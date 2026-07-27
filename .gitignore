@@ -1,0 +1,36 @@
+# dependencies
+node_modules/
+@nestjs/
+
+# build output
+dist/
+build/
+.next/
+out/
+
+# env
+.env
+.env.local
+.env.*.local
+
+# testing
+coverage/
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# misc
+.DS_Store
+*.pem
+.vercel
+
+# typescript
+*.tsbuildinfo
+
+# database dumps (могут содержать хеши паролей и ключи)
+*.sql
+*.dump

@@ -1,0 +1,316 @@
+@import "tailwindcss";
+
+@theme {
+  /* ── Surfaces ──
+     True black, monochrome — surfaces barely lift off the background
+     (elevation reads through the 1px border + inset sheen on .panel/.pill,
+     not through big lightness jumps). Any depth beyond that comes from the
+     highlight, not from color. */
+  --color-app:           #050505;
+  --color-surface:       #0a0a0a;
+  --color-elevated:      #131313;
+  --color-elevated-2:    #1e1e1e;   /* hover / active fill on top of elevated */
+  --color-line:          #242424;
+  --color-line-strong:   #383838;
+
+  /* ── Text ──
+     Контраст проверен по WCAG на самом светлом фоне, где эти цвета реально
+     стоят (--color-elevated-2 #1e1e1e), и на самом тёмном (--color-app):
+       fg     #fafafa → 16–18:1
+       muted  #a3a3a3 →  6.2–7.4:1
+       subtle #808080 →  4.2–5.2:1
+     Прежние значения (muted #8f8f8f, subtle #5c5c5c) давали у subtle всего
+     2.8:1 при норме AA 4.5:1 — мелкие подписи и цифры статистики буквально
+     не читались при ярком внешнем свете. subtle остаётся самым тихим цветом
+     в шкале, но теперь это «тихо», а не «невидимо». */
+  --color-fg:            #fafafa;
+  --color-muted:         #a3a3a3;
+  --color-subtle:        #808080;
+
+  /* ── Accent (Vercel blue) — the one branded color, reserved for primary
+     actions, focus rings and links. Everything else stays black/white/gray;
+     the ambient-glow utility below carries the violet/teal duo as a purely
+     decorative background wash, never as UI chrome color. ── */
+  --color-accent:        #0055ff;
+  --color-accent-soft:   #2e73ff;   /* hover — lightens, doesn't darken */
+  --color-accent-2:      #6fa1ff;   /* bright highlight — focus rings / links */
+
+  /* ── Ambient glow duo (decorative only — see .ambient-glow) ── */
+  --color-glow-violet:   #7c3aed;
+  --color-glow-teal:     #2dd4bf;
+
+  /* ── P&L semantic ── */
+  --color-up:            #26a544;
+  --color-down:          #eb5757;
+  --color-warn:          #f0bf00;
+
+  /* ── Compat aliases (shadcn-style classes) ── */
+  --color-background:        #050505;
+  --color-foreground:        #fafafa;
+  --color-muted-foreground:  #a3a3a3;
+  --color-ring:              #6fa1ff;
+
+  /* ── Fonts ── */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+
+  /* ── Radius ── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+
+  /* ── Shadows (Linear's elevation scale) ── */
+  --shadow-low:    0px 2px 4px rgba(0, 0, 0, 0.1);
+  --shadow-medium: 0px 4px 24px rgba(0, 0, 0, 0.2);
+  --shadow-high:   0px 7px 32px rgba(0, 0, 0, 0.35);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-app);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .tabular,
+  table,
+  input[type="number"] {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  h1, h2, h3 {
+    letter-spacing: -0.015em;
+  }
+
+  * {
+    scrollbar-width: none;
+  }
+  *::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
+  ::selection {
+    background-color: color-mix(in srgb, var(--color-accent-2) 30%, transparent);
+    color: var(--color-fg);
+  }
+}
+
+@layer components {
+  /* Shared glossy top edge — the one bit of depth a flat monochrome UI gets.
+     A hairline catch of light along the top border, not a color. Applied to
+     panels and pill/button surfaces so raised elements read as raised. */
+  .sheen {
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  }
+
+  /* Decorative ambient glow — the violet→teal radial blur behind a hero
+     section, Vercel-style. Purely a background wash: put `.ambient-glow` on
+     a `relative overflow-hidden` wrapper, content stacks above it (z-10). */
+  .ambient-glow {
+    position: relative;
+    overflow: hidden;
+  }
+  .ambient-glow::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    /* Three blobs spread left→center→right so the whole card reads as lit —
+       two never covered the far side of a wide hero band, just one corner. */
+    background:
+      radial-gradient(60% 130% at 12% 20%, color-mix(in srgb, var(--color-glow-violet) 50%, transparent), transparent 80%),
+      radial-gradient(55% 130% at 50% 35%, color-mix(in srgb, var(--color-glow-teal) 38%, transparent), transparent 80%),
+      radial-gradient(60% 130% at 88% 15%, color-mix(in srgb, var(--color-glow-violet) 42%, transparent), transparent 80%);
+    filter: blur(60px);
+  }
+  .ambient-glow > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Standard data panel */
+  .panel {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-xl);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+  }
+
+  /* Live status dot — calm steady halo, no animation */
+  .pulse-dot {
+    box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 20%, transparent);
+  }
+
+  /* Фильтр-чип, покрашенный цветом своего тега. Цвет приходит из JS одной
+     переменной --chip-color, а состояния (обводка / заливка / ховер) живут
+     здесь: если задавать borderColor инлайновым style, он перебивает любой
+     hover:border-* класс и ховер у чипа молча пропадает. */
+  /* Заливка цветом чипа вместо общего серого фона, ярче по мере вовлечения:
+     покой 5% → ховер 18% → выбран 38% → выбран+ховер 48%.
+     Контраст белого текста проверен на всех цветах тегов из палитры:
+     худший случай (лайм #84cc16) при 48% даёт ~6:1 — выше нормы AA 4.5. */
+  .chip-tag {
+    border-color: color-mix(in srgb, var(--chip-color) 55%, transparent);
+    background-color: color-mix(in srgb, var(--chip-color) 5%, transparent);
+  }
+  .chip-tag:hover {
+    border-color: var(--chip-color);
+    background-color: color-mix(in srgb, var(--chip-color) 18%, transparent);
+  }
+  .chip-tag[data-active='true'] {
+    border-color: var(--chip-color);
+    background-color: color-mix(in srgb, var(--chip-color) 38%, transparent);
+  }
+  .chip-tag[data-active='true']:hover {
+    background-color: color-mix(in srgb, var(--chip-color) 48%, transparent);
+  }
+
+  /* Scrollable regions hide the OS scrollbar globally (see `*` rule above) for
+     a clean look — fine when content clearly continues past the fold, but a
+     bounded table with more rows than fit needs SOME visible cue that there's
+     more below, or it just reads as stuck. Thin, muted, matches line colors. */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    display: block;
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: var(--color-line-strong);
+    border-radius: 9999px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* Win/loss badge (WinLossCount): a light sweep glints across the icon, pauses,
+     then repeats — a shine, not a constant motion. Respects reduced-motion below. */
+  .shimmer-badge {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .shimmer-badge::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(115deg, transparent 20%, rgb(255 255 255 / 0.85) 50%, transparent 80%);
+    transform: translateX(-120%);
+    animation: shimmer-sweep 2.6s ease-in-out infinite;
+    mix-blend-mode: overlay;
+  }
+}
+
+@keyframes shimmer-sweep {
+  0%, 15% { transform: translateX(-120%); }
+  55%, 100% { transform: translateX(120%); }
+}
+
+/* ── /stats page only — terminal-window motif + white accent.
+   Scoped to these class names (not used anywhere else) so it never touches
+   the app's shared blue accent or .panel used by Analytics/Lab. ── */
+@layer components {
+  .term-window {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-xl);
+  }
+  .term-window.accent {
+    border-color: rgba(255, 255, 255, 0.5);
+  }
+
+  /* White "accent" button/pill, local to /stats — the app-wide Button's
+     primary variant stays brand blue; this is the mockup's white accent. */
+  .btn-white {
+    background: #fff;
+    color: #171613;
+  }
+  .btn-white:hover { background: #e2e2e2; }
+}
+
+/* ── Раскрытие строки таблицы (ордера сделки) ── */
+@layer components {
+  /* grid-template-rows 0fr → 1fr — единственный способ анимировать высоту до
+     auto: ячейка растёт плавно вместе с содержимым, а не прыгает на полную
+     высоту сразу. Дочерний элемент обязан быть min-height:0 + overflow:hidden,
+     иначе ему нечего обрезать и он торчит из схлопнутой строки. */
+  .row-reveal {
+    display: grid;
+    grid-template-rows: 1fr;
+    animation: row-reveal-in 200ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .row-reveal.closing {
+    animation: row-reveal-out 160ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  }
+  .row-reveal > * {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* Ордера проявляются каскадом сверху вниз — порядковый номер приходит
+     инлайн через --i, чтобы не плодить по классу на строку. */
+  .order-row-in {
+    animation: order-row-in 240ms cubic-bezier(0.2, 0, 0.2, 1) backwards;
+    animation-delay: calc(var(--i, 0) * 26ms);
+  }
+}
+
+@keyframes row-reveal-in {
+  from { grid-template-rows: 0fr; opacity: 0; }
+  to { grid-template-rows: 1fr; opacity: 1; }
+}
+
+@keyframes row-reveal-out {
+  from { grid-template-rows: 1fr; opacity: 1; }
+  to { grid-template-rows: 0fr; opacity: 0; }
+}
+
+@keyframes order-row-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Кривая P&L прочерчивается слева направо: pathLength=1 нормирует длину, так
+   что скорость не зависит от числа сделок. Остальные слои (заливка, пик,
+   подпись конца) проявляются следом, когда линия уже почти дошла. */
+@layer components {
+  .equity-line {
+    stroke-dasharray: 1;
+    animation: equity-draw 700ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+  .equity-fade {
+    animation: equity-fade 400ms ease-out 420ms both;
+  }
+}
+
+@keyframes equity-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes equity-fade {
+  from { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,66 @@
+# Full local stack: PostgreSQL + NestJS API + Next.js web.
+# Start everything:   docker compose up --build
+# Stop:               docker compose down   (add -v to also wipe the DB volume)
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: virex
+      POSTGRES_PASSWORD: virex
+      POSTGRES_DB: virex
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U virex -d virex"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    # Loads JWT secrets + other backend config from the existing api env file...
+    env_file:
+      - ./backend/.env
+    # ...and overrides the DB host to the compose service.
+    environment:
+      DATABASE_URL: postgresql://virex:virex@db:5432/virex?schema=public
+      PORT: "8091"
+      FRONTEND_URL: http://localhost:8090
+    ports:
+      - "8091:8091"
+    volumes:
+      - ./backend:/app
+      - api_node_modules:/app/node_modules
+    # Sync the schema to the DB (regenerating the client too, since the
+    # api_node_modules volume persists across rebuilds and can hold a stale
+    # client), then start with hot reload.
+    command: sh -c "npx prisma db push && npm run start:dev"
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      # Browser-facing URL → must be the host-published API port.
+      NEXT_PUBLIC_API_URL: http://localhost:8091
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./frontend:/app
+      - web_node_modules:/app/node_modules
+      - web_next:/app/.next
+
+volumes:
+  pgdata:
+  api_node_modules:
+  web_node_modules:
+  web_next:

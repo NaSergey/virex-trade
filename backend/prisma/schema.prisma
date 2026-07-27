@@ -1,0 +1,306 @@
+// Prisma schema for virex-trader backend
+// Docs: https://www.prisma.io/docs
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String // bcrypt hash
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Bybit API credentials, AES-256-GCM encrypted at rest (see CredentialsService).
+  // Null when the user hasn't connected an exchange account yet.
+  bybitApiKeyEnc    String?
+  bybitApiSecretEnc String?
+  bybitConnectedAt  DateTime?
+
+  // Telegram notifications: chat linked via the bot's /start <code> deep link
+  // (TelegramService). Code is one-time — cleared on successful link.
+  telegramChatId   String?
+  telegramLinkCode String? @unique
+
+  refreshTokens      RefreshToken[]
+  trades             Trade[]
+  executions         Execution[]
+  tags               Tag[]
+  positionTags       PositionTag[]
+  openPositionsSeen  OpenPositionSeen[]
+  savedTagCombos     SavedTagCombo[]
+  dismissedTagCombos DismissedTagCombo[]
+
+  @@map("users")
+}
+
+// One closed trade synced from Bybit (realized PnL).
+// Source: GET /v5/position/closed-pnl. We store the key fields for stats plus the
+// full raw record for forward-compat. Deduped on (orderId, closedAt) so re-syncs
+// are idempotent. `direction` is the position side (closing Sell => was long).
+model Trade {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol        String
+  side          String // closing order side from Bybit: "Buy" | "Sell"
+  direction     String // derived position side: "long" | "short"
+  qty           Float
+  avgEntryPrice Float
+  avgExitPrice  Float
+  closedPnl     Float
+  openFee       Float    @default(0)
+  closeFee      Float    @default(0)
+  leverage      Float?
+  orderId       String
+  closedAt      DateTime // Bybit updatedTime
+  // Approximate position open time, copied from OpenPositionSeen when the
+  // trade syncs. Null for trades whose position opened while the server was
+  // down (or before this feature) — time-based stats simply skip those.
+  openedAt      DateTime?
+  // Groups the closing orders that belong to ONE position. Bybit's closed-pnl
+  // emits a row per closing order, so taking profit in parts (or averaging in)
+  // used to read as several separate trades — inflating the trade count and
+  // the winrate. Derived from execution history: a position spans fills from
+  // when size leaves 0 until it returns to 0 (see PositionBuilderService).
+  // Null while the position hasn't been reconstructed yet — aggregates fall
+  // back to treating such a row as its own position.
+  positionId    String?
+  raw           Json?
+  createdAt     DateTime @default(now())
+
+  tags    TradeTag[]
+  context TradeContext?
+
+  @@unique([userId, orderId, closedAt])
+  @@index([userId, symbol])
+  @@index([userId, closedAt])
+  @@index([userId, positionId])
+  @@map("trades")
+}
+
+// One fill from Bybit's execution history (GET /v5/execution/list), stored so
+// positions can be reconstructed without re-querying the exchange: closed-pnl
+// alone never reveals the running position size, so it cannot tell a partial
+// take-profit from a separate trade. Every execType that moves position size is
+// kept (Trade, BustTrade/liquidations, AdlTrade, ...) — only "Funding" is
+// dropped, which carries a qty as well and would corrupt the running size.
+// `closedSize` is 0 on opening/averaging-in fills and > 0 on closing fills.
+//
+// Deduped on execId + orderId rather than execId alone: a self-cross reports
+// both sides of the same fill under one execId with different orderIds, and
+// keying on execId alone silently dropped one leg.
+model Execution {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol     String
+  side       String // "Buy" | "Sell"
+  qty        Float
+  price      Float
+  closedSize Float
+  execType   String // "Trade" | "BustTrade" | "AdlTrade" | ...
+  orderId    String
+  execId     String
+  execTime   DateTime
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, execId, orderId])
+  @@index([userId, symbol, execTime])
+  @@map("executions")
+}
+
+// User-defined entry-reason label ("пробой уровня", "отскок от EMA", ...).
+// Attached to open positions via PositionTag and to closed trades via TradeTag;
+// the stats page aggregates winrate/PnL per tag.
+model Tag {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  color     String   @default("#6366f1")
+  // Journal category: 'setup' (entry reason) | 'emotion' | 'mistake'.
+  // Lets the stats page separate "which setups win" from "which mistakes cost me".
+  type      String   @default("setup")
+  createdAt DateTime @default(now())
+
+  tradeTags    TradeTag[]
+  positionTags PositionTag[]
+
+  @@unique([userId, name])
+  @@map("tags")
+}
+
+model TradeTag {
+  tradeId String
+  tagId   String
+  trade   Trade  @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  tag     Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([tradeId, tagId])
+  @@map("trade_tags")
+}
+
+// Market-context snapshot of a closed trade, computed once from Bybit klines
+// by TradeContextService (никаких live-запросов при фильтрации в «Лаборатории»).
+// The snapshot is anchored at the trade's entry moment when we know it
+// (Trade.openedAt), else at closedAt — `basis` records which one, so the lab
+// can tell exact entries from approximations. `ok=false` marks trades whose
+// kline history was insufficient (row still written so we don't retry forever);
+// indicator fields stay null in that case.
+model TradeContext {
+  id      String  @id @default(uuid())
+  tradeId String  @unique
+  trade   Trade   @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  basis   String // 'opened' | 'closed' — which trade timestamp anchored the snapshot
+  ok      Boolean @default(true)
+
+  // 1h timeframe at the anchor moment
+  price         Float? // last 1h close before entry
+  atrPct        Float? // ATR14 / price * 100 — volatility, comparable across symbols
+  rsi           Float? // RSI14
+  volRel        Float? // last candle volume / SMA20 volume (1 = average)
+  ema200Above   Boolean? // price above EMA200
+  ema200DistPct Float? // (price - EMA200) / EMA200 * 100
+  // 4h regime from IndicatorsService.computeSnapshot: EMA20 vs EMA50 gated by ADX
+  trend4h       String? // 'trend_up' | 'trend_down' | 'range'
+
+  computedAt DateTime @default(now())
+
+  @@map("trade_contexts")
+}
+
+// Tags the user put on a currently open position (keyed by symbol+direction —
+// Bybit allows at most one open position per key, so the pair identifies
+// "the current position" for as long as it stays open). TradeSyncService
+// copies them onto every closed trade of that position (closedAt >= createdAt),
+// so ladder/partial closes all inherit the tags, then prunes the rows once
+// the position is no longer open on Bybit (TagsService.pruneClosedPositions) —
+// otherwise they'd leak onto the next position opened on the same symbol+direction.
+model PositionTag {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol    String
+  direction String // 'long' | 'short'
+  tagId     String
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, symbol, direction, tagId])
+  @@index([userId, symbol, direction])
+  @@map("position_tags")
+}
+
+// A user-composed tag combination pinned in «Лучшие комбинации»: unlike the
+// auto-derived exact sets, a saved combo counts every trade CONTAINING all of
+// its tags (whatever else is tagged) — a persistent strategy watchlist card.
+model SavedTagCombo {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tagIds    String[] // 2+ tag ids, sorted; rows self-heal away if a tag is deleted
+  key       String // sorted tagIds joined '|' — dedup handle
+  // Unpinning must not delete a user-created card (recreating the exact same
+  // trades/tags at 0-trade combos looked like data loss). Unpin just flips
+  // this to false; the row (and its edit history via tagIds) stays put. Only
+  // the explicit "Удалить" action hard-deletes the row.
+  pinned    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, key])
+  @@map("saved_tag_combos")
+}
+
+// A user-dismissed auto-derived combo card (exact tag set) — hides it from the
+// "по тегам" combo grid going forward. Unlike SavedTagCombo this carries no
+// tagIds, just the same canonical dedup key (sorted tag ids joined '|', or
+// '__untagged__'): dismissing only needs to match, never to render tag names.
+model DismissedTagCombo {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key       String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, key])
+  @@map("dismissed_tag_combos")
+}
+
+// First time the sync loop saw a position open on Bybit (±1 sync interval).
+// Same lifecycle as PositionTag: upserted while the position is open, copied
+// onto its closed trades as Trade.openedAt when they sync, pruned once the
+// position is gone so it can't leak onto the next position on the same
+// symbol+direction. Bybit's closed-pnl records carry no entry time and the
+// position list's createdTime doesn't reset per position lifecycle, so our
+// own first-seen clock is the reliable source here.
+model OpenPositionSeen {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol      String
+  direction   String // 'long' | 'short'
+  firstSeenAt DateTime @default(now())
+
+  @@unique([userId, symbol, direction])
+  @@map("open_positions_seen")
+}
+
+// Daily BTC candle from Bybit (category=linear), cached so the Аналитика
+// page can correlate price moves against weekday without live requests per
+// view. Backfilled once by DailyPriceSyncService, then appended one row per
+// UTC day.
+model DailyPrice {
+  id        String   @id @default(uuid())
+  symbol    String   @default("BTCUSDT")
+  date      DateTime // UTC day (candle open time, 00:00)
+  open      Float
+  close     Float
+  changePct Float // (close - open) / open * 100
+
+  @@unique([symbol, date])
+  @@index([date])
+  @@map("daily_prices")
+}
+
+// Hourly BTC candle from Bybit, cached so the Аналитика page can show which
+// UTC hours run hottest (range-based volatility) and which lean up/down,
+// without live requests per view. Backfilled once by HourlyPriceSyncService,
+// then appended one row per UTC hour. high/low (absent from DailyPrice) are
+// what volatility is measured from — (high-low)/open, not just close-open.
+model HourlyPrice {
+  id        String   @id @default(uuid())
+  symbol    String   @default("BTCUSDT")
+  date      DateTime // UTC hour (candle open time, on the hour)
+  open      Float
+  high      Float
+  low       Float
+  close     Float
+  changePct Float // (close - open) / open * 100
+
+  @@unique([symbol, date])
+  @@index([date])
+  @@map("hourly_prices")
+}
+
+// One row per active refresh token (supports multiple devices / sessions).
+// We never store the raw token — only its SHA-256 hash. On refresh the row is
+// rotated (deleted + recreated) so a stolen token is single-use.
+model RefreshToken {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
