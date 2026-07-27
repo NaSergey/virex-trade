@@ -72,11 +72,35 @@ export const useUSDTBalance = () => {
   });
 };
 
+// Открытая позиция из Bybit v5 /position/list, как её отдаёт биржа — все
+// числа строками. `createdTime` НЕ сбрасывается на каждую новую позицию по
+// символу, поэтому «сколько времени в позиции» считается не отсюда, а по
+// нашим часам (OpenPositionSeen, см. usePositionTags → openedAt).
+export interface BybitPosition {
+  symbol: string;
+  side: 'Buy' | 'Sell' | '';
+  size: string;
+  avgPrice: string;
+  markPrice: string;
+  positionValue: string;
+  unrealisedPnl: string;
+  leverage: string;
+  liqPrice: string;
+  takeProfit: string;
+  stopLoss: string;
+  createdTime: string;
+  updatedTime: string;
+}
+
 export const useOpenPositions = () => {
   return useQuery({
     queryKey: ['openPositions'],
     queryFn: async () => {
-      const data = await getOpenPositions();
+      const data = (await getOpenPositions()) as {
+        positions: BybitPosition[];
+        success: boolean;
+        error?: string;
+      };
       if (!data.success) {
         throw new Error(data.error || 'Ошибка загрузки позиций');
       }
@@ -180,6 +204,85 @@ export const useTradeOrders = (tradeId: string | null) =>
       const res = await apiFetch(`/api/trades/${tradeId}/orders`, { method: 'GET' });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       return res.json() as Promise<{ success: boolean; positionId: string | null; orders: TradeOrder[]; error?: string }>;
+    },
+    enabled: !!tradeId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+// ── Entry context of an open position (snapshot taken when it opened) ──
+export interface OpenPositionContext {
+  // null = снимок ещё не сделан (следующий тик синка посчитает),
+  // false = у символа не хватило истории свечей.
+  ok: boolean | null;
+  computedAt: string | null;
+  entryPrice: number | null;
+  atrPct: number | null;
+  rsi: number | null;
+  volRel: number | null;
+  ema200Above: boolean | null;
+  trend4h: string | null;
+  rangePos1h: number | null;
+  rangePos4h: number | null;
+  rangePos1d: number | null;
+}
+
+export const useOpenPositionContext = (symbol: string, direction: 'long' | 'short') =>
+  useQuery({
+    queryKey: ['openPositionContext', symbol, direction],
+    queryFn: async () => {
+      const res = await apiFetch(
+        `/api/trades/open-context?symbol=${encodeURIComponent(symbol)}&direction=${direction}`,
+        { method: 'GET' },
+      );
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      return res.json() as Promise<{ success: boolean; context: OpenPositionContext | null }>;
+    },
+    enabled: !!symbol,
+    // Снимок неизменен, пока позиция открыта — но пока ok === null его ещё
+    // считают, поэтому перепроверяем раз в минуту, как и сам список позиций.
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+
+// ── Range-check: всё, чтобы проверить «диапазон входа» глазами на графике ──
+export interface RangeCheckCandle {
+  time: number; // unix seconds
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
+export interface RangeCheckResponse {
+  success: boolean;
+  symbol: string;
+  direction: 'long' | 'short';
+  timeframe: '1h' | '4h' | '1d';
+  candles: RangeCheckCandle[];
+  window: {
+    candles: number; // сколько свечей реально попало в окно
+    expected: number; // сколько должно было
+    low: number | null;
+    high: number | null;
+    fromTime: number | null;
+    toTime: number;
+  };
+  // barTime — время свечи, содержащей момент: маркер на «межсвечном» времени
+  // lightweight-charts не рисует.
+  entry: { price: number; time: number; barTime: number | null; basis: 'opened' | 'closed' };
+  exit: { price: number; time: number; barTime: number | null };
+  closedPnl: number;
+  stored: number | null; // что лежит в базе
+  recomputed: number | null; // что даёт та же формула по нарисованным свечам
+}
+
+export const useRangeCheck = (tradeId: string | null, tf: '1h' | '4h' | '1d') =>
+  useQuery({
+    queryKey: ['rangeCheck', tradeId, tf],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/trades/${tradeId}/range-check?tf=${tf}`, { method: 'GET' });
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      return res.json() as Promise<RangeCheckResponse>;
     },
     enabled: !!tradeId,
     staleTime: 5 * 60 * 1000,

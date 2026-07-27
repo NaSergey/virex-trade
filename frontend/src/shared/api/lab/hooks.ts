@@ -21,7 +21,13 @@ export interface LabFilters {
   ema200?: 'above' | 'below';
   atr?: 'high' | 'low'; // относительно медианы периода
   vol?: 'high' | 'low';
+  // Диапазон входа: где цена входа стояла внутри high/low последних свечей ТФ.
+  // rangeTf выбирает ТФ (он сам по себе ничего не фильтрует), range — корзину.
+  rangeTf: RangeTf;
+  range?: 'low' | 'mid' | 'high';
 }
+
+export type RangeTf = '1h' | '4h' | '1d';
 
 export const emptyLabFilters = (days: number): LabFilters => ({
   days,
@@ -30,6 +36,7 @@ export const emptyLabFilters = (days: number): LabFilters => ({
   weekdays: [],
   sessions: [],
   trend4h: [],
+  rangeTf: '4h',
 });
 
 export interface LabAgg {
@@ -59,6 +66,7 @@ export interface LabFacet {
     | 'ema200'
     | 'atr'
     | 'vol'
+    | 'range'
     | 'symbol'
     | 'tags';
   values: LabFacetValue[];
@@ -70,7 +78,9 @@ export interface LabResponse {
   filtered: LabAgg; // после всех фильтров
   equity: EquityPoint[];
   medians: { atrPct: number | null; volRel: number | null };
-  coverage: { total: number; withContext: number };
+  // withRange считается отдельно от withContext: диапазон входа требует своих
+  // окон (на дневке — месяц истории), поэтому покрытие у него ниже.
+  coverage: { total: number; withContext: number; withRange: number };
   facets: LabFacet[];
   trades: Trade[]; // последние 200 подходящих
 }
@@ -96,6 +106,9 @@ export const useLab = (f: LabFilters) =>
           ema200: f.ema200,
           atr: f.atr,
           vol: f.vol,
+          // ТФ шлём всегда: от него зависят и фасеты диапазона, а не только фильтр.
+          rangeTf: f.rangeTf,
+          range: f.range,
         })}`,
       ),
     placeholderData: keepPreviousData,

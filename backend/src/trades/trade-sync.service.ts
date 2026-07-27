@@ -198,9 +198,71 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
       }
     }
 
+    // Entry snapshots for positions that don't have one yet. Separate from the
+    // loop above so a snapshot missed while the exchange was unreachable gets
+    // retried on the next tick instead of being lost for the whole position.
+    await this.snapshotOpenPositions(userId, positions);
+
     const stale = existing.filter((r) => !openKeys.has(`${r.symbol}|${r.direction}`));
     if (stale.length > 0) {
       await this.prisma.openPositionSeen.deleteMany({ where: { id: { in: stale.map((s) => s.id) } } });
+    }
+  }
+
+  /**
+   * Compute the entry context (indicators + where the entry sat in each
+   * timeframe's range) for open positions that don't have it yet, and store it
+   * on the registry row. Runs while the position is still open, so the numbers
+   * come from the price actually paid at the moment it was paid rather than
+   * being reconstructed from history after the fact.
+   *
+   * `ctxOk === false` means the symbol's kline history was too short — the row
+   * keeps that verdict so we don't re-request candles every single tick for a
+   * position that will never produce a snapshot.
+   */
+  private async snapshotOpenPositions(userId: string, positions: OpenedPositionInfo[]): Promise<void> {
+    const rows = await this.prisma.openPositionSeen.findMany({
+      where: { userId, ctxOk: null },
+      select: { id: true, symbol: true, direction: true, firstSeenAt: true },
+    });
+    if (rows.length === 0) return;
+
+    const priceOf = new Map(
+      positions.map((p) => [`${p.symbol}|${p.direction}`, p.avgPrice ? parseFloat(p.avgPrice) : NaN]),
+    );
+
+    for (const r of rows) {
+      const entryPrice = priceOf.get(`${r.symbol}|${r.direction}`);
+      // Position already gone (or Bybit didn't report an entry price this
+      // tick): leave the row untouched, the prune below will clean it up.
+      if (entryPrice == null || !Number.isFinite(entryPrice)) continue;
+      try {
+        // Anchored at first-seen, not "now": on a restart-triggered catch-up
+        // the position may have been open for a while already, and the entry
+        // context belongs to when it opened.
+        const snap = await this.tradeContext.snapshotNow(r.symbol, entryPrice, r.firstSeenAt.getTime());
+        await this.prisma.openPositionSeen.update({
+          where: { id: r.id },
+          data: {
+            entryPrice,
+            ctxOk: snap.ok,
+            ctxComputedAt: new Date(),
+            price: snap.price ?? null,
+            atrPct: snap.atrPct ?? null,
+            rsi: snap.rsi ?? null,
+            volRel: snap.volRel ?? null,
+            ema200Above: snap.ema200Above ?? null,
+            ema200DistPct: snap.ema200DistPct ?? null,
+            trend4h: snap.trend4h ?? null,
+            rangePos1h: snap.rangePos1h ?? null,
+            rangePos4h: snap.rangePos4h ?? null,
+            rangePos1d: snap.rangePos1d ?? null,
+          },
+        });
+        this.logger.log(`entry context computed for open ${r.symbol} ${r.direction}`);
+      } catch (e) {
+        this.logger.warn(`entry context failed for ${r.symbol} ${r.direction}: ${e}`);
+      }
     }
   }
 

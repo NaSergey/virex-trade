@@ -5,12 +5,6 @@ import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } f
 import { apiFetch } from '@/shared/api/http';
 import { useOpenPositions } from '@/shared/api/bybit/hooks';
 
-interface OpenPosition {
-  symbol: string;
-  side: string;
-  size: string;
-}
-
 // Journal categories: setups (entry reasons) vs emotions/mistakes — the stats
 // page groups tags by these so "what wins" and "what my mistakes cost" read
 // separately.
@@ -271,8 +265,10 @@ export const useDismissCombo = () => {
   });
 };
 
+// `openedAt` — когда наш sync-цикл впервые увидел эту позицию открытой
+// (Bybit createdTime для этого не годится, см. OpenPositionSeen).
 export const fetchPositionTags = (symbol: string, direction: 'long' | 'short') =>
-  requestJson<{ success: boolean; tags: TagItem[] }>(
+  requestJson<{ success: boolean; openedAt: string | null; tags: TagItem[] }>(
     `/api/tags/position?symbol=${encodeURIComponent(symbol)}&direction=${direction}`,
   );
 
@@ -288,7 +284,7 @@ export const usePositionTags = (symbol: string, direction: 'long' | 'short', ena
 export const useOpenPositionTags = () => {
   const { data: openPosData } = useOpenPositions();
   const openPositions = useMemo(
-    () => ((openPosData?.positions ?? []) as OpenPosition[]).filter((p) => parseFloat(p.size) > 0),
+    () => (openPosData?.positions ?? []).filter((p) => parseFloat(p.size) > 0),
     [openPosData],
   );
   const pendingQueries = useQueries({

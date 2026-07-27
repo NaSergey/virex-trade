@@ -215,12 +215,21 @@ export class TagsService {
 
   /** Current tag set of an open position (symbol + direction). */
   async positionTags(userId: string, symbol: string, direction: string) {
-    const rows = await this.prisma.positionTag.findMany({
-      where: { userId, symbol, direction },
-      include: { tag: true },
-    });
+    const [rows, seen] = await Promise.all([
+      this.prisma.positionTag.findMany({
+        where: { userId, symbol, direction },
+        include: { tag: true },
+      }),
+      // Bybit's own createdTime doesn't reset per position lifecycle, so the
+      // sync loop's first-seen clock is the only honest "открыта с" we have.
+      this.prisma.openPositionSeen.findUnique({
+        where: { userId_symbol_direction: { userId, symbol, direction } },
+        select: { firstSeenAt: true },
+      }),
+    ]);
     return {
       success: true,
+      openedAt: seen?.firstSeenAt ?? null,
       tags: rows.map((r) => ({ id: r.tag.id, name: r.tag.name, color: r.tag.color })),
     };
   }

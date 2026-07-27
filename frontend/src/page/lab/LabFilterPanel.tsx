@@ -4,12 +4,24 @@ import { RotateCcw } from 'lucide-react';
 import { cn } from '@/shared/lib/utils/css';
 import { WEEKDAY_LABELS, WEEKDAY_ORDER } from '@/shared/lib/utils/period';
 import { useTags } from '@/shared/api/tags/hooks';
-import type { LabFacetValue, LabResponse } from '@/shared/api/lab/hooks';
+import { SegmentedControl } from '@/shared/ui/SegmentedControl';
+import type { LabFacetValue, LabResponse, RangeTf } from '@/shared/api/lab/hooks';
 import { ChipGroup, ChipGroupFromDefs, FacetChip, type ChipDef } from './FacetChip';
 import { DirectionToggle } from './DirectionToggle';
 import { HourRangeSelect } from './HourRangeSelect';
 import { EMPTY_FACET, useStickySymbols } from './facets';
-import { ATR_LABELS, EMA_LABELS, SESSION_HINTS, SESSION_LABELS, TREND_LABELS, VOL_LABELS } from './constants';
+import {
+  ATR_LABELS,
+  EMA_LABELS,
+  RANGE_HINTS,
+  RANGE_LABELS,
+  RANGE_TF_OPTIONS,
+  RANGE_TF_WINDOWS,
+  SESSION_HINTS,
+  SESSION_LABELS,
+  TREND_LABELS,
+  VOL_LABELS,
+} from './constants';
 import type { LabFiltersState } from './useLabFilters';
 
 type FacetLookup = (dimension: string, key: string) => LabFacetValue | undefined;
@@ -99,6 +111,62 @@ function buildContextGroups(
       ],
     },
   ];
+}
+
+/**
+ * Диапазон входа — где цена входа стояла внутри high/low последних свечей ТФ:
+ * 0% = взял по низу диапазона, 100% = по верху (пробои выходят за границы и
+ * попадают в крайние чипы). Единственная группа со своим переключателем:
+ * контекст считается сразу по трём ТФ, и тумблер выбирает, какую из шкал
+ * читают чипы. Поэтому он живёт рядом с ними, а не в общем баре контролов.
+ */
+function RangeGroup({
+  state,
+  fv,
+  coverage,
+}: {
+  state: LabFiltersState;
+  fv: FacetLookup;
+  coverage?: LabResponse['coverage'];
+}) {
+  const { filters, set, toggleSingle } = state;
+
+  return (
+    <div>
+      <div className="mb-1.5 flex flex-wrap items-center gap-2">
+        <span className="text-[11px] font-semibold tracking-wide text-muted uppercase">Диапазон входа</span>
+        <SegmentedControl
+          options={RANGE_TF_OPTIONS}
+          value={filters.rangeTf}
+          onChange={(tf: RangeTf) => set({ rangeTf: tf })}
+          size="sm"
+        />
+        <span className="text-[11px] text-muted">{RANGE_TF_WINDOWS[filters.rangeTf]}</span>
+        {/* Покрытие именно этого ТФ: на дневке окно требует месяца истории, так
+            что у части сделок диапазона нет — молча ронять их из чипов нечестно. */}
+        {coverage && coverage.withRange < coverage.total && (
+          <span
+            className="text-[11px] text-muted"
+            title="Сделки без посчитанного диапазона не попадают ни в один из трёх чипов. Обычно это либо ещё не досчитанный контекст, либо символ без нужной истории свечей."
+          >
+            посчитан у {coverage.withRange} из {coverage.total}
+          </span>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {(['low', 'mid', 'high'] as const).map((k) => (
+          <FacetChip
+            key={k}
+            label={RANGE_LABELS[k]}
+            hint={RANGE_HINTS[k]}
+            active={filters.range === k}
+            stats={fv('range', k)}
+            onClick={() => toggleSingle('range', k)}
+          />
+        ))}
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -208,6 +276,7 @@ export function LabFilterPanel({
         {contextGroups.filter((g) => !g.inline).map((g) => (
           <ChipGroupFromDefs key={g.title} title={g.title} chips={g.chips} />
         ))}
+        <RangeGroup state={state} fv={fv} coverage={coverage} />
       </div>
     </section>
   );

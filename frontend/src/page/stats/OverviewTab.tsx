@@ -9,6 +9,7 @@ import { Pagination } from '@/shared/ui/Pagination';
 import { TermWindow } from '@/page/stats/TermWindow';
 import { TradeOrders } from '@/page/stats/TradeOrders';
 import { TradeTagsModal } from '@/page/stats/TradeTagsModal';
+import { OpenPositions } from '@/page/stats/OpenPositions';
 import { EquityChart } from '@/page/stats/EquityChart';
 import { Kv, KvRow, StatRing, DuoRing, ringColor } from '@/page/stats/KvRow';
 import { formatPnl, pnlColor } from '@/shared/lib/utils/format';
@@ -139,6 +140,10 @@ export function OverviewTab({ days }: { days: number }) {
           </KvRow>
         )}
       </TermWindow>
+
+      {/* Что открыто прямо сейчас — сразу под метриками: таблица ниже знает
+          только о закрытых сделках. Само себя прячет, если позиций нет. */}
+      <OpenPositions />
 
       <section className="mt-3">
         <TermWindow>

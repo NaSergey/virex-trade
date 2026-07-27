@@ -23,6 +23,20 @@ export interface LabFilter {
   ema200?: 'above' | 'below';
   atr?: 'high' | 'low'; // vs median atrPct of the period
   vol?: 'high' | 'low'; // vs median volRel of the period
+  rangeTf?: RangeTf; // which timeframe's entry range `range` reads (default 4h)
+  range?: 'low' | 'mid' | 'high'; // where in that range the entry landed
+}
+
+export type RangeTf = '1h' | '4h' | '1d';
+
+// Границы «низа» и «верха» диапазона входа. Вход вне диапазона ТФ (пробой)
+// даёт rangePos < 0 / > 100 и естественно попадает в крайнюю корзину.
+const RANGE_LOW_MAX = 33;
+const RANGE_HIGH_MIN = 66;
+
+function rangeBucket(v: number | null | undefined): string | null {
+  if (v == null) return null;
+  return v < RANGE_LOW_MAX ? 'low' : v < RANGE_HIGH_MIN ? 'mid' : 'high';
 }
 
 // Торговые сессии по UTC (непересекающиеся, чтобы каждая сделка попадала ровно
@@ -67,6 +81,9 @@ interface Row {
     volRel: number | null;
     ema200Above: boolean | null;
     trend4h: string | null;
+    rangePos1h: number | null;
+    rangePos4h: number | null;
+    rangePos1d: number | null;
   } | null;
   tags: Array<{ id: string; name: string; color: string }>;
 }
@@ -80,6 +97,7 @@ type Dim =
   | 'ema200'
   | 'atr'
   | 'vol'
+  | 'range'
   | 'symbol'
   | 'tags';
 
@@ -169,6 +187,9 @@ export class LabService {
               volRel: t.context.volRel,
               ema200Above: t.context.ema200Above,
               trend4h: t.context.trend4h,
+              rangePos1h: t.context.rangePos1h,
+              rangePos4h: t.context.rangePos4h,
+              rangePos1d: t.context.rangePos1d,
             }
           : null,
         tags: t.tags.map((tt) => ({ id: tt.tag.id, name: tt.tag.name, color: tt.tag.color })),
@@ -180,6 +201,15 @@ export class LabService {
     const okRows = rows.filter((r) => r.ctx?.ok);
     const medAtr = median(okRows.map((r) => r.ctx!.atrPct).filter((v): v is number => v != null));
     const medVol = median(okRows.map((r) => r.ctx!.volRel).filter((v): v is number => v != null));
+
+    // Диапазон входа считается сразу по трём ТФ, но фильтр и фасет всегда
+    // читают только выбранный — иначе три почти одинаковых ряда чипов в панели.
+    const rangeOf = (r: Row): number | null => {
+      if (!r.ctx) return null;
+      if (f.rangeTf === '1h') return r.ctx.rangePos1h;
+      if (f.rangeTf === '1d') return r.ctx.rangePos1d;
+      return r.ctx.rangePos4h;
+    };
 
     // Предикаты по измерениям: true = сделка проходит фильтр этого измерения
     // (или фильтр не задан). Сделки без контекста не проходят контекстные
@@ -210,6 +240,7 @@ export class LabService {
         (medVol != null &&
           r.ctx?.volRel != null &&
           (r.ctx.volRel >= medVol) === (f.vol === 'high')),
+      range: (r) => !f.range || rangeBucket(rangeOf(r)) === f.range,
       symbol: (r) => !f.symbols?.length || f.symbols.includes(r.symbol),
       tags: (r) => !f.tagIds?.length || f.tagIds.every((id) => r.tagSet.has(id)),
     };
@@ -289,6 +320,10 @@ export class LabService {
         ),
       },
       {
+        dimension: 'range',
+        values: facetOf('range', (r) => rangeBucket(rangeOf(r)), ['low', 'mid', 'high']),
+      },
+      {
         dimension: 'symbol',
         values: facetOf('symbol', (r) => r.symbol)
           .sort((a, b) => b.trades - a.trades)
@@ -326,7 +361,14 @@ export class LabService {
       filtered: agg(filtered),
       equity,
       medians: { atrPct: medAtr, volRel: medVol },
-      coverage: { total: rows.length, withContext: okRows.length },
+      coverage: {
+        total: rows.length,
+        withContext: okRows.length,
+        // Отдельно от withContext: диапазон входа считается по своим окнам и
+        // на дневке требует месяца истории, поэтому у части сделок с полным
+        // контекстом его всё равно нет — и панель должна честно это показать.
+        withRange: rows.filter((r) => rangeOf(r) != null).length,
+      },
       facets,
       trades: latest.slice(0, 200).map((r) => ({
         id: r.id,

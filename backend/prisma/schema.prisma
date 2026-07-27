@@ -172,6 +172,22 @@ model TradeContext {
   // 4h regime from IndicatorsService.computeSnapshot: EMA20 vs EMA50 gated by ADX
   trend4h       String? // 'trend_up' | 'trend_down' | 'range'
 
+  // Where the entry price sat inside the recent range of each timeframe:
+  // (entry - low) / (high - low) * 100 over the last N candles closed before
+  // the anchor. 0 = bought at the bottom of the range, 100 = at the top.
+  // Deliberately NOT clamped: an entry above the range (breakout) reads > 100
+  // and below it < 0, which is exactly what we want to be able to see.
+  // Windows: a day on 1h, five days on 4h, a month on the daily.
+  rangePos1h Float?
+  rangePos4h Float?
+  rangePos1d Float?
+
+  // Field-set version of the snapshot. Snapshots are only ever computed for
+  // trades that have none (context == null), so without this a newly added
+  // indicator would stay null forever on every already-computed trade —
+  // TradeContextService drops stale-version rows so they get recomputed.
+  ctxVersion Int @default(1)
+
   computedAt DateTime @default(now())
 
   @@map("trade_contexts")
@@ -248,6 +264,26 @@ model OpenPositionSeen {
   symbol      String
   direction   String // 'long' | 'short'
   firstSeenAt DateTime @default(now())
+
+  // Entry snapshot taken the first tick the position was seen — same fields and
+  // same formulas as TradeContext, but measured live at the entry instead of
+  // reconstructed from history once the trade closes. Lets the открытая позиция
+  // show its own entry context (в верхнем или нижнем диапазоне вошли) while
+  // it's still running. Null until the snapshot succeeds; ctxOk=false marks a
+  // symbol whose kline history was too short, so we stop retrying it.
+  entryPrice    Float?
+  ctxOk         Boolean?
+  ctxComputedAt DateTime?
+  price         Float?
+  atrPct        Float?
+  rsi           Float?
+  volRel        Float?
+  ema200Above   Boolean?
+  ema200DistPct Float?
+  trend4h       String?
+  rangePos1h    Float?
+  rangePos4h    Float?
+  rangePos1d    Float?
 
   @@unique([userId, symbol, direction])
   @@map("open_positions_seen")

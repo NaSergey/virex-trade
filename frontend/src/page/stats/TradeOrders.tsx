@@ -1,7 +1,10 @@
 'use client';
 
+import { useState } from 'react';
+import { LineChart } from 'lucide-react';
 import { useTradeOrders, type Trade, type TradeOrder } from '@/shared/api/bybit/hooks';
 import { formatPnl, formatPrice, pnlColor } from '@/shared/lib/utils/format';
+import { RangeCheckModal } from '@/page/stats/RangeCheckModal';
 
 /** Время ордера — с секундами: внутри одной позиции ордера идут плотно. */
 function fmtOrderTime(iso: string): string {
@@ -87,6 +90,7 @@ function OrderRow({ order, index }: { order: TradeOrder; index: number }) {
  */
 export function TradeOrders({ trade }: { trade: Trade }) {
   const { data, isLoading, isError } = useTradeOrders(trade.id);
+  const [rangeCheck, setRangeCheck] = useState(false);
   const orders = data?.orders ?? [];
 
   const entries = orders.filter((o) => o.kind === 'entry');
@@ -102,7 +106,23 @@ export function TradeOrders({ trade }: { trade: Trade }) {
             {exits.length === 1 ? '' : 'ов'}
           </span>
         )}
+        {/* Проверка диапазона входа живёт здесь, а не отдельной колонкой в
+            таблице: это инструмент разбора одной сделки, а раскрытая строка и
+            есть её разбор. */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setRangeCheck(true);
+          }}
+          className="ml-auto inline-flex cursor-pointer items-center gap-1.5 rounded border border-line px-2 py-1 text-[10px] font-medium text-muted normal-case transition-colors hover:bg-elevated hover:text-fg"
+          title="Показать на графике, где был вход внутри диапазона таймфрейма"
+        >
+          <LineChart className="h-3 w-3" />
+          Диапазон входа
+        </button>
       </div>
+
+      {rangeCheck && <RangeCheckModal trade={trade} onClose={() => setRangeCheck(false)} />}
 
       {isLoading ? (
         <OrdersSkeleton />

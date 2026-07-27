@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { TradesService } from './trades.service';
 import { TradeSyncService } from './trade-sync.service';
+import { TradeContextService, type RangeTf } from './trade-context.service';
 import { LabService } from './lab.service';
 import { BybitTradeService } from '../bybit/services/bybit-trade.service';
 import { CredentialsService } from '../credentials/credentials.service';
@@ -13,6 +14,7 @@ export class TradesController {
   constructor(
     private readonly tradesService: TradesService,
     private readonly syncService: TradeSyncService,
+    private readonly tradeContext: TradeContextService,
     private readonly labService: LabService,
     private readonly bybitTrade: BybitTradeService,
     private readonly credentials: CredentialsService,
@@ -102,6 +104,8 @@ export class TradesController {
     @Query('ema200') ema200?: string,
     @Query('atr') atr?: string,
     @Query('vol') vol?: string,
+    @Query('rangeTf') rangeTf?: string,
+    @Query('range') range?: string,
   ) {
     const csv = (s?: string) => (s ? s.split(',').filter(Boolean) : undefined);
     const int = (s?: string) => {
@@ -124,7 +128,20 @@ export class TradesController {
       ema200: ema200 === 'above' || ema200 === 'below' ? ema200 : undefined,
       atr: atr === 'high' || atr === 'low' ? atr : undefined,
       vol: vol === 'high' || vol === 'low' ? vol : undefined,
+      rangeTf: rangeTf === '1h' || rangeTf === '4h' || rangeTf === '1d' ? rangeTf : undefined,
+      range: range === 'low' || range === 'mid' || range === 'high' ? range : undefined,
     });
+  }
+
+  // Entry context of the currently open position (computed at open time by
+  // TradeSyncService, so it's available while the position is still running).
+  @Get('open-context')
+  async openContext(
+    @CurrentUser('userId') userId: string,
+    @Query('symbol') symbol?: string,
+    @Query('direction') direction?: string,
+  ) {
+    return this.tradesService.openPositionContext(userId, symbol ?? '', direction ?? '');
   }
 
   // Entry/exit fill markers for the chart (one per order, recent window).
@@ -148,6 +165,18 @@ export class TradesController {
   @Get(':id/orders')
   async orders(@CurrentUser('userId') userId: string, @Param('id') id: string) {
     return this.tradesService.positionOrders(userId, id);
+  }
+
+  // Свечи + границы окна + вход: всё, чтобы глазами проверить, что «диапазон
+  // входа» посчитан по тем свечам и по той цене, по которым должен.
+  @Get(':id/range-check')
+  async rangeCheck(
+    @CurrentUser('userId') userId: string,
+    @Param('id') id: string,
+    @Query('tf') tf?: string,
+  ) {
+    const timeframe: RangeTf = tf === '1h' || tf === '1d' ? tf : '4h';
+    return this.tradeContext.rangeCheck(userId, id, timeframe);
   }
 
   // Manual re-sync (full backfill) — useful after connecting new API keys.

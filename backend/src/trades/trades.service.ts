@@ -140,6 +140,40 @@ export class TradesService {
    * исполнений, а трейдеру нужен ордер. P&L есть только у закрывающих —
    * его отдаёт closed-pnl, то есть наши же строки Trade, по orderId.
    */
+  /**
+   * Entry context of a position that is open right now — the snapshot
+   * TradeSyncService took the first tick it saw the position. Unlike a closed
+   * trade's TradeContext this exists while the position is still running, so
+   * the «Обзор» can say «вошёл в верхней трети диапазона 4H» before the trade
+   * is history. `ctxOk === null` = snapshot hasn't been taken yet (the next
+   * sync tick will), `false` = the symbol has too little kline history.
+   */
+  async openPositionContext(userId: string, symbol: string, direction: string) {
+    if (!symbol || (direction !== 'long' && direction !== 'short')) {
+      return { success: false, context: null, error: 'Не указана позиция' };
+    }
+    const row = await this.prisma.openPositionSeen.findUnique({
+      where: { userId_symbol_direction: { userId, symbol, direction } },
+    });
+    if (!row) return { success: true, context: null };
+    return {
+      success: true,
+      context: {
+        ok: row.ctxOk,
+        computedAt: row.ctxComputedAt,
+        entryPrice: row.entryPrice,
+        atrPct: row.atrPct,
+        rsi: row.rsi,
+        volRel: row.volRel,
+        ema200Above: row.ema200Above,
+        trend4h: row.trend4h,
+        rangePos1h: row.rangePos1h,
+        rangePos4h: row.rangePos4h,
+        rangePos1d: row.rangePos1d,
+      },
+    };
+  }
+
   async positionOrders(userId: string, tradeId: string) {
     const trade = await this.prisma.trade.findFirst({ where: { id: tradeId, userId } });
     if (!trade) return { success: false, orders: [], error: 'Сделка не найдена' };

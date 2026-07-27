@@ -6,7 +6,7 @@ import { emptyLabFilters, type LabFilters } from '@/shared/api/lab/hooks';
 /** Множественные измерения: набор выбранных строковых значений. */
 type MultiKey = 'tagIds' | 'symbols' | 'sessions' | 'trend4h';
 /** Одиночные измерения: выбрано одно значение либо ничего. */
-type SingleKey = 'direction' | 'ema200' | 'atr' | 'vol';
+type SingleKey = 'direction' | 'ema200' | 'atr' | 'vol' | 'range';
 
 const toggled = <T,>(list: T[], v: T): T[] => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
@@ -21,6 +21,9 @@ const countActive = (f: LabFilters) =>
   (f.ema200 ? 1 : 0) +
   (f.atr ? 1 : 0) +
   (f.vol ? 1 : 0) +
+  // rangeTf не считаем: он лишь выбирает, какой ТФ читают чипы диапазона,
+  // и сам по себе выборку не сужает.
+  (f.range ? 1 : 0) +
   (f.hourFrom != null || f.hourTo != null ? 1 : 0);
 
 /**
@@ -45,7 +48,9 @@ export function useLabFilters() {
     /** Одиночный выбор: клик по уже выбранному значению снимает фильтр. */
     toggleSingle: <K extends SingleKey>(key: K, value: LabFilters[K]) =>
       set({ [key]: filters[key] === value ? undefined : value } as Partial<LabFilters>),
-    reset: () => setFilters(emptyLabFilters(0)),
+    // rangeTf переживает сброс: это не фильтр, а выбор шкалы, на которую
+    // смотришь — сбрасывать его вместе с фильтрами было бы неожиданно.
+    reset: () => setFilters((f) => ({ ...emptyLabFilters(0), rangeTf: f.rangeTf })),
     activeCount: countActive(filters),
   };
 }
