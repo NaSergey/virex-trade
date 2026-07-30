@@ -16,10 +16,18 @@ export function AuthGuard({ children }: { children: ReactNode }) {
   }, [loading, user, router]);
 
   if (loading) {
+    // Крутящегося колечка тут быть не может: радиус в этой системе нулевой,
+    // так что «спиннер» — это квадрат. Ожидание показывается словом.
     return (
-      <div className="flex h-screen w-screen items-center justify-center gap-3 bg-app text-muted">
-        <span className="h-4 w-4 animate-spin rounded-full border-2 border-line border-t-fg" />
-        Загрузка…
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <span className="lbl">Восстанавливаем сессию…</span>
       </div>
     );
   }

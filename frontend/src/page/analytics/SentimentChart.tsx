@@ -1,123 +1,108 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import type { MouseEventParams, Time, UTCTimestamp } from 'lightweight-charts';
-import { useLightweightChart } from '@/shared/ui/chart/useLightweightChart';
+import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { SentimentPoint } from '@/shared/api/analytics/hooks';
 
-/** $6.1B / $840M — компактные доллары для оси и тултипа. */
+const W = 900;
+const PT = 18;
+const PB = 22;
+
+/** $6.1B / $840M — компактные доллары для подписи. */
 export function fmtUsdCompact(v: number): string {
-  if (v >= 1e9) return `$${(v / 1e9).toFixed(1)}B`;
-  if (v >= 1e6) return `$${(v / 1e6).toFixed(0)}M`;
-  return `$${Math.round(v).toLocaleString('en-US')}`;
+  if (v >= 1e9) return `$${(v / 1e9).toFixed(1)} B`;
+  if (v >= 1e6) return `$${(v / 1e6).toFixed(0)} M`;
+  return `$${Math.round(v).toLocaleString('ru-RU')}`;
 }
 
 /**
- * Доля лонг-аккаунтов (правая шкала, в процентах, пунктир на 50% = «толпа
- * нейтральна») + открытый интерес в долларах (левая шкала). Тултип на
- * кроссхейре расшифровывает обе линии словами.
+ * Позиционирование участников: доля лонг-аккаунтов во времени. Волосяная линия
+ * на 50% — «толпа нейтральна»; всё, что выше, — перевес в лонг.
+ *
+ * Открытый интерес намеренно не наложен второй кривой со своей шкалой: две
+ * несопоставимые оси на одном полотне создают ложные «пересечения», которых в
+ * данных нет. Его текущее значение стоит числом в коэффициентах выше.
  */
-export function SentimentChart({ data }: { data: SentimentPoint[] }) {
-  const { containerRef, chart } = useLightweightChart({ leftPriceScale: true });
-  const tooltipRef = useRef<HTMLDivElement>(null);
+export function SentimentChart({ data, height = 180 }: { data: SentimentPoint[]; height?: number }) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (!chart) return;
-
-    // Long ratio — right scale, 0–100%
-    const buySeries = chart.addAreaSeries({
-      lineColor: 'rgba(34, 197, 94, 0.9)',
-      topColor: 'rgba(34, 197, 94, 0.2)',
-      bottomColor: 'rgba(239, 68, 68, 0.2)',
-      lineWidth: 2,
-      priceScaleId: 'right',
-      priceFormat: { type: 'custom', formatter: (v: number) => `${v.toFixed(0)}%` },
-    });
-    // Ориентир: выше — лонгов больше, ниже — шортов больше.
-    buySeries.createPriceLine({
-      price: 50,
-      color: '#4b5563',
-      lineWidth: 1,
-      lineStyle: 2, // dashed
-      axisLabelVisible: false,
-      title: '',
-    });
-
-    // Open interest ($) — left scale
-    const oiSeries = chart.addAreaSeries({
-      lineColor: 'rgba(99, 102, 241, 0.6)',
-      topColor: 'rgba(99, 102, 241, 0.12)',
-      bottomColor: 'rgba(99, 102, 241, 0.02)',
-      lineWidth: 1,
-      priceScaleId: 'left',
-      priceFormat: { type: 'custom', formatter: fmtUsdCompact },
-    });
-
-    const mapped = data.map((p) => ({
-      time: (p.timestamp / 1000) as UTCTimestamp,
-      value: p.buyRatio * 100,
-    }));
-    const oiMapped = data
-      .filter((p) => p.openInterestUsd > 0)
-      .map((p) => ({ time: (p.timestamp / 1000) as UTCTimestamp, value: p.openInterestUsd }));
-    buySeries.setData(mapped);
-    oiSeries.setData(oiMapped);
-    chart.timeScale().fitContent();
-
-    // Плавающий тултип: «дата — лонгов X% / шортов Y% — OI $Z».
-    const onCrosshair = (param: MouseEventParams<Time>) => {
-      const el = tooltipRef.current;
-      const box = containerRef.current;
-      if (!el || !box) return;
-      // Обе серии — area, их точки всегда несут value.
-      const longPct = (param.seriesData.get(buySeries) as { value?: number } | undefined)?.value;
-      if (param.time == null || !param.point || longPct == null) {
-        el.style.display = 'none';
-        return;
-      }
-      const oiUsd = (param.seriesData.get(oiSeries) as { value?: number } | undefined)?.value;
-      const dt = new Date((param.time as number) * 1000);
-      const when = dt.toLocaleString('ru-RU', {
-        day: '2-digit',
-        month: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-      el.innerHTML =
-        `<div class="text-subtle">${when}</div>` +
-        `<div><span style="color:#22c55e">Лонг ${longPct.toFixed(1)}%</span>` +
-        ` · <span style="color:#ef4444">Шорт ${(100 - longPct).toFixed(1)}%</span></div>` +
-        (oiUsd != null ? `<div style="color:#818cf8">OI ${fmtUsdCompact(oiUsd)}</div>` : '');
-      el.style.display = 'block';
-      // Не даём тултипу вылезать за правый край.
-      const flip = param.point.x > box.clientWidth - 170;
-      el.style.left = flip ? '' : `${param.point.x + 14}px`;
-      el.style.right = flip ? `${box.clientWidth - param.point.x + 14}px` : '';
-      el.style.top = `${Math.max(4, param.point.y - 14)}px`;
+  const chart = useMemo(() => {
+    if (data.length < 2) return null;
+    const values = data.map((p) => p.buyRatio * 100);
+    // Домен всегда включает 50: без этого нейтральная линия могла бы уехать за
+    // край и перевес читался бы не от чего.
+    const lo = Math.min(45, ...values) - 1;
+    const hi = Math.max(55, ...values) + 1;
+    const x = (i: number) => (i / (values.length - 1)) * W;
+    const y = (v: number) => PT + (1 - (v - lo) / (hi - lo)) * (height - PT - PB);
+    return {
+      x,
+      y,
+      values,
+      line: values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' '),
+      neutralY: y(50),
     };
-    chart.subscribeCrosshairMove(onCrosshair);
+  }, [data, height]);
 
-    return () => {
-      // The chart instance may already be disposed by useLightweightChart's own
-      // cleanup (e.g. React StrictMode's double-effect-invocation in dev) by the
-      // time this runs — removeSeries on a disposed chart throws internally.
-      try {
-        chart.unsubscribeCrosshairMove(onCrosshair);
-        chart.removeSeries(buySeries);
-        chart.removeSeries(oiSeries);
-      } catch {
-        // Chart already disposed — nothing to clean up.
-      }
-    };
-  }, [chart, data, containerRef]);
+  if (!chart) return <p style={{ color: 'var(--color-muted)' }}>Данных за период нет</p>;
+
+  const onMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const rect = boxRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0) return;
+    const frac = (e.clientX - rect.left) / rect.width;
+    setHoverIdx(Math.max(0, Math.min(data.length - 1, Math.round(frac * (data.length - 1)))));
+  };
+
+  const hover = hoverIdx != null ? { point: data[hoverIdx], value: chart.values[hoverIdx] } : null;
 
   return (
-    <div className="relative h-full w-full">
-      <div ref={containerRef} className="h-full w-full" />
-      <div
-        ref={tooltipRef}
-        className="pointer-events-none absolute z-10 hidden rounded-md border border-line bg-surface/95 px-2.5 py-1.5 font-mono text-[11px] leading-4 text-fg shadow-lg shadow-black/30"
-      />
+    <div ref={boxRef} onPointerMove={onMove} onPointerLeave={() => setHoverIdx(null)}>
+      <svg viewBox={`0 0 ${W} ${height}`} style={{ display: 'block', width: '100%', height: 'auto' }} role="img" aria-label="Доля лонг-аккаунтов во времени">
+        <line
+          x1="0"
+          y1={chart.neutralY.toFixed(1)}
+          x2={W}
+          y2={chart.neutralY.toFixed(1)}
+          stroke="var(--color-line-2)"
+          strokeWidth="1"
+          strokeDasharray="3 4"
+        />
+        <text x="0" y={(chart.neutralY - 6).toFixed(1)} fill="var(--color-subtle)" fontSize="11" fontFamily="var(--font-mono)">
+          50 % — нейтрально
+        </text>
+        <polyline points={chart.line} fill="none" stroke="var(--color-fg)" strokeWidth="1.5" strokeLinejoin="round" />
+
+        {hover && (
+          <g>
+            <line
+              x1={chart.x(hoverIdx!).toFixed(1)}
+              y1={PT - 10}
+              x2={chart.x(hoverIdx!).toFixed(1)}
+              y2={height - PB + 10}
+              stroke="var(--color-line-strong)"
+              strokeWidth="1"
+              shapeRendering="crispEdges"
+            />
+            <text
+              x={(chart.x(hoverIdx!) > W * 0.7 ? chart.x(hoverIdx!) - 8 : chart.x(hoverIdx!) + 8).toFixed(1)}
+              y={PT - 2}
+              textAnchor={chart.x(hoverIdx!) > W * 0.7 ? 'end' : 'start'}
+              fill="var(--color-fg)"
+              fontSize="12"
+              fontFamily="var(--font-mono)"
+            >
+              лонг {hover.value.toFixed(1)} % ·{' '}
+              {new Date(hover.point.timestamp).toLocaleString('ru-RU', {
+                day: '2-digit',
+                month: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+              {hover.point.openInterestUsd > 0 ? ` · OI ${fmtUsdCompact(hover.point.openInterestUsd)}` : ''}
+            </text>
+          </g>
+        )}
+      </svg>
     </div>
   );
 }

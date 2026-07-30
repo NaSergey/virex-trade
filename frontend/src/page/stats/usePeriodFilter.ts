@@ -12,6 +12,9 @@ export const PERIODS = [
 
 const DAYS_STORAGE_KEY = 'virex:stats:days';
 const CUSTOM_DATE_STORAGE_KEY = 'virex:stats:customDateFrom';
+const MODE_STORAGE_KEY = 'virex:stats:periodMode';
+
+type Mode = 'preset' | 'custom';
 
 // Пауза после последнего нажатия, прежде чем дата уйдёт в запросы. Хватает,
 // чтобы допечатать год, и не ощущается задержкой при выборе из календаря.
@@ -49,8 +52,21 @@ const readStoredCustomDate = () => {
 };
 
 /**
- * Фильтр периода, общий для страниц «Обзор» и «Теги» (раньше это были
- * вкладки одной страницы с одним состоянием — теперь отдельные пункты
+ * Какой из двух селекторов сейчас управляет фильтром — пресет или своя дата.
+ * До появления этого флага активность своей даты определялась одним лишь её
+ * наличием в хранилище; при первом заходе после обновления сохраняем то же
+ * поведение, а не сбрасываем всех на пресет.
+ */
+const readStoredMode = (hasStoredDate: boolean): Mode => {
+  if (typeof window === 'undefined') return 'preset';
+  const saved = localStorage.getItem(MODE_STORAGE_KEY);
+  if (saved === 'custom' || saved === 'preset') return saved;
+  return hasStoredDate ? 'custom' : 'preset';
+};
+
+/**
+ * Фильтр периода, общий для страниц «Обзор», «Теги» и «Лаборатория» (раньше
+ * это были вкладки одной страницы с одним состоянием — теперь отдельные пункты
  * навигации, поэтому период живёт в localStorage: переход между ними и
  * перезагрузка страницы не сбрасывают выбранный период.
  *
@@ -60,20 +76,25 @@ const readStoredCustomDate = () => {
  * useEffect на секунду мелькал дефолт (30 дней, без своей даты), а потом блок
  * дёргался на сохранённое значение.
  *
- * `customDate` переопределяет пресет (7/30/90/всё), если задан — храним саму
- * дату, а не посчитанное один раз число дней, иначе фильтр молча съезжает на
- * день при следующем заходе (см. daysSince).
+ * Пресет и своя дата не вытесняют друг друга из памяти — только по очереди
+ * управляют фильтром. Клик по «30 дней» после того, как была введена своя
+ * дата, снимает её с управления (`mode` → 'preset'), но не стирает саму дату:
+ * она остаётся в поле и в хранилище, и повторный клик по полю сразу
+ * возвращает к ней, не заставляя вводить заново. Стирает дату насовсем только
+ * явная очистка поля — это осознанное действие, а не побочный эффект выбора
+ * пресета.
  *
  * Состояний даты два: `customDate` — то, что в поле прямо сейчас (обновляется
  * на каждое нажатие, иначе поле не печатается), и внутреннее «подтверждённое»
- * — то, из чего считается период для запросов. Второе отстаёт от первого на
- * паузу в наборе и никогда не принимает недопечатанную дату, поэтому запросы
- * не летят на каждую цифру.
+ * — то, из чего считается период для запросов, когда своя дата активна. Второе
+ * отстаёт от первого на паузу в наборе и никогда не принимает недопечатанную
+ * дату, поэтому запросы не летят на каждую цифру.
  */
 export function usePeriodFilter() {
   const [days, setDaysState] = useState<number>(readStoredDays);
   const [customDate, setCustomDateState] = useState<string | null>(readStoredCustomDate);
   const [committedDate, setCommittedDate] = useState<string | null>(readStoredCustomDate);
+  const [mode, setModeState] = useState<Mode>(() => readStoredMode(readStoredCustomDate() != null));
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cancelPending = () => {
@@ -82,6 +103,11 @@ export function usePeriodFilter() {
   };
 
   useEffect(() => cancelPending, []);
+
+  const setMode = (m: Mode) => {
+    setModeState(m);
+    localStorage.setItem(MODE_STORAGE_KEY, m);
+  };
 
   const commit = (iso: string | null) => {
     setCommittedDate(iso);
@@ -93,23 +119,26 @@ export function usePeriodFilter() {
     cancelPending();
     setDaysState(d);
     localStorage.setItem(DAYS_STORAGE_KEY, String(d));
-    setCustomDateState(null);
-    commit(null);
+    setMode('preset');
   };
 
   const setCustomDate = (iso: string | null) => {
     setCustomDateState(iso);
     cancelPending();
-    // Сброс — явное действие кнопкой, а не набор: применяем сразу.
+    // Сброс — явное действие (очистка поля), а не набор: применяем сразу и
+    // стираем дату насовсем, в отличие от переключения на пресет.
     if (iso === null) {
+      setMode('preset');
       commit(null);
       return;
     }
+    setMode('custom');
     if (!isUsableDate(iso)) return;
     timer.current = setTimeout(() => commit(iso), COMMIT_DELAY_MS);
   };
 
-  const effectiveDays = committedDate ? daysSince(committedDate) : days;
+  const customActive = mode === 'custom';
+  const effectiveDays = customActive && committedDate ? daysSince(committedDate) : days;
 
-  return { days, customDate, effectiveDays, setDays, setCustomDate };
+  return { days, customDate, customActive, effectiveDays, setDays, setCustomDate };
 }

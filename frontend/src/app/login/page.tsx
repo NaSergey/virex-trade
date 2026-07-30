@@ -3,10 +3,14 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/shared/auth/AuthContext';
-import { VirexLogo } from '@/shared/ui/icon/VirexLogo';
 
 type Mode = 'login' | 'register';
 
+/**
+ * Вход. Ни карточки, ни рамки: форма стоит на том же единственном фоне, что и
+ * весь продукт, и держится линейками полей — первое, что человек видит, уже
+ * говорит, как этот интерфейс устроен.
+ */
 export default function LoginPage() {
   const { user, loading, login, register } = useAuth();
   const router = useRouter();
@@ -18,7 +22,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Already authenticated → bounce to the app.
+  // Уже авторизован → в приложение.
   useEffect(() => {
     if (!loading && user) router.replace('/');
   }, [loading, user, router]);
@@ -28,11 +32,8 @@ export default function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      if (mode === 'login') {
-        await login(email, password);
-      } else {
-        await register(email, password, name || undefined);
-      }
+      if (mode === 'login') await login(email, password);
+      else await register(email, password, name || undefined);
       router.replace('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка');
@@ -41,100 +42,96 @@ export default function LoginPage() {
     }
   };
 
-  const fieldClass =
-    'w-full tabular rounded-lg border border-line bg-app px-3 py-2 text-sm text-fg placeholder:text-subtle ' +
-    'outline-none transition-colors duration-150 hover:border-line-strong focus:border-accent-2 focus:ring-1 focus:ring-accent-2';
-
   return (
-    <div className="flex h-screen w-screen items-center justify-center bg-app px-4">
-      <div className="w-full max-w-sm">
-        <div className="mb-6 flex items-center gap-2.5">
-          <VirexLogo className="h-8 w-8 text-fg" />
-          <span className="text-base font-semibold tracking-tight text-fg">Virex</span>
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 'var(--s4)',
+      }}
+    >
+      <div style={{ width: '100%', maxWidth: 360 }}>
+        <div className="mark" style={{ marginBottom: 'var(--s5)' }}>
+          Virex
         </div>
 
-        <form onSubmit={onSubmit} className="panel space-y-4 p-6 shadow-(--shadow-medium)">
-          <div className="space-y-1">
-            <h1 className="text-lg font-semibold text-fg">
-              {mode === 'login' ? 'Вход в терминал' : 'Регистрация'}
-            </h1>
-            <p className="text-sm text-muted">
-              {mode === 'login'
-                ? 'Введите данные аккаунта, чтобы продолжить'
-                : 'Создайте аккаунт, чтобы начать работу'}
-            </p>
-          </div>
+        <h1>{mode === 'login' ? 'Вход' : 'Регистрация'}</h1>
+        <p className="lede" style={{ marginBottom: 'var(--s4)' }}>
+          {mode === 'login'
+            ? 'Журнал криптофьючерсов: сделки, разметка и статистика по ней.'
+            : 'Создайте аккаунт — дальше подключите биржевые ключи в настройках.'}
+        </p>
 
+        <form onSubmit={onSubmit}>
           {mode === 'register' && (
-            <div className="space-y-1.5">
-              <label className="block text-xs font-medium text-muted">
-                Имя <span className="text-subtle">(необязательно)</span>
+            <div className="field">
+              <label className="lbl" htmlFor="name">
+                Имя (необязательно)
               </label>
               <input
-                type="text"
+                id="name"
+                className="in full"
+                autoComplete="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className={fieldClass}
-                autoComplete="name"
               />
             </div>
           )}
 
-          <div className="space-y-1.5">
-            <label className="block text-xs font-medium text-muted">Email</label>
+          <div className="field">
+            <label className="lbl" htmlFor="email">
+              Почта
+            </label>
             <input
+              id="email"
+              className="in full"
               type="email"
               required
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className={fieldClass}
-              autoComplete="email"
             />
           </div>
 
-          <div className="space-y-1.5">
-            <label className="block text-xs font-medium text-muted">Пароль</label>
+          <div className="field">
+            <label className="lbl" htmlFor="password">
+              Пароль
+            </label>
             <input
+              id="password"
+              className="in full"
               type="password"
               required
               minLength={mode === 'register' ? 8 : undefined}
+              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className={fieldClass}
-              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
             />
           </div>
 
           {error && (
-            <div className="rounded-lg border border-down/40 bg-down/10 px-3 py-2 text-sm text-down">
+            <p className="warn" style={{ marginBottom: 'var(--s3)' }}>
               {error}
-            </div>
+            </p>
           )}
 
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full cursor-pointer rounded-lg bg-accent py-2.5 text-sm font-semibold text-white transition-colors duration-150 hover:bg-accent-soft disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {submitting
-              ? 'Подождите…'
-              : mode === 'login'
-                ? 'Войти'
-                : 'Зарегистрироваться'}
+          <button type="submit" className="btn solid" style={{ width: '100%' }} disabled={submitting}>
+            {submitting ? 'Подождите…' : mode === 'login' ? 'Войти' : 'Зарегистрироваться'}
           </button>
         </form>
 
         <button
           type="button"
+          className="btn bare"
+          style={{ marginTop: 'var(--s3)', width: '100%' }}
           onClick={() => {
             setMode(mode === 'login' ? 'register' : 'login');
             setError(null);
           }}
-          className="mt-4 w-full cursor-pointer text-center text-sm text-muted transition-colors hover:text-fg"
         >
-          {mode === 'login'
-            ? 'Нет аккаунта? Зарегистрироваться'
-            : 'Уже есть аккаунт? Войти'}
+          {mode === 'login' ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
         </button>
       </div>
     </div>

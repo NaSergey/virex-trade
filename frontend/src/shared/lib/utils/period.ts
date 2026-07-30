@@ -25,3 +25,17 @@ export function daysSince(date: Date | string): number {
 export function daysSinceDefault(): number {
   return daysSince(DEFAULT_SINCE);
 }
+
+/**
+ * Период прописью: «30 июн — 29 июл 2026». Свод всегда подписан теми самыми
+ * датами, за которые он посчитан, — иначе «30 дней» остаётся абстракцией, и по
+ * снимку экрана уже не сказать, какой это был месяц.
+ * @param days - глубина периода в днях; 0 — всё время
+ */
+export function formatPeriodRange(days: number): string {
+  if (days <= 0) return 'всё время';
+  const to = new Date();
+  const from = new Date(to.getTime() - (days - 1) * 86400000);
+  const short = (d: Date) => d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }).replace('.', '');
+  return `${short(from)} — ${short(to)} ${to.getFullYear()}`;
+}

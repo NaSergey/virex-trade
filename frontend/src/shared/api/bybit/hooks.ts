@@ -179,6 +179,26 @@ export interface Trade {
   // Из скольких закрывающих ордеров собрана позиция (1 = закрыта разом).
   parts: number;
   tags?: Array<{ id: string; name: string; color: string }>;
+  // Снимок рынка на входе: null — контекст этой сделки ещё не посчитан
+  // (у старых сделок его может не быть вовсе), ok === false — у символа не
+  // хватило истории свечей.
+  context?: TradeContext | null;
+}
+
+/** Каким был рынок в момент входа — то, что показывает раскрытая запись журнала. */
+export interface TradeContext {
+  ok: boolean;
+  // basis и rsi отдаёт только /api/trades: Лаборатория присылает тот же снимок,
+  // но без служебной привязки к моменту и без RSI — их там нечем показывать.
+  basis?: 'opened' | 'closed';
+  rsi?: number | null;
+  atrPct: number | null;
+  volRel: number | null;
+  ema200Above: boolean | null;
+  trend4h: string | null;
+  rangePos1h: number | null;
+  rangePos4h: number | null;
+  rangePos1d: number | null;
 }
 
 // Один ордер раскрытой сделки: филлы биржи, сгруппированные по orderId.
@@ -268,7 +288,7 @@ export interface RangeCheckResponse {
     toTime: number;
   };
   // barTime — время свечи, содержащей момент: маркер на «межсвечном» времени
-  // lightweight-charts не рисует.
+  // на «межсвечном» времени маркер поставить некуда.
   entry: { price: number; time: number; barTime: number | null; basis: 'opened' | 'closed' };
   exit: { price: number; time: number; barTime: number | null };
   closedPnl: number;

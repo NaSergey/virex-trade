@@ -1,4 +1,50 @@
 /**
+ * Разряды тонким пробелом: 118 420.50 читается с одного взгляда, 118420.50 —
+ * нет. Пробел именно тонкий (U+2009), а не обычный: в моноширинной колонке
+ * полный пробел рвёт число на два.
+ */
+function group(intPart: string): string {
+  return intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+}
+
+/**
+ * Класс знака суммы: 'pos' — прибыль, 'neg' — убыток. Ноль относим к прибыли
+ * (закрытие в безубыток — не потеря), как и подпись со знаком «+0.00».
+ * @param v - сумма
+ */
+export function moneyClass(v: number): 'pos' | 'neg' {
+  return v >= 0 ? 'pos' : 'neg';
+}
+
+/**
+ * Деньги в журнале: знак всегда явный (плюс у прибыли, типографский минус
+ * U+2212 у убытка — дефис в моно-колонке слишком похож на тире и на перенос),
+ * два знака после запятой, разряды разбиты.
+ *
+ * Одна форма на весь продукт: свод, таблицы, диалоги и подписи графика
+ * показывают одно и то же число одинаково.
+ * @param v - сумма
+ * @param digits - знаков после точки (по умолчанию 2)
+ */
+export function formatMoney(v: number, digits = 2): string {
+  if (!Number.isFinite(v)) return '—';
+  const [int, frac] = Math.abs(v).toFixed(digits).split('.');
+  return `${v >= 0 ? '+' : '−'}${group(int)}${frac ? `.${frac}` : ''}`;
+}
+
+/**
+ * Цена без знака, но с разбитыми разрядами и той же точностью, что и
+ * formatPrice (мелкие инструменты — 4 знака, остальные — 2).
+ * @param value - цена числом или строкой с биржи
+ */
+export function formatPriceGrouped(value: string | number | null | undefined): string {
+  const plain = formatPrice(value);
+  if (plain === '-') return '—';
+  const [int, frac] = plain.split('.');
+  return `${group(int)}${frac ? `.${frac}` : ''}`;
+}
+
+/**
  * Format number with appropriate decimal places
  * - If number < 1 (e.g., 0.234235): show 4 decimal places
  * - If number >= 1 (e.g., 98097.70): show 2 decimal places
@@ -25,17 +71,6 @@ export function formatPrice(value: string | number | null | undefined): string {
 }
 
 /**
- * Format a PnL value with an explicit sign and 2 decimal places.
- * Does not append a currency suffix — callers that need one (e.g. " USDT")
- * append it themselves, since suffix presence varies per call site.
- * @param v - PnL value
- * @returns Formatted string, e.g. "+5.00" or "-3.46"
- */
-export function formatPnl(v: number): string {
-  return `${v >= 0 ? '+' : ''}${v.toFixed(2)}`;
-}
-
-/**
  * Format an ISO date string as a short ru-RU day/month, hour:minute string.
  * @param iso - ISO date string
  * @returns Formatted date string
@@ -47,25 +82,6 @@ export function formatTradeDate(iso: string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-/**
- * Sum a numeric field across a list of items, defensively parsing string/undefined values.
- * @param items - Array of items
- * @param field - Key of the numeric field to sum
- * @returns Sum of parsed values (0 for unparseable/missing values)
- */
-export function sumPnl<T>(items: T[], field: keyof T): number {
-  return items.reduce((sum, item) => sum + (parseFloat(String(item[field] ?? '')) || 0), 0);
-}
-
-/**
- * Semantic text color class for a PnL/profit-factor-driven value: up-colored
- * above zero, down-colored below, muted at exactly zero.
- * @param v - value to classify (PnL, avg PnL, etc.)
- */
-export function pnlColor(v: number): string {
-  return v > 0 ? 'text-up' : v < 0 ? 'text-down' : 'text-muted';
 }
 
 /**
@@ -83,10 +99,12 @@ export function formatProfitFactor(profitFactor: number, wins: number, losses: n
 }
 
 /**
- * Format a percentage with an explicit sign, e.g. "+2.35%" / "-1.10%".
- * @param v - value in percent
- * @param digits - decimal places (default 2)
+ * Проценты со знаком: «+2.35 %» / «−1.10 %». Минус и отбивка перед знаком
+ * процента — те же, что у денег (см. formatMoney): одна типографика на все
+ * величины со знаком.
+ * @param v - значение в процентах
+ * @param digits - знаков после точки (по умолчанию 2)
  */
 export function fmtPctSigned(v: number, digits = 2): string {
-  return `${v >= 0 ? '+' : ''}${v.toFixed(digits)}%`;
+  return `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(digits)} %`;
 }

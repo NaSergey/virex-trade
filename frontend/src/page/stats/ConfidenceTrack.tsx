@@ -1,25 +1,28 @@
 'use client';
 
 /**
- * Винрейт-трек для карточки комбинации: заливка = winRate, метка-риска =
- * нижняя граница доверительного интервала Уилсона (консервативная оценка
- * при малой выборке) — та же идея, что раньше показывал текстовый LB рядом
- * с WinrateBar, но как в макете: заливка + маркер на одной шкале.
+ * Винрейт и его нижняя граница на одной шкале: треугольник — измеренный
+ * винрейт, янтарная риска — нижняя граница 95%-го интервала (поправка Уилсона),
+ * янтарная полоса между ними — цена короткой выборки.
+ *
+ * Одно число вместо двух не годилось: «100% на шести сделках» и «65% на
+ * тридцати четырёх» выглядят как «первое лучше», хотя нижняя граница у них 54%
+ * против 48% — то есть почти одно и то же. Расстояние между риской и
+ * треугольником и есть та самая поправка, и её видно, не читая цифр.
  */
-export function ConfidenceTrack({ winRate, wilsonLow, trades }: { winRate: number; wilsonLow: number; trades: number }) {
-  const color = winRate >= 50 ? 'var(--color-up)' : 'var(--color-down)';
+export function ConfidenceTrack({ winRate, wilsonLow }: { winRate: number; wilsonLow: number }) {
+  const wr = Math.max(0, Math.min(100, winRate));
+  const lb = Math.max(0, Math.min(100, wilsonLow));
+
   return (
-    <div>
-      <div className="relative mt-1.5 h-[5px] rounded-full bg-elevated-2">
-        <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${winRate}%`, background: color }} />
-        <div className="absolute top-[-2.5px] h-[10px] w-[2px] rounded-sm bg-fg" style={{ left: `${wilsonLow}%` }} />
-      </div>
-      <div className="mt-1 flex justify-between text-[9.5px] text-subtle">
-        <span>winrate {winRate}%</span>
-        <span title="Нижняя граница 95% доверительного интервала (поправка Уилсона)">
-          LB {wilsonLow}% (n={trades})
-        </span>
-      </div>
-    </div>
+    <span className="cinl">
+      <span className="cinl-p">{wr.toFixed(1)}</span>
+      <span className="cinl-b">
+        <i className="cinl-rng" style={{ left: `${lb.toFixed(1)}%`, width: `${Math.max(0, wr - lb).toFixed(1)}%` }} />
+        <i className="cinl-lb" style={{ left: `${lb.toFixed(1)}%` }} />
+        <i className="cinl-pt" style={{ left: `${wr.toFixed(1)}%` }} />
+      </span>
+      <span className="cinl-l">≥ {lb.toFixed(1)}</span>
+    </span>
   );
 }

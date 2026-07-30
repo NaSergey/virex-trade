@@ -7,155 +7,213 @@ import {
   useMarketSentiment,
   useVolatility,
 } from '@/shared/api/analytics/hooks';
-import { StatCard } from '@/shared/ui/StatCard';
-import { SegmentedControl } from '@/shared/ui/SegmentedControl';
+import { useHourlyStats, useMarketCorrelation } from '@/shared/api/market-events/hooks';
+import { Wrap } from '@/shared/ui/Wrap';
+import { Seg } from '@/shared/ui/Seg';
+import { WEEKDAY_LABELS, WEEKDAY_ORDER } from '@/shared/lib/utils/period';
 import { fmtPctSigned } from '@/shared/lib/utils/format';
 import { SentimentChart, fmtUsdCompact } from './SentimentChart';
-import { EconomicCalendarWeekPanel } from './EconomicCalendarWeekPanel';
-import { HourlyVolatilityPanel } from './HourlyVolatilityPanel';
 
 const SYMBOLS = [
-  { label: 'BTC', value: 'BTCUSDT' },
-  { label: 'ETH', value: 'ETHUSDT' },
-  { label: 'SOL', value: 'SOLUSDT' },
+  { value: 'BTCUSDT', label: 'BTC' },
+  { value: 'ETHUSDT', label: 'ETH' },
+  { value: 'SOLUSDT', label: 'SOL' },
+];
+
+const HISTORY = [
+  { value: 365, label: '1 год' },
+  { value: 730, label: '2 года' },
 ];
 
 function fmtMarketCap(v: number): string {
-  if (v >= 1e12) return `$${(v / 1e12).toFixed(2)}T`;
-  if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
+  if (v >= 1e12) return `$${(v / 1e12).toFixed(2)} T`;
+  if (v >= 1e9) return `$${(v / 1e9).toFixed(2)} B`;
   return `$${v.toFixed(0)}`;
 }
 
-function fearGreedColor(v: number): string {
-  if (v <= 25) return 'text-down';
-  if (v <= 45) return 'text-warn';
-  if (v <= 55) return 'text-warn';
-  if (v <= 75) return 'text-up';
-  return 'text-up';
-}
-
+/**
+ * Рынок: общий фон, к вашим сделкам не привязанный. Сказано это прямо в
+ * подзаголовке — иначе страница со статистикой рядом со страницами со
+ * статистикой читается как «моя статистика», и «винрейт роста 62 %» можно
+ * принять за свой.
+ */
 export const AnalyticsPage = () => {
   const [symbol, setSymbol] = useState('BTCUSDT');
+  const [historyDays, setHistoryDays] = useState(365);
 
   const { data: marketData } = useMarketData();
   const { data: fgData } = useFearAndGreed();
   const { data: sentimentData } = useMarketSentiment(symbol);
-  const { data: volData } = useVolatility('BTCUSDT');
+  const { data: volData } = useVolatility(symbol);
+  const { data: hourly } = useHourlyStats(historyDays);
+  const { data: corr } = useMarketCorrelation(historyDays);
 
-  const latestPoint = sentimentData?.points.at(-1);
+  const latest = sentimentData?.points.at(-1);
+  const longShort = latest && latest.sellRatio > 0 ? latest.buyRatio / latest.sellRatio : null;
+  const hours = hourly?.hourly ?? [];
+  const maxVol = Math.max(0, ...hours.map((b) => b.avgVolatilityPct));
+  const hottest = hours.length > 0 ? [...hours].sort((a, b) => b.avgVolatilityPct - a.avgVolatilityPct)[0] : null;
 
   return (
-    <div className="h-full overflow-y-auto bg-app p-3">
-      <div className="mx-auto flex flex-col gap-3">
-        {/* Header + symbol selector */}
-        <div className="flex items-center justify-between">
-          <h1 className="text-base font-semibold text-fg">Аналитика</h1>
-          <SegmentedControl options={SYMBOLS} value={symbol} onChange={setSymbol} />
+    <Wrap style={{ paddingBottom: 'var(--s6)' }}>
+      <div className="pagehead">
+        <div>
+          <h1>Рынок</h1>
+          <p className="lede">Общерыночный фон. К вашим сделкам не привязан.</p>
         </div>
+        <Seg options={SYMBOLS} value={symbol} onChange={setSymbol} ariaLabel="Инструмент" />
+      </div>
 
-        {/* Metric cards */}
-        <div className="grid grid-cols-5 gap-2">
-          <StatCard
-            label="Рыночная капитализация"
-            value={marketData ? fmtMarketCap(marketData.marketCap) : '—'}
-            extra={
-              marketData && (
-                <div
-                  className={`mt-0.5 font-mono text-xs ${marketData.marketCapChange24h >= 0 ? 'text-up' : 'text-down'}`}
-                >
-                  {fmtPctSigned(marketData.marketCapChange24h)} 24h
-                </div>
-              )
-            }
-          />
-
-          <StatCard
-            label="Fear &amp; Greed"
-            value={fgData ? String(fgData.value) : '—'}
-            valueClassName={`font-mono text-lg font-semibold ${fgData ? fearGreedColor(fgData.value) : 'text-fg'}`}
-            extra={
-              fgData && (
-                <div className="mt-0.5 text-xs text-muted">{fgData.classification}</div>
-              )
-            }
-          />
-
-          <StatCard
-            label="Волатильность BTC (24ч)"
-            value={volData ? `${volData.currentVolPct.toFixed(2)}%` : '—'}
-            extra={
-              volData && (
-                <div className={`mt-0.5 font-mono text-xs ${volData.elevated ? 'text-down' : 'text-muted'}`}>
-                  {volData.elevated ? '↑ выше среднего' : 'в норме'} · база 7д {volData.avgVolPct.toFixed(2)}%
-                </div>
-              )
-            }
-          />
-
-          <StatCard
-            label="Объём BTC (24ч)"
-            value={volData ? fmtUsdCompact(volData.volume24hUsd) : '—'}
-            extra={
-              volData && (
-                <>
-                  <div className={`mt-0.5 font-mono text-xs ${volData.volumeChangePct >= 0 ? 'text-up' : 'text-down'}`}>
-                    {fmtPctSigned(volData.volumeChangePct)} к среднему 7д
-                  </div>
-                  <div
-                    className={`mt-0.5 text-[11px] ${
-                      volData.dominantSide === 'buy'
-                        ? 'text-up'
-                        : volData.dominantSide === 'sell'
-                          ? 'text-down'
-                          : 'text-muted'
-                    }`}
-                  >
-                    {volData.dominantSide === 'buy' && '🟢 перевес в покупку'}
-                    {volData.dominantSide === 'sell' && '🔴 перевес в продажу'}
-                    {volData.dominantSide === 'neutral' && '⚪ без перевеса'}
-                    {' · '}
-                    {fmtUsdCompact(volData.buyVolumeUsd)} / {fmtUsdCompact(volData.sellVolumeUsd)}
-                  </div>
-                </>
-              )
-            }
-          />
-
-          <EconomicCalendarWeekPanel />
+      <div className="an">
+        <div>
+          <div className="lbl">Капитализация</div>
+          <div className="an-v">{marketData ? fmtMarketCap(marketData.marketCap) : '—'}</div>
+          {marketData && (
+            <div className={`n ${marketData.marketCapChange24h >= 0 ? 'pos' : 'neg'}`} style={{ fontSize: 'var(--t-xs)' }}>
+              {fmtPctSigned(marketData.marketCapChange24h)} за 24 ч
+            </div>
+          )}
         </div>
-
-        <HourlyVolatilityPanel />
-
-        {/* Sentiment chart */}
-        <section className="panel flex h-90 flex-col">
-          <div className="flex items-center gap-4 border-b border-line px-3 py-2">
-            <span className="text-sm font-semibold text-fg">Позиционирование {symbol}</span>
-            <div className="flex items-center gap-3 text-[10px] text-muted">
-              <span>
-                <span className="mr-1 inline-block h-2 w-2 rounded-sm bg-up" />
-                Лонг {latestPoint ? `${(latestPoint.buyRatio * 100).toFixed(1)}%` : '—'}
-              </span>
-              <span>
-                <span className="mr-1 inline-block h-2 w-2 rounded-sm bg-down" />
-                Шорт {latestPoint ? `${(latestPoint.sellRatio * 100).toFixed(1)}%` : '—'}
-              </span>
-              <span title="Открытый интерес — сумма всех открытых позиций по инструменту, в долларах">
-                <span className="mr-1 inline-block h-2 w-2 rounded-sm" style={{ background: '#818cf8' }} />
-                OI {latestPoint && latestPoint.openInterestUsd > 0 ? fmtUsdCompact(latestPoint.openInterestUsd) : ''}
+        <div>
+          <div className="lbl">Страх и жадность</div>
+          <div className="an-v">{fgData ? fgData.value : '—'}</div>
+          {/* Шкала, а не цветная цифра: 62 само по себе ничего не значит, а
+              положение риски между крайностями — значит. */}
+          <div className="gauge">{fgData && <i style={{ left: `${fgData.value}%` }} />}</div>
+          <div className="lbl" style={{ marginTop: 'var(--s1)' }}>
+            {fgData?.classification ?? '—'}
+          </div>
+        </div>
+        <div>
+          <div className="lbl">Волатильность · 24 ч</div>
+          <div className="an-v">{volData ? `${volData.currentVolPct.toFixed(2)} %` : '—'}</div>
+          {volData && (
+            <div className="n" style={{ fontSize: 'var(--t-xs)', color: 'var(--color-muted)' }}>
+              база 7 дней {volData.avgVolPct.toFixed(2)} %{' '}
+              <span className={volData.elevated ? 'dbt' : undefined}>
+                {volData.elevated ? '· выше обычного' : '· в норме'}
               </span>
             </div>
+          )}
+        </div>
+        <div>
+          <div className="lbl">Объём · 24 ч</div>
+          <div className="an-v">{volData ? fmtUsdCompact(volData.volume24hUsd) : '—'}</div>
+          {volData && (
+            <div
+              className={`n ${volData.dominantSide === 'buy' ? 'pos' : volData.dominantSide === 'sell' ? 'neg' : ''}`}
+              style={{ fontSize: 'var(--t-xs)' }}
+            >
+              {volData.dominantSide === 'buy'
+                ? 'перевес покупок'
+                : volData.dominantSide === 'sell'
+                  ? 'перевес продаж'
+                  : 'без перевеса'}{' '}
+              · {fmtPctSigned(volData.volumeChangePct)} к среднему
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="asym" style={{ marginTop: 'var(--s5)' }}>
+        <div>
+          <h2>Позиционирование участников</h2>
+          <div className="coef" style={{ borderTop: 0 }}>
+            <div>
+              <div className="lbl">Long / Short</div>
+              <div className="coef-v">{longShort ? longShort.toFixed(2) : '—'}</div>
+            </div>
+            <div>
+              <div className="lbl">Открытый интерес</div>
+              <div className="coef-v">
+                {latest && latest.openInterestUsd > 0 ? fmtUsdCompact(latest.openInterestUsd) : '—'}
+              </div>
+            </div>
+            <div>
+              <div className="lbl">Доля лонгов</div>
+              <div className="coef-v">{latest ? `${(latest.buyRatio * 100).toFixed(1)} %` : '—'}</div>
+            </div>
           </div>
-          <div className="min-h-0 flex-1 p-2">
-            {sentimentData && sentimentData.points.length > 0 ? (
+          <div style={{ marginTop: 'var(--s3)' }}>
+            {sentimentData && sentimentData.points.length > 1 ? (
               <SentimentChart data={sentimentData.points} />
             ) : (
-              <div className="flex h-full items-center justify-center text-sm text-muted">
-                {sentimentData ? 'Нет данных' : 'Загрузка…'}
-              </div>
+              <p style={{ color: 'var(--color-muted)' }}>{sentimentData ? 'Нет данных' : 'Загрузка…'}</p>
             )}
           </div>
-        </section>
+
+          <div className="h2row" style={{ marginTop: 'var(--s5)' }}>
+            <h2>Волатильность по часам · UTC</h2>
+            <Seg options={HISTORY} value={historyDays} onChange={setHistoryDays} ariaLabel="Глубина истории" />
+          </div>
+          {hottest ? (
+            <>
+              <div className="hrs">
+                {hours.map((b) => (
+                  <span
+                    className="hr"
+                    key={b.hour}
+                    style={{ height: `${maxVol > 0 ? ((b.avgVolatilityPct / maxVol) * 100).toFixed(0) : 0}%` }}
+                    title={
+                      b.samples > 0
+                        ? `${String(b.hour).padStart(2, '0')}:00 — ход свечи ${b.avgVolatilityPct.toFixed(2)} %, рост в ${b.winRateLongPct.toFixed(0)} % случаев (n=${b.samples})`
+                        : `${String(b.hour).padStart(2, '0')}:00 — нет данных`
+                    }
+                  >
+                    <b style={{ height: '100%', opacity: (0.3 + (b.avgVolatilityPct / (maxVol || 1)) * 0.7).toFixed(2) }} />
+                  </span>
+                ))}
+              </div>
+              <div className="hrs-x">
+                {hours.map((b) => (
+                  <span key={b.hour}>{b.hour % 3 === 0 ? String(b.hour).padStart(2, '0') : ''}</span>
+                ))}
+              </div>
+              <p style={{ marginTop: 'var(--s3)', color: 'var(--color-muted)', fontSize: 'var(--t-xs)' }}>
+                Горячий час: {String(hottest.hour).padStart(2, '0')}:00 UTC — средний ход свечи{' '}
+                {hottest.avgVolatilityPct.toFixed(2)} %. Высота столбика — ход свечи, а не направление.
+              </p>
+            </>
+          ) : (
+            <p style={{ color: 'var(--color-muted)' }}>
+              Нет данных — почасовой синк ещё не набрал историю.
+            </p>
+          )}
+        </div>
+
+        <aside className="marg">
+          <h2>Вероятности по дням недели</h2>
+          {corr && corr.totalDays > 0 ? (
+            <>
+              {WEEKDAY_ORDER.map((d) => {
+                const b = corr.weekday[d];
+                const up = (b?.winRateLongPct ?? 0) >= 50;
+                return (
+                  <div className="evt" key={d}>
+                    <span className="evt-d">{WEEKDAY_LABELS[d]}</span>
+                    <span className="evt-n n">
+                      {b?.days ? `${b.winRateLongPct.toFixed(0)} %` : '—'}
+                      <span className="lbl" style={{ letterSpacing: '.06em' }}>
+                        {' '}
+                        рост
+                      </span>
+                    </span>
+                    <span className={`evt-i ${b?.days ? (up ? 'pos' : 'neg') : ''}`}>
+                      {b?.days ? `${b.avgChangePct >= 0 ? '+' : '−'}${Math.abs(b.avgChangePct).toFixed(2)} %` : ''}
+                    </span>
+                  </div>
+                );
+              })}
+              <p style={{ marginTop: 'var(--s3)', color: 'var(--color-muted)', fontSize: 'var(--t-xs)' }}>
+                Доля дней, закрывшихся выше открытия, и средний ход за {corr.totalDays} дней. Отклонение от
+                50 % на такой выборке — намёк, а не закономерность.
+              </p>
+            </>
+          ) : (
+            <p style={{ color: 'var(--color-muted)' }}>Нет данных</p>
+          )}
+        </aside>
       </div>
-    </div>
+    </Wrap>
   );
 };

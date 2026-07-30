@@ -3,7 +3,7 @@
 // только собирает блоки.
 
 /** Ниже этого числа сделок цифры среза — шум, а не закономерность. */
-export const MIN_N = 20;
+export { MIN_N } from '@/shared/lib/utils/confidence';
 
 export const SESSION_LABELS: Record<string, string> = { asia: 'Азия', london: 'Лондон', ny: 'Нью-Йорк', night: 'Ночь' };
 

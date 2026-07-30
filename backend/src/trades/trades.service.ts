@@ -107,7 +107,11 @@ export class TradesService {
     const rows = await this.prisma.trade.findMany({
       where,
       orderBy: { closedAt: 'desc' },
-      include: { tags: { include: { tag: true } } },
+      // Снимок рынка на входе едет вместе со строкой: раскрытая запись журнала
+      // показывает не только из каких ордеров сложилась позиция, но и каким был
+      // рынок в момент входа. Отдельным запросом на строку это были бы 20
+      // запросов на страницу, а данные лежат в связанной таблице 1:1.
+      include: { tags: { include: { tag: true } }, context: true },
     });
     const positions = collapseToPositions(rows);
     const pageRows = positions.slice((page - 1) * pageSize, page * pageSize);
@@ -115,10 +119,26 @@ export class TradesService {
       success: true,
       // tradeIds stays server-side: it's the drill-down handle for the rows a
       // position was built from, not something the table renders.
-      trades: pageRows.map(({ tags, tradeIds, ...t }) => ({
+      trades: pageRows.map(({ tags, tradeIds, context, ...t }) => ({
         ...t,
         parts: tradeIds.length,
         tags: tags.map((tt) => ({ id: tt.tag.id, name: tt.tag.name, color: tt.tag.color })),
+        // Наружу — только измерения, без id/версии снимка: это служебные поля
+        // TradeContextService, а не данные сделки.
+        context: context
+          ? {
+              ok: context.ok,
+              basis: context.basis,
+              atrPct: context.atrPct,
+              rsi: context.rsi,
+              volRel: context.volRel,
+              ema200Above: context.ema200Above,
+              trend4h: context.trend4h,
+              rangePos1h: context.rangePos1h,
+              rangePos4h: context.rangePos4h,
+              rangePos1d: context.rangePos1d,
+            }
+          : null,
       })),
       total: positions.length,
       page,

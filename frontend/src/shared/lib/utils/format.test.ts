@@ -1,17 +1,57 @@
 import { describe, expect, it } from 'vitest';
-import { formatPnl, formatTradeDate, sumPnl } from './format';
+import { fmtPctSigned, formatMoney, formatPriceGrouped, formatTradeDate, moneyClass } from './format';
 
-describe('formatPnl', () => {
-  it('formats a positive value with a leading plus sign', () => {
-    expect(formatPnl(5)).toBe('+5.00');
+// Тонкий пробел (U+2009) — разрядный разделитель денег и цен.
+const T = ' ';
+
+describe('formatMoney', () => {
+  it('разбивает разряды тонким пробелом и ставит явный плюс', () => {
+    expect(formatMoney(1284.4)).toBe(`+1${T}284.40`);
   });
 
-  it('formats a negative value rounded to 2 decimals', () => {
-    expect(formatPnl(-3.456)).toBe('-3.46');
+  it('у убытка — типографский минус, а не дефис', () => {
+    expect(formatMoney(-231.9)).toBe('−231.90');
   });
 
-  it('formats zero with a leading plus sign', () => {
-    expect(formatPnl(0)).toBe('+0.00');
+  it('ноль показывает со знаком плюс: безубыток — не потеря', () => {
+    expect(formatMoney(0)).toBe('+0.00');
+  });
+
+  it('разбивает и миллионы', () => {
+    expect(formatMoney(-1234567.5)).toBe(`−1${T}234${T}567.50`);
+  });
+
+  it('нечисло превращает в прочерк, а не в NaN', () => {
+    expect(formatMoney(Number.NaN)).toBe('—');
+  });
+});
+
+describe('formatPriceGrouped', () => {
+  it('крупная цена — два знака и разбитые разряды', () => {
+    expect(formatPriceGrouped(118420.5)).toBe(`118${T}420.50`);
+  });
+
+  it('мелкий инструмент — четыре знака', () => {
+    expect(formatPriceGrouped(0.23456)).toBe('0.2346');
+  });
+
+  it('пустое значение — прочерк', () => {
+    expect(formatPriceGrouped(null)).toBe('—');
+  });
+});
+
+describe('moneyClass', () => {
+  it('прибыль и ноль — pos, убыток — neg', () => {
+    expect(moneyClass(1)).toBe('pos');
+    expect(moneyClass(0)).toBe('pos');
+    expect(moneyClass(-0.01)).toBe('neg');
+  });
+});
+
+describe('fmtPctSigned', () => {
+  it('знак и отбивка перед процентом — те же, что у денег', () => {
+    expect(fmtPctSigned(2.345)).toBe('+2.35 %');
+    expect(fmtPctSigned(-1.1)).toBe('−1.10 %');
   });
 });
 
@@ -25,16 +65,5 @@ describe('formatTradeDate', () => {
       minute: '2-digit',
     });
     expect(formatTradeDate(iso)).toBe(expected);
-  });
-});
-
-describe('sumPnl', () => {
-  it('defensively sums a numeric field across items, treating undefined as 0', () => {
-    const items = [{ pnl: '1.5' }, { pnl: '2' }, { pnl: undefined }];
-    expect(sumPnl(items, 'pnl')).toBe(3.5);
-  });
-
-  it('returns 0 for an empty array', () => {
-    expect(sumPnl([], 'pnl')).toBe(0);
   });
 });

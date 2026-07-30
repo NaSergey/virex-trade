@@ -1,17 +1,18 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { QueryProvider } from "./(internal)/QueryProvider";
 import { AuthProvider } from "@/shared/auth/AuthContext";
 
-// UI + headings — Inter (Swiss, clean, full Cyrillic).
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin", "cyrillic"],
-  display: "swap",
-});
-
-// Numbers / prices / data — JetBrains Mono (terminal, tabular figures).
+/**
+ * Два голоса, и только два: серифы — речь (заголовки, пояснения, названия
+ * тегов), моно — данные (цифры, подписи-капители, управление).
+ *
+ * Серифная гарнитура системная (Cambria → Georgia, см. --font-serif): это не
+ * экономия на webfont, а часть направления — гроссбух набран тем, что уже
+ * стоит в системе. Моно грузим: нужны честные tabular-фигуры И кириллица, а у
+ * системных Consolas/Menlo одно из двух всегда отсутствует.
+ */
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains",
   subsets: ["latin", "cyrillic"],
@@ -19,8 +20,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Traders Diary",
-  description: "Crypto trading terminal",
+  title: "Virex — журнал криптофьючерсов",
+  description: "Журнал сделок и статистика по разметке",
 };
 
 export default function RootLayout({
@@ -29,8 +30,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ru" className={`${inter.variable} ${jetbrainsMono.variable}`}>
-      <body className="antialiased">
+    <html lang="ru" className={jetbrainsMono.variable}>
+      <body>
         <QueryProvider>
           <AuthProvider>
             {children}

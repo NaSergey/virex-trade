@@ -2,28 +2,37 @@
 
 import { useState } from 'react';
 import { AuthGuard } from '@/shared/auth/AuthGuard';
-import { Sidebar, type Tab } from '@/shared/ui/Sidebar';
+import { TopNav, type Tab } from '@/shared/ui/TopNav';
 import { OverviewPage } from '@/page/stats/OverviewPage';
 import { TagsPage } from '@/page/stats/TagsPage';
 import { LabPage } from '@/page/lab/Page';
 import { AnalyticsPage } from '@/page/analytics/Page';
 import { SettingsPage } from '@/page/settings/Page';
 
+/**
+ * Прокрутка — документа, а не внутренних панелей: страница-гроссбух кончается
+ * там, где кончаются записи, и кривая может выйти в край вьюпорта (см. .bleed).
+ * Своя область прокрутки у каждой панели этого не позволяла.
+ */
 function AppShell() {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
 
   return (
-    <div className="grid h-screen w-screen grid-cols-[232px_1fr] overflow-hidden bg-app">
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+    <>
+      <TopNav
+        activeTab={activeTab}
+        onTabChange={(tab) => {
+          setActiveTab(tab);
+          window.scrollTo(0, 0);
+        }}
+      />
 
-      <div className="min-h-0 min-w-0">
-        {activeTab === 'overview' && <OverviewPage />}
-        {activeTab === 'tags' && <TagsPage />}
-        {activeTab === 'analytics' && <AnalyticsPage />}
-        {activeTab === 'lab' && <LabPage />}
-        {activeTab === 'settings' && <SettingsPage />}
-      </div>
-    </div>
+      {activeTab === 'overview' && <OverviewPage />}
+      {activeTab === 'tags' && <TagsPage />}
+      {activeTab === 'analytics' && <AnalyticsPage />}
+      {activeTab === 'lab' && <LabPage />}
+      {activeTab === 'settings' && <SettingsPage />}
+    </>
   );
 }
 

@@ -1,21 +1,26 @@
 'use client';
 
-const W = 56;
+const W = 80;
 const H = 18;
 
-/** Крошечный спарклайн для строки таблицы тегов — без осей и hover. */
+/**
+ * Динамика тега в строке таблицы: только форма кривой, без осей и подписей.
+ * Отвечает на единственный вопрос — «этот итог набирался ровно или одним
+ * выбросом», — на который сумма в соседней колонке ответить не может.
+ */
 export function Sparkline({ values, color }: { values: number[]; color: string }) {
-  if (values.length < 2) return <svg viewBox={`0 0 ${W} ${H}`} className="block h-4.5 w-14" />;
+  if (values.length < 2) return <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden />;
 
-  const min = Math.min(0, ...values);
-  const max = Math.max(0, ...values, 1);
-  const x = (i: number) => (i / (values.length - 1)) * W;
-  const y = (v: number) => H - ((v - min) / (max - min || 1)) * H;
-  const path = values.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const points = values
+    .map((v, i) => `${((i / (values.length - 1)) * W).toFixed(1)},${(H - ((v - min) / span) * H).toFixed(1)}`)
+    .join(' ');
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="block h-4.5 w-14">
-      <path d={path} fill="none" stroke={color} strokeWidth="1.4" />
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden style={{ display: 'block' }}>
+      <polyline points={points} fill="none" stroke={color} strokeWidth="1" />
     </svg>
   );
 }

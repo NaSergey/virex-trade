@@ -1,92 +1,180 @@
 'use client';
 
-import { useMemo } from 'react';
-import { FlaskConical } from 'lucide-react';
-import type { ColumnDef } from '@tanstack/react-table';
-import { DataTable } from '@/shared/ui/data-table';
-import { PageShell } from '@/shared/ui/PageShell';
-import { buildTradeColumns, tradeRowClass } from '@/shared/lib/utils/tradeColumns';
+import { useState } from 'react';
+import { useLab, type LabFilters as LabFiltersType } from '@/shared/api/lab/hooks';
 import type { Trade } from '@/shared/api/bybit/hooks';
-import { useLab, type LabFilters } from '@/shared/api/lab/hooks';
+import { Wrap } from '@/shared/ui/Wrap';
+import { Tags } from '@/shared/ui/Tag';
+import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import { EquityChart } from '@/page/stats/EquityChart';
+import { RangeCheckModal } from '@/page/stats/RangeCheckModal';
 import { usePeriodFilter } from '@/page/stats/usePeriodFilter';
-import { PeriodFilterControls } from '@/page/stats/StatsHeader';
-import { LabFilterPanel } from './LabFilterPanel';
-import { LabSummary } from './LabSummary';
+import { PeriodRail } from '@/page/stats/PeriodRail';
+import { formatMoney, formatPriceGrouped, moneyClass } from '@/shared/lib/utils/format';
+import { formatRangePos } from '@/shared/lib/utils/range';
+import { LabFilters } from './LabFilters';
+import { LabCompare } from './LabCompare';
+import { RANGE_TF_OPTIONS } from './constants';
 import { useLabFilters } from './useLabFilters';
 import { useFacetLookup } from './facets';
 
+/** Подпись ТФ в шапке колонки — та же, что на тумблере рядом с условиями. */
+const RANGE_TF_LABELS: Record<string, string> = Object.fromEntries(
+  RANGE_TF_OPTIONS.map((o) => [o.value, o.label]),
+);
+
+/** Диапазон выбранного ТФ — тот же, по которому фильтрует колонка условий. */
+function rangeOf(trade: Trade, tf: LabFiltersType['rangeTf']): number | null {
+  const ctx = trade.context;
+  if (!ctx) return null;
+  return tf === '1h' ? ctx.rangePos1h : tf === '4h' ? ctx.rangePos4h : ctx.rangePos1d;
+}
+
+/**
+ * Лаборатория: «а если брать только сделки при таких-то условиях — как меняется
+ * результат?»
+ *
+ * Слева условия, справа результат; границу держит волосяная линейка, а не
+ * пустая колонка сетки.
+ */
 export const LabPage = () => {
-  const { days, customDate, effectiveDays, setDays, setCustomDate } = usePeriodFilter();
+  const { days, customDate, customActive, effectiveDays, setDays, setCustomDate } = usePeriodFilter();
   const state = useLabFilters();
-  // Период живёт в usePeriodFilter (тот же блок 7/30/90/всё + своя дата, что
-  // на Обзоре/Тегах) — filters.days из состояния не читаем, подменяем перед
-  // каждым запросом, чтобы не дублировать источник истины.
-  const labFilters: LabFilters = { ...state.filters, days: effectiveDays };
+  const [rangeCheck, setRangeCheck] = useState<Trade | null>(null);
+
+  // Период живёт в usePeriodFilter (та же рейка, что на Обзоре и Тегах) —
+  // filters.days не читаем, подменяем перед каждым запросом.
+  const labFilters: LabFiltersType = { ...state.filters, days: effectiveDays };
   const { data, isLoading } = useLab(labFilters);
   const fv = useFacetLookup(data);
 
-  const filtered = data?.filtered;
   const equity = data?.equity ?? [];
   const trades = data?.trades ?? [];
-  const columns = useMemo<ColumnDef<Trade>[]>(() => buildTradeColumns({ withTagsEditable: false }), []);
+  const filtered = data?.filtered;
+
+  const columns: LedgerColumn<Trade>[] = [
+    {
+      key: 'closedAt',
+      header: 'Закрыта',
+      cellClassName: 'n',
+      render: (t) => (
+        <span style={{ color: 'var(--color-muted)' }}>
+          {new Date(t.closedAt)
+            .toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+            .replace('.', '')}
+        </span>
+      ),
+    },
+    { key: 'symbol', header: 'Символ', render: (t) => <span className="sym">{t.symbol}</span> },
+    {
+      key: 'direction',
+      header: 'Напр.',
+      render: (t) => <span className={`dir${t.direction === 'short' ? ' short' : ''}`}>{t.direction}</span>,
+    },
+    {
+      key: 'entry',
+      header: 'Вход',
+      align: 'right',
+      cellClassName: 'n',
+      render: (t) => formatPriceGrouped(t.avgEntryPrice),
+    },
+    {
+      key: 'range',
+      header: `Диапазон ${RANGE_TF_LABELS[state.filters.rangeTf]}`,
+      label: 'Диапазон',
+      align: 'right',
+      cellClassName: 'n',
+      render: (t) => (
+        <span style={{ color: 'var(--color-muted)' }}>{formatRangePos(rangeOf(t, state.filters.rangeTf))}</span>
+      ),
+    },
+    {
+      key: 'pnl',
+      header: 'P&L',
+      align: 'right',
+      cellClassName: 'n',
+      render: (t) => <span className={moneyClass(t.closedPnl)}>{formatMoney(t.closedPnl)}</span>,
+    },
+    { key: 'tags', header: 'Теги', cellClassName: 'cell-tags', render: (t) => <Tags tags={t.tags ?? []} /> },
+    {
+      key: 'check',
+      align: 'right',
+      render: (t) => (
+        <button className="btn bare" onClick={() => setRangeCheck(t)}>
+          Проверить
+        </button>
+      ),
+    },
+  ];
 
   return (
-    <PageShell>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <FlaskConical className="h-4 w-4 text-fg" />
-          <h1 className="text-base font-semibold text-fg">Лаборатория</h1>
-          <span className="text-xs text-muted">комбинируй фильтры — ищи, что реально работает</span>
+    <Wrap style={{ paddingBottom: 'var(--s6)' }}>
+      <div className="pagehead">
+        <div>
+          <h1>Лаборатория</h1>
+          <p className="lede">
+            А если брать только сделки при таких-то условиях — как меняется результат? Рядом с каждым
+            условием видно, во что он обойдётся.
+          </p>
         </div>
-        <PeriodFilterControls days={days} customDate={customDate} onSelectDays={setDays} onCustomDate={setCustomDate} />
+        <button className="btn" onClick={state.reset} disabled={state.activeCount === 0}>
+          Сбросить {state.activeCount > 0 ? `· ${state.activeCount}` : ''}
+        </button>
       </div>
 
-      <LabFilterPanel state={state} data={data} fv={fv} />
+      <div className="strip" style={{ marginBottom: 'var(--s4)' }}>
+        <PeriodRail
+          title="Выборка из периода"
+          days={days}
+          customDate={customDate}
+          customActive={customActive}
+          trades={data?.baseline.trades}
+          onSelectDays={setDays}
+          onCustomDate={setCustomDate}
+        />
+      </div>
 
-      <LabSummary filtered={filtered} baseline={data?.baseline} />
+      <div className="lab">
+        <LabFilters state={state} data={data} fv={fv} />
 
-      <section className="panel flex h-75 flex-col">
-        <div className="flex items-center justify-between border-b border-line px-3 py-2">
-          <span className="text-sm font-semibold text-fg">Кривая P&L по выборке</span>
-          {filtered && (
-            <span className="text-xs text-muted">
-              {filtered.wins} прибыльных · {filtered.losses} убыточных
-            </span>
-          )}
-        </div>
-        <div className="min-h-0 flex-1 p-2">
-          {equity.length > 0 ? (
-            <EquityChart data={equity} />
-          ) : (
-            <div className="flex h-full items-center justify-center text-sm text-muted">
-              {isLoading ? 'Загрузка…' : 'Нет сделок под эти фильтры'}
+        <div className="lab-r">
+          <LabCompare filtered={filtered} baseline={data?.baseline} />
+
+          <div style={{ marginTop: 'var(--s4)' }}>
+            <h2>Кривая выборки</h2>
+            {equity.length > 1 ? (
+              <EquityChart data={equity} height={220} />
+            ) : (
+              <div className="state">
+                <h3>{isLoading ? 'Считаем…' : 'Ни одна сделка не подошла'}</h3>
+                <p>
+                  Условия взаимоисключающие. Снимите одно — рядом с каждым видно, сколько сделок оно
+                  оставляет.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div style={{ marginTop: 'var(--s4)' }}>
+            <div className="h2row">
+              <h2>Подходящие сделки</h2>
+              <span className="lbl">
+                {filtered && trades.length < filtered.trades
+                  ? `последние ${trades.length} из ${filtered.trades}`
+                  : `${trades.length}`}
+              </span>
             </div>
-          )}
-        </div>
-      </section>
 
-      {/* Фиксированная высота (как у графика выше): число подходящих строк
-          (0..200) иначе меняло бы размер всей страницы на каждый клик. */}
-      <section className="panel flex h-105 flex-col p-3">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-sm font-semibold text-fg">Сделки выборки</span>
-          <span className="text-xs text-muted">
-            {filtered && trades.length < filtered.trades
-              ? `Показаны последние ${trades.length} из ${filtered.trades}`
-              : `Всего: ${trades.length}`}
-          </span>
+            {/* Пустая выборка уже объяснена состоянием на месте кривой выше —
+                второй раз повторять то же самое под пустой таблицей незачем. */}
+            {trades.length > 0 && (
+              <LedgerTable columns={columns} rows={trades} rowKey={(t) => t.id} />
+            )}
+          </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-hidden">
-          <DataTable
-            data={trades}
-            columns={columns}
-            isLoading={isLoading}
-            noDataContent={<div className="py-4 text-sm text-muted">Нет сделок под эти фильтры</div>}
-            rowClassName={tradeRowClass}
-          />
-        </div>
-      </section>
-    </PageShell>
+      </div>
+
+      {rangeCheck && <RangeCheckModal trade={rangeCheck} onClose={() => setRangeCheck(null)} />}
+    </Wrap>
   );
 };
