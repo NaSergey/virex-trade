@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '@/shared/config/api';
-import { tokenStore } from '@/shared/auth/tokenStore';
+import { tokenStore } from '@/shared/lib/tokenStore';
 
 // Called when the session can no longer be refreshed (refresh token gone/expired).
 // AuthProvider registers a handler that clears the user and redirects to /login.

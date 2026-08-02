@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@/shared/ui/dialog';
+import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader } from '@/shared/ui/dialog';
+import { Field, Input } from '@/shared/ui/Field';
 
 export interface ConfirmRequest {
   title: string;
@@ -20,6 +21,12 @@ export interface ConfirmRequest {
  * клика только скоростью — то есть отменял ошибку темпа, но не ошибку решения,
  * и ничего не сообщал о последствиях. Здесь перечислено, что именно случится, и
  * подтверждение требует прочитать слово и его напечатать.
+ *
+ * Разговор идёт сверху вниз: что за действие → что после него будет → чем
+ * подтвердить. Последствия стоят ДО поля намеренно: набирать слово, не
+ * прочитав, за что, — тот же рефлекс, ради отмены которого диалог и заведён.
+ * Раньше они приходили в запросе, но на экран не выводились вовсе — оставалось
+ * требование напечатать слово без единого объяснения, зачем.
  */
 export function ConfirmDialog({ request, onClose }: { request: ConfirmRequest; onClose: () => void }) {
   const [typed, setTyped] = useState('');
@@ -27,47 +34,43 @@ export function ConfirmDialog({ request, onClose }: { request: ConfirmRequest; o
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent>
+      {/* Кромка цветом убытка — то единственное, чем окно необратимого
+          отличается от обычного диалога ещё до того, как прочитан заголовок. */}
+      <DialogContent className="dlg-risk">
         <DialogHeader title={request.title} subtitle={request.subtitle} />
         <DialogBody>
-          <div className="warn">
-            <strong style={{ fontWeight: 400 }}>Что произойдёт:</strong>
-            <ul>
-              {request.consequences.map((c) => (
-                <li key={c}>{c}</li>
-              ))}
-            </ul>
-          </div>
-          <div className="field" style={{ marginTop: 'var(--s3)' }}>
-            <label className="lbl" htmlFor="confirm-word">
-              Для подтверждения введите <span style={{ color: 'var(--color-fg)' }}>{request.word}</span>
-            </label>
-            <input
+          <Field
+            className="cfm-word"
+            label={
+              <>
+                Наберите <span className="cfm-key">{request.word}</span>
+              </>
+            }
+            htmlFor="confirm-word"
+          >
+            {/* Плейсхолдера нет: он повторял ровно то слово, которое надо
+                набрать, и пустое поле выглядело уже заполненным. */}
+            <Input
               id="confirm-word"
-              className="in full"
+              full
               autoComplete="off"
               autoFocus
-              placeholder={request.word}
+              data-ok={matches}
               value={typed}
               onChange={(e) => setTyped(e.target.value)}
             />
-          </div>
+          </Field>
         </DialogBody>
-        <DialogFooter>
-          <button className="btn bare" onClick={onClose}>
-            Отмена
-          </button>
-          <button
-            className="btn risk"
-            disabled={!matches}
-            onClick={() => {
-              request.onConfirm();
-              onClose();
-            }}
-          >
-            Подтвердить
-          </button>
-        </DialogFooter>
+        <DialogActions
+          confirmLabel="Подтвердить"
+          confirmVariant="risk"
+          confirmDisabled={!matches}
+          onConfirm={() => {
+            request.onConfirm();
+            onClose();
+          }}
+          onCancel={onClose}
+        />
       </DialogContent>
     </Dialog>
   );

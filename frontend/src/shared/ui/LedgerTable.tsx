@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useState, type ReactNode } from 'react';
+import { SkeletonLines } from '@/shared/ui/Skeleton';
 
 /** Описание одной колонки журнала. */
 export interface LedgerColumn<T> {
@@ -55,8 +56,8 @@ interface LedgerTableProps<T> {
 /**
  * Таблица-журнал: одна разметка на все страницы.
  *
- * Пять таблиц продукта (позиции, закрытые сделки, комбинации, теги, выборка
- * Лаборатории) отличаются только колонками — но каждая ещё обязана нести
+ * Пять таблиц продукта (позиции, закрытые сделки, комбинации, теги, подходящие
+ * сделки «Выборки») отличаются только колонками — но каждая ещё обязана нести
  * `data-l` на ячейках (на узком экране таблица превращается в записи и подписи
  * берутся оттуда), одинаково выравнивать числа и одинаково раскрываться. Пока
  * это было пять раз написано вручную, любая из этих договорённостей могла
@@ -78,11 +79,18 @@ export function LedgerTable<T>({
   renderExpanded,
 }: LedgerTableProps<T>) {
   const [openKey, setOpenKey] = useState<string | null>(null);
+  // Строка, которая доигрывает анимацию закрытия. React убирал бы её из DOM
+  // мгновенно вместе с сеткой ордеров — раскрытие проигрывалось, а закрытие
+  // просто исчезало рывком. Держим узел смонтированным до конца .closing.
+  const [closingKey, setClosingKey] = useState<string | null>(null);
 
   const caret: LedgerColumn<T> = {
     key: '__caret',
     width: 22,
-    render: (row) => <span className="caret">{openKey === rowKey(row) ? '▾' : '▸'}</span>,
+    cellClassName: 'caret-cell',
+    // Глиф один и тот же — открытое состояние поворачивает его CSS-transition'ом
+    // (tr.row.open .caret), а не подменой символа, иначе раскрытие дёргалось бы.
+    render: () => <span className="caret">▸</span>,
   };
   const cols = renderExpanded ? [caret, ...columns] : columns;
 
@@ -121,26 +129,40 @@ export function LedgerTable<T>({
           {isLoading ? (
             <tr>
               <td colSpan={cols.length} data-l="">
-                {[100, 92, 84, 76].map((w) => (
-                  <div className="skel" key={w} style={{ width: `${w}%` }} />
-                ))}
+                <SkeletonLines widths={[100, 92, 84, 76]} />
               </td>
             </tr>
           ) : rows.length === 0 ? (
             <tr>
-              <td colSpan={cols.length} data-l="" style={{ color: 'var(--color-muted)' }}>
+              <td colSpan={cols.length} data-l="" className="muted">
                 {empty}
               </td>
             </tr>
           ) : (
-            rows.map((row) => {
+            rows.map((row, index) => {
               const key = rowKey(row);
               const open = openKey === key;
+              const closing = !open && closingKey === key;
               return (
                 <Fragment key={key}>
                   <tr
                     className={renderExpanded ? `row${open ? ' open' : ''}` : undefined}
-                    onClick={renderExpanded ? () => setOpenKey(open ? null : key) : undefined}
+                    style={{ '--i': index } as React.CSSProperties}
+                    onClick={
+                      renderExpanded
+                        ? () => {
+                            if (open) {
+                              // закрываем — прежняя строка доигрывает анимацию, а не пропадает
+                              setClosingKey(key);
+                              setOpenKey(null);
+                            } else {
+                              // переключение на другую строку тоже должно увести прежнюю с анимацией
+                              if (openKey) setClosingKey(openKey);
+                              setOpenKey(key);
+                            }
+                          }
+                        : undefined
+                    }
                   >
                     {cols.map((c) => (
                       <td key={c.key} data-l={labelOf(c)} className={cellClass(c)}>
@@ -148,9 +170,16 @@ export function LedgerTable<T>({
                       </td>
                     ))}
                   </tr>
-                  {open && renderExpanded && (
+                  {(open || closing) && renderExpanded && (
                     <tr className="exp">
-                      <td colSpan={cols.length}>{renderExpanded(row)}</td>
+                      <td colSpan={cols.length}>
+                        <div
+                          className={`row-reveal${closing ? ' closing' : ''}`}
+                          onAnimationEnd={() => setClosingKey((k) => (k === key ? null : k))}
+                        >
+                          {renderExpanded(row)}
+                        </div>
+                      </td>
                     </tr>
                   )}
                 </Fragment>

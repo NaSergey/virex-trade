@@ -77,6 +77,11 @@
   --s5: 48px;
   --s6: 96px;
 
+  /* Высота липкой шапки. Переменная, а не число: от неё считается, где
+     останавливается всё остальное липкое на странице, и на узком экране шапка
+     ниже — забыть поправить второе место было бы нечем. */
+  --top-h: 56px;
+
   --hair: var(--color-line);
   --hair-2: var(--color-line-2);
   --rule: var(--color-line-strong);
@@ -110,16 +115,21 @@
     box-shadow: none !important;
   }
 
+  /* clip, а не hidden: hidden делает страницу собственной областью прокрутки,
+     и всё, что внутри объявлено position: sticky, липнуть перестаёт — шапка
+     уезжала вверх вместе с содержимым. clip так же отрезает горизонтальный
+     вылет (его даёт кривая в край вьюпорта, см. .bleed), но области прокрутки
+     не заводит. */
   html {
     color-scheme: dark;
     max-width: 100%;
-    overflow-x: hidden;
+    overflow-x: clip;
   }
 
   body {
     margin: 0;
     max-width: 100%;
-    overflow-x: hidden;
+    overflow-x: clip;
     background-color: var(--ground);
     color: var(--ink);
     font-family: var(--font-serif);
@@ -168,6 +178,10 @@
     margin: 0 auto;
     padding: 0 var(--s4);
   }
+  /* Полоса, которой страница заканчивается: под последним блоком остаётся поле,
+     иначе таблица упирается в край окна и читается как обрезанная. Мерка одна
+     на все страницы — потому и лежит здесь, а не инлайном в каждой. */
+  .wrap.page { padding-bottom: var(--s6); }
 
   /* ── два голоса: моно = данные, серифы = речь ─────────────────── */
   .n {
@@ -186,6 +200,14 @@
   .pos { color: var(--profit); }
   .neg { color: var(--loss); }
   .dbt { color: var(--doubt); }
+  /* Приглушение — такая же утилита краски, как три цвета выше, и по той же
+     причине: иначе `color: var(--color-muted)` пишется инлайном в каждом
+     втором компоненте и расходится с --ink-2, когда шкала краски меняется. */
+  .muted { color: var(--ink-2); }
+  .subtle { color: var(--ink-3); }
+  /* Итог строки — единственное место, где деньги набираются крупнее прочих
+     чисел. Кегль здесь, а не в пяти таблицах инлайном. */
+  .money-l { font-size: var(--t-m); }
 
   /* ═══════════════ ШАПКА ═══════════════ */
   .top {
@@ -202,7 +224,7 @@
     display: flex;
     align-items: stretch;
     gap: var(--s5);
-    height: 56px;
+    height: var(--top-h);
   }
   .mark {
     display: flex;
@@ -308,6 +330,9 @@
     border-top: 1px solid var(--hair-2);
     border-bottom: 1px solid var(--hair-2);
   }
+  /* Полоса открывает лист сама, без заголовка над собой, — и тогда ей нужны
+     собственные поля сверху и снизу. */
+  .strip.spaced { margin: var(--s4) 0; }
 
   /* рейка-заголовок: слева период прописью, справа управление этим же периодом */
   .strip-rail {
@@ -483,20 +508,15 @@
   }
 
   /* третий уровень: справочные числа, список без коробок */
+  /* Сетка справочных пар. Сама пара — .kv (см. НАСТРОЙКИ): «подпись слева,
+     значение справа, волосяная линейка под ними» в системе одна, и описана она
+     один раз. Здесь задаётся только в сколько колонок эти пары стоят. */
   .lookup {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 0 var(--s4);
   }
-  .lookup > div {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: var(--s2);
-    padding: var(--s2) 0;
-    border-bottom: 1px solid var(--hair);
-  }
-  .lookup .n { font-size: var(--t-s); }
+  .lookup.one { grid-template-columns: 1fr; }
 
   /* ═══════════════ ПОЛОСА «СЕЙЧАС» ═══════════════ */
   /* единственная заливка на весь продукт — контраст по роду, не по степени */
@@ -567,7 +587,12 @@
     color: var(--loss);
   }
   .ledger .exp > td {
-    padding: 0;
+    /* По вертикали отступ уже даёт .order-ctx (padding: var(--s3) 0) — здесь
+       нужен только горизонтальный, иначе текст раскрытой строки утыкается
+       прямо в край подсвеченной полосы. Мерка своя, мельче наборной: полоса
+       и так выделена заливкой, широкие поля отодвинули бы её содержимое от
+       колонок таблицы, под которыми оно стоит. */
+    padding: 0 var(--s2);
     height: auto;
     background: var(--band);
   }
@@ -576,6 +601,12 @@
     width: 10px;
     color: var(--ink-3);
     font-family: var(--font-mono);
+    transition: transform 200ms cubic-bezier(0.32, 0.72, 0, 1), color 150ms ease;
+  }
+  /* Каретка — первая колонка, край её ячейки совпадает с краем таблицы (= край
+     .wrap): без отступа слева треугольник утыкается прямо в него. */
+  .ledger td.caret-cell {
+    padding-left: var(--s2);
   }
   /* Вложенная таблица исполнений живёт внутри раскрытой строки, поэтому её
      ячейки тоже попадают под `.ledger td` — своя, более плотная разметка. */
@@ -587,7 +618,39 @@
     border-top: 0;
   }
   .ledger .fills tr:last-child td { border-bottom: 0; }
-  tr.row.open .caret { color: var(--ink); }
+  /* Раскрытая строка: слева исполнения, справа контекст входа. Половины не
+     равные — контекст уже на пятую часть: он справка при исполнениях, а не
+     вторая такая же таблица. Flex, а не grid: доли задаются и базой, и ростом
+     в одном отношении 1 : 0.8, поэтому пропорция держится на любой ширине, а
+     на узком экране колонки просто переносятся. */
+  .order-ctx {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s4);
+    padding: var(--s3) 0;
+  }
+  .order-ctx > div {
+    flex: 1 1 280px;
+    min-width: 0;
+  }
+  .order-ctx > div + div {
+    flex-grow: 0.8;
+    flex-basis: 224px;
+  }
+  /* Grid и так растягивал половины до общей высоты, но когда у исполнений
+     всего пара строк, а у контекста — шесть, эта общая высота ничем не видна.
+     Линия слева делает её очевидной, той же кистью, что и .asym > .marg. */
+  .order-ctx > div + div {
+    border-left: 1px solid var(--hair);
+    padding-left: var(--s4);
+  }
+  /* Заголовки половин стоят теснее к своему содержимому, чем заголовки разделов
+     страницы: раскрытая строка — не страница, и полный отступ разрывал бы её. */
+  .order-ctx .h2row { margin-bottom: var(--s2); }
+  tr.row.open .caret {
+    color: var(--ink);
+    transform: rotate(90deg);
+  }
 
   /* ═══════════════ ПРИБОРНАЯ ШКАЛА ═══════════════ */
   .scale {
@@ -659,6 +722,7 @@
   .tag {
     font-family: var(--font-mono);
     font-size: var(--t-xs);
+    line-height: 1;
     letter-spacing: 0.06em;
     border-bottom: 2px solid currentColor;
     padding-bottom: 1px;
@@ -676,6 +740,11 @@
     flex-wrap: wrap;
     align-items: baseline;
   }
+  /* Кнопка добавления живёт в той же строке, что и пилюли тегов, и должна
+     садиться на ту же линию подчёркивания — но у <button> своя, отличная от
+     <span>, высота строки по умолчанию (UA не наследует line-height: 1.5 с
+     body), и без явного значения пунктирная линия съезжала на несколько
+     пикселей ниже сплошных подчёркиваний тегов. */
   .tag-add {
     appearance: none;
     background: none;
@@ -684,6 +753,8 @@
     color: var(--ink-3);
     font-family: var(--font-mono);
     font-size: var(--t-xs);
+    line-height: 1;
+    display: inline-block;
     border-bottom: 1px dotted var(--ink-3);
     padding: 0 0 1px;
   }
@@ -712,6 +783,26 @@
   }
   .seg button:first-child { border-left: 0; }
   .seg button:hover { color: var(--ink); }
+  /* Тумблер ТФ в колонке условий тянется на всю её ширину: он относится ко
+     всей группе, а не к одному условию в ней, и короткий ряд кнопок посреди
+     колонки читался бы как ещё одно условие. Деления равные — ни одно из пяти
+     не главнее прочих. Шаг мельче обычного: впятером с ним они не влезают. */
+  .fb .seg {
+    width: 100%;
+  }
+  .fb .seg button {
+    flex: 1;
+    padding: 6px var(--s2);
+    letter-spacing: 0.06em;
+    text-align: center;
+  }
+  /* Тумблер, стоящий на строке заголовка раздела рядом с числом: шаг мельче
+     обычного, иначе ряд кнопок весит больше самого заголовка и строка
+     разъезжается по высоте. */
+  .seg-tight button {
+    padding: 3px var(--s2);
+    letter-spacing: 0.06em;
+  }
   .seg button[aria-pressed="true"] {
     background: var(--ink);
     color: var(--ground);
@@ -792,6 +883,30 @@
     color: var(--ink);
     text-decoration: underline;
   }
+  /* Без своей рамки и паддинга — та же строка текста, что и h2 рядом в
+     .h2row. Иначе паддинг кнопки растягивал именно эту половину строки
+     заголовка, и её border-bottom не совпадал по высоте с соседней. */
+  .btn.tight {
+    padding: 0;
+    border: 0;
+  }
+  /* Кнопка, которую иначе принимают за подпись: в строке заголовка она стоит
+     рядом с такими же прописными и ничем от них не отличается. Выворот —
+     единственный способ выделить в этой системе (цвет здесь означает деньги),
+     тот же приём, что у выбранной кнопки в .seg.
+     Отрицательные поля гасят собственную высоту плашки: иначе эта половина
+     строки заголовка станет выше соседней и их линейки разъедутся. */
+  .btn.cue {
+    background: var(--ink);
+    color: var(--ground);
+    padding: 3px var(--s2);
+    margin: -3px 0;
+  }
+  .btn.cue:hover {
+    background: var(--ink);
+    color: var(--ground);
+    opacity: 0.82;
+  }
   .btn.risk {
     color: var(--loss);
     border-color: var(--loss);
@@ -848,10 +963,14 @@
     text-align: right;
     white-space: nowrap;
   }
+  /* Дорожка полосы без собственной линейки снизу: полоса растёт вбок от
+     центральной риски, стоять ей не на чем — «пол» под ней только повторял
+     разделитель строки в двух сантиметрах ниже.
+     Ячейка тянется на всю высоту строки, чтобы риски соседних дней сомкнулись
+     в одну сплошную ось на весь блок, а не рассыпались на семь огрызков. */
   .wk-t {
     position: relative;
-    height: 12px;
-    border-bottom: 1px solid var(--hair);
+    align-self: stretch;
   }
   .wk-z {
     position: absolute;
@@ -861,10 +980,13 @@
     width: 1px;
     background: var(--rule);
   }
+  /* Полоса своей высоты и по центру строки: высоту ей задаёт не ячейка,
+     с тех пор как та растянулась на всю строку. */
   .wk-f {
     position: absolute;
-    top: 2px;
-    bottom: 1px;
+    top: 50%;
+    height: 12px;
+    transform: translateY(-50%);
   }
   .hrs {
     display: grid;
@@ -994,7 +1116,13 @@
     color: var(--doubt);
     font-weight: 400;
   }
-  /* создание тега — одна строка, а не столбик полей */
+  /* Справка из нескольких абзацев: между собой они стоят теснее, чем отбиты от
+     таблицы над ними, — иначе читаются как отдельные сноски к разным местам. */
+  .foot + .foot {
+    margin-top: var(--s2);
+  }
+  /* Поиск и создание тега — одна строка на двух краях, а не два столбика
+     полей друг под другом. */
   .newrow {
     display: flex;
     align-items: center;
@@ -1003,6 +1131,16 @@
     padding: var(--s2) 0 var(--s3);
     border-bottom: 1px solid var(--hair);
   }
+  /* Создание прижато к правому краю: auto-поле слева отталкивает его от
+     поиска на всю свободную ширину, поэтому между ними не нужна ни линейка,
+     ни подпись — их разводит сама строка. */
+  .newrow-r {
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+    flex-wrap: wrap;
+    margin-left: auto;
+  }
   .acts {
     display: flex;
     gap: var(--s1);
@@ -1010,22 +1148,93 @@
   }
   .acts .btn { padding: 4px 6px; }
 
+  /* Закреп комбинации: залитая звезда — закреплена, контурная — нет. Знак и
+     переключатель — одно и то же, поэтому он и стоит в первой колонке, где
+     состояние читается взглядом вдоль края таблицы.
+     Незакреплённый контур держится приглушённым: колонка одинаково ярких
+     звёзд спорила бы с самими комбинациями, ради которых таблица.
+     Ячейка отбивается слева, как каретка: край её колонки — край таблицы. */
+  .ledger td.pin-cell { padding-left: var(--s2); }
+  .pin {
+    appearance: none;
+    border: 0;
+    background: none;
+    padding: 4px;
+    cursor: pointer;
+    /* Звезда — не буква: моноширинный кегль ей мал, а метрики шрифта данных
+       ей ни к чему. Своя мерка и своя строка, чтобы знак встал по центру
+       ячейки, а не по базовой линии соседнего текста. */
+    font-size: 14px;
+    line-height: 1;
+    color: var(--ink-3);
+    transition: color 120ms ease;
+  }
+  .pin:hover,
+  .pin[aria-pressed="true"] { color: var(--ink); }
+
   /* ═══════════════ ЛАБОРАТОРИЯ ═══════════════ */
-  /* Условия слева, результат справа — та же мерка, что у .asym. */
+  /* Условия слева, результат справа. Линейку и отбивку от неё (--s4) колонки
+     делят с .asym, а вот пропорция здесь своя: условия — список галок, ему
+     довольно узкой колонки, тогда как кривой и таблице справа тем лучше, чем
+     шире им дали. */
   .lab {
     display: grid;
-    grid-template-columns: minmax(0, 3fr) minmax(0, 9fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 4fr);
     gap: 0 var(--s4);
   }
+  /* Условия остаются на виду, пока листаешь результат.
+     Липнет обёртка ВНУТРИ колонки, а не сама колонка: грид-элемент в качестве
+     липкого ведёт себя непредсказуемо (его блок — вся высота ряда, и съезжать
+     ему некуда), а обычный блок внутри растянутой на ряд колонки — как раз тот
+     случай, для которого sticky и придуман.
+     Мерки взяты от --top-h, а не числом: на узком экране шапка ниже, и колонка
+     подстраивается сама. dvh, а не vh: на телефоне адресная строка съезжает, и
+     vh там врёт на её высоту. Своя прокрутка нужна, когда открыто несколько
+     групп сразу и они не помещаются в экран. */
+  .lab-stick {
+    position: sticky;
+    top: var(--top-h);
+    max-height: calc(100dvh - var(--top-h));
+    overflow-y: auto;
+    /* Прокрутка внутри колонки есть, но её не видно и она не перехватывает
+       колесо: докрутив условия до конца, страница едет дальше сама. С
+       overscroll-behavior: contain она в этом месте вставала намертво, и
+       казалось, что под курсором страница вообще не листается. */
+    scrollbar-width: none;
+    /* Полоса под шапкой: без неё заголовок «Фильтры» лежит на её линейке. */
+    padding-top: var(--s3);
+    padding-bottom: var(--s4);
+    background: var(--ground);
+  }
+  .lab-stick::-webkit-scrollbar { width: 0; }
   .lab-r {
     border-left: 1px solid var(--hair);
     padding-left: var(--s4);
   }
-  .fg { border-bottom: 1px solid var(--hair); }
+  /* Разделы правой колонки идут тем же шагом, что разделы Обзора (--s5).
+     С --s4 заголовок раздела стоял к предыдущему блоку теснее, чем к
+     собственному содержимому, — и читался как подпись под ним. */
+  .lab-sec { margin-top: var(--s3); }
+  /* Заголовки разделов справа стоят без линейки под собой: раздел отделён от
+     соседа шагом в --s5, а у таблицы под заголовком есть своя шапка — вместе
+     получалось три горизонтали на один экран. Прописные моноширинные и так
+     ни на что в правой колонке не похожи. */
+  .lab-r h2,
+  .lab-r .h2row {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+  .lab-r .h2row { margin-bottom: var(--s3); }
+
+  /* Группы разделяет пустое место, а не линейка на каждую: шесть черт подряд
+     в узкой колонке весили больше, чем сами условия. Границу группы держит её
+     заголовок — прописные с плюсом слева ни с чем не спутать. */
+  .fg + .fg { margin-top: var(--s1); }
   .fg summary {
+    position: relative;
     cursor: pointer;
     list-style: none;
-    padding: var(--s3) 0;
+    padding: var(--s2) 0 var(--s2) 16px;
     display: flex;
     align-items: center;
     gap: var(--s2);
@@ -1034,14 +1243,31 @@
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--ink-2);
+    transition: color 150ms ease;
   }
   .fg summary::-webkit-details-marker { display: none; }
-  .fg summary::before {
-    content: "+";
-    color: var(--ink-3);
-    width: 10px;
+  /* Плюс складывается в минус поворотом вертикальной риски, а не подменой
+     глифа: обозначение то же, но видно само движение — группа раскрылась,
+     а не сменилась другой. */
+  .fg summary::before,
+  .fg summary::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 9px;
+    height: 1px;
+    margin-top: -0.5px;
+    background: var(--ink-3);
+    transition: transform 240ms cubic-bezier(0.32, 0.72, 0, 1), background-color 150ms ease;
   }
-  .fg[open] summary::before { content: "−"; }
+  .fg summary::after { transform: rotate(90deg); }
+  .fg[open] summary::after { transform: rotate(0deg); }
+  .fg summary:hover { color: var(--ink); }
+  .fg summary:hover::before,
+  .fg summary:hover::after,
+  .fg[open] summary::before,
+  .fg[open] summary::after { background: var(--ink-2); }
   .fg[open] summary { color: var(--ink); }
   .fg-c {
     margin-left: auto;
@@ -1050,13 +1276,16 @@
     padding: 1px 5px;
     font-size: 9px;
     font-family: var(--font-mono);
+    animation: fg-count-in 220ms cubic-bezier(0.32, 0.72, 0, 1);
   }
+  /* Раскрытая группа отбивается снизу сильнее свёрнутой: без линейки её конец
+     показывает только просвет перед следующим заголовком. */
   .fb { padding-bottom: var(--s3); }
   .opt {
     display: flex;
     align-items: baseline;
     gap: var(--s2);
-    padding: 5px 0;
+    padding: 4px 0;
     cursor: pointer;
   }
   .opt:hover .opt-n { color: var(--ink); }
@@ -1070,6 +1299,7 @@
     min-width: 0;
     color: var(--ink-2);
     font-size: var(--t-s);
+    transition: color 120ms ease;
   }
   .opt[data-on="true"] .opt-n { color: var(--ink); }
   .opt-s {
@@ -1081,7 +1311,7 @@
   }
   .cov {
     border-top: 1px solid var(--doubt);
-    padding: var(--s3) 0;
+    padding: var(--s3) 0 var(--s2);
     margin-bottom: var(--s2);
   }
   .cov-b {
@@ -1096,17 +1326,23 @@
     bottom: 0;
     left: 0;
     background: var(--doubt);
+    transform-origin: left;
+    transition: width 420ms cubic-bezier(0.32, 0.72, 0, 1);
+    animation: cov-grow 620ms cubic-bezier(0.32, 0.72, 0, 1);
   }
+  /* Четыре величины подряд разделяет просвет, а не риски: с линейками между
+     ячейками строка показаний читалась как таблица из четырёх клеток, хотя
+     это одно высказывание слева направо. Снизу линейка остаётся — ею сводка
+     закрывается, и она же единственная горизонталь в правой колонке. */
   .cmp {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    border-bottom: 1px solid var(--rule);
+    gap: var(--s4);
+    /* Сверху та же отбивка, что у .lab-stick напротив: «Сделок» и «Фильтры»
+       стоят на одной линии по обе стороны линейки. */
+    padding: var(--s3) 0 var(--s4);
+    border-bottom: 1px solid var(--hair);
   }
-  .cmp > div {
-    padding: var(--s3) var(--s3) var(--s3) 0;
-    border-left: 1px solid var(--hair);
-  }
-  .cmp > div:first-child { border-left: 0; }
   .cmp-v {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
@@ -1220,21 +1456,19 @@
 
   /* ═══════════════ НАСТРОЙКИ ═══════════════ */
   .set { max-width: 620px; }
+  /* Справочная пара «подпись → значение»: единственная разметка на весь
+     продукт — и в меню профиля, и в настройках, и в справках под графиками
+     (.lookup собирает эти же пары в колонки). Подпись набирается общим .lbl,
+     а не своим правилом: две почти одинаковые подписи расходились по трекингу. */
   .kv {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    gap: var(--s3);
+    gap: var(--s2);
     padding: var(--s2) 0;
     border-bottom: 1px solid var(--hair);
   }
-  .kv > span:first-child {
-    font-family: var(--font-mono);
-    font-size: var(--t-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--ink-3);
-  }
+  .kv .n { font-size: var(--t-s); }
   .mask {
     font-family: var(--font-mono);
     letter-spacing: 0.1em;
@@ -1276,6 +1510,41 @@
     justify-content: flex-end;
     gap: var(--s2);
   }
+
+  /* ── подтверждение необратимого ──────────────────────────────── */
+  /* Кромка цветом убытка: окно опознаётся раньше, чем прочитан заголовок.
+     Двойной волос, а не заливка шапки — заливка в этой системе означает
+     «сейчас», и красный фон был бы вторым, никому не известным значением. */
+  .dlg-risk { border-top: 2px solid var(--loss); }
+  /* Последствия — по строке на пункт, тире вместо точки: пункты здесь короткие
+     и читаются подряд, а точка сбивала бы их в маркированный список из чужой
+     типографики. */
+  .cfm-list {
+    list-style: none;
+    margin: var(--s2) 0 0;
+    padding: 0;
+    color: var(--ink-2);
+  }
+  .cfm-list li {
+    position: relative;
+    padding-left: var(--s3);
+    margin-top: var(--s1);
+  }
+  .cfm-list li::before {
+    content: "—";
+    position: absolute;
+    left: 0;
+    color: var(--ink-3);
+  }
+  /* Поле отбито от последствий воздухом, а не линейкой: зон в окне и так три,
+     и каждая уже отделена своей. */
+  .cfm-word { margin-top: var(--s4); }
+  /* Слово в подписи — краской: его нужно прочитать буквально, а вся подпись
+     набрана приглушённым. */
+  .cfm-key { color: var(--ink); }
+  /* Слово набрано верно — поле отвечает само, не заставляя переводить взгляд
+     на кнопку в подвале и проверять, ожила ли она. */
+  .in[data-ok="true"] { border-bottom-color: var(--ink); }
   .pick {
     appearance: none;
     cursor: pointer;
@@ -1311,6 +1580,15 @@
 @media (max-width: 1100px) {
   .asym,
   .lab { grid-template-columns: 1fr; }
+  /* В одну колонку условия стоят НАД результатом, а не рядом: залипнув, они
+     съели бы весь экран, ради которого их и листают. */
+  .lab-stick {
+    position: static;
+    max-height: none;
+    overflow-y: visible;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
   .asym > .marg,
   .lab-r {
     border-left: 0;
@@ -1321,8 +1599,7 @@
   }
   .an,
   .cmp { grid-template-columns: repeat(2, 1fr); }
-  .an > div:nth-child(3),
-  .cmp > div:nth-child(3) { border-left: 0; }
+  .an > div:nth-child(3) { border-left: 0; }
   /* 9 метрик = 3×3 без сирот, колонка ~350px — кегль значений не падает */
   .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .mcell {
@@ -1342,12 +1619,27 @@
     --t-xl: 26px;
     --t-l: 19px;
   }
+  /* Ниже 720px .order-ctx уже сам сложился в один столбец (auto-fit) —
+     линия слева переезжает наверх, как у .asym > .marg на своём брейкпоинте. */
+  .order-ctx > div + div {
+    border-left: 0;
+    padding-left: 0;
+    border-top: 1px solid var(--hair);
+    padding-top: var(--s3);
+  }
+  /* На узком экране поиск и создание всё равно встают друг под друга —
+     прижимать создание вправо больше не к чему, а прижатое оно смотрелось бы
+     сдвинутым относительно поиска над ним. Поля тянутся на всю ширину. */
+  .newrow-r {
+    margin-left: 0;
+    width: 100%;
+  }
+  .newrow .in { flex: 1; }
   .wrap,
   .top-in { padding: 0 var(--s3); }
-  .top-in {
-    gap: var(--s3);
-    height: 48px;
-  }
+  /* Шапка ниже — и всё липкое ниже неё едет следом само, через --top-h. */
+  :root { --top-h: 48px; }
+  .top-in { gap: var(--s3); }
   /* На узком экране четыре колонки строки недели остаются, но отбивка между
      ними ужимается — иначе полоса результата схлопывается в ничто. */
   .wk { gap: var(--s2); }
@@ -1398,13 +1690,16 @@
   .mcell:nth-child(2n + 1) { padding-right: 0; }
   .mcell:nth-child(n + 2) { border-top: 1px solid var(--hair); }
   .mcell:nth-child(2) { border-top: 1px solid var(--hair-2); }
-  .an > div,
-  .cmp > div {
+  .an > div {
     border-left: 0;
     border-top: 1px solid var(--hair);
+    padding-left: 0;
+    padding-right: 0;
   }
-  .an > div:first-child,
-  .cmp > div:first-child { border-top: 0; }
+  .an > div:first-child { border-top: 0; }
+  /* Сводка выборки в один столбец: ячейки и здесь держит просвет, но вдвое
+     теснее — четыре строки подряд с отбивкой в --s4 растянулись бы на экран. */
+  .cmp { gap: var(--s3); }
   .hrs-x span:nth-child(even) { visibility: hidden; }
 
   /* таблица → записи журнала */
@@ -1419,8 +1714,11 @@
   }
   .ledger thead { display: none; }
   .ledger tbody tr.row {
+    position: relative;
     border-bottom: 1px solid var(--rule);
-    padding: var(--s2) 0;
+    /* Правый паз держит место для .caret-cell, чтобы значок раскрытия не лёг
+       поверх значения первой строки. */
+    padding: var(--s2) var(--s4) var(--s2) 0;
   }
   .ledger tbody tr.row:hover > td { background: none; }
   .ledger td {
@@ -1447,6 +1745,18 @@
     flex-wrap: wrap;
     justify-content: flex-start;
   }
+  /* Каретка раскрытия в карточке — без этого правила она наследует общую
+     раскладку td (блок на всю ширину с пустой подписью слева) и тянет за
+     собой лишнюю строку с висящим в пустоте треугольником. Значок встаёт в
+     зарезервированный паз в углу карточки, вне потока значений. */
+  .ledger td.caret-cell {
+    position: absolute;
+    top: var(--s2);
+    right: 0;
+    width: auto;
+    padding: 0;
+  }
+  .ledger td.caret-cell::before { display: none; }
   .scale { width: 100%; }
   /* вложенная таблица исполнений остаётся таблицей */
   .fills,
@@ -1482,12 +1792,38 @@
     animation: equity-fade 400ms ease-out 420ms both;
   }
 
+  /* Табличка наведения на кривой: накопленный итог с датой, а под ним просадка
+     — но только если точка внутри ямы. Держится самой точки (смещение считает
+     компонент), у края холста перекидывается на другую сторону. Подписей на
+     самом холсте нет: там они ложились на кривую и не читались. */
+  .eq-readout {
+    position: absolute;
+    padding: var(--s1) var(--s2);
+    background: var(--ground);
+    border: 1px solid var(--rule);
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums lining-nums;
+    font-size: var(--t-s);
+    line-height: 1.45;
+    color: var(--ink);
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .eq-readout-dim { color: var(--ink-2); }
+  .eq-readout-dip { color: var(--loss); }
+
   /* Раскрытие строки таблицы (ордера сделки): grid-template-rows 0fr → 1fr —
      единственный способ анимировать высоту до auto. */
   .row-reveal {
     display: grid;
     grid-template-rows: 1fr;
     animation: row-reveal-in 200ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  /* Закрытие — та же сетка в обратную сторону. forwards держит 0fr/opacity:0
+     до конца анимации, иначе высота на мгновение отскочит обратно к 1fr
+     (в статичном .row-reveal), прежде чем React уберёт строку из DOM. */
+  .row-reveal.closing {
+    animation: row-reveal-out 180ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
   }
   .row-reveal > * {
     min-height: 0;
@@ -1496,6 +1832,42 @@
   .order-row-in {
     animation: order-row-in 240ms cubic-bezier(0.2, 0, 0.2, 1) backwards;
     animation-delay: calc(var(--i, 0) * 26ms);
+  }
+
+  /* Закрытые сделки: строки журнала проявляются лёгким подъёмом внахлёст,
+     той же кистью, что и раскрытые ордера ниже (.order-row-in) — так смена
+     страницы и периода читается как одно движение, а не перерисовка. */
+  .trades .ledger tbody tr.row {
+    animation: trade-row-in 260ms cubic-bezier(0.2, 0, 0.2, 1) backwards;
+    animation-delay: calc(var(--i, 0) * 24ms);
+  }
+  /* Наведение и раскрытие снимались рывком — заливка и так уже есть
+     (.ledger tbody tr.row:hover), не хватало только перехода к ней. */
+  .trades .ledger tbody tr.row > td {
+    transition: background-color 120ms ease;
+  }
+
+  /* Раскрытие группы условий. Высота едет до auto без единой строчки JS:
+     interpolate-size разрешает интерполяцию ключевого слова, ::details-content
+     даёт тот самый ящик, у которого её можно взять. Где этого ещё нет
+     (Firefox), группа раскрывается мгновенно, а содержимое всё равно
+     проявляется анимацией ниже — не хуже, чем было. */
+  .fg { interpolate-size: allow-keywords; }
+  .fg::details-content {
+    block-size: 0;
+    overflow: hidden;
+    transition: block-size 260ms cubic-bezier(0.32, 0.72, 0, 1),
+      content-visibility 260ms allow-discrete;
+  }
+  .fg[open]::details-content { block-size: auto; }
+
+  /* Условия выступают внахлёст той же кистью, что строки журнала. Правило
+     висит на [open], а не на самом .fb: <details> держит содержимое в DOM и
+     закрытым, и без этого анимация отыгрывала бы один раз при загрузке
+     страницы — во всех группах разом и ни в одной видимо. */
+  .fg[open] .fb > * {
+    animation: opt-in 240ms cubic-bezier(0.2, 0, 0.2, 1) backwards;
+    animation-delay: calc(var(--i, 0) * 16ms);
   }
 }
 
@@ -1513,7 +1885,32 @@
   to { grid-template-rows: 1fr; opacity: 1; }
 }
 
+@keyframes row-reveal-out {
+  from { grid-template-rows: 1fr; opacity: 1; }
+  to { grid-template-rows: 0fr; opacity: 0; }
+}
+
 @keyframes order-row-in {
   from { opacity: 0; transform: translateY(-3px); }
   to { opacity: 1; transform: none; }
+}
+
+@keyframes trade-row-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes opt-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes fg-count-in {
+  from { opacity: 0; transform: scale(0.7); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes cov-grow {
+  from { transform: scaleX(0); }
+  to { transform: none; }
 }

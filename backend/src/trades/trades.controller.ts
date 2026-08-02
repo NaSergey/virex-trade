@@ -3,7 +3,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { TradesService } from './trades.service';
 import { TradeSyncService } from './trade-sync.service';
-import { TradeContextService, type RangeTf } from './trade-context.service';
+import { TradeContextService, isRangeTf, type RangeTf } from './trade-context.service';
 import { LabService } from './lab.service';
 import { BybitTradeService } from '../bybit/services/bybit-trade.service';
 import { CredentialsService } from '../credentials/credentials.service';
@@ -86,7 +86,7 @@ export class TradesController {
     return this.tradesService.statsByTagCombo(userId, days ? parseInt(days, 10) : undefined);
   }
 
-  // «Лаборатория»: произвольная комбинация фильтров (теги / время / рыночный
+  // «Выборка»: произвольная комбинация фильтров (теги / время / рыночный
   // контекст) → сводка, фасеты и кривая P&L. Все csv-параметры — списки.
   @Get('lab')
   async lab(
@@ -175,7 +175,7 @@ export class TradesController {
     @Param('id') id: string,
     @Query('tf') tf?: string,
   ) {
-    const timeframe: RangeTf = tf === '1h' || tf === '1d' ? tf : '4h';
+    const timeframe: RangeTf = isRangeTf(tf) ? tf : '4h';
     return this.tradeContext.rangeCheck(userId, id, timeframe);
   }
 

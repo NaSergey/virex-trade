@@ -2,8 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EquityPoint, wilsonLower } from './trades.service';
 import { collapseToPositions } from './positions';
+import { isRangeTf, storedRangePos, type RangeTf } from './trade-context.service';
 
-// «Лаборатория»: произвольная комбинация фильтров по сделкам (теги + рыночный
+// «Выборка»: произвольная комбинация фильтров по сделкам (теги + рыночный
 // контекст из TradeContext + время) → сводка против базовой линии периода,
 // кривая P&L и фасеты. Фасет = разбивка одного измерения, посчитанная при
 // всех ОСТАЛЬНЫХ активных фильтрах (классический faceted search): видно,
@@ -27,7 +28,7 @@ export interface LabFilter {
   range?: 'low' | 'mid' | 'high'; // where in that range the entry landed
 }
 
-export type RangeTf = '1h' | '4h' | '1d';
+export type { RangeTf } from './trade-context.service';
 
 // Границы «низа» и «верха» диапазона входа. Вход вне диапазона ТФ (пробой)
 // даёт rangePos < 0 / > 100 и естественно попадает в крайнюю корзину.
@@ -81,6 +82,8 @@ interface Row {
     volRel: number | null;
     ema200Above: boolean | null;
     trend4h: string | null;
+    rangePos15m: number | null;
+    rangePos30m: number | null;
     rangePos1h: number | null;
     rangePos4h: number | null;
     rangePos1d: number | null;
@@ -187,6 +190,8 @@ export class LabService {
               volRel: t.context.volRel,
               ema200Above: t.context.ema200Above,
               trend4h: t.context.trend4h,
+              rangePos15m: t.context.rangePos15m,
+              rangePos30m: t.context.rangePos30m,
               rangePos1h: t.context.rangePos1h,
               rangePos4h: t.context.rangePos4h,
               rangePos1d: t.context.rangePos1d,
@@ -202,14 +207,10 @@ export class LabService {
     const medAtr = median(okRows.map((r) => r.ctx!.atrPct).filter((v): v is number => v != null));
     const medVol = median(okRows.map((r) => r.ctx!.volRel).filter((v): v is number => v != null));
 
-    // Диапазон входа считается сразу по трём ТФ, но фильтр и фасет всегда
-    // читают только выбранный — иначе три почти одинаковых ряда чипов в панели.
-    const rangeOf = (r: Row): number | null => {
-      if (!r.ctx) return null;
-      if (f.rangeTf === '1h') return r.ctx.rangePos1h;
-      if (f.rangeTf === '1d') return r.ctx.rangePos1d;
-      return r.ctx.rangePos4h;
-    };
+    // Диапазон входа считается сразу по всем ТФ, но фильтр и фасет всегда
+    // читают только выбранный — иначе пять почти одинаковых рядов чипов.
+    const tf = isRangeTf(f.rangeTf) ? f.rangeTf : '4h';
+    const rangeOf = (r: Row): number | null => (r.ctx ? storedRangePos(r.ctx, tf) : null);
 
     // Предикаты по измерениям: true = сделка проходит фильтр этого измерения
     // (или фильтр не задан). Сделки без контекста не проходят контекстные

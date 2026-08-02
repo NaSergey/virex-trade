@@ -1,13 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { AuthGuard } from '@/shared/auth/AuthGuard';
-import { TopNav, type Tab } from '@/shared/ui/TopNav';
-import { OverviewPage } from '@/page/stats/OverviewPage';
-import { TagsPage } from '@/page/stats/TagsPage';
-import { LabPage } from '@/page/lab/Page';
-import { AnalyticsPage } from '@/page/analytics/Page';
-import { SettingsPage } from '@/page/settings/Page';
+import { AuthGuard } from '@/features/auth';
+import { TopNav, type Tab } from '@/widgets/top-nav';
+// Слой страниц FSD лежит в src/views, а не src/pages: src/pages — служебный
+// каталог Pages Router, и Next пытался собрать каждый файл оттуда как роут
+// (сборка падала на «Property 'default' is missing»). App Router живёт в
+// src/app, здесь — только его содержимое.
+import { OverviewPage } from '@/views/overview/Page';
+import { TagsPage } from '@/views/tags/Page';
+import { LabPage } from '@/views/lab/Page';
+import { AnalyticsPage } from '@/views/analytics/Page';
+import { SettingsPage } from '@/views/settings/Page';
 
 /**
  * Прокрутка — документа, а не внутренних панелей: страница-гроссбух кончается

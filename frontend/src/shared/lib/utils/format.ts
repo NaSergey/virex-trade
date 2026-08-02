@@ -45,6 +45,30 @@ export function formatPriceGrouped(value: string | number | null | undefined): s
 }
 
 /**
+ * Количество монет: столько знаков, сколько есть на самом деле, без хвоста
+ * двоичной дроби.
+ *
+ * Размер позиции складывается из её частей (`3.7 + 3.7 + 1.7`), и в двоичной
+ * дроби это даёт `9.100000000000001` — в колонке чисел такая строка выглядит
+ * как сбой расчёта, хотя это ровно 9.1. Восемь знаков — предел, который
+ * вообще бывает у шага лота; всё, что за ним, — мусор представления, а не
+ * данные.
+ *
+ * Отдельно от formatPrice: у цены точность фиксированная (2 или 4 знака), а у
+ * количества значащих знаков столько, сколько дал инструмент — «1200» нельзя
+ * показать как «1200.00», а «0.001» как «0.00».
+ * @param value - количество числом или строкой с биржи
+ */
+export function formatQty(value: string | number | null | undefined): string {
+  const num = typeof value === 'string' ? parseFloat(value) : value;
+  if (num == null || !Number.isFinite(num)) return '—';
+  // Хвостовые нули срезаются вместе с точкой: toFixed их дописывает всем.
+  const abs = Math.abs(num).toFixed(8).replace(/\.?0+$/, '');
+  const [int, frac] = abs.split('.');
+  return `${num < 0 ? '−' : ''}${group(int)}${frac ? `.${frac}` : ''}`;
+}
+
+/**
  * Format number with appropriate decimal places
  * - If number < 1 (e.g., 0.234235): show 4 decimal places
  * - If number >= 1 (e.g., 98097.70): show 2 decimal places

@@ -46,6 +46,38 @@ export function fillDelta(f: FillLike): Record<PositionSide, number> {
     : { long: -closing, short: opening };
 }
 
+/**
+ * Время открытия позиции, зашитое в её id (`SYMBOL:side:openMs`) — момент
+ * ПЕРВОГО филла по истории исполнений. Режем по последнему ':' на случай
+ * символов с разделителем внутри.
+ */
+export function positionOpenMs(positionId: string | null | undefined): number | null {
+  if (!positionId) return null;
+  const ms = Number(positionId.slice(positionId.lastIndexOf(':') + 1));
+  return Number.isFinite(ms) && ms > 0 ? ms : null;
+}
+
+/**
+ * Когда в позицию вошли — и насколько этому времени можно верить.
+ *
+ * Порядок источников важен. `positionId` собран из истории исполнений, то есть
+ * это настоящее время первого филла. Колонка `openedAt` — совсем другое: её
+ * ставит синк по первому появлению позиции в опросе биржи, поэтому она
+ * опаздывает на интервал опроса, а если в момент входа сервер лежал — то и на
+ * часы. Раньше всё считалось от неё, и на графике вход оказывался правее того
+ * места, где в позицию реально вошли.
+ */
+export function entryTimeOf(row: {
+  positionId: string | null;
+  openedAt: Date | null;
+  closedAt: Date;
+}): { ms: number; basis: 'filled' | 'opened' | 'closed' } {
+  const filled = positionOpenMs(row.positionId);
+  if (filled != null) return { ms: filled, basis: 'filled' };
+  if (row.openedAt) return { ms: row.openedAt.getTime(), basis: 'opened' };
+  return { ms: row.closedAt.getTime(), basis: 'closed' };
+}
+
 /** The trade columns every aggregate reads. Structural so callers can pass richer rows. */
 export interface TradeRowLike {
   id: string;

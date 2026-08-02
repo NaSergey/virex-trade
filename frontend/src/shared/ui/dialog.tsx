@@ -3,6 +3,7 @@
 import * as React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { cn } from '@/shared/lib/utils/css';
+import { Button, type ButtonVariant } from '@/shared/ui/Button';
 
 /**
  * Диалог гроссбуха: рамка в один волос цветом краски и три жёстких зоны —
@@ -76,4 +77,50 @@ const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivEleme
   <div className={cn('df', className)} {...props} />
 );
 
-export { Dialog, DialogPortal, DialogOverlay, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogClose };
+/**
+ * Подвал диалога: «Отмена» и одно действие, ради которого диалог открывали.
+ *
+ * Все четыре диалога продукта заканчиваются одинаково, и порядок кнопок здесь —
+ * не вкусовщина: отмена слева, действие справа, потому что справа заканчивается
+ * чтение. Пока это писалось в каждом диалоге руками, порядок и подписи могли
+ * разойтись — а именно они решают, что человек нажмёт не глядя.
+ */
+function DialogActions({
+  confirmLabel,
+  onConfirm,
+  onCancel,
+  confirmDisabled,
+  /** `risk` — для необратимого: цвет убытка вместо заливки. */
+  confirmVariant = 'solid',
+  cancelLabel = 'Отмена',
+}: {
+  confirmLabel: React.ReactNode;
+  onConfirm: () => void;
+  onCancel: () => void;
+  confirmDisabled?: boolean;
+  confirmVariant?: Extract<ButtonVariant, 'solid' | 'risk'>;
+  cancelLabel?: React.ReactNode;
+}) {
+  return (
+    <DialogFooter>
+      <Button variant="bare" onClick={onCancel}>
+        {cancelLabel}
+      </Button>
+      <Button variant={confirmVariant} disabled={confirmDisabled} onClick={onConfirm}>
+        {confirmLabel}
+      </Button>
+    </DialogFooter>
+  );
+}
+
+export {
+  Dialog,
+  DialogPortal,
+  DialogOverlay,
+  DialogContent,
+  DialogHeader,
+  DialogBody,
+  DialogFooter,
+  DialogActions,
+  DialogClose,
+};

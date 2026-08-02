@@ -1,6 +1,7 @@
 'use client';
 
 import { memo } from 'react';
+import { Button } from '@/shared/ui/Button';
 
 export interface PaginationProps {
   page: number;
@@ -35,12 +36,12 @@ export const Pagination = memo(({ page, pageSize, total, onPrev, onNext }: Pagin
         {from}—{to} из {total}
       </span>
       <div style={{ display: 'flex', gap: 'var(--s2)' }}>
-        <button className="btn" onClick={onPrev} disabled={page <= 1}>
+        <Button onClick={onPrev} disabled={page <= 1}>
           ← Назад
-        </button>
-        <button className="btn" onClick={onNext} disabled={page >= lastPage}>
+        </Button>
+        <Button onClick={onNext} disabled={page >= lastPage}>
           Вперёд →
-        </button>
+        </Button>
       </div>
     </div>
   );

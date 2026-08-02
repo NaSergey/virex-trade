@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { QueryProvider } from "./(internal)/QueryProvider";
-import { AuthProvider } from "@/shared/auth/AuthContext";
+import { AuthProvider } from "@/features/auth";
 
 /**
  * Два голоса, и только два: серифы — речь (заголовки, пояснения, названия

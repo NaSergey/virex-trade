@@ -2,6 +2,7 @@
 
 import { memo } from 'react';
 import { cn } from '@/shared/lib/utils/css';
+import { Button } from '@/shared/ui/Button';
 
 export interface SegOption<T extends string | number> {
   value: T;
@@ -31,15 +32,15 @@ function SegInner<T extends string | number>({
   return (
     <div className={cn('seg', className)} role="group" aria-label={ariaLabel}>
       {options.map((opt) => (
-        <button
+        <Button
           key={opt.value}
-          type="button"
+          variant="none"
           title={opt.title}
           aria-pressed={value === opt.value}
           onClick={() => onChange(opt.value)}
         >
           {opt.label}
-        </button>
+        </Button>
       ))}
     </div>
   );

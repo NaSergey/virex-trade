@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { cn } from '@/shared/lib/utils/css';
 
 /**
@@ -8,9 +8,20 @@ import { cn } from '@/shared/lib/utils/css';
  * Кривая P&L из неё сознательно выходит в край вьюпорта (см. .bleed) — это
  * единственный контролируемый выход за сетку во всём продукте.
  */
-export function Wrap({ children, className, style }: { children: ReactNode; className?: string; style?: React.CSSProperties }) {
+export function Wrap({
+  children,
+  /** Полоса заканчивает страницу — снизу остаётся поле (.wrap.page). */
+  page,
+  className,
+  style,
+}: {
+  children: ReactNode;
+  page?: boolean;
+  className?: string;
+  style?: CSSProperties;
+}) {
   return (
-    <div className={cn('wrap', className)} style={style}>
+    <div className={cn('wrap', page && 'page', className)} style={style}>
       {children}
     </div>
   );

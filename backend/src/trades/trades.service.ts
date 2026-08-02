@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { collapseToPositions, fillDelta, type PositionSide } from './positions';
+import { collapseToPositions, fillDelta, positionOpenMs, type PositionSide } from './positions';
 
 export interface TradeStats {
   totalTrades: number;
@@ -298,10 +298,8 @@ export class TradesService {
     parts: Array<{ orderId: string }>,
   ) {
     const SIZE_EPS = 1e-8;
-    // positionId = `SYMBOL:openedAtMs`; режем по последнему ':' — на случай
-    // символов с разделителем внутри.
-    const openMs = trade.positionId ? Number(trade.positionId.slice(trade.positionId.lastIndexOf(':') + 1)) : NaN;
-    const from = Number.isFinite(openMs) ? new Date(openMs) : trade.openedAt;
+    const openMs = positionOpenMs(trade.positionId);
+    const from = openMs != null ? new Date(openMs) : trade.openedAt;
 
     if (!from) {
       // Позиция не реконструирована и времени входа нет — честно отдаём хотя

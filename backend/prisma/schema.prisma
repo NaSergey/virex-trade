@@ -177,10 +177,14 @@ model TradeContext {
   // the anchor. 0 = bought at the bottom of the range, 100 = at the top.
   // Deliberately NOT clamped: an entry above the range (breakout) reads > 100
   // and below it < 0, which is exactly what we want to be able to see.
-  // Windows: a day on 1h, five days on 4h, a month on the daily.
-  rangePos1h Float?
-  rangePos4h Float?
-  rangePos1d Float?
+  // Each window is exactly what the range-check chart of that timeframe draws
+  // (48 candles on everything up to 1h, 60 on 4h and daily) — twelve hours on
+  // 15m, a day on 30m, two days on 1h, ten days on 4h, two months on the daily.
+  rangePos15m Float?
+  rangePos30m Float?
+  rangePos1h  Float?
+  rangePos4h  Float?
+  rangePos1d  Float?
 
   // Field-set version of the snapshot. Snapshots are only ever computed for
   // trades that have none (context == null), so without this a newly added
@@ -281,6 +285,8 @@ model OpenPositionSeen {
   ema200Above   Boolean?
   ema200DistPct Float?
   trend4h       String?
+  rangePos15m   Float?
+  rangePos30m   Float?
   rangePos1h    Float?
   rangePos4h    Float?
   rangePos1d    Float?

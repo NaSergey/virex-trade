@@ -2,7 +2,9 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/shared/auth/AuthContext';
+import { useAuth } from '@/features/auth';
+import { Button } from '@/shared/ui/Button';
+import { Field, Input } from '@/shared/ui/Field';
 
 type Mode = 'login' | 'register';
 
@@ -66,42 +68,33 @@ export default function LoginPage() {
 
         <form onSubmit={onSubmit}>
           {mode === 'register' && (
-            <div className="field">
-              <label className="lbl" htmlFor="name">
-                Имя (необязательно)
-              </label>
-              <input
+            <Field label="Имя (необязательно)" htmlFor="name">
+              <Input
                 id="name"
-                className="in full"
+                full
                 autoComplete="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
-            </div>
+            </Field>
           )}
 
-          <div className="field">
-            <label className="lbl" htmlFor="email">
-              Почта
-            </label>
-            <input
+          <Field label="Почта" htmlFor="email">
+            <Input
               id="email"
-              className="in full"
+              full
               type="email"
               required
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
-          </div>
+          </Field>
 
-          <div className="field">
-            <label className="lbl" htmlFor="password">
-              Пароль
-            </label>
-            <input
+          <Field label="Пароль" htmlFor="password">
+            <Input
               id="password"
-              className="in full"
+              full
               type="password"
               required
               minLength={mode === 'register' ? 8 : undefined}
@@ -109,7 +102,7 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
-          </div>
+          </Field>
 
           {error && (
             <p className="warn" style={{ marginBottom: 'var(--s3)' }}>
@@ -117,14 +110,13 @@ export default function LoginPage() {
             </p>
           )}
 
-          <button type="submit" className="btn solid" style={{ width: '100%' }} disabled={submitting}>
+          <Button type="submit" variant="solid" style={{ width: '100%' }} disabled={submitting}>
             {submitting ? 'Подождите…' : mode === 'login' ? 'Войти' : 'Зарегистрироваться'}
-          </button>
+          </Button>
         </form>
 
-        <button
-          type="button"
-          className="btn bare"
+        <Button
+          variant="bare"
           style={{ marginTop: 'var(--s3)', width: '100%' }}
           onClick={() => {
             setMode(mode === 'login' ? 'register' : 'login');
@@ -132,7 +124,7 @@ export default function LoginPage() {
           }}
         >
           {mode === 'login' ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
-        </button>
+        </Button>
       </div>
     </div>
   );

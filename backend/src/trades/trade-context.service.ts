@@ -3,27 +3,42 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { BybitMarketService } from '../bybit/services/bybit-market.service';
 import { IndicatorsService, Candle } from './indicators.service';
+import { entryTimeOf } from './positions';
 
+const M15_MS = 900_000;
+const M30_MS = 2 * M15_MS;
 const H1_MS = 3600_000;
 const H4_MS = 4 * H1_MS;
 const D1_MS = 24 * H1_MS;
+// Младшие ТФ считают только диапазон входа — индикаторов по ним нет, поэтому
+// глубина ровно в окно плюс запас.
+const M15_LOOKBACK = 60;
+const M30_LOOKBACK = 60;
 // EMA200 needs 200 closed 1h candles before the anchor; +20 slack.
 const H1_LOOKBACK = 220;
 // computeSnapshot wants >= 60 candles; ~200 gives stable ADX/EMA50 on 4h.
 const H4_LOOKBACK = 210;
 // Daily candles are fetched ONLY for the entry-range metric (no indicator is
 // computed off them), so the lookback is just the range window plus slack.
-const D1_LOOKBACK = 45;
+const D1_LOOKBACK = 70;
 const MIN_CANDLES = 60;
 // Cap per user per sync tick so the initial backfill spreads over a few
 // ticks instead of stalling one tick for minutes.
 const BATCH_LIMIT = 400;
 
-// Range windows for rangePos*: a day on 1h, five days on 4h, a month on the
-// daily — three different answers to "did I buy high or low", one per horizon.
-const RANGE_WINDOW_1H = 24;
-const RANGE_WINDOW_4H = 30;
-const RANGE_WINDOW_1D = 30;
+// Range windows for rangePos*: how far back "did I buy high or low" looks, one
+// horizon per timeframe — two days on 1h, ten days on 4h, two months on the
+// daily.
+//
+// Каждое окно равно тому, что рисует график этого таймфрейма (RANGE_TF_SPEC
+// ниже), и это не совпадение: пока окно было короче нарисованного, слева от
+// стрелки входа оставались свечи ниже «низа», и число выглядело враньём. Либо
+// не рисовать лишнего, либо считать по всему нарисованному — выбрано второе.
+const RANGE_WINDOW_15M = 48;
+const RANGE_WINDOW_30M = 48;
+const RANGE_WINDOW_1H = 48;
+const RANGE_WINDOW_4H = 60;
+const RANGE_WINDOW_1D = 60;
 // A window shorter than this isn't a range, it's two candles — better null
 // than a percentage of noise.
 const RANGE_MIN_CANDLES = 10;
@@ -34,15 +49,50 @@ const RANGE_MIN_CANDLES = 10;
  * new field stays null on all existing history (snapshots are only computed
  * when a trade has no context at all).
  */
-export const CTX_VERSION = 2;
+// 3: окна rangePos* расширены до всей истории, которую показывает график
+// (48 свечей на 1h, 60 на 4h и на дневках) — старые значения считались по
+// более коротким окнам и с новыми не сравнимы.
+// 4: добавлены rangePos15m/30m — на старых снимках они пустые.
+export const CTX_VERSION = 4;
 
-export type RangeTf = '1h' | '4h' | '1d';
+// Пять горизонтов одного вопроса «дорого ли я взял»: от двенадцати часов до
+// двух месяцев. Скальперу коридор в сутки ничего не говорит — ему нужны
+// последние часы, и вот они.
+export const RANGE_TF_LIST = ['15m', '30m', '1h', '4h', '1d'] as const;
+export type RangeTf = (typeof RANGE_TF_LIST)[number];
+export const isRangeTf = (v: unknown): v is RangeTf =>
+  RANGE_TF_LIST.includes(v as RangeTf);
 
-/** Kline interval, candle length, range window and chart lookback per timeframe. */
+/** Колонка снимка, в которой лежит диапазон входа этого ТФ. */
+export const RANGE_POS_FIELD = {
+  '15m': 'rangePos15m',
+  '30m': 'rangePos30m',
+  '1h': 'rangePos1h',
+  '4h': 'rangePos4h',
+  '1d': 'rangePos1d',
+} as const satisfies Record<RangeTf, string>;
+
+/** Сохранённый диапазон входа выбранного ТФ — из любого носителя этих полей. */
+export function storedRangePos(
+  ctx: Partial<Record<(typeof RANGE_POS_FIELD)[RangeTf], number | null>>,
+  tf: RangeTf,
+): number | null {
+  return ctx[RANGE_POS_FIELD[tf]] ?? null;
+}
+
+/**
+ * Kline interval, candle length and range window per timeframe.
+ *
+ * lookback === window намеренно: график рисует ровно те свечи, по которым взяты
+ * верх и низ, поэтому линии всегда касаются самой высокой и самой низкой свечи
+ * слева от входа. Разъехаться этим двум числам нельзя.
+ */
 const RANGE_TF_SPEC: Record<RangeTf, { interval: string; tfMs: number; window: number; lookback: number }> = {
-  '1h': { interval: '60', tfMs: H1_MS, window: RANGE_WINDOW_1H, lookback: RANGE_WINDOW_1H + 24 },
-  '4h': { interval: '240', tfMs: H4_MS, window: RANGE_WINDOW_4H, lookback: RANGE_WINDOW_4H + 30 },
-  '1d': { interval: 'D', tfMs: D1_MS, window: RANGE_WINDOW_1D, lookback: RANGE_WINDOW_1D + 30 },
+  '15m': { interval: '15', tfMs: M15_MS, window: RANGE_WINDOW_15M, lookback: RANGE_WINDOW_15M },
+  '30m': { interval: '30', tfMs: M30_MS, window: RANGE_WINDOW_30M, lookback: RANGE_WINDOW_30M },
+  '1h': { interval: '60', tfMs: H1_MS, window: RANGE_WINDOW_1H, lookback: RANGE_WINDOW_1H },
+  '4h': { interval: '240', tfMs: H4_MS, window: RANGE_WINDOW_4H, lookback: RANGE_WINDOW_4H },
+  '1d': { interval: 'D', tfMs: D1_MS, window: RANGE_WINDOW_1D, lookback: RANGE_WINDOW_1D },
 };
 
 /**
@@ -58,9 +108,20 @@ export interface EntrySnapshot {
   ema200Above?: boolean | null;
   ema200DistPct?: number | null;
   trend4h?: string | null;
+  rangePos15m?: number | null;
+  rangePos30m?: number | null;
   rangePos1h?: number | null;
   rangePos4h?: number | null;
   rangePos1d?: number | null;
+}
+
+/** Свечи всех таймфреймов на один момент — то, из чего собирается снимок. */
+export interface SnapshotCandles {
+  m15: Candle[];
+  m30: Candle[];
+  h1: Candle[];
+  h4: Candle[];
+  d1: Candle[];
 }
 
 /** Last EMA value (SMA seed + standard smoothing), values oldest-first. */
@@ -125,7 +186,14 @@ export class TradeContextService {
       where: { userId, context: null },
       orderBy: { closedAt: 'desc' },
       take: BATCH_LIMIT,
-      select: { id: true, symbol: true, openedAt: true, closedAt: true, avgEntryPrice: true },
+      select: {
+        id: true,
+        symbol: true,
+        positionId: true,
+        openedAt: true,
+        closedAt: true,
+        avgEntryPrice: true,
+      },
     });
     if (pending.length === 0) return 0;
 
@@ -148,15 +216,27 @@ export class TradeContextService {
   }
 
   /**
-   * Drop snapshots written by an older CTX_VERSION so the pass below recomputes
-   * them with the current field set. Bounded by BATCH_LIMIT like everything
-   * else here: deleting the whole history at once would blank the Лаборатория's
-   * market-context filters until the backfill caught up, whereas one batch per
-   * tick keeps the hole small and self-healing.
+   * Drop snapshots that must be recomputed: written by an older CTX_VERSION (a
+   * new field would otherwise stay null on all history), or anchored on a
+   * guessed entry time while the exact one has since arrived — a position is
+   * only reconstructed when its last closing fill lands, which can be several
+   * ticks after the trade row itself.
+   *
+   * Bounded by BATCH_LIMIT like everything else here: deleting the whole
+   * history at once would blank the selection page's market-context filters
+   * until the backfill caught up, whereas one batch per tick keeps the hole
+   * small and self-healing. Terminates: a recomputed row comes back with
+   * basis 'filled' and stops matching.
    */
   private async dropStale(userId: string): Promise<void> {
     const stale = await this.prisma.tradeContext.findMany({
-      where: { ctxVersion: { lt: CTX_VERSION }, trade: { userId } },
+      where: {
+        trade: { userId },
+        OR: [
+          { ctxVersion: { lt: CTX_VERSION } },
+          { basis: { not: 'filled' }, trade: { userId, positionId: { not: null } } },
+        ],
+      },
       take: BATCH_LIMIT,
       select: { id: true },
     });
@@ -167,24 +247,30 @@ export class TradeContextService {
 
   private async computeSymbol(
     symbol: string,
-    rows: Array<{ id: string; openedAt: Date | null; closedAt: Date; avgEntryPrice: number }>,
+    rows: Array<{
+      id: string;
+      positionId: string | null;
+      openedAt: Date | null;
+      closedAt: Date;
+      avgEntryPrice: number;
+    }>,
   ): Promise<number> {
-    const anchors = rows.map((r) => ({
-      row: r,
-      ms: (r.openedAt ?? r.closedAt).getTime(),
-      basis: r.openedAt ? 'opened' : 'closed',
-    }));
+    const anchors = rows.map((r) => ({ row: r, ...entryTimeOf(r) }));
     const minMs = Math.min(...anchors.map((a) => a.ms));
     const maxMs = Math.max(...anchors.map((a) => a.ms));
 
-    const c1 = await this.market.getKlinesRange(symbol, '60', minMs - H1_LOOKBACK * H1_MS, maxMs);
-    const c4 = await this.market.getKlinesRange(symbol, '240', minMs - H4_LOOKBACK * H4_MS, maxMs);
-    // Daily candles serve only rangePos1d — no indicator is computed off them,
-    // so a symbol without daily history still gets a full snapshot.
-    const cd = await this.market.getKlinesRange(symbol, 'D', minMs - D1_LOOKBACK * D1_MS, maxMs);
+    // Младшие ТФ и дневки служат только диапазону входа — индикаторов по ним
+    // нет, поэтому символ без такой истории всё равно получит полный снимок.
+    const candles: SnapshotCandles = {
+      m15: await this.market.getKlinesRange(symbol, '15', minMs - M15_LOOKBACK * M15_MS, maxMs),
+      m30: await this.market.getKlinesRange(symbol, '30', minMs - M30_LOOKBACK * M30_MS, maxMs),
+      h1: await this.market.getKlinesRange(symbol, '60', minMs - H1_LOOKBACK * H1_MS, maxMs),
+      h4: await this.market.getKlinesRange(symbol, '240', minMs - H4_LOOKBACK * H4_MS, maxMs),
+      d1: await this.market.getKlinesRange(symbol, 'D', minMs - D1_LOOKBACK * D1_MS, maxMs),
+    };
 
     const data = anchors.map((a) =>
-      this.buildRow(a.row.id, a.basis, a.ms, a.row.avgEntryPrice, c1, c4, cd),
+      this.buildRow(a.row.id, a.basis, a.ms, a.row.avgEntryPrice, candles),
     );
     // skipDuplicates: a concurrent run (manual sync + timer) must not throw
     // on the unique tradeId.
@@ -197,15 +283,13 @@ export class TradeContextService {
     basis: string,
     anchorMs: number,
     entryPrice: number,
-    c1: Candle[],
-    c4: Candle[],
-    cd: Candle[],
+    candles: SnapshotCandles,
   ): Prisma.TradeContextCreateManyInput {
     return {
       tradeId,
       basis,
       ctxVersion: CTX_VERSION,
-      ...this.buildSnapshot(anchorMs, entryPrice, c1, c4, cd),
+      ...this.buildSnapshot(anchorMs, entryPrice, candles),
     };
   }
 
@@ -218,16 +302,12 @@ export class TradeContextService {
    * Candles are filtered to those closed strictly before the anchor, so nothing
    * here can see the future of the entry moment.
    */
-  buildSnapshot(
-    anchorMs: number,
-    entryPrice: number,
-    c1: Candle[],
-    c4: Candle[],
-    cd: Candle[],
-  ): EntrySnapshot {
-    const h1 = closedBefore(c1, anchorMs, H1_MS).slice(-H1_LOOKBACK);
-    const h4 = closedBefore(c4, anchorMs, H4_MS).slice(-H4_LOOKBACK);
-    const d1 = closedBefore(cd, anchorMs, D1_MS).slice(-D1_LOOKBACK);
+  buildSnapshot(anchorMs: number, entryPrice: number, candles: SnapshotCandles): EntrySnapshot {
+    const m15 = closedBefore(candles.m15, anchorMs, M15_MS).slice(-M15_LOOKBACK);
+    const m30 = closedBefore(candles.m30, anchorMs, M30_MS).slice(-M30_LOOKBACK);
+    const h1 = closedBefore(candles.h1, anchorMs, H1_MS).slice(-H1_LOOKBACK);
+    const h4 = closedBefore(candles.h4, anchorMs, H4_MS).slice(-H4_LOOKBACK);
+    const d1 = closedBefore(candles.d1, anchorMs, D1_MS).slice(-D1_LOOKBACK);
     // Not enough history (delisted symbol, very old trade beyond kline paging):
     // ok=false so callers don't retry this anchor forever.
     if (h1.length < MIN_CANDLES || h4.length < MIN_CANDLES) {
@@ -265,6 +345,8 @@ export class TradeContextService {
       // Measured against the price actually paid, not the last close: the
       // question is where THIS entry landed in the range, not where the market
       // happened to be at the anchor candle's close.
+      rangePos15m: rangePos(m15, RANGE_WINDOW_15M, entryPrice),
+      rangePos30m: rangePos(m30, RANGE_WINDOW_30M, entryPrice),
       rangePos1h: rangePos(h1, RANGE_WINDOW_1H, entryPrice),
       rangePos4h: rangePos(h4, RANGE_WINDOW_4H, entryPrice),
       rangePos1d: rangePos(d1, RANGE_WINDOW_1D, entryPrice),
@@ -278,10 +360,15 @@ export class TradeContextService {
    * being reconstructed weeks later when it closes.
    */
   async snapshotNow(symbol: string, entryPrice: number, anchorMs = Date.now()): Promise<EntrySnapshot> {
-    const c1 = await this.market.getKlinesRange(symbol, '60', anchorMs - H1_LOOKBACK * H1_MS, anchorMs);
-    const c4 = await this.market.getKlinesRange(symbol, '240', anchorMs - H4_LOOKBACK * H4_MS, anchorMs);
-    const cd = await this.market.getKlinesRange(symbol, 'D', anchorMs - D1_LOOKBACK * D1_MS, anchorMs);
-    return this.buildSnapshot(anchorMs, entryPrice, c1, c4, cd);
+    const at = (interval: string, back: number) =>
+      this.market.getKlinesRange(symbol, interval, anchorMs - back, anchorMs);
+    return this.buildSnapshot(anchorMs, entryPrice, {
+      m15: await at('15', M15_LOOKBACK * M15_MS),
+      m30: await at('30', M30_LOOKBACK * M30_MS),
+      h1: await at('60', H1_LOOKBACK * H1_MS),
+      h4: await at('240', H4_LOOKBACK * H4_MS),
+      d1: await at('D', D1_LOOKBACK * D1_MS),
+    });
   }
 
   /**
@@ -299,7 +386,7 @@ export class TradeContextService {
     if (!trade || trade.userId !== userId) throw new NotFoundException('Сделка не найдена');
 
     const { interval, tfMs, window, lookback } = RANGE_TF_SPEC[tf];
-    const anchorMs = (trade.openedAt ?? trade.closedAt).getTime();
+    const { ms: anchorMs, basis } = entryTimeOf(trade);
     const entryPrice = trade.avgEntryPrice;
     // Left edge covers the measurement window; the right edge runs past the
     // exit so the chart also shows how the trade actually played out.
@@ -323,12 +410,7 @@ export class TradeContextService {
     const windowCandles = closedBefore(candles, anchorMs, tfMs).slice(-window);
     const low = windowCandles.length > 0 ? Math.min(...windowCandles.map((c) => c.low)) : null;
     const high = windowCandles.length > 0 ? Math.max(...windowCandles.map((c) => c.high)) : null;
-    const stored =
-      tf === '1h'
-        ? trade.context?.rangePos1h
-        : tf === '1d'
-          ? trade.context?.rangePos1d
-          : trade.context?.rangePos4h;
+    const stored = trade.context ? storedRangePos(trade.context, tf) : null;
 
     return {
       success: true,
@@ -355,9 +437,10 @@ export class TradeContextService {
         price: entryPrice,
         time: Math.floor(anchorMs / 1000),
         barTime: toSec(barOf(anchorMs)),
-        // 'opened' = real entry time; 'closed' = we only knew the exit time and
-        // anchored there, which the chart should say out loud.
-        basis: trade.openedAt ? 'opened' : 'closed',
+        // 'filled' = exact, from execution history; 'opened' = approximate,
+        // when the sync first saw the position; 'closed' = the entry time was
+        // never known and the window hangs off the exit. The chart says which.
+        basis,
       },
       exit: {
         price: trade.avgExitPrice,
