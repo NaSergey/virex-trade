@@ -9,6 +9,7 @@ import { TradeSyncService } from './trade-sync.service';
 import { TradeContextService } from './trade-context.service';
 import { PositionBuilderService } from './position-builder.service';
 import { LabService } from './lab.service';
+import { HabitsService } from './habits.service';
 import { IndicatorsService } from './indicators.service';
 
 // PrismaModule is @Global, so PrismaService is available without importing it.
@@ -21,6 +22,7 @@ import { IndicatorsService } from './indicators.service';
     TradeContextService,
     PositionBuilderService,
     LabService,
+    HabitsService,
     IndicatorsService,
   ],
 })

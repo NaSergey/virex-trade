@@ -5,6 +5,7 @@ import { TradesService } from './trades.service';
 import { TradeSyncService } from './trade-sync.service';
 import { TradeContextService, isRangeTf, type RangeTf } from './trade-context.service';
 import { LabService } from './lab.service';
+import { HabitsService } from './habits.service';
 import { BybitTradeService } from '../bybit/services/bybit-trade.service';
 import { CredentialsService } from '../credentials/credentials.service';
 
@@ -16,6 +17,7 @@ export class TradesController {
     private readonly syncService: TradeSyncService,
     private readonly tradeContext: TradeContextService,
     private readonly labService: LabService,
+    private readonly habitsService: HabitsService,
     private readonly bybitTrade: BybitTradeService,
     private readonly credentials: CredentialsService,
   ) {}
@@ -131,6 +133,21 @@ export class TradesController {
       rangeTf: rangeTf === '1h' || rangeTf === '4h' || rangeTf === '1d' ? rangeTf : undefined,
       range: range === 'low' || range === 'mid' || range === 'high' ? range : undefined,
     });
+  }
+
+  // «Цена привычек»: обратная «Выборке» — сервис сам перебирает срезы и
+  // возвращает те, что стоили (или принесли) денег, уже в долларах.
+  @Get('habits')
+  async habits(
+    @CurrentUser('userId') userId: string,
+    @Query('days') days?: string,
+    @Query('tz') tz?: string,
+  ) {
+    const int = (s?: string) => {
+      const n = s != null && s !== '' ? parseInt(s, 10) : NaN;
+      return Number.isFinite(n) ? n : undefined;
+    };
+    return this.habitsService.scan(userId, int(days), int(tz));
   }
 
   // Entry context of the currently open position (computed at open time by

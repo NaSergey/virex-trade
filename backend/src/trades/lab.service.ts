@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EquityPoint, wilsonLower } from './trades.service';
-import { collapseToPositions } from './positions';
 import { isRangeTf, storedRangePos, type RangeTf } from './trade-context.service';
+import { loadRows, SESSIONS, type Row } from './trade-rows';
 
 // «Выборка»: произвольная комбинация фильтров по сделкам (теги + рыночный
 // контекст из TradeContext + время) → сводка против базовой линии периода,
@@ -40,15 +40,6 @@ function rangeBucket(v: number | null | undefined): string | null {
   return v < RANGE_LOW_MAX ? 'low' : v < RANGE_HIGH_MIN ? 'mid' : 'high';
 }
 
-// Торговые сессии по UTC (непересекающиеся, чтобы каждая сделка попадала ровно
-// в одну): Азия 00–08, Лондон 08–14, Нью-Йорк 14–21, ночь 21–24.
-const SESSIONS: Record<string, [number, number]> = {
-  asia: [0, 8],
-  london: [8, 14],
-  ny: [14, 21],
-  night: [21, 24],
-};
-
 export interface LabAgg {
   trades: number;
   wins: number;
@@ -58,37 +49,6 @@ export interface LabAgg {
   profitFactor: number;
   avgPnl: number;
   wilsonLow: number; // 0..100
-}
-
-interface Row {
-  id: string;
-  symbol: string;
-  direction: string;
-  closedPnl: number;
-  closedAt: Date;
-  openedAt: Date | null;
-  qty: number;
-  avgEntryPrice: number;
-  avgExitPrice: number;
-  parts: number; // закрывающих ордеров в позиции
-  // derived
-  tagSet: Set<string>;
-  session: string;
-  weekday: number; // user-local
-  hour: number; // user-local
-  ctx: {
-    ok: boolean;
-    atrPct: number | null;
-    volRel: number | null;
-    ema200Above: boolean | null;
-    trend4h: string | null;
-    rangePos15m: number | null;
-    rangePos30m: number | null;
-    rangePos1h: number | null;
-    rangePos4h: number | null;
-    rangePos1d: number | null;
-  } | null;
-  tags: Array<{ id: string; name: string; color: string }>;
 }
 
 type Dim =
@@ -103,13 +63,6 @@ type Dim =
   | 'range'
   | 'symbol'
   | 'tags';
-
-function median(values: number[]): number | null {
-  if (values.length === 0) return null;
-  const s = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(s.length / 2);
-  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
-}
 
 function agg(rows: Row[]): LabAgg {
   let wins = 0;
@@ -146,66 +99,16 @@ export class LabService {
   constructor(private readonly prisma: PrismaService) {}
 
   async query(userId: string, f: LabFilter) {
-    const where: { userId: string; closedAt?: { gte: Date } } = { userId };
-    if (f.days && f.days > 0) {
-      where.closedAt = { gte: new Date(Date.now() - f.days * 24 * 60 * 60 * 1000) };
-    }
-    // Collapsed to positions first: every count, winrate and facet below then
-    // describes positions taken rather than closing orders sent, so scaling out
-    // of a winner no longer registers as several winning trades.
-    const raw = collapseToPositions(
-      await this.prisma.trade.findMany({
-        where,
-        orderBy: { closedAt: 'asc' },
-        include: { tags: { include: { tag: true } }, context: true },
-      }),
+    // Строки, сессии и медианы ATR/объёма — общие с «Ценой привычек», см.
+    // trade-rows.ts. Медианы считаются по всему периоду: это стабильная точка
+    // отсчёта для «выше/ниже среднего», не зависящая от остальных фильтров.
+    const { rows, medAtr, medVol } = await loadRows(
+      this.prisma,
+      userId,
+      f.days,
+      f.tzOffsetMin,
     );
-
-    const tz = Number.isFinite(f.tzOffsetMin) ? (f.tzOffsetMin as number) : 0;
-    const rows: Row[] = raw.map((t) => {
-      const basis = t.openedAt ?? t.closedAt;
-      const local = new Date(basis.getTime() - tz * 60_000);
-      const utcHour = basis.getUTCHours();
-      const session =
-        Object.entries(SESSIONS).find(([, [a, b]]) => utcHour >= a && utcHour < b)?.[0] ?? 'night';
-      return {
-        id: t.id,
-        symbol: t.symbol,
-        direction: t.direction,
-        closedPnl: t.closedPnl,
-        closedAt: t.closedAt,
-        openedAt: t.openedAt,
-        qty: t.qty,
-        avgEntryPrice: t.avgEntryPrice,
-        avgExitPrice: t.avgExitPrice,
-        parts: t.parts,
-        tagSet: new Set(t.tags.map((tt) => tt.tagId)),
-        session,
-        weekday: local.getUTCDay(),
-        hour: local.getUTCHours(),
-        ctx: t.context
-          ? {
-              ok: t.context.ok,
-              atrPct: t.context.atrPct,
-              volRel: t.context.volRel,
-              ema200Above: t.context.ema200Above,
-              trend4h: t.context.trend4h,
-              rangePos15m: t.context.rangePos15m,
-              rangePos30m: t.context.rangePos30m,
-              rangePos1h: t.context.rangePos1h,
-              rangePos4h: t.context.rangePos4h,
-              rangePos1d: t.context.rangePos1d,
-            }
-          : null,
-        tags: t.tags.map((tt) => ({ id: tt.tag.id, name: tt.tag.name, color: tt.tag.color })),
-      };
-    });
-
-    // «Выше/ниже среднего» — медиана по всему периоду (стабильная точка
-    // отсчёта, не зависит от остальных фильтров).
     const okRows = rows.filter((r) => r.ctx?.ok);
-    const medAtr = median(okRows.map((r) => r.ctx!.atrPct).filter((v): v is number => v != null));
-    const medVol = median(okRows.map((r) => r.ctx!.volRel).filter((v): v is number => v != null));
 
     // Диапазон входа считается сразу по всем ТФ, но фильтр и фасет всегда
     // читают только выбранный — иначе пять почти одинаковых рядов чипов.
