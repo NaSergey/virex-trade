@@ -25,9 +25,14 @@ model User {
   bybitConnectedAt  DateTime?
 
   // Telegram notifications: chat linked via the bot's /start <code> deep link
-  // (TelegramService). Code is one-time — cleared on successful link.
-  telegramChatId   String?
-  telegramLinkCode String? @unique
+  // (TelegramService). Code is one-time — cleared on successful link — and
+  // expires (see TELEGRAM_LINK_CODE_TTL_MS) so a link URL that leaks out of a
+  // chat log can't be redeemed months later.
+  // chatId is unique: a chat drives exactly one account, so an inbound button
+  // press resolves to one user instead of an arbitrary findFirst match.
+  telegramChatId     String?   @unique
+  telegramLinkCode   String?   @unique
+  telegramLinkCodeAt DateTime?
 
   refreshTokens      RefreshToken[]
   trades             Trade[]
@@ -334,7 +339,11 @@ model HourlyPrice {
 
 // One row per active refresh token (supports multiple devices / sessions).
 // We never store the raw token — only its SHA-256 hash. On refresh the row is
-// rotated (deleted + recreated) so a stolen token is single-use.
+// rotated (deleted + recreated in one transaction) so a stolen token is
+// single-use and a failure mid-rotation can't drop a valid session.
+// Rows are not self-cleaning: a session that is never refreshed or logged out
+// leaves its row behind forever, so RefreshTokenCleanupService sweeps expired
+// ones on an interval — hence the expiresAt index.
 model RefreshToken {
   id        String   @id @default(uuid())
   tokenHash String   @unique
@@ -344,5 +353,6 @@ model RefreshToken {
   createdAt DateTime @default(now())
 
   @@index([userId])
+  @@index([expiresAt])
   @@map("refresh_tokens")
 }

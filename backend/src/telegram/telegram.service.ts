@@ -5,6 +5,10 @@ import { PrismaService } from '../prisma/prisma.service';
 const TG_API = 'https://api.telegram.org';
 // Telegram hard limit for callback_data is 64 bytes: "pt|SYMBOL|long|<uuid36>".
 const MAX_CALLBACK_DATA = 64;
+// How long a /start deep link stays redeemable. The code is a bearer token for
+// "attach this chat to that account", so an unused one shouldn't stay live
+// indefinitely in a chat history, a screenshot or a URL bar.
+const LINK_CODE_TTL_MS = 15 * 60_000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -152,10 +156,31 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
       });
       return;
     }
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { telegramChatId: chatId, telegramLinkCode: null },
-    });
+    const issuedAt = user.telegramLinkCodeAt?.getTime();
+    if (issuedAt == null || Date.now() - issuedAt > LINK_CODE_TTL_MS) {
+      // Burn the stale code so a leaked link can't be retried later.
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { telegramLinkCode: null, telegramLinkCodeAt: null },
+      });
+      await this.api('sendMessage', {
+        chat_id: chatId,
+        text: 'Ссылка устарела — сгенерируй новую в приложении.',
+      });
+      return;
+    }
+    await this.prisma.$transaction([
+      // telegramChatId is unique, so re-linking a chat to another account has
+      // to release it from the previous owner rather than hit the constraint.
+      this.prisma.user.updateMany({
+        where: { telegramChatId: chatId, id: { not: user.id } },
+        data: { telegramChatId: null },
+      }),
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: { telegramChatId: chatId, telegramLinkCode: null, telegramLinkCodeAt: null },
+      }),
+    ]);
     await this.api('sendMessage', {
       chat_id: chatId,
       text: '✅ Готово! Когда откроется новая позиция, пришлю уведомление с кнопками тегов.',
@@ -170,7 +195,9 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
     const answer = (text?: string) =>
       this.api('answerCallbackQuery', { callback_query_id: cb.id, text });
 
-    const user = chatId ? await this.prisma.user.findFirst({ where: { telegramChatId: chatId } }) : null;
+    const user = chatId
+      ? await this.prisma.user.findUnique({ where: { telegramChatId: chatId } })
+      : null;
     if (!user) {
       await answer('Аккаунт не привязан');
       return;
@@ -349,14 +376,19 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
     const username = await this.getBotUsername();
     if (!username) throw new BadRequestException('Telegram-бот недоступен — проверьте токен');
     const code = randomBytes(8).toString('hex');
-    await this.prisma.user.update({ where: { id: userId }, data: { telegramLinkCode: code } });
+    await this.prisma.user.update({
+      where: { id: userId },
+      // Issue time drives the TTL check in handleMessage; regenerating a link
+      // restarts the window and invalidates the previous code.
+      data: { telegramLinkCode: code, telegramLinkCodeAt: new Date() },
+    });
     return { success: true, url: `https://t.me/${username}?start=${code}` };
   }
 
   async unlink(userId: string) {
     await this.prisma.user.update({
       where: { id: userId },
-      data: { telegramChatId: null, telegramLinkCode: null },
+      data: { telegramChatId: null, telegramLinkCode: null, telegramLinkCodeAt: null },
     });
     return { success: true };
   }

@@ -89,14 +89,18 @@ export class AuthService {
       throw new UnauthorizedException('Недействительный refresh-токен');
     }
 
-    // Rotation: the presented token is always consumed.
-    await this.prisma.refreshToken.delete({ where: { id: stored.id } });
-
     if (stored.expiresAt.getTime() < Date.now()) {
+      // Nothing to rotate into — just drop the dead row.
+      await this.prisma.refreshToken
+        .delete({ where: { id: stored.id } })
+        .catch(() => undefined);
       throw new UnauthorizedException('Refresh-токен истёк');
     }
 
-    return this.issueTokens(stored.user);
+    // Consuming the presented token and persisting its replacement happen in
+    // one transaction: deleting first meant a failure while issuing the new
+    // pair logged the user out of a session that was still perfectly valid.
+    return this.issueTokens(stored.user, { consumeTokenId: stored.id });
   }
 
   async logout(rawToken: string | undefined): Promise<void> {
@@ -118,11 +122,14 @@ export class AuthService {
     return this.refreshTtlDays * 24 * 60 * 60 * 1000;
   }
 
-  private async issueTokens(user: {
-    id: string;
-    email: string;
-    name: string | null;
-  }): Promise<AuthResult> {
+  private async issueTokens(
+    user: {
+      id: string;
+      email: string;
+      name: string | null;
+    },
+    opts?: { consumeTokenId?: string },
+  ): Promise<AuthResult> {
     const payload: JwtPayload = { sub: user.id, email: user.email };
     const accessToken = await this.jwt.signAsync(payload, {
       secret: this.accessSecret,
@@ -132,13 +139,29 @@ export class AuthService {
 
     const refreshToken = randomBytes(48).toString('hex');
     const expiresAt = new Date(Date.now() + this.refreshCookieMaxAgeMs);
-    await this.prisma.refreshToken.create({
+    const create = this.prisma.refreshToken.create({
       data: {
         tokenHash: this.hashToken(refreshToken),
         userId: user.id,
         expiresAt,
       },
     });
+
+    if (opts?.consumeTokenId) {
+      try {
+        await this.prisma.$transaction([
+          this.prisma.refreshToken.delete({ where: { id: opts.consumeTokenId } }),
+          create,
+        ]);
+      } catch {
+        // The delete found nothing: another request rotated this same token
+        // first. Single-use means the loser is rejected, not handed a second
+        // valid session off one stolen token.
+        throw new UnauthorizedException('Недействительный refresh-токен');
+      }
+    } else {
+      await create;
+    }
 
     return {
       user: this.toPublicUser(user),
