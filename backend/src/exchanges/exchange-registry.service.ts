@@ -4,6 +4,7 @@ import { OkxAdapter } from './adapters/okx.adapter';
 import { BitgetAdapter } from './adapters/bitget.adapter';
 import { KucoinAdapter } from './adapters/kucoin.adapter';
 import { GateAdapter } from './adapters/gate.adapter';
+import { BinanceAdapter } from './adapters/binance.adapter';
 import { ExchangeAdapter, ExchangeId } from './exchange.types';
 
 /**
@@ -22,6 +23,7 @@ export class ExchangeRegistry {
     bitget: BitgetAdapter,
     kucoin: KucoinAdapter,
     gate: GateAdapter,
+    binance: BinanceAdapter,
   ) {
     this.adapters = new Map<ExchangeId, ExchangeAdapter>([
       [bybit.id, bybit],
@@ -29,6 +31,7 @@ export class ExchangeRegistry {
       [bitget.id, bitget],
       [kucoin.id, kucoin],
       [gate.id, gate],
+      [binance.id, binance],
     ]);
   }
 

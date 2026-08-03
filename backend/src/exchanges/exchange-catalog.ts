@@ -53,6 +53,13 @@ export const EXCHANGE_CATALOG: readonly ExchangeMeta[] = [
     permissionsHint:
       'APIv4-ключ с доступом к Perpetual Futures на чтение и торговлю, без вывода средств.',
   },
+  {
+    id: 'binance',
+    label: 'Binance Futures',
+    needsPassphrase: false,
+    permissionsHint:
+      'Ключ с правом «Enable Futures» на чтение и торговлю, без вывода средств. Если у ключа включён IP-whitelist, добавьте в него адрес сервера.',
+  },
 ];
 
 export const isExchangeId = (v: unknown): v is ExchangeId =>

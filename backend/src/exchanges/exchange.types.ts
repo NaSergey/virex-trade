@@ -7,7 +7,7 @@
  * catalog entry, with no changes to the sync pipeline.
  */
 
-export type ExchangeId = 'bybit' | 'okx' | 'bitget' | 'kucoin' | 'gate';
+export type ExchangeId = 'bybit' | 'okx' | 'bitget' | 'kucoin' | 'gate' | 'binance';
 
 /** Per-user API credentials, decrypted just-in-time by CredentialsService. */
 export interface ExchangeCredentials {

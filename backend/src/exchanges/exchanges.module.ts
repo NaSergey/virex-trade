@@ -6,6 +6,7 @@ import { OkxAdapter } from './adapters/okx.adapter';
 import { BitgetAdapter } from './adapters/bitget.adapter';
 import { KucoinAdapter } from './adapters/kucoin.adapter';
 import { GateAdapter } from './adapters/gate.adapter';
+import { BinanceAdapter } from './adapters/binance.adapter';
 import { ExchangeRegistry } from './exchange-registry.service';
 import { ExchangeController } from './exchange.controller';
 
@@ -23,6 +24,7 @@ import { ExchangeController } from './exchange.controller';
     BitgetAdapter,
     KucoinAdapter,
     GateAdapter,
+    BinanceAdapter,
     ExchangeRegistry,
   ],
   exports: [ExchangeRegistry],
