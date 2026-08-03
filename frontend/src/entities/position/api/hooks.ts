@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { apiJson, qs } from '@/shared/api/http';
-import type { BybitPosition, OpenPositionContext } from './types';
+import type { ExchangePosition, OpenPositionContext } from './types';
 
 /**
  * Открытые позиции и снимок рынка на их входе — всё, что продукт спрашивает у
@@ -18,7 +18,7 @@ export const useOpenPositions = () =>
   useQuery({
     queryKey: ['openPositions'],
     queryFn: () =>
-      apiJson<{ success: boolean; positions: BybitPosition[] }>('/api/bybit/positions'),
+      apiJson<{ success: boolean; positions: ExchangePosition[] }>('/api/exchange/positions'),
     staleTime: 15_000,
     refetchInterval: 30_000,
   });

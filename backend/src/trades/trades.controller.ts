@@ -6,8 +6,8 @@ import { TradeSyncService } from './trade-sync.service';
 import { TradeContextService, isRangeTf, type RangeTf } from './trade-context.service';
 import { LabService } from './lab.service';
 import { HabitsService } from './habits.service';
-import { BybitTradeService } from '../bybit/services/bybit-trade.service';
 import { CredentialsService } from '../credentials/credentials.service';
+import { ExchangeRegistry } from '../exchanges/exchange-registry.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('api/trades')
@@ -18,8 +18,8 @@ export class TradesController {
     private readonly tradeContext: TradeContextService,
     private readonly labService: LabService,
     private readonly habitsService: HabitsService,
-    private readonly bybitTrade: BybitTradeService,
     private readonly credentials: CredentialsService,
+    private readonly exchanges: ExchangeRegistry,
   ) {}
 
   @Get()
@@ -169,8 +169,8 @@ export class TradesController {
     @Query('days') days?: string,
   ) {
     if (!symbol) return { success: false, executions: [] };
-    const creds = await this.credentials.requireDecrypted(userId);
-    const executions = await this.bybitTrade.fetchExecutions(creds, {
+    const { exchange, credentials } = await this.credentials.requireActive(userId);
+    const executions = await this.exchanges.get(exchange).fetchExecutionMarkers(credentials, {
       symbol,
       days: days ? parseInt(days, 10) : undefined,
     });
@@ -199,7 +199,7 @@ export class TradesController {
   // Manual re-sync (full backfill) — useful after connecting new API keys.
   @Post('sync')
   async sync(@CurrentUser('userId') userId: string) {
-    await this.credentials.requireDecrypted(userId);
+    await this.credentials.requireActive(userId);
     const { inserted, skipped } = await this.syncService.syncUser(userId, { full: true });
     // `skipped` = a sync for this user was already running, so this request did
     // nothing; without it the caller can't tell that apart from "no new trades".

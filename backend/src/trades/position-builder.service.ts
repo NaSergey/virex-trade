@@ -1,12 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { BybitTradeService } from '../bybit/services/bybit-trade.service';
-import { BybitService } from '../bybit/bybit.service';
-import { BybitCredentials } from '../bybit/services/bybit-auth.service';
+import { ExchangeRegistry } from '../exchanges/exchange-registry.service';
+import { ExchangeCredentials, ExchangeId } from '../exchanges/exchange.types';
 import { fillDelta, type FillLike, type PositionSide } from './positions';
 
-const WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // Bybit execution/list max query window
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const BACKFILL_WEEKS = 30; // first run: cover the same span as the trade backfill
 // Sizes come back as decimal strings; comparing the running total to an exact 0
 // would leave a dust remainder open forever on float arithmetic.
@@ -17,9 +16,9 @@ const SIDES: PositionSide[] = ['long', 'short'];
 type SideSizes = Record<PositionSide, number>;
 
 /**
- * Reconstructs real positions out of Bybit's per-order closed-pnl rows.
+ * Reconstructs real positions out of the exchange's per-order closed-pnl rows.
  *
- * Bybit emits one closed-pnl record per CLOSING ORDER, so taking profit in
+ * Exchanges emit one closed-pnl record per CLOSING ORDER, so taking profit in
  * three parts looks like three trades, and averaging into a position splits it
  * further. That inflates the trade count and skews winrate upward (partial
  * take-profits are almost always green, partial stop-outs are not a thing).
@@ -39,23 +38,27 @@ export class PositionBuilderService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly bybitTrade: BybitTradeService,
-    private readonly bybit: BybitService,
+    private readonly exchanges: ExchangeRegistry,
   ) {}
 
   /**
    * Pull new fills, then re-derive position boundaries and stamp `positionId`
    * on the affected trades. Returns what changed so callers can log it.
+   *
+   * Scoped to one exchange throughout: replaying fills from two exchanges as a
+   * single running size would split positions at meaningless points.
    */
   async sync(
     userId: string,
-    creds: BybitCredentials,
+    exchange: ExchangeId,
+    creds: ExchangeCredentials,
     opts?: { full?: boolean },
   ): Promise<{ fills: number; positions: number; stamped: number }> {
-    const fills = await this.fetchAndStoreExecutions(userId, creds, opts);
+    const fills = await this.fetchAndStoreExecutions(userId, exchange, creds, opts);
     const { positions, stamped } = await this.rebuild(
       userId,
-      await this.currentSizes(creds),
+      exchange,
+      await this.currentSizes(exchange, creds),
     );
     return { fills, positions, stamped };
   }
@@ -69,20 +72,19 @@ export class PositionBuilderService {
    * записи сразу, и складывать их в одно число значит потерять обе.
    */
   private async currentSizes(
-    creds: BybitCredentials,
+    exchange: ExchangeId,
+    creds: ExchangeCredentials,
   ): Promise<Map<string, SideSizes>> {
     const sizes = new Map<string, SideSizes>();
     try {
-      const open = await this.bybit.getOpenPositions(creds);
+      const open = await this.exchanges.get(exchange).getOpenPositions(creds);
       if (!open.success) return sizes;
-      for (const p of open.positions as any[]) {
-        const size = parseFloat(p.size ?? '0');
+      for (const p of open.positions) {
+        const size = parseFloat(p.size);
         if (!(size > 0)) continue;
-        const symbol = String(p.symbol);
-        const cur = sizes.get(symbol) ?? { long: 0, short: 0 };
-        if (p.side === 'Buy') cur.long += size;
-        else cur.short += size;
-        sizes.set(symbol, cur);
+        const cur = sizes.get(p.symbol) ?? { long: 0, short: 0 };
+        cur[p.direction] += size;
+        sizes.set(p.symbol, cur);
       }
     } catch {
       // Treat as flat — the seeding below degrades to "assume nothing open".
@@ -97,72 +99,46 @@ export class PositionBuilderService {
    */
   private async fetchAndStoreExecutions(
     userId: string,
-    creds: BybitCredentials,
+    exchange: ExchangeId,
+    creds: ExchangeCredentials,
     opts?: { full?: boolean },
   ): Promise<number> {
     const newest = await this.prisma.execution.findFirst({
-      where: { userId },
+      where: { userId, exchange },
       orderBy: { execTime: 'desc' },
       select: { execTime: true },
     });
     const now = Date.now();
-    // Re-scan a full window back from the newest fill: Bybit can report a fill
-    // slightly late, and re-fetching is free (execId dedupes on insert).
+    // Re-scan a full week back from the newest fill: an exchange can report a
+    // fill slightly late, and re-fetching is free (execId dedupes on insert).
     const from =
       opts?.full || !newest
-        ? now - BACKFILL_WEEKS * WINDOW_MS
-        : newest.execTime.getTime() - WINDOW_MS;
+        ? now - BACKFILL_WEEKS * WEEK_MS
+        : newest.execTime.getTime() - WEEK_MS;
 
-    let stored = 0;
-    for (let start = from; start < now; start += WINDOW_MS) {
-      const end = Math.min(start + WINDOW_MS, now);
-      let cursor: string | undefined;
-      do {
-        const page = await this.bybitTrade.fetchExecutionsPage(creds, {
-          startTime: start,
-          endTime: end,
-          cursor,
-          limit: 100,
-        });
-        if (!page.success) {
-          this.logger.warn(`execution fetch failed: ${page.error}`);
-          break;
-        }
-        const rows: Prisma.ExecutionCreateManyInput[] = [];
-        for (const e of page.list) {
-          // Funding rows carry an execQty too — counting them would drift the
-          // running position size and split positions at random points. Every
-          // other type (Trade, BustTrade liquidations, AdlTrade, ...) does move
-          // the position and has to be kept, or a liquidated position never
-          // balances back to zero.
-          if (e.execType === 'Funding') continue;
-          const execTime = Number(e.execTime);
-          const qty = parseFloat(e.execQty ?? '0');
-          if (!e.execId || !Number.isFinite(execTime) || !(qty > 0)) continue;
-          rows.push({
-            userId,
-            symbol: String(e.symbol),
-            side: e.side === 'Buy' ? 'Buy' : 'Sell',
-            qty,
-            price: parseFloat(e.execPrice ?? '0'),
-            closedSize: parseFloat(e.closedSize ?? '0'),
-            execType: String(e.execType ?? 'Trade'),
-            orderId: String(e.orderId ?? ''),
-            execId: String(e.execId),
-            execTime: new Date(execTime),
-          });
-        }
-        if (rows.length) {
-          const res = await this.prisma.execution.createMany({
-            data: rows,
-            skipDuplicates: true,
-          });
-          stored += res.count;
-        }
-        cursor = page.nextPageCursor;
-      } while (cursor);
+    const fetched = await this.exchanges
+      .get(exchange)
+      .fetchFills(creds, { startMs: from, endMs: now });
+    if (fetched.partial) {
+      this.logger.warn(`execution fetch incomplete for ${exchange}: ${fetched.error}`);
     }
-    return stored;
+    if (fetched.items.length === 0) return 0;
+
+    const rows: Prisma.ExecutionCreateManyInput[] = fetched.items.map((f) => ({
+      userId,
+      exchange,
+      symbol: f.symbol,
+      side: f.side,
+      qty: f.qty,
+      price: f.price,
+      closedSize: f.closedSize,
+      execType: f.execType,
+      orderId: f.orderId,
+      execId: f.execId,
+      execTime: f.execTime,
+    }));
+    const res = await this.prisma.execution.createMany({ data: rows, skipDuplicates: true });
+    return res.count;
   }
 
   /**
@@ -181,10 +157,11 @@ export class PositionBuilderService {
    */
   private async rebuild(
     userId: string,
+    exchange: ExchangeId,
     openSizes: Map<string, SideSizes>,
   ): Promise<{ positions: number; stamped: number }> {
     const fills = await this.prisma.execution.findMany({
-      where: { userId },
+      where: { userId, exchange },
       orderBy: [{ symbol: 'asc' }, { execTime: 'asc' }],
       select: {
         symbol: true,
@@ -231,7 +208,7 @@ export class PositionBuilderService {
 
     // Stamp only what actually changed, so a steady-state tick writes nothing.
     const trades = await this.prisma.trade.findMany({
-      where: { userId },
+      where: { userId, exchange },
       select: { id: true, orderId: true, positionId: true },
     });
     let stamped = 0;

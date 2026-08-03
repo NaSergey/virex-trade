@@ -21,7 +21,14 @@ import { BybitTradeService } from './services/bybit-trade.service';
     BybitTradeService,
     BybitService,
   ],
-  exports: [BybitService, BybitTradeService, BybitOrderService, BybitMarketService, BybitBalanceService],
+  exports: [
+    BybitService,
+    BybitTradeService,
+    BybitOrderService,
+    BybitMarketService,
+    BybitBalanceService,
+    BybitPositionService,
+  ],
 })
 export class BybitModule {}
 

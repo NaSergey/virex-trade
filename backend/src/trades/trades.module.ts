@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { BybitModule } from '../bybit/bybit.module';
 import { CredentialsModule } from '../credentials/credentials.module';
+import { ExchangesModule } from '../exchanges/exchanges.module';
 import { TagsModule } from '../tags/tags.module';
 import { TelegramModule } from '../telegram/telegram.module';
 import { TradesController } from './trades.controller';
@@ -14,7 +15,7 @@ import { IndicatorsService } from './indicators.service';
 
 // PrismaModule is @Global, so PrismaService is available without importing it.
 @Module({
-  imports: [BybitModule, CredentialsModule, TagsModule, TelegramModule],
+  imports: [BybitModule, CredentialsModule, ExchangesModule, TagsModule, TelegramModule],
   controllers: [TradesController],
   providers: [
     TradesService,

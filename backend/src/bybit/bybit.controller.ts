@@ -10,9 +10,13 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { CredentialsService } from '../credentials/credentials.service';
 
-// All Bybit endpoints require a valid access token. Signed (private) endpoints
-// additionally require the user to have connected their Bybit API keys —
-// CredentialsService.requireDecrypted throws a clear 400 otherwise.
+// Bybit-specific order management. Exchange-agnostic account reads (balance,
+// open positions) live on /api/exchange and follow the user's active exchange;
+// what remains here is tied to Bybit's own order semantics and is therefore
+// resolved against the Bybit connection explicitly rather than the active one.
+//
+// All endpoints require a valid access token; signed ones additionally require
+// connected Bybit keys — CredentialsService.require throws a clear 400 otherwise.
 @UseGuards(JwtAuthGuard)
 @Controller('api/bybit')
 export class BybitController {
@@ -20,18 +24,6 @@ export class BybitController {
     private readonly bybitService: BybitService,
     private readonly credentials: CredentialsService,
   ) {}
-
-  @Get('balance')
-  async getBalance(@CurrentUser('userId') userId: string) {
-    const creds = await this.credentials.requireDecrypted(userId);
-    return this.bybitService.getUSDTBalance(creds);
-  }
-
-  @Get('positions')
-  async getPositions(@CurrentUser('userId') userId: string) {
-    const creds = await this.credentials.requireDecrypted(userId);
-    return this.bybitService.getOpenPositions(creds);
-  }
 
   // Public market data — no Bybit keys required.
   @Get('tickers')
@@ -41,19 +33,19 @@ export class BybitController {
 
   @Post('order')
   async createOrder(@CurrentUser('userId') userId: string, @Body() createOrderDto: CreateOrderDto) {
-    const creds = await this.credentials.requireDecrypted(userId);
+    const creds = await this.credentials.require(userId, 'bybit');
     return this.bybitService.createOrder(creds, createOrderDto);
   }
 
   @Post('order/amend')
   async amendOrder(@CurrentUser('userId') userId: string, @Body() amendOrderDto: AmendOrderDto) {
-    const creds = await this.credentials.requireDecrypted(userId);
+    const creds = await this.credentials.require(userId, 'bybit');
     return this.bybitService.amendOrder(creds, amendOrderDto);
   }
 
   @Post('leverage')
   async setLeverage(@CurrentUser('userId') userId: string, @Body() setLeverageDto: SetLeverageDto) {
-    const creds = await this.credentials.requireDecrypted(userId);
+    const creds = await this.credentials.require(userId, 'bybit');
     return this.bybitService.setLeverage(creds, setLeverageDto);
   }
 
@@ -68,13 +60,13 @@ export class BybitController {
     @CurrentUser('userId') userId: string,
     @Body() setTradingStopDto: SetTradingStopDto,
   ) {
-    const creds = await this.credentials.requireDecrypted(userId);
+    const creds = await this.credentials.require(userId, 'bybit');
     return this.bybitService.setTradingStop(creds, setTradingStopDto);
   }
 
   @Get('margin-mode')
   async getMarginMode(@CurrentUser('userId') userId: string, @Query('symbol') symbol: string) {
-    const creds = await this.credentials.requireDecrypted(userId);
+    const creds = await this.credentials.require(userId, 'bybit');
     return this.bybitService.getMarginMode(creds, symbol);
   }
 
@@ -83,13 +75,13 @@ export class BybitController {
     @CurrentUser('userId') userId: string,
     @Body() closePositionDto: ClosePositionDto,
   ) {
-    const creds = await this.credentials.requireDecrypted(userId);
+    const creds = await this.credentials.require(userId, 'bybit');
     return this.bybitService.closePosition(creds, closePositionDto);
   }
 
   @Get('orders')
   async getOrders(@CurrentUser('userId') userId: string) {
-    const creds = await this.credentials.requireDecrypted(userId);
+    const creds = await this.credentials.require(userId, 'bybit');
     return this.bybitService.getOpenOrders(creds);
   }
 
@@ -98,7 +90,7 @@ export class BybitController {
     @CurrentUser('userId') userId: string,
     @Body() createGridOrdersDto: CreateGridOrdersDto,
   ) {
-    const creds = await this.credentials.requireDecrypted(userId);
+    const creds = await this.credentials.require(userId, 'bybit');
     return this.bybitService.createGridOrders(creds, createGridOrdersDto);
   }
 }

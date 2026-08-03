@@ -35,14 +35,11 @@ export const useOpenPositionTags = () => {
     [openPosData],
   );
   const pendingQueries = useQueries({
-    queries: openPositions.map((p) => {
-      const direction: 'long' | 'short' = p.side === 'Buy' ? 'long' : 'short';
-      return {
-        queryKey: ['positionTags', p.symbol, direction] as const,
-        queryFn: () => fetchPositionTags(p.symbol, direction),
-        staleTime: 15_000,
-      };
-    }),
+    queries: openPositions.map((p) => ({
+      queryKey: ['positionTags', p.symbol, p.direction] as const,
+      queryFn: () => fetchPositionTags(p.symbol, p.direction),
+      staleTime: 15_000,
+    })),
   });
   const pendingTagged = openPositions
     .map((p, i) => ({ position: p, tags: pendingQueries[i]?.data?.tags ?? [] }))

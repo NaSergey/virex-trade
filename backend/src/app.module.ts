@@ -4,6 +4,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { BybitModule } from './bybit/bybit.module';
+import { ExchangesModule } from './exchanges/exchanges.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { TradesModule } from './trades/trades.module';
@@ -27,6 +28,7 @@ import { MarketEventsModule } from './market-events/market-events.module';
     PrismaModule,
     AuthModule,
     BybitModule,
+    ExchangesModule,
     TradesModule,
     AnalyticsModule,
     SettingsModule,

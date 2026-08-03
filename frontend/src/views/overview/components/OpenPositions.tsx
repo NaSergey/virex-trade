@@ -4,7 +4,7 @@ import { useState } from 'react';
 import {
   useOpenPositions,
   useOpenPositionContext,
-  type BybitPosition,
+  type ExchangePosition,
   type OpenPositionContext,
 } from '@/entities/position';
 import { usePositionTags, Tags } from '@/entities/tag';
@@ -26,8 +26,6 @@ interface TaggingTarget {
   tagIds: string[];
 }
 
-const directionOf = (p: BybitPosition): 'long' | 'short' => (p.side === 'Buy' ? 'long' : 'short');
-
 /** Возраст позиции по нашим часам (см. openedAt в usePositionTags). */
 function fmtAge(iso: string | null | undefined): string {
   if (!iso) return '—';
@@ -44,8 +42,8 @@ function fmtAge(iso: string | null | undefined): string {
  * открытия знает не биржа (её `createdTime` не сбрасывается на новую позицию),
  * а наши часы — тот же запрос, что отдаёт теги позиции.
  */
-function AgeCell({ position }: { position: BybitPosition }) {
-  const { data } = usePositionTags(position.symbol, directionOf(position));
+function AgeCell({ position }: { position: ExchangePosition }) {
+  const { data } = usePositionTags(position.symbol, position.direction);
   return <span className="muted">{fmtAge(data?.openedAt)}</span>;
 }
 
@@ -64,8 +62,8 @@ const RANGE_ROWS = [
  * Сколько горизонтов показывать, решает тумблер в шапке раздела (см.
  * useRangeTf): один выбранный или все три.
  */
-function RangeCell({ position, rangeTf }: { position: BybitPosition; rangeTf: RangeTfPref }) {
-  const { data } = useOpenPositionContext(position.symbol, directionOf(position));
+function RangeCell({ position, rangeTf }: { position: ExchangePosition; rangeTf: RangeTfPref }) {
+  const { data } = useOpenPositionContext(position.symbol, position.direction);
   const ctx = data?.context;
   const rows = rangeTf === 'all' ? RANGE_ROWS : RANGE_ROWS.filter((r) => r.key === rangeTf);
   return (
@@ -75,11 +73,11 @@ function RangeCell({ position, rangeTf }: { position: BybitPosition; rangeTf: Ra
   );
 }
 
-function TagsCell({ position, onEdit }: { position: BybitPosition; onEdit: (t: TaggingTarget) => void }) {
-  const direction = directionOf(position);
+function TagsCell({ position, onEdit }: { position: ExchangePosition; onEdit: (t: TaggingTarget) => void }) {
+  const direction = position.direction;
   const { data } = usePositionTags(position.symbol, direction);
   const tags = data?.tags ?? [];
-  const pnl = parseFloat(position.unrealisedPnl) || 0;
+  const pnl = parseFloat(position.unrealisedPnl ?? '') || 0;
 
   return (
     <Tags tags={tags}>
@@ -110,14 +108,14 @@ export function OpenPositions() {
   const positions = (data?.positions ?? []).filter((p) => parseFloat(p.size) > 0);
   if (positions.length === 0) return null;
 
-  const totalPnl = positions.reduce((s, p) => s + (parseFloat(p.unrealisedPnl) || 0), 0);
+  const totalPnl = positions.reduce((s, p) => s + (parseFloat(p.unrealisedPnl ?? '') || 0), 0);
 
-  const columns: LedgerColumn<BybitPosition>[] = [
+  const columns: LedgerColumn<ExchangePosition>[] = [
     { key: 'symbol', header: 'Символ', render: (p) => <span className="sym">{p.symbol}</span> },
     {
       key: 'direction',
       header: 'Напр.',
-      render: (p) => <span className={`dir${directionOf(p) === 'short' ? ' short' : ''}`}>{directionOf(p)}</span>,
+      render: (p) => <span className={`dir${p.direction === 'short' ? ' short' : ''}`}>{p.direction}</span>,
     },
     {
       key: 'size',
@@ -147,7 +145,7 @@ export function OpenPositions() {
       header: 'Ликвидация',
       align: 'right',
       cellClassName: 'n neg',
-      render: (p) => (parseFloat(p.liqPrice) > 0 ? formatPriceGrouped(p.liqPrice) : '—'),
+      render: (p) => (parseFloat(p.liqPrice ?? '') > 0 ? formatPriceGrouped(p.liqPrice) : '—'),
     },
     {
       key: 'age',
@@ -167,7 +165,7 @@ export function OpenPositions() {
       header: 'Нереализ. P&L',
       align: 'right',
       cellClassName: 'n',
-      render: (p) => <Money value={parseFloat(p.unrealisedPnl) || 0} large />,
+      render: (p) => <Money value={parseFloat(p.unrealisedPnl ?? '') || 0} large />,
     },
     {
       key: 'tags',
@@ -193,7 +191,7 @@ export function OpenPositions() {
         <LedgerTable
           columns={columns}
           rows={positions}
-          rowKey={(p) => `${p.symbol}-${p.side}`}
+          rowKey={(p) => `${p.symbol}-${p.direction}`}
         />
       </Wrap>
 

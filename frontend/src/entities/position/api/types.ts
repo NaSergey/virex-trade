@@ -1,21 +1,26 @@
-// Открытая позиция из Bybit v5 /position/list, как её отдаёт биржа — все
-// числа строками. `createdTime` НЕ сбрасывается на каждую новую позицию по
-// символу, поэтому «сколько времени в позиции» считается не отсюда, а по
-// нашим часам (OpenPositionSeen, см. usePositionTags → openedAt).
-export interface BybitPosition {
+// Открытая позиция с активной биржи, нормализованная бэкендом (см.
+// OpenPosition в exchange.types.ts) — числа остаются строками, как их отдаёт
+// биржа, чтобы не округлить размеры и цены до отображения.
+//
+// Направление приходит уже как long/short: раньше здесь было биржевое
+// `side: 'Buy' | 'Sell'`, и каждый потребитель переводил его сам.
+//
+// Время открытия биржа не сообщает достоверно, поэтому «сколько времени в
+// позиции» считается по нашим часам (OpenPositionSeen, см. usePositionTags →
+// openedAt), а не по полю из ответа.
+export interface ExchangePosition {
   symbol: string;
-  side: 'Buy' | 'Sell' | '';
+  direction: 'long' | 'short';
   size: string;
-  avgPrice: string;
-  markPrice: string;
-  positionValue: string;
-  unrealisedPnl: string;
-  leverage: string;
-  liqPrice: string;
-  takeProfit: string;
-  stopLoss: string;
-  createdTime: string;
-  updatedTime: string;
+  // Ниже — то, что рисует таблица. Биржа, которая поля не отдаёт, его опускает.
+  avgPrice?: string;
+  markPrice?: string;
+  positionValue?: string;
+  unrealisedPnl?: string;
+  leverage?: string;
+  liqPrice?: string;
+  takeProfit?: string;
+  stopLoss?: string;
 }
 
 // ── Entry context of an open position (snapshot taken when it opened) ──

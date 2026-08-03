@@ -18,11 +18,20 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Bybit API credentials, AES-256-GCM encrypted at rest (see CredentialsService).
-  // Null when the user hasn't connected an exchange account yet.
+  // DEPRECATED — superseded by ExchangeConnection, kept only so
+  // LegacyCredentialsMigrationService can move existing keys into the new table
+  // on boot. Dropping them in the same change would have `prisma db push`
+  // delete the columns before the app ever runs, taking the credentials with
+  // them; they are nulled out once migrated and removed in a follow-up.
   bybitApiKeyEnc    String?
   bybitApiSecretEnc String?
   bybitConnectedAt  DateTime?
+
+  // Which connected exchange drives sync, positions and trading right now.
+  // Null until the first exchange is connected.
+  activeExchange String?
+
+  exchangeConnections ExchangeConnection[]
 
   // Telegram notifications: chat linked via the bot's /start <code> deep link
   // (TelegramService). Code is one-time — cleared on successful link — and
@@ -46,7 +55,29 @@ model User {
   @@map("users")
 }
 
-// One closed trade synced from Bybit (realized PnL).
+// One exchange account the user has connected. A user may hold several (one
+// row per exchange) while exactly one — User.activeExchange — is the account
+// the app reads and trades on.
+//
+// Secrets are AES-256-GCM encrypted at rest, same as before; they simply live
+// per connection now instead of in columns on `users`. `passphraseEnc` is the
+// third secret that OKX, Bitget and KuCoin require and Bybit does not — null
+// for exchanges whose catalog entry sets needsPassphrase = false.
+model ExchangeConnection {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exchange      String // ExchangeId — 'bybit', ...
+  apiKeyEnc     String
+  apiSecretEnc  String
+  passphraseEnc String?
+  connectedAt   DateTime @default(now())
+
+  @@unique([userId, exchange])
+  @@map("exchange_connections")
+}
+
+// One closed trade synced from an exchange (realized PnL).
 // Source: GET /v5/position/closed-pnl. We store the key fields for stats plus the
 // full raw record for forward-compat. Deduped on (orderId, closedAt) so re-syncs
 // are idempotent. `direction` is the position side (closing Sell => was long).
@@ -79,15 +110,19 @@ model Trade {
   // back to treating such a row as its own position.
   positionId    String?
   raw           Json?
+  // Which exchange this trade came from. Defaults to bybit so rows imported
+  // before multi-exchange support keep their (only possible) origin.
+  exchange      String   @default("bybit")
   createdAt     DateTime @default(now())
 
   tags    TradeTag[]
   context TradeContext?
 
-  @@unique([userId, orderId, closedAt])
+  @@unique([userId, exchange, orderId, closedAt])
   @@index([userId, symbol])
   @@index([userId, closedAt])
   @@index([userId, positionId])
+  @@index([userId, exchange])
   @@map("trades")
 }
 
@@ -115,10 +150,14 @@ model Execution {
   orderId    String
   execId     String
   execTime   DateTime
+  // Position reconstruction walks a user's whole fill history, so fills from
+  // two different exchanges must never be replayed as one running size.
+  exchange   String   @default("bybit")
   createdAt  DateTime @default(now())
 
-  @@unique([userId, execId, orderId])
+  @@unique([userId, exchange, execId, orderId])
   @@index([userId, symbol, execTime])
+  @@index([userId, exchange])
   @@map("executions")
 }
 

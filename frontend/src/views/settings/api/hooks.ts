@@ -3,40 +3,71 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiJson } from '@/shared/api/http';
 
-export interface BybitStatus {
-  success: boolean;
+export type ExchangeId = string;
+
+/** One exchange as the settings page sees it: catalog entry + connection state. */
+export interface ExchangeInfo {
+  id: ExchangeId;
+  label: string;
+  /** OKX/Bitget/KuCoin issue a third secret; the form shows the field only then. */
+  needsPassphrase: boolean;
+  permissionsHint: string;
   connected: boolean;
   apiKeyMasked: string | null;
+  connectedAt: string | null;
 }
 
-export const useBybitStatus = () =>
-  useQuery({
-    queryKey: ['settings', 'bybit'],
-    queryFn: () => apiJson<BybitStatus>('/api/settings/bybit'),
-    staleTime: 30000,
-  });
+export interface ExchangesStatus {
+  success: boolean;
+  /** Which connected exchange drives sync and positions; null if none yet. */
+  activeExchange: ExchangeId | null;
+  exchanges: ExchangeInfo[];
+}
 
-export const useSaveBybitKeys = () => {
+export interface ConnectVars {
+  exchange: ExchangeId;
+  apiKey: string;
+  apiSecret: string;
+  passphrase?: string;
+}
+
+const SETTINGS_KEY = ['settings', 'exchanges'];
+
+// Connecting or switching changes whose account the whole app is reading, so
+// every exchange-derived query has to be refetched, not just the settings page.
+const ACCOUNT_KEYS = [SETTINGS_KEY, ['usdtBalance'], ['openPositions'], ['trades']];
+
+const useAccountMutation = <TVars>(fn: (vars: TVars) => Promise<unknown>) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (vars: { apiKey: string; apiSecret: string }) =>
-      apiJson<{ success: boolean; apiKeyMasked: string }>('/api/settings/bybit', {
-        method: 'PUT',
-        body: JSON.stringify(vars),
-      }),
+    mutationFn: fn,
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['settings', 'bybit'] });
-      void qc.invalidateQueries({ queryKey: ['usdtBalance'] });
-      void qc.invalidateQueries({ queryKey: ['openPositions'] });
-      void qc.invalidateQueries({ queryKey: ['bots'] });
+      for (const key of ACCOUNT_KEYS) void qc.invalidateQueries({ queryKey: key });
     },
   });
 };
 
-export const useDisconnectBybit = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () => apiJson('/api/settings/bybit', { method: 'DELETE' }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['settings', 'bybit'] }),
+export const useExchanges = () =>
+  useQuery({
+    queryKey: SETTINGS_KEY,
+    queryFn: () => apiJson<ExchangesStatus>('/api/settings/exchanges'),
+    staleTime: 30000,
   });
-};
+
+export const useConnectExchange = () =>
+  useAccountMutation(({ exchange, ...body }: ConnectVars) =>
+    apiJson<{ success: boolean; apiKeyMasked: string }>(`/api/settings/exchanges/${exchange}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  );
+
+export const useDisconnectExchange = () =>
+  useAccountMutation((exchange: ExchangeId) =>
+    apiJson(`/api/settings/exchanges/${exchange}`, { method: 'DELETE' }),
+  );
+
+export const useSetActiveExchange = () =>
+  useAccountMutation((exchange: ExchangeId) =>
+    apiJson(`/api/settings/active-exchange/${exchange}`, { method: 'PUT' }),
+  );
