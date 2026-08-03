@@ -46,6 +46,13 @@ export const EXCHANGE_CATALOG: readonly ExchangeMeta[] = [
     permissionsHint:
       'Ключ KuCoin Futures с правами General и Futures Trading, без вывода средств. Passphrase задаётся вами при создании ключа.',
   },
+  {
+    id: 'gate',
+    label: 'Gate.io',
+    needsPassphrase: false,
+    permissionsHint:
+      'APIv4-ключ с доступом к Perpetual Futures на чтение и торговлю, без вывода средств.',
+  },
 ];
 
 export const isExchangeId = (v: unknown): v is ExchangeId =>

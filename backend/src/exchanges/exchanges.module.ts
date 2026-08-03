@@ -5,6 +5,7 @@ import { BybitAdapter } from './adapters/bybit.adapter';
 import { OkxAdapter } from './adapters/okx.adapter';
 import { BitgetAdapter } from './adapters/bitget.adapter';
 import { KucoinAdapter } from './adapters/kucoin.adapter';
+import { GateAdapter } from './adapters/gate.adapter';
 import { ExchangeRegistry } from './exchange-registry.service';
 import { ExchangeController } from './exchange.controller';
 
@@ -16,7 +17,14 @@ import { ExchangeController } from './exchange.controller';
 @Module({
   imports: [BybitModule, CredentialsModule],
   controllers: [ExchangeController],
-  providers: [BybitAdapter, OkxAdapter, BitgetAdapter, KucoinAdapter, ExchangeRegistry],
+  providers: [
+    BybitAdapter,
+    OkxAdapter,
+    BitgetAdapter,
+    KucoinAdapter,
+    GateAdapter,
+    ExchangeRegistry,
+  ],
   exports: [ExchangeRegistry],
 })
 export class ExchangesModule {}
