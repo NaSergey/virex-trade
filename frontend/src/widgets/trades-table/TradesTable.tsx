@@ -22,8 +22,11 @@ function fmtHold(openedAt: string | null, closedAt: string): string {
   if (!openedAt) return '—';
   const min = Math.round((new Date(closedAt).getTime() - new Date(openedAt).getTime()) / 60_000);
   if (!Number.isFinite(min) || min < 0) return '—';
-  const h = Math.floor(min / 60);
-  return h > 0 ? `${h} ч ${String(min % 60).padStart(2, '0')} м` : `${min} м`;
+  const d = Math.floor(min / 1440);
+  const h = Math.floor((min % 1440) / 60);
+  const m = String(min % 60).padStart(2, '0');
+  if (d > 0) return `${d} д ${h} ч ${m} м`;
+  return h > 0 ? `${h} ч ${m} м` : `${min} м`;
 }
 
 /** Колонка снимка, в которой лежит диапазон входа этого ТФ. */

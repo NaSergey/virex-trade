@@ -101,7 +101,14 @@ export function LedgerTable<T>({
 
   return (
     <div className="scroll">
-      <table className="ledger" style={minWidth ? { minWidth } : undefined}>
+      {/* Мерка идёт переменной, а не свойством min-width: инлайновый стиль
+          сильнее любого правила таблицы стилей, и на узком экране, где .ledger
+          рассыпается в карточки и min-width снимается, объявленные здесь 980px
+          пережили бы это снятие. */}
+      <table
+        className="ledger"
+        style={minWidth ? ({ '--ledger-min': `${minWidth}px` } as React.CSSProperties) : undefined}
+      >
         <thead>
           <tr>
             {cols.map((c) => {

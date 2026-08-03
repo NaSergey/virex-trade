@@ -33,8 +33,8 @@ export function PeriodRail({
   onSelectDays,
   onCustomDate,
 }: {
-  /** Что сводится: «Свод за период», «Теги за период». */
-  title: string;
+  /** Что сводится: «Теги за период». Без него подпись слева — только счётчик. */
+  title?: string;
   days: number;
   customDate: string | null;
   /** Своя дата сейчас управляет фильтром (а не просто стоит в поле). */
@@ -52,11 +52,15 @@ export function PeriodRail({
   return (
     <div className="strip-rail">
       <span className="ctx">
-        {title} · <b>{range}</b>
+        {title && (
+          <>
+            {title} · <b>{range}</b>
+            {trades != null && ' · '}
+          </>
+        )}
         {trades != null && (
           <>
-            {' '}
-            · <b>{trades}</b> сделок
+            <b>{trades}</b> сделок
           </>
         )}
       </span>

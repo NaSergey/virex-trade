@@ -1,11 +1,19 @@
 'use client';
 
-import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { SentimentPoint } from '../api/hooks';
 
 const W = 900;
 const PT = 18;
 const PB = 22;
+
+/**
+ * В каких пределах холст стоит на экране. Пропорция 900:180 задана под ширину
+ * основной колонки; на телефоне те же 180 единиц оборачивались полосой в
+ * семьдесят пикселей, и кривая доли лонгов читалась как дрожание линии.
+ */
+const MIN_PX = 150;
+const MAX_PX = 260;
 
 /** $6.1B / $840M — компактные доллары для подписи. */
 export function fmtUsdCompact(v: number): string {
@@ -25,6 +33,39 @@ export function fmtUsdCompact(v: number): string {
 export function SentimentChart({ data, height = 180 }: { data: SentimentPoint[]; height?: number }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const [boxW, setBoxW] = useState(0);
+
+  // Холст масштабируется целиком, вместе с подписями: на узкой колонке одна
+  // единица viewBox — это треть пикселя, и кегль, заданный в единицах, на
+  // экране втрое мельче объявленного (на телефоне — четыре пикселя, читать
+  // нечем). Меряем ширину и пересчитываем кегль в экранные пиксели, как это
+  // делает кривая P&L.
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    setBoxW(el.getBoundingClientRect().width);
+    const ro = new ResizeObserver(([entry]) => setBoxW(entry.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  /** Сколько единиц холста приходится на один экранный пиксель. */
+  const u = boxW > 0 ? W / boxW : 1;
+
+  // Высота viewBox — от измеренной ширины, чтобы холст на экране не выходил
+  // из MIN_PX…MAX_PX. На широкой колонке счёт возвращает объявленное.
+  const vbHeight = useMemo(() => {
+    if (boxW <= 0) return height;
+    const px = Math.min(MAX_PX, Math.max(MIN_PX, (boxW * height) / W));
+    return Math.round((px * W) / boxW);
+  }, [boxW, height]);
+
+  // Поля холста растут вместе с кеглем: сверху в них стоит подпись наведения,
+  // и объявленных восемнадцати единиц ей хватало ровно при кегле в единицах
+  // же. Подпись, пересчитанная в экранные пиксели, в такое поле не влезала и
+  // обрезалась верхним краем холста.
+  const pt = PT * u;
+  const pb = PB * u;
 
   const chart = useMemo(() => {
     if (data.length < 2) return null;
@@ -34,7 +75,7 @@ export function SentimentChart({ data, height = 180 }: { data: SentimentPoint[];
     const lo = Math.min(45, ...values) - 1;
     const hi = Math.max(55, ...values) + 1;
     const x = (i: number) => (i / (values.length - 1)) * W;
-    const y = (v: number) => PT + (1 - (v - lo) / (hi - lo)) * (height - PT - PB);
+    const y = (v: number) => pt + (1 - (v - lo) / (hi - lo)) * (vbHeight - pt - pb);
     return {
       x,
       y,
@@ -42,7 +83,7 @@ export function SentimentChart({ data, height = 180 }: { data: SentimentPoint[];
       line: values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' '),
       neutralY: y(50),
     };
-  }, [data, height]);
+  }, [data, vbHeight, pt, pb]);
 
   if (!chart) return <p className="muted">Данных за период нет</p>;
 
@@ -57,38 +98,52 @@ export function SentimentChart({ data, height = 180 }: { data: SentimentPoint[];
 
   return (
     <div ref={boxRef} onPointerMove={onMove} onPointerLeave={() => setHoverIdx(null)}>
-      <svg viewBox={`0 0 ${W} ${height}`} style={{ display: 'block', width: '100%', height: 'auto' }} role="img" aria-label="Доля лонг-аккаунтов во времени">
+      <svg viewBox={`0 0 ${W} ${vbHeight}`} style={{ display: 'block', width: '100%', height: 'auto' }} role="img" aria-label="Доля лонг-аккаунтов во времени">
         <line
           x1="0"
           y1={chart.neutralY.toFixed(1)}
           x2={W}
           y2={chart.neutralY.toFixed(1)}
           stroke="var(--color-line-2)"
-          strokeWidth="1"
-          strokeDasharray="3 4"
+          strokeWidth={u.toFixed(2)}
+          strokeDasharray={`${(3 * u).toFixed(1)} ${(4 * u).toFixed(1)}`}
         />
-        <text x="0" y={(chart.neutralY - 6).toFixed(1)} fill="var(--color-subtle)" fontSize="11" fontFamily="var(--font-mono)">
+        <text
+          x="0"
+          y={(chart.neutralY - 6 * u).toFixed(1)}
+          fill="var(--color-subtle)"
+          fontSize={(11 * u).toFixed(1)}
+          fontFamily="var(--font-mono)"
+        >
           50 % — нейтрально
         </text>
-        <polyline points={chart.line} fill="none" stroke="var(--color-fg)" strokeWidth="1.5" strokeLinejoin="round" />
+        {/* Толщина линий — тоже в единицах холста: на телефоне полуторная
+            обращалась в шесть десятых пикселя, и кривая выцветала. */}
+        <polyline
+          points={chart.line}
+          fill="none"
+          stroke="var(--color-fg)"
+          strokeWidth={(1.5 * u).toFixed(2)}
+          strokeLinejoin="round"
+        />
 
         {hover && (
           <g>
             <line
               x1={chart.x(hoverIdx!).toFixed(1)}
-              y1={PT - 10}
+              y1={(pt - 10 * u).toFixed(1)}
               x2={chart.x(hoverIdx!).toFixed(1)}
-              y2={height - PB + 10}
+              y2={(vbHeight - pb + 10 * u).toFixed(1)}
               stroke="var(--color-line-strong)"
-              strokeWidth="1"
+              strokeWidth={u.toFixed(2)}
               shapeRendering="crispEdges"
             />
             <text
-              x={(chart.x(hoverIdx!) > W * 0.7 ? chart.x(hoverIdx!) - 8 : chart.x(hoverIdx!) + 8).toFixed(1)}
-              y={PT - 2}
+              x={(chart.x(hoverIdx!) > W * 0.7 ? chart.x(hoverIdx!) - 8 * u : chart.x(hoverIdx!) + 8 * u).toFixed(1)}
+              y={(pt - 2 * u).toFixed(1)}
               textAnchor={chart.x(hoverIdx!) > W * 0.7 ? 'end' : 'start'}
               fill="var(--color-fg)"
-              fontSize="12"
+              fontSize={(12 * u).toFixed(1)}
               fontFamily="var(--font-mono)"
             >
               лонг {hover.value.toFixed(1)} % ·{' '}

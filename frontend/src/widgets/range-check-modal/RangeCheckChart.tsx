@@ -6,6 +6,13 @@ import { formatPriceGrouped } from '@/shared/lib/utils/format';
 
 const W = 660;
 const H = 240;
+/**
+ * В каких пределах холст стоит на экране. Пропорция 660:240 задана под окно
+ * разбора сделки на большом экране; на телефоне окно вчетверо уже, и те же 240
+ * единиц оборачивались сотней пикселей — свечи превращались в частокол щепок.
+ */
+const MIN_PX = 200;
+const MAX_PX = 330;
 // Подписи уровней стоят не в полосе справа, а прямо над своими линиями внутри
 // поля — с обводкой фоном, чтобы читались поверх свечей. Полоса съедала пятую
 // часть ширины ради двух слов.
@@ -13,7 +20,7 @@ const PR = 8;
 const PT = 16;
 const PB = 18;
 const PW = W - PR; // поле со свечами
-const GAP = 13; // минимальный просвет между подписями уровней
+const GAP = 13; // минимальный просвет между подписями уровней, в экранных пикселях
 const MIN_VISIBLE = 6; // дальше приближать нечего — останется частокол
 
 interface Level {
@@ -28,18 +35,18 @@ interface Level {
  * отличаются на доли процента, и подписи садятся друг на друга. Сами линии
  * остаются на своих местах, уезжает только текст.
  */
-function spread(levels: Level[]): Level[] {
+function spread(levels: Level[], gap: number, bottom: number): Level[] {
   const sorted = [...levels].sort((a, b) => a.y - b.y);
   let prev = -Infinity;
   for (const l of sorted) {
-    l.ly = Math.max(l.y, prev + GAP);
+    l.ly = Math.max(l.y, prev + gap);
     prev = l.ly;
   }
   // Если очередь уехала за нижний край — подпираем её снизу вверх.
-  let limit = H - 6;
+  let limit = bottom;
   for (let i = sorted.length - 1; i >= 0; i--) {
     sorted[i].ly = Math.min(sorted[i].ly, limit);
-    limit = sorted[i].ly - GAP;
+    limit = sorted[i].ly - gap;
   }
   return sorted;
 }
@@ -65,6 +72,31 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
   const [span, setSpan] = useState<{ from: number; to: number } | null>(null);
   const [cursor, setCursor] = useState<{ i: number; y: number } | null>(null);
   const [grabbing, setGrabbing] = useState(false);
+  const [boxW, setBoxW] = useState(0);
+
+  // Холст масштабируется целиком: на телефоне одна его единица — половина
+  // экранного пикселя, и подписи, набранные девятью единицами, выходили в
+  // четыре пикселя. Меряем ширину и переводим все пиксельные мерки — кегли,
+  // толщины, просветы между подписями — в единицы холста.
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    setBoxW(el.getBoundingClientRect().width);
+    const ro = new ResizeObserver(([entry]) => setBoxW(entry.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  /** Сколько единиц холста приходится на один экранный пиксель. */
+  const u = boxW > 0 ? W / boxW : 1;
+  /** Экранные пиксели → единицы холста. */
+  const px = (n: number) => n * u;
+  // Высота холста — от измеренной ширины, чтобы на экране он не выходил из
+  // MIN_PX…MAX_PX. В широком окне счёт возвращает объявленные 240.
+  const h =
+    boxW > 0
+      ? Math.round((Math.min(MAX_PX, Math.max(MIN_PX, (boxW * H) / W)) * W) / boxW)
+      : H;
 
   const candles = data.candles;
   // Свеча входа и свеча выхода: время уже привязано бэкендом к конкретной свече.
@@ -94,7 +126,7 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
   const lo = Math.min(...visible.map((c) => c.low), ...marks);
   const hi = Math.max(...visible.map((c) => c.high), ...marks);
   const priceSpan = hi - lo || 1;
-  const y = (v: number) => PT + (1 - (v - lo) / priceSpan) * (H - PT - PB);
+  const y = (v: number) => PT + (1 - (v - lo) / priceSpan) * (h - PT - PB);
 
   const pnlColor = data.closedPnl >= 0 ? 'var(--color-up)' : 'var(--color-down)';
   const long = data.direction === 'long';
@@ -165,7 +197,7 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
     const yv = (e.clientY - rect.top) * scale;
     const i = from + Math.floor(xv / bw);
     // За краем данных свечи под курсором нет — прицел там не нужен.
-    if (xv < 0 || xv > PW || yv < PT - 6 || yv > H - PB + 6 || i < vFrom || i >= vTo) setCursor(null);
+    if (xv < 0 || xv > PW || yv < PT - px(6) || yv > h - PB + px(6) || i < vFrom || i >= vTo) setCursor(null);
     else setCursor({ i, y: yv });
   };
 
@@ -184,6 +216,8 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
     ]
       .filter((l): l is Omit<Level, 'y' | 'ly'> => Boolean(l))
       .map((l) => ({ ...l, y: y(l.value), ly: y(l.value) })),
+    px(GAP),
+    h - px(6),
   );
 
   /**
@@ -207,24 +241,26 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
     // с таким номером может просто не быть (а при idx = -1 её и не искали).
     const bar = candles[idx];
     if (!bar || idx < from || idx >= to) return null;
-    const x = clamp(cx(idx), 20, PW - 20);
+    const x = clamp(cx(idx), px(20), PW - px(20));
     const up = side === 'below'; // стрелка смотрит вверх, на свечу
     // Метка не должна вылезти за поле: если свеча прижата к краю, отступ съедается.
-    const base = up ? Math.min(y(bar.low) + 7, H - PB - 20) : Math.max(y(bar.high) - 7, PT + 20);
-    const tail = up ? base + 7 : base - 7;
+    const base = up
+      ? Math.min(y(bar.low) + px(7), h - PB - px(20))
+      : Math.max(y(bar.high) - px(7), PT + px(20));
+    const tail = up ? base + px(7) : base - px(7);
     return (
       <g key={label}>
         <polygon
-          points={`${x.toFixed(1)},${base.toFixed(1)} ${(x - 4.5).toFixed(1)},${tail.toFixed(1)} ${(x + 4.5).toFixed(1)},${tail.toFixed(1)}`}
+          points={`${x.toFixed(1)},${base.toFixed(1)} ${(x - px(4.5)).toFixed(1)},${tail.toFixed(1)} ${(x + px(4.5)).toFixed(1)},${tail.toFixed(1)}`}
           fill={color}
           stroke="var(--color-background)"
-          strokeWidth="0.75"
+          strokeWidth={px(0.75).toFixed(2)}
         />
         <text
           x={x.toFixed(1)}
-          y={(up ? tail + 10 : tail - 4).toFixed(1)}
+          y={(up ? tail + px(10) : tail - px(4)).toFixed(1)}
           fill={color}
-          fontSize="9"
+          fontSize={px(9).toFixed(1)}
           fontFamily="var(--font-mono)"
           letterSpacing="0.08em"
           textAnchor="middle"
@@ -238,7 +274,7 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
   return (
     <svg
       ref={svgRef}
-      viewBox={`0 0 ${W} ${H}`}
+      viewBox={`0 0 ${W} ${h}`}
       style={{
         width: '100%',
         height: 'auto',
@@ -268,8 +304,8 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
           x2={PW}
           y2={l.y.toFixed(1)}
           stroke="var(--color-muted)"
-          strokeWidth="1"
-          strokeDasharray="3 4"
+          strokeWidth={u.toFixed(2)}
+          strokeDasharray={`${px(3).toFixed(1)} ${px(4).toFixed(1)}`}
         />
       ))}
 
@@ -286,13 +322,13 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
               x2={x.toFixed(1)}
               y2={y(c.low).toFixed(1)}
               stroke={color}
-              strokeWidth="1"
+              strokeWidth={u.toFixed(2)}
             />
             <rect
               x={(x - bw * 0.28).toFixed(1)}
               y={top.toFixed(1)}
-              width={Math.max(0.8, bw * 0.56).toFixed(1)}
-              height={Math.max(1.5, Math.abs(y(c.close) - y(c.open))).toFixed(1)}
+              width={Math.max(px(0.8), bw * 0.56).toFixed(1)}
+              height={Math.max(px(1.5), Math.abs(y(c.close) - y(c.open))).toFixed(1)}
               fill={color}
             />
           </g>
@@ -313,10 +349,10 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
         <text
           key={t.i}
           pointerEvents="none"
-          x={clamp(cx(t.i), 20, PW - 20).toFixed(1)}
-          y={H - 5}
+          x={clamp(cx(t.i), px(20), PW - px(20)).toFixed(1)}
+          y={(h - px(5)).toFixed(1)}
           fill="var(--color-subtle)"
-          fontSize="9"
+          fontSize={px(9).toFixed(1)}
           fontFamily="var(--font-mono)"
           letterSpacing="0.06em"
           textAnchor="middle"
@@ -333,11 +369,11 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
         <g pointerEvents="none">
           <line
             x1={cx(cursor.i).toFixed(1)}
-            y1={PT - 6}
+            y1={(PT - px(6)).toFixed(1)}
             x2={cx(cursor.i).toFixed(1)}
-            y2={(H - PB + 4).toFixed(1)}
+            y2={(h - PB + px(4)).toFixed(1)}
             stroke="var(--color-line-2)"
-            strokeWidth="1"
+            strokeWidth={u.toFixed(2)}
           />
           <line
             x1="0"
@@ -345,20 +381,20 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
             x2={PW}
             y2={cursor.y.toFixed(1)}
             stroke="var(--color-line-2)"
-            strokeWidth="1"
+            strokeWidth={u.toFixed(2)}
           />
           {/* Обводка фоном — подпись встаёт поверх постоянных отметок оси, как
               бегунок на шкале, а не рядом с ними. */}
           <text
-            x={clamp(cx(cursor.i), 42, PW - 42).toFixed(1)}
-            y={H - 5}
+            x={clamp(cx(cursor.i), px(42), PW - px(42)).toFixed(1)}
+            y={(h - px(5)).toFixed(1)}
             fill="var(--color-fg)"
-            fontSize="9"
+            fontSize={px(9).toFixed(1)}
             fontFamily="var(--font-mono)"
             letterSpacing="0.06em"
             textAnchor="middle"
             stroke="var(--color-background)"
-            strokeWidth="3"
+            strokeWidth={px(3).toFixed(1)}
             paintOrder="stroke"
           >
             {daily
@@ -373,14 +409,14 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
         <text
           key={l.label}
           pointerEvents="none"
-          x={PW - 2}
-          y={(l.ly - 4).toFixed(1)}
+          x={(PW - px(2)).toFixed(1)}
+          y={(l.ly - px(4)).toFixed(1)}
           fill="var(--color-muted)"
-          fontSize="11"
+          fontSize={px(11).toFixed(1)}
           fontFamily="var(--font-mono)"
           textAnchor="end"
           stroke="var(--color-background)"
-          strokeWidth="3"
+          strokeWidth={px(3).toFixed(1)}
           paintOrder="stroke"
         >
           {l.label} {formatPriceGrouped(l.value)}

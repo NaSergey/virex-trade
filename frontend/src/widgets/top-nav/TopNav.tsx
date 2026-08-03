@@ -26,6 +26,16 @@ export function TopNav({ activeTab, onTabChange }: { activeTab: Tab; onTabChange
   const { user, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const navRef = useRef<HTMLElement>(null);
+
+  // На узком экране разделы стоят рейкой, которая листается вбок, и выбранный
+  // может оказаться за её краем — после перезагрузки страницы или перехода не
+  // мышью. Рейка подводит его к себе сама; block: 'nearest' держит при этом
+  // вертикальную прокрутку страницы на месте.
+  useEffect(() => {
+    const active = navRef.current?.querySelector('[aria-selected="true"]');
+    active?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+  }, [activeTab]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -41,7 +51,7 @@ export function TopNav({ activeTab, onTabChange }: { activeTab: Tab; onTabChange
       <div className="top-in">
         <div className="mark">Virex</div>
 
-        <nav className="nav" role="tablist" aria-label="Разделы">
+        <nav className="nav" role="tablist" aria-label="Разделы" ref={navRef}>
           {NAV.map((item) => (
             <Button
               key={item.id}

@@ -47,7 +47,10 @@ export default function LoginPage() {
   return (
     <div
       style={{
-        minHeight: '100vh',
+        // dvh, а не vh: на телефоне vh считается от вьюпорта без адресной
+        // строки, и форма, поставленная по центру такого экрана, оказывалась
+        // ниже его середины — а на коротких экранах уезжала под клавиатуру.
+        minHeight: '100dvh',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

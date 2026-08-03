@@ -18,7 +18,7 @@ import { PB, W, type EquityGeometry } from '../model/geometry';
  * Ямы просадок. Заливка одного веса у всех — сравнивать их нужно площадью, а
  * не яркостью; глубину каждой назовёт наведение.
  */
-export function DrawdownLayer({ chart }: { chart: EquityGeometry }) {
+export function DrawdownLayer({ chart, u }: { chart: EquityGeometry; u: number }) {
   return (
     <g className="equity-fade">
       {chart.underwater.map((s) => (
@@ -29,16 +29,20 @@ export function DrawdownLayer({ chart }: { chart: EquityGeometry }) {
               У ямы мельче нескольких пикселей линейка легла бы прямо на
               кривую и читалась бы как грязь на ней, а не как отметка —
               такую яму показывает только заливка. */}
-          {chart.y(s.troughValue) - s.water.y >= 6 && (
+          {/* Порог — в экранных пикселях, а не в единицах холста: на телефоне
+              одна единица меньше трети пикселя, и «яма мельче шести единиц»
+              означало бы «мельче двух пикселей» — линейка ложилась бы на
+              кривую ровно в тех ямах, ради которых порог и заведён. */}
+          {chart.y(s.troughValue) - s.water.y >= 6 * u && (
             <line
               x1={s.water.x1.toFixed(1)}
               y1={s.water.y.toFixed(1)}
               x2={s.water.x2.toFixed(1)}
               y2={s.water.y.toFixed(1)}
               stroke="var(--color-down)"
-              strokeWidth="1"
+              strokeWidth={u.toFixed(2)}
               strokeOpacity="0.75"
-              strokeDasharray="2 4"
+              strokeDasharray={`${(2 * u).toFixed(1)} ${(4 * u).toFixed(1)}`}
             />
           )}
         </g>
@@ -59,7 +63,7 @@ export function DrawdownLayer({ chart }: { chart: EquityGeometry }) {
  * Порядок важен: слой идёт ПОСЛЕ общей кривой и рисуется той же анимацией, иначе
  * красное проступило бы раньше, чем кость успела дорисоваться.
  */
-export function DrawdownCurve({ chart, id }: { chart: EquityGeometry; id: string }) {
+export function DrawdownCurve({ chart, id, u }: { chart: EquityGeometry; id: string; u: number }) {
   if (chart.ddStops.length === 0) return null;
   return (
     <>
@@ -78,7 +82,7 @@ export function DrawdownCurve({ chart, id }: { chart: EquityGeometry; id: string
         points={chart.line}
         fill="none"
         stroke={`url(#${id})`}
-        strokeWidth="1.75"
+        strokeWidth={(1.75 * u).toFixed(2)}
         strokeLinejoin="round"
         pathLength={1}
         className="equity-line"

@@ -28,8 +28,8 @@ export function PeriodStrip({
   children,
 }: {
   period: Period;
-  /** Что сводится: «Свод за период», «Теги за период». */
-  title: string;
+  /** Что сводится: «Теги за период». Без него подпись слева — только счётчик. */
+  title?: string;
   /** Число записей в периоде; undefined — ещё не пришло. */
   trades?: number;
   /** Полоса стоит первой на листе и отбивается сверху и снизу. */
@@ -39,7 +39,7 @@ export function PeriodStrip({
   children?: ReactNode;
 }) {
   return (
-    <div className={cn('strip', spaced && 'spaced')}>
+    <div className={cn('strip', spaced && 'spaced', !children && 'rail-only')}>
       <PeriodRail
         title={title}
         days={period.days}

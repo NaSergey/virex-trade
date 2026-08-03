@@ -51,7 +51,6 @@ export function OverviewPage() {
             прежнего периода в новом означала бы уже не те сделки. */}
         <PeriodStrip
           period={period}
-          title="Свод за период"
           trades={stats?.totalTrades}
           onChange={() => setPage(1)}
         >

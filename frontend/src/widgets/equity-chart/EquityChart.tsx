@@ -30,6 +30,17 @@ const trades = (n: number) => {
 const GAP = 12;
 
 /**
+ * В каких пределах холст стоит на экране. Пропорция задана шириной наборной
+ * полосы (1360 единиц) и высотой в тех же единицах — на широком экране это
+ * ровно то, что нужно, а на телефоне те же 300 единиц оборачивались полосой в
+ * восемьдесят пикселей: кривая переставала быть кривой и читалась как черта с
+ * шероховатостями. Ниже MIN_PX холст не опускается, выше MAX_PX не растёт —
+ * иначе на большом мониторе кривая занимала бы пол-экрана.
+ */
+const MIN_PX = 190;
+const MAX_PX = 420;
+
+/**
  * Табличка стоит у самой точки: справа-сверху от неё, а у края холста
  * переворачивается на другую сторону — ширину и высоту она отмеряет сама,
  * поэтому смещение считается процентами от собственного размера, а не
@@ -75,7 +86,16 @@ export function EquityChart({ data, height = 300 }: { data: EquityPoint[]; heigh
   const gradientId = `eq-dd-${useId().replaceAll(':', '')}`;
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [boxW, setBoxW] = useState(0);
-  const chart = useMemo(() => buildEquityGeometry(data, height), [data, height]);
+  // Высота холста в единицах viewBox считается от измеренной ширины: сколько
+  // бы единиц ни было объявлено пропсом, на экране холст обязан остаться в
+  // пределах MIN_PX…MAX_PX. На широкой наборной полосе счёт даёт ровно
+  // объявленное — правило работает только там, где пропорция врёт.
+  const vbHeight = useMemo(() => {
+    if (boxW <= 0) return height;
+    const px = Math.min(MAX_PX, Math.max(MIN_PX, (boxW * height) / W));
+    return Math.round((px * W) / boxW);
+  }, [boxW, height]);
+  const chart = useMemo(() => buildEquityGeometry(data, vbHeight), [data, vbHeight]);
 
   // Холст масштабируется целиком, вместе с подписями: в узкой колонке
   // (кривая выборки) единица viewBox — это половина пикселя, и кегль,
@@ -117,7 +137,7 @@ export function EquityChart({ data, height = 300 }: { data: EquityPoint[]; heigh
       style={{ position: 'relative' }}
     >
       <svg
-        viewBox={`0 0 ${W} ${height}`}
+        viewBox={`0 0 ${W} ${vbHeight}`}
         style={{ display: 'block', width: '100%', height: 'auto' }}
         role="img"
         aria-label={
@@ -134,7 +154,7 @@ export function EquityChart({ data, height = 300 }: { data: EquityPoint[]; heigh
           x2={W}
           y2={chart.zeroY.toFixed(1)}
           stroke="var(--color-line-2)"
-          strokeWidth="1"
+          strokeWidth={u.toFixed(2)}
           shapeRendering="crispEdges"
         />
 
@@ -142,20 +162,23 @@ export function EquityChart({ data, height = 300 }: { data: EquityPoint[]; heigh
             не утверждает, поэтому и стоит на самом нижнем уровне яркости. */}
         <path d={chart.area} fill="var(--color-fg)" opacity="0.06" className="equity-fade" />
 
-        <DrawdownLayer chart={chart} />
+        <DrawdownLayer chart={chart} u={u} />
 
+        {/* Толщина линий задана в экранных пикселях и переведена в единицы
+            холста: полторы единицы на телефоне — это меньше половины пикселя,
+            и кривая выцветала до тени от самой себя. */}
         <polyline
           points={chart.line}
           fill="none"
           stroke="var(--color-fg)"
-          strokeWidth="1.75"
+          strokeWidth={(1.75 * u).toFixed(2)}
           strokeLinejoin="round"
           pathLength={1}
           className="equity-line"
         />
-        <DrawdownCurve chart={chart} id={gradientId} />
+        <DrawdownCurve chart={chart} id={gradientId} u={u} />
 
-        {hover && <HoverCursor point={hover.point} height={height} u={u} />}
+        {hover && <HoverCursor point={hover.point} height={vbHeight} u={u} />}
       </svg>
 
       {/* Табличка наведения — HTML, а не текст в SVG: кегль не зависит от
