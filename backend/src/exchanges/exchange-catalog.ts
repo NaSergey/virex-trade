@@ -25,6 +25,13 @@ export const EXCHANGE_CATALOG: readonly ExchangeMeta[] = [
     needsPassphrase: false,
     permissionsHint: 'Права на чтение и торговлю (Contract Trade), без права на вывод средств.',
   },
+  {
+    id: 'okx',
+    label: 'OKX',
+    needsPassphrase: true,
+    permissionsHint:
+      'Права «Читать» и «Торговля», без «Вывод средств». Passphrase задаётся вами при создании ключа — восстановить его потом нельзя.',
+  },
 ];
 
 export const isExchangeId = (v: unknown): v is ExchangeId =>
