@@ -60,6 +60,13 @@ export const EXCHANGE_CATALOG: readonly ExchangeMeta[] = [
     permissionsHint:
       'Ключ с правом «Enable Futures» на чтение и торговлю, без вывода средств. Если у ключа включён IP-whitelist, добавьте в него адрес сервера.',
   },
+  {
+    id: 'mexc',
+    label: 'MEXC Futures',
+    needsPassphrase: false,
+    permissionsHint:
+      'Ключ с доступом к фьючерсам на чтение и торговлю, без вывода средств. MEXC ограничивает фьючерсный API на части аккаунтов — если ключ не принимается, доступ нужно запросить в поддержке.',
+  },
 ];
 
 export const isExchangeId = (v: unknown): v is ExchangeId =>

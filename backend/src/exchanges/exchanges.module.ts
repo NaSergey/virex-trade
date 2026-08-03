@@ -7,6 +7,7 @@ import { BitgetAdapter } from './adapters/bitget.adapter';
 import { KucoinAdapter } from './adapters/kucoin.adapter';
 import { GateAdapter } from './adapters/gate.adapter';
 import { BinanceAdapter } from './adapters/binance.adapter';
+import { MexcAdapter } from './adapters/mexc.adapter';
 import { ExchangeRegistry } from './exchange-registry.service';
 import { ExchangeController } from './exchange.controller';
 
@@ -25,6 +26,7 @@ import { ExchangeController } from './exchange.controller';
     KucoinAdapter,
     GateAdapter,
     BinanceAdapter,
+    MexcAdapter,
     ExchangeRegistry,
   ],
   exports: [ExchangeRegistry],
