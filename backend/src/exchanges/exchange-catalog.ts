@@ -39,6 +39,13 @@ export const EXCHANGE_CATALOG: readonly ExchangeMeta[] = [
     permissionsHint:
       'Права «Только чтение» и «Трейдинг» для фьючерсов, без вывода средств. Passphrase задаётся вами при создании ключа.',
   },
+  {
+    id: 'kucoin',
+    label: 'KuCoin Futures',
+    needsPassphrase: true,
+    permissionsHint:
+      'Ключ KuCoin Futures с правами General и Futures Trading, без вывода средств. Passphrase задаётся вами при создании ключа.',
+  },
 ];
 
 export const isExchangeId = (v: unknown): v is ExchangeId =>
