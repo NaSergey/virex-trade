@@ -58,32 +58,29 @@ export class HourlyPriceSyncService implements OnApplicationBootstrap, OnModuleD
       const closed = candles.filter((c) => c.time < curHourStart);
       if (closed.length === 0) return { upserted: 0 };
 
-      let upserted = 0;
-      for (const c of closed) {
-        if (c.open <= 0) continue;
-        await this.prisma.hourlyPrice.upsert({
-          where: { symbol_date: { symbol: SYMBOL, date: new Date(c.time) } },
-          create: {
-            symbol: SYMBOL,
-            date: new Date(c.time),
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-            changePct: ((c.close - c.open) / c.open) * 100,
-          },
-          update: {
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-            changePct: ((c.close - c.open) / c.open) * 100,
-          },
-        });
-        upserted++;
-      }
-      if (upserted > 0) this.logger.log(`upserted ${upserted} hourly price(s)`);
-      return { upserted };
+      // A closed candle never changes, so inserting and skipping what's already
+      // stored is equivalent to the previous per-candle upsert — but it costs a
+      // few batched statements instead of one round-trip per row, which on a
+      // fresh backfill was ~20k sequential queries.
+      const rows = closed
+        .filter((c) => c.open > 0)
+        .map((c) => ({
+          symbol: SYMBOL,
+          date: new Date(c.time),
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          changePct: ((c.close - c.open) / c.open) * 100,
+        }));
+      if (rows.length === 0) return { upserted: 0 };
+
+      const { count } = await this.prisma.hourlyPrice.createMany({
+        data: rows,
+        skipDuplicates: true,
+      });
+      if (count > 0) this.logger.log(`upserted ${count} hourly price(s)`);
+      return { upserted: count };
     } finally {
       this.syncing = false;
     }

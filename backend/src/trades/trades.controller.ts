@@ -200,7 +200,9 @@ export class TradesController {
   @Post('sync')
   async sync(@CurrentUser('userId') userId: string) {
     await this.credentials.requireDecrypted(userId);
-    const { inserted } = await this.syncService.syncUser(userId, { full: true });
-    return { success: true, inserted };
+    const { inserted, skipped } = await this.syncService.syncUser(userId, { full: true });
+    // `skipped` = a sync for this user was already running, so this request did
+    // nothing; without it the caller can't tell that apart from "no new trades".
+    return { success: true, inserted, ...(skipped ? { skipped: true } : {}) };
   }
 }

@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
+import { resolveJwtAccessSecret } from './jwt-secret';
 
 export interface PublicUser {
   id: string;
@@ -25,8 +26,7 @@ export interface AuthResult {
 
 @Injectable()
 export class AuthService {
-  private readonly accessSecret =
-    process.env.JWT_ACCESS_SECRET || 'dev-access-secret-change-me';
+  private readonly accessSecret = resolveJwtAccessSecret();
   private readonly accessTtl = process.env.JWT_ACCESS_TTL || '15m';
   private readonly refreshTtlDays = Number(
     process.env.JWT_REFRESH_TTL_DAYS || '7',

@@ -4,6 +4,8 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { CreateGridOrdersDto } from './dto/create-grid-orders.dto';
 import { AmendOrderDto } from './dto/amend-order.dto';
 import { SetLeverageDto } from './dto/set-leverage.dto';
+import { SetTradingStopDto } from './dto/set-trading-stop.dto';
+import { ClosePositionDto } from './dto/close-position.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { CredentialsService } from '../credentials/credentials.service';
@@ -64,16 +66,10 @@ export class BybitController {
   @Post('position/tpsl')
   async setTradingStop(
     @CurrentUser('userId') userId: string,
-    @Body()
-    body: {
-      symbol: string;
-      positionType: 'long' | 'short';
-      takeProfit?: string;
-      stopLoss?: string;
-    },
+    @Body() setTradingStopDto: SetTradingStopDto,
   ) {
     const creds = await this.credentials.requireDecrypted(userId);
-    return this.bybitService.setTradingStop(creds, body);
+    return this.bybitService.setTradingStop(creds, setTradingStopDto);
   }
 
   @Get('margin-mode')
@@ -85,17 +81,10 @@ export class BybitController {
   @Post('position/close')
   async closePosition(
     @CurrentUser('userId') userId: string,
-    @Body()
-    body: {
-      symbol: string;
-      positionType: 'long' | 'short';
-      orderType: 'Market' | 'Limit';
-      price?: string;
-      quantity?: string;
-    },
+    @Body() closePositionDto: ClosePositionDto,
   ) {
     const creds = await this.credentials.requireDecrypted(userId);
-    return this.bybitService.closePosition(creds, body);
+    return this.bybitService.closePosition(creds, closePositionDto);
   }
 
   @Get('orders')

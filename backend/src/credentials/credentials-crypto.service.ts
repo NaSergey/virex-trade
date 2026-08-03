@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 
@@ -13,18 +13,20 @@ const ALGO = 'aes-256-gcm';
  */
 @Injectable()
 export class CredentialsCryptoService {
-  private readonly logger = new Logger(CredentialsCryptoService.name);
   private readonly key: Buffer;
 
   constructor(configService: ConfigService) {
-    const hex = configService.get<string>('CREDENTIALS_ENCRYPTION_KEY') || '';
+    const hex = (configService.get<string>('CREDENTIALS_ENCRYPTION_KEY') ?? '').trim();
+    // Hard failure rather than a padded fallback: a zero-filled key is public
+    // knowledge, and credentials written under it silently stop decrypting the
+    // moment the real key is configured. Better to refuse to boot.
     if (!/^[0-9a-f]{64}$/i.test(hex)) {
-      this.logger.error(
+      throw new Error(
         'CREDENTIALS_ENCRYPTION_KEY is missing or not a 64-char hex string. ' +
           'Generate one with: openssl rand -hex 32',
       );
     }
-    this.key = Buffer.from(hex.padEnd(64, '0').slice(0, 64), 'hex');
+    this.key = Buffer.from(hex, 'hex');
   }
 
   encrypt(plaintext: string): string {
@@ -40,12 +42,22 @@ export class CredentialsCryptoService {
     if (!ivHex || !tagHex || !dataHex) {
       throw new Error('Malformed encrypted credential payload');
     }
-    const decipher = crypto.createDecipheriv(ALGO, this.key, Buffer.from(ivHex, 'hex'));
-    decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
-    const plaintext = Buffer.concat([
-      decipher.update(Buffer.from(dataHex, 'hex')),
-      decipher.final(),
-    ]);
-    return plaintext.toString('utf8');
+    try {
+      const decipher = crypto.createDecipheriv(ALGO, this.key, Buffer.from(ivHex, 'hex'));
+      decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
+      const plaintext = Buffer.concat([
+        decipher.update(Buffer.from(dataHex, 'hex')),
+        decipher.final(),
+      ]);
+      return plaintext.toString('utf8');
+    } catch {
+      // GCM auth failure — the stored blob was written under a different
+      // CREDENTIALS_ENCRYPTION_KEY (or tampered with). The raw node error
+      // ("unable to authenticate data") tells an operator nothing useful.
+      throw new Error(
+        'Failed to decrypt stored credential: it was encrypted with a different ' +
+          'CREDENTIALS_ENCRYPTION_KEY. Reconnect the exchange keys to re-encrypt them.',
+      );
+    }
   }
 }

@@ -25,7 +25,12 @@ const SYNC_INTERVAL_MS = 60_000; // periodic incremental sync
 @Injectable()
 export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(TradeSyncService.name);
-  private syncing = false;
+  // Per-user locks, not one global flag: a single shared `syncing` boolean let
+  // the background sweep swallow a user's manual re-sync (it returned a
+  // truthful-looking `{ inserted: 0 }` without ever contacting Bybit), and made
+  // every user wait behind whoever was mid-backfill.
+  private readonly inFlight = new Set<string>();
+  private sweeping = false;
   private timer?: NodeJS.Timeout;
 
   constructor(
@@ -53,8 +58,8 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
 
   /** Sync every user that has connected Bybit keys. Used by the periodic timer. */
   async syncAll(opts?: { full?: boolean }): Promise<{ inserted: number }> {
-    if (this.syncing) return { inserted: 0 };
-    this.syncing = true;
+    if (this.sweeping) return { inserted: 0 };
+    this.sweeping = true;
     try {
       const users = await this.prisma.user.findMany({
         where: { bybitApiKeyEnc: { not: null } },
@@ -62,22 +67,40 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
       });
       let inserted = 0;
       for (const u of users) {
-        inserted += await this.syncUserUnlocked(u.id, opts);
+        if (this.inFlight.has(u.id)) continue; // manual re-sync already running
+        // One user's failure (revoked keys, an undecryptable credential blob,
+        // a Bybit outage) must not abort the sweep for everyone behind them.
+        try {
+          inserted += await this.runLocked(u.id, opts);
+        } catch (e) {
+          this.logger.warn(`sync failed for user ${u.id}: ${e}`);
+        }
       }
       return { inserted };
     } finally {
-      this.syncing = false;
+      this.sweeping = false;
     }
   }
 
-  /** Manual re-sync for a single user (e.g. right after connecting keys). */
-  async syncUser(userId: string, opts?: { full?: boolean }): Promise<{ inserted: number }> {
-    if (this.syncing) return { inserted: 0 };
-    this.syncing = true;
+  /**
+   * Manual re-sync for a single user (e.g. right after connecting keys).
+   * `skipped` distinguishes "nothing new on Bybit" from "your previous sync is
+   * still running" — both used to surface as a bare `inserted: 0`.
+   */
+  async syncUser(
+    userId: string,
+    opts?: { full?: boolean },
+  ): Promise<{ inserted: number; skipped?: boolean }> {
+    if (this.inFlight.has(userId)) return { inserted: 0, skipped: true };
+    return { inserted: await this.runLocked(userId, opts) };
+  }
+
+  private async runLocked(userId: string, opts?: { full?: boolean }): Promise<number> {
+    this.inFlight.add(userId);
     try {
-      return { inserted: await this.syncUserUnlocked(userId, opts) };
+      return await this.syncUserUnlocked(userId, opts);
     } finally {
-      this.syncing = false;
+      this.inFlight.delete(userId);
     }
   }
 

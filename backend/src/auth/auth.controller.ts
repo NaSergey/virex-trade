@@ -9,6 +9,7 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { Request, Response } from 'express';
 import { AuthService, AuthResult } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
@@ -19,11 +20,18 @@ import { CurrentUser } from './decorators/current-user.decorator';
 const REFRESH_COOKIE = 'refresh_token';
 const REFRESH_COOKIE_PATH = '/auth';
 
+// Credential-guessing budget per IP. Well clear of anything a real person does
+// (login is once per refresh-token lifetime) while making an online password
+// search useless.
+const CREDENTIAL_ATTEMPTS = { default: { limit: 10, ttl: 60_000 } };
+
+@UseGuards(ThrottlerGuard)
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
+  @Throttle(CREDENTIAL_ATTEMPTS)
   async register(
     @Body() dto: RegisterDto,
     @Res({ passthrough: true }) res: Response,
@@ -33,6 +41,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @Throttle(CREDENTIAL_ATTEMPTS)
   @HttpCode(HttpStatus.OK)
   async login(
     @Body() dto: LoginDto,

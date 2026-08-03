@@ -58,28 +58,26 @@ export class DailyPriceSyncService implements OnApplicationBootstrap, OnModuleDe
       const closed = candles.filter((c) => c.time < todayStart);
       if (closed.length === 0) return { upserted: 0 };
 
-      let upserted = 0;
-      for (const c of closed) {
-        if (c.open <= 0) continue;
-        await this.prisma.dailyPrice.upsert({
-          where: { symbol_date: { symbol: SYMBOL, date: new Date(c.time) } },
-          create: {
-            symbol: SYMBOL,
-            date: new Date(c.time),
-            open: c.open,
-            close: c.close,
-            changePct: ((c.close - c.open) / c.open) * 100,
-          },
-          update: {
-            open: c.open,
-            close: c.close,
-            changePct: ((c.close - c.open) / c.open) * 100,
-          },
-        });
-        upserted++;
-      }
-      if (upserted > 0) this.logger.log(`upserted ${upserted} daily price(s)`);
-      return { upserted };
+      // Closed candles are immutable, so insert-and-skip-existing matches the
+      // old per-candle upsert while collapsing one round-trip per row (a fresh
+      // backfill reaches back to 2019) into a few batched statements.
+      const rows = closed
+        .filter((c) => c.open > 0)
+        .map((c) => ({
+          symbol: SYMBOL,
+          date: new Date(c.time),
+          open: c.open,
+          close: c.close,
+          changePct: ((c.close - c.open) / c.open) * 100,
+        }));
+      if (rows.length === 0) return { upserted: 0 };
+
+      const { count } = await this.prisma.dailyPrice.createMany({
+        data: rows,
+        skipDuplicates: true,
+      });
+      if (count > 0) this.logger.log(`upserted ${count} daily price(s)`);
+      return { upserted: count };
     } finally {
       this.syncing = false;
     }
