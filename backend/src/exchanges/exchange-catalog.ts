@@ -32,6 +32,13 @@ export const EXCHANGE_CATALOG: readonly ExchangeMeta[] = [
     permissionsHint:
       'Права «Читать» и «Торговля», без «Вывод средств». Passphrase задаётся вами при создании ключа — восстановить его потом нельзя.',
   },
+  {
+    id: 'bitget',
+    label: 'Bitget',
+    needsPassphrase: true,
+    permissionsHint:
+      'Права «Только чтение» и «Трейдинг» для фьючерсов, без вывода средств. Passphrase задаётся вами при создании ключа.',
+  },
 ];
 
 export const isExchangeId = (v: unknown): v is ExchangeId =>
