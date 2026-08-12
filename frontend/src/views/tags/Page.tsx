@@ -43,6 +43,7 @@ export function TagsPage() {
 
       <AllTags
         tags={statsData?.tags ?? []}
+        taggedTrades={(statsData?.totalTrades ?? 0) - (statsData?.untagged.trades ?? 0)}
         onEditTag={(tagId) => {
           const tag = (tagsData?.tags ?? []).find((x) => x.id === tagId);
           if (tag) setEditing(tag);

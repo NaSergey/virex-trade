@@ -132,3 +132,23 @@ export function formatProfitFactor(profitFactor: number, wins: number, losses: n
 export function fmtPctSigned(v: number, digits = 2): string {
   return `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(digits)} %`;
 }
+
+/**
+ * Русское склонение существительного при числе: 1 списание, 2 списания,
+ * 5 списаний. Числительное само не подставляется — вызывающий ставит его
+ * там, где нужно, и волен показать его иначе (например, «—»).
+ * @param n - число, по которому склоняем
+ * @param one - форма при 1 (списание)
+ * @param few - форма при 2–4 (списания)
+ * @param many - форма при 0 и 5+ (списаний)
+ */
+export function plural(n: number, one: string, few: string, many: string): string {
+  const abs = Math.abs(n) % 100;
+  // 11–14 идут по форме «many» вопреки последней цифре: одиннадцать списаний,
+  // а не одиннадцать списание.
+  if (abs >= 11 && abs <= 14) return many;
+  const last = abs % 10;
+  if (last === 1) return one;
+  if (last >= 2 && last <= 4) return few;
+  return many;
+}

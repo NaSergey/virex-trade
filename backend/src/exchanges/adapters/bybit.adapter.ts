@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { BybitApiKeyService } from '../../bybit/services/bybit-api-key.service';
 import { BybitBalanceService } from '../../bybit/services/bybit-balance.service';
 import { BybitPositionService } from '../../bybit/services/bybit-position.service';
 import { BybitTradeService } from '../../bybit/services/bybit-trade.service';
@@ -9,9 +10,12 @@ import {
   ExchangeCredentials,
   ExecMarker,
   Fill,
+  FillsResult,
+  FundingRow,
   PositionsResult,
   RangeResult,
   TimeRange,
+  VerifyResult,
 } from '../exchange.types';
 
 // Bybit caps closed-pnl and execution/list queries at a 7-day window, so any
@@ -34,13 +38,26 @@ export class BybitAdapter implements ExchangeAdapter {
     private readonly balance: BybitBalanceService,
     private readonly positions: BybitPositionService,
     private readonly trades: BybitTradeService,
+    private readonly apiKeys: BybitApiKeyService,
   ) {}
 
-  async verifyCredentials(creds: ExchangeCredentials) {
+  async verifyCredentials(creds: ExchangeCredentials): Promise<VerifyResult> {
     // A balance read is the cheapest call that proves the key, the secret and
     // the account permissions all line up.
     const res = await this.balance.getUSDTBalance(creds);
-    return res.success ? { success: true } : { success: false, error: res.error };
+    if (!res.success) return { success: false, error: res.error };
+
+    // Bybit is the one exchange here that will say what a key may do, so it is
+    // the one place the read-only rule can be enforced instead of trusted.
+    // A key that reads fine but cannot be interrogated is reported without
+    // permissions rather than as safe.
+    const info = await this.apiKeys.getApiKeyInfo(creds);
+    if (!info.success) return { success: true };
+
+    return {
+      success: true,
+      permissions: { canTrade: info.canTrade, canWithdraw: info.canWithdraw },
+    };
   }
 
   async getBalance(creds: ExchangeCredentials): Promise<BalanceResult> {
@@ -108,8 +125,9 @@ export class BybitAdapter implements ExchangeAdapter {
     return { success: !partial, items, partial: partial || undefined, error };
   }
 
-  async fetchFills(creds: ExchangeCredentials, range: TimeRange): Promise<RangeResult<Fill>> {
+  async fetchFills(creds: ExchangeCredentials, range: TimeRange): Promise<FillsResult> {
     const items: Fill[] = [];
+    const funding: FundingRow[] = [];
     let partial = false;
     let error: string | undefined;
 
@@ -128,6 +146,14 @@ export class BybitAdapter implements ExchangeAdapter {
           break;
         }
         for (const e of page.list) {
+          // Funding arrives in these same pages. It is split off here rather
+          // than fetched again: one walk of the history yields both, and the
+          // two lists can never be confused for each other downstream.
+          const fee = mapFunding(e);
+          if (fee) {
+            funding.push(fee);
+            continue;
+          }
           const fill = mapFill(e);
           if (fill) items.push(fill);
         }
@@ -135,7 +161,7 @@ export class BybitAdapter implements ExchangeAdapter {
       } while (cursor);
     }
 
-    return { success: !partial, items, partial: partial || undefined, error };
+    return { success: !partial, items, funding, partial: partial || undefined, error };
   }
 
   fetchExecutionMarkers(
@@ -176,6 +202,27 @@ function mapClosedTrade(r: any): ClosedTrade | null {
     orderId: String(r.orderId),
     closedAt: new Date(closedMs),
     raw: r,
+  };
+}
+
+/**
+ * A funding row, or null for anything that is not one.
+ *
+ * Bybit reports the payment in `execFee`, positive when the user paid it, and
+ * leaves `execPrice`/`closedSize` meaningless here — only the amount, the
+ * symbol and the time matter. Rows with a zero fee are still kept: a funding
+ * window that cost nothing is a fact about the position, and dropping it would
+ * make "no funding recorded" ambiguous between free and unknown.
+ */
+function mapFunding(e: any): FundingRow | null {
+  if (e?.execType !== 'Funding') return null;
+  const execTime = Number(e?.execTime);
+  if (!e?.execId || !Number.isFinite(execTime)) return null;
+  return {
+    symbol: String(e.symbol),
+    amount: num(e.execFee),
+    at: new Date(execTime),
+    execId: String(e.execId),
   };
 }
 

@@ -122,6 +122,21 @@ export class PositionBuilderService {
     if (fetched.partial) {
       this.logger.warn(`execution fetch incomplete for ${exchange}: ${fetched.error}`);
     }
+    // Funding rode in on the same pages. It is stored apart from Execution so
+    // it can never be replayed as position size, and stored at all so the cost
+    // of holding a position stops being invisible.
+    if (fetched.funding?.length) {
+      const fees: Prisma.FundingFeeCreateManyInput[] = fetched.funding.map((f) => ({
+        userId,
+        exchange,
+        symbol: f.symbol,
+        amount: f.amount,
+        at: f.at,
+        execId: f.execId,
+      }));
+      await this.prisma.fundingFee.createMany({ data: fees, skipDuplicates: true });
+    }
+
     if (fetched.items.length === 0) return 0;
 
     const rows: Prisma.ExecutionCreateManyInput[] = fetched.items.map((f) => ({

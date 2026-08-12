@@ -7,7 +7,7 @@ import { SectionHead } from '@/shared/ui/SectionHead';
 import { SkeletonLines } from '@/shared/ui/Skeleton';
 import { KeyValue } from '@/shared/ui/Lookup';
 import { Money } from '@/shared/ui/Money';
-import { formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
+import { formatPriceGrouped, formatQty, plural } from '@/shared/lib/utils/format';
 import { formatRangePos } from '@/shared/lib/utils/range';
 import { RangeCheckModal } from '@/widgets/range-check-modal';
 
@@ -98,6 +98,21 @@ export function TradeOrders({ trade }: { trade: Trade }) {
                 ))}
               </tbody>
             </table>
+          )}
+
+          {/* Фандинг не входит ни в один ордер: биржа списывает его сама, пока
+              позиция висит. В закрытом P&L его тоже нет, поэтому чем дольше
+              держали, тем сильнее ордера выше врут о цене сделки. Строка стоит
+              под ними, а не сбоку, — это продолжение того же счёта. */}
+          {data?.funding && (
+            <p className="foot">
+              Фандинг за время удержания: <Money value={data.funding.total} />{' '}
+              <span className="muted">
+                ({data.funding.payments}{' '}
+                {plural(data.funding.payments, 'списание', 'списания', 'списаний')})
+              </span>
+              . В P&L сделки он не входит.
+            </p>
           )}
         </div>
 

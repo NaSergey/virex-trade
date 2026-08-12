@@ -93,6 +93,26 @@ export class SettingsController {
       );
     }
 
+    // Virex only reads. A key that can also trade or withdraw turns a leaked
+    // database from an exposed trade history into drained accounts, so such a
+    // key is refused here rather than stored and trusted to go unused.
+    // `permissions` is absent when the exchange cannot be asked — unknown, not
+    // safe, and the reason this is enforceable on Bybit and nowhere else yet.
+    if (check.permissions) {
+      const excess = [
+        check.permissions.canTrade ? 'торговлю' : null,
+        check.permissions.canWithdraw ? 'вывод средств' : null,
+      ].filter(Boolean);
+
+      if (excess.length > 0) {
+        throw new BadRequestException(
+          `Этот ключ разрешает ${excess.join(' и ')}. Virex только читает историю сделок, ` +
+            `поэтому принимает ключи с правом «только чтение». Создайте на ${meta.label} ` +
+            `новый ключ без прав на торговлю и вывод и подключите его.`,
+        );
+      }
+    }
+
     await this.credentials.save(userId, id, credentials);
     return {
       success: true,

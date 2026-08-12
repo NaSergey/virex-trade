@@ -46,6 +46,7 @@ model User {
   refreshTokens      RefreshToken[]
   trades             Trade[]
   executions         Execution[]
+  fundingFees        FundingFee[]
   tags               Tag[]
   positionTags       PositionTag[]
   openPositionsSeen  OpenPositionSeen[]
@@ -159,6 +160,35 @@ model Execution {
   @@index([userId, symbol, execTime])
   @@index([userId, exchange])
   @@map("executions")
+}
+
+// One funding payment on a perpetual, kept out of Execution on purpose.
+//
+// Funding rows come back in the same execution history as fills and carry an
+// execQty, so replaying them as fills drifts the running position size — which
+// is why the adapters drop them from Fill. They are still real money: a
+// position held across many funding windows pays (or earns) a sum that closed
+// PnL never mentions, and the longer it is held the more of the result it
+// explains. Storing them separately keeps position reconstruction honest and
+// makes the cost of holding visible.
+//
+// `amount` follows the exchange's sign convention as paid-by-the-user: positive
+// means the user paid, negative means the user received.
+model FundingFee {
+  id       String   @id @default(uuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exchange String   @default("bybit")
+  symbol   String
+  amount   Float
+  at       DateTime
+  execId   String
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, exchange, execId])
+  @@index([userId, symbol, at])
+  @@map("funding_fees")
 }
 
 // User-defined entry-reason label ("пробой уровня", "отскок от EMA", ...).

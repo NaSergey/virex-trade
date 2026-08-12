@@ -80,6 +80,22 @@ export interface Fill {
   execTime: Date;
 }
 
+/**
+ * One funding payment, returned alongside the fills it was mixed in with.
+ *
+ * Funding shares execution history with fills but must never reach position
+ * reconstruction, so it travels in its own list rather than as a `Fill` with a
+ * special execType — a shape that cannot be replayed as size by accident.
+ *
+ * `amount` is signed as paid-by-the-user: positive means the user paid.
+ */
+export interface FundingRow {
+  symbol: string;
+  amount: number;
+  at: Date;
+  execId: string;
+}
+
 /** One fill aggregated per order — for entry/exit markers on the chart. */
 export interface ExecMarker {
   orderId: string;
@@ -121,6 +137,36 @@ export interface TimeRange {
   endMs: number;
 }
 
+/**
+ * Fills for the range, plus the funding payments that arrived in the same pages
+ * of execution history. `funding` is absent on exchanges whose fill endpoint
+ * does not carry funding at all — absent means "this adapter cannot say", not
+ * "there was none", so callers must not read it as zero.
+ */
+export interface FillsResult extends RangeResult<Fill> {
+  funding?: FundingRow[];
+}
+
+/**
+ * What an API key is allowed to do, as the exchange reports it.
+ *
+ * Virex only ever reads: a key that can trade or withdraw turns a leaked
+ * database from an exposed trade history into drained accounts, so connect
+ * refuses such keys. Adapters that cannot ask the exchange about permissions
+ * return undefined — unknown, which is not the same as safe, and is why the
+ * check can only be enforced where the exchange answers.
+ */
+export interface KeyPermissions {
+  canTrade: boolean;
+  canWithdraw: boolean;
+}
+
+export interface VerifyResult {
+  success: boolean;
+  error?: string;
+  permissions?: KeyPermissions;
+}
+
 export interface ExchangeAdapter {
   readonly id: ExchangeId;
 
@@ -129,7 +175,7 @@ export interface ExchangeAdapter {
    * stored, so a typo or a key without the right permissions is caught at
    * connect time rather than on the first sync.
    */
-  verifyCredentials(creds: ExchangeCredentials): Promise<{ success: boolean; error?: string }>;
+  verifyCredentials(creds: ExchangeCredentials): Promise<VerifyResult>;
 
   getBalance(creds: ExchangeCredentials): Promise<BalanceResult>;
 
@@ -138,8 +184,11 @@ export interface ExchangeAdapter {
   /** Realized-PnL records closed within the range. Adapters paginate internally. */
   fetchClosedTrades(creds: ExchangeCredentials, range: TimeRange): Promise<RangeResult<ClosedTrade>>;
 
-  /** Position-moving fills within the range. Adapters paginate internally. */
-  fetchFills(creds: ExchangeCredentials, range: TimeRange): Promise<RangeResult<Fill>>;
+  /**
+   * Position-moving fills within the range, and any funding seen on the way.
+   * Adapters paginate internally.
+   */
+  fetchFills(creds: ExchangeCredentials, range: TimeRange): Promise<FillsResult>;
 
   /** Recent fills for one symbol, aggregated to one marker per order. */
   fetchExecutionMarkers(

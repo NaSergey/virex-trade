@@ -262,6 +262,7 @@ export class TradesService {
     return {
       success: true,
       positionId: trade.positionId,
+      funding: await this.positionFunding(userId, trade, parts, fills),
       // Пусто, когда история исполнений ещё не подтянута (или сделка старше
       // бэкфилла) — клиенту нужно показать это, а не «ордеров нет».
       orders: [...orders.values()]
@@ -283,6 +284,54 @@ export class TradesService {
           };
         }),
     };
+  }
+
+  /**
+   * Фандинг, заплаченный (или полученный) за время жизни позиции.
+   *
+   * Считается по окну времени и символу, а не по ссылке на позицию: биржа не
+   * связывает выплату фандинга с конкретной позицией, она просто списывает по
+   * инструменту раз в несколько часов. Пока позиция по символу одна — а на
+   * one-way счёте так и есть — окно даёт точный ответ.
+   *
+   * `null` означает «фандинга за это окно не записано», а не «фандинга не
+   * было»: сделки старше бэкфилла истории исполнений его просто не имеют, и
+   * подписать ноль там значило бы соврать.
+   */
+  private async positionFunding(
+    userId: string,
+    trade: { symbol: string; exchange: string; openedAt: Date | null; closedAt: Date },
+    parts: Array<{ openedAt: Date | null; closedAt: Date }>,
+    fills: Array<{ execTime: Date }>,
+  ): Promise<{ total: number; payments: number } | null> {
+    const starts = [
+      ...parts.map((p) => p.openedAt?.getTime()),
+      ...fills.map((f) => f.execTime.getTime()),
+      trade.openedAt?.getTime(),
+    ].filter((t): t is number => t != null);
+    const ends = [
+      ...parts.map((p) => p.closedAt.getTime()),
+      ...fills.map((f) => f.execTime.getTime()),
+      trade.closedAt.getTime(),
+    ];
+    if (starts.length === 0) return null;
+
+    const rows = await this.prisma.fundingFee.findMany({
+      where: {
+        userId,
+        exchange: trade.exchange,
+        symbol: trade.symbol,
+        at: { gte: new Date(Math.min(...starts)), lte: new Date(Math.max(...ends)) },
+      },
+      select: { amount: true },
+    });
+    if (rows.length === 0) return null;
+
+    // Знак биржи — «сколько заплатил пользователь». В отчёте это расход,
+    // поэтому переворачиваем: минус на экране значит «стоило денег», как у
+    // любой другой строки убытка.
+    const total = -rows.reduce((sum, r) => sum + r.amount, 0);
+    return { total: Number(total.toFixed(4)), payments: rows.length };
   }
 
   /**

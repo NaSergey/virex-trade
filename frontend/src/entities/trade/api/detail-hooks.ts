@@ -25,9 +25,15 @@ export const useTradeOrders = (tradeId: string | null) =>
   useQuery({
     queryKey: ['tradeOrders', tradeId],
     queryFn: () =>
-      apiJson<{ success: boolean; positionId: string | null; orders: TradeOrder[]; error?: string }>(
-        `/api/trades/${tradeId}/orders`,
-      ),
+      apiJson<{
+        success: boolean;
+        positionId: string | null;
+        orders: TradeOrder[];
+        // null, когда за время жизни позиции фандинга не записано — это не то
+        // же самое, что ноль: у сделок старше бэкфилла его просто нет.
+        funding: { total: number; payments: number } | null;
+        error?: string;
+      }>(`/api/trades/${tradeId}/orders`),
     enabled: !!tradeId,
     staleTime: DETAIL_STALE,
   });

@@ -25,16 +25,28 @@ type SortKey = 'trades' | 'winRate' | 'profitFactor' | 'avgWin' | 'avgLoss' | 't
  */
 export function AllTags({
   tags,
+  taggedTrades,
   onEditTag,
   askConfirm,
 }: {
   tags: TagBucket[];
+  /** Сколько всего сделок несут хотя бы один тег — база для проверки пересечений. */
+  taggedTrades: number;
   onEditTag: (tagId: string) => void;
   askConfirm: (request: ConfirmRequest) => void;
 }) {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'trades', dir: -1 });
   const deleteTag = useDeleteTag();
+
+  // Сделка с двумя тегами попадает в обе строки целиком, поэтому столбец
+  // сделок в сумме больше, чем сделок на самом деле. Разница и есть признак
+  // пересечения — считаем её, а не показываем сноску всем подряд: у того, кто
+  // ставит по одному тегу, суммы сходятся и предупреждать не о чем.
+  const overlapping = useMemo(
+    () => tags.filter((t) => t.id != null).reduce((sum, t) => sum + t.trades, 0) > taggedTrades,
+    [tags, taggedTrades],
+  );
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -181,6 +193,19 @@ export function AllTags({
         }
         empty={search ? 'Ни один тег не подошёл под поиск.' : 'За этот период сделок с тегами нет.'}
       />
+
+      {/* Без этой оговорки первый же человек, сложивший столбец P&L, решит, что
+          у него сломана математика. Сделка не делится между своими тегами —
+          она целиком принадлежит каждому, иначе «пробой» приносил бы треть
+          того, что принёс на самом деле, и число не значило бы ничего. */}
+      {overlapping && (
+        <p className="foot">
+          У сделки может быть несколько тегов, и в каждую строку она попадает <b>целиком</b>.
+          Поэтому строки пересекаются, а столбцы «Сделки» и «P&L» не суммируются в общий итог по
+          периоду — каждая строка отвечает на вопрос «как торгуется с этим тегом», а не «какая
+          доля результата приходится на него».
+        </p>
+      )}
     </div>
   );
 }
