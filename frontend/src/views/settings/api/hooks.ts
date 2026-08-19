@@ -15,6 +15,12 @@ export interface ExchangeInfo {
   connected: boolean;
   apiKeyMasked: string | null;
   connectedAt: string | null;
+  /**
+   * Ключи сохранены, но сервер не может их расшифровать (сменился его мастер-
+   * ключ, база восстановлена из другого окружения). Подключение числится, но
+   * работать по нему нельзя — форма ключей показывается снова.
+   */
+  needsReconnect: boolean;
 }
 
 export interface ExchangesStatus {
@@ -52,6 +58,10 @@ export const useExchanges = () =>
     queryKey: SETTINGS_KEY,
     queryFn: () => apiJson<ExchangesStatus>('/api/settings/exchanges'),
     staleTime: 30000,
+    // Три повтора с нарастающей паузой — это ещё пятнадцать секунд пустой
+    // страницы поверх уже случившейся ошибки. Настройки открывают, чтобы
+    // что-то починить: лучше сразу сказать, что не вышло, и дать «Повторить».
+    retry: 1,
   });
 
 export const useConnectExchange = () =>

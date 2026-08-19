@@ -31,7 +31,7 @@ import {
  * поступление данных, и оно не должно случаться от промаха мышью.
  */
 export const SettingsPage = () => {
-  const { data, isLoading } = useExchanges();
+  const { data, isLoading, error, refetch, isFetching } = useExchanges();
   const connect = useConnectExchange();
   const disconnect = useDisconnectExchange();
   const setActive = useSetActiveExchange();
@@ -47,7 +47,7 @@ export const SettingsPage = () => {
     exchanges.find((e) => e.id === data?.activeExchange) ??
     exchanges[0];
 
-  if (isLoading || !selected) {
+  if (isLoading) {
     return (
       <Wrap page>
         <PageHead title="Настройки" lede="Подключение биржевого аккаунта." />
@@ -59,7 +59,46 @@ export const SettingsPage = () => {
     );
   }
 
+  // Неудачу запроса раньше рисовала та же заглушка, что и загрузку: страница
+  // молча стояла скелетом навсегда, и выглядело это как «настройки не
+  // открываются». Ошибка называется вслух, и рядом стоит кнопка повтора —
+  // страницу ключей нельзя оставлять без выхода, чинить биржу больше негде.
+  if (error || !selected) {
+    return (
+      <Wrap page>
+        <PageHead title="Настройки" lede="Подключение биржевого аккаунта." />
+        <div className="set">
+          <ErrorNote
+            error={error ?? new Error('Список бирж пуст — сервер не вернул ни одной.')}
+            fallback="Не удалось загрузить настройки бирж"
+          />
+          <Button
+            variant="solid"
+            style={{ marginTop: 'var(--s3)' }}
+            disabled={isFetching}
+            onClick={() => void refetch()}
+          >
+            {isFetching ? 'Загрузка…' : 'Повторить'}
+          </Button>
+        </div>
+      </Wrap>
+    );
+  }
+
   const connectedCount = exchanges.filter((e) => e.connected).length;
+
+  const askDisconnect = () =>
+    setConfirm({
+      title: `Отключить ${selected.label}?`,
+      subtitle: 'История сделок и теги останутся в Virex.',
+      consequences: [
+        'открытые позиции перестанут обновляться',
+        'новые сделки не будут подгружаться',
+        'ордера на бирже останутся как есть — отменить их можно будет только после повторного подключения тех же ключей',
+      ],
+      word: 'ОТКЛЮЧИТЬ',
+      onConfirm: () => disconnect.mutate(selected.id),
+    });
 
   return (
     <Wrap page>
@@ -83,35 +122,39 @@ export const SettingsPage = () => {
           </Field>
         )}
 
-        {selected.connected ? (
+        {selected.connected && !selected.needsReconnect ? (
           <ConnectedExchange
             exchange={selected}
             isActive={data?.activeExchange === selected.id}
             canActivate={connectedCount > 1}
             activating={setActive.isPending}
             onActivate={() => setActive.mutate(selected.id)}
-            onDisconnect={() =>
-              setConfirm({
-                title: `Отключить ${selected.label}?`,
-                subtitle: 'История сделок и теги останутся в Virex.',
-                consequences: [
-                  'открытые позиции перестанут обновляться',
-                  'новые сделки не будут подгружаться',
-                  'ордера на бирже останутся как есть — отменить их можно будет только после повторного подключения тех же ключей',
-                ],
-                word: 'ОТКЛЮЧИТЬ',
-                onConfirm: () => disconnect.mutate(selected.id),
-              })
-            }
+            onDisconnect={askDisconnect}
             disconnecting={disconnect.isPending}
           />
         ) : (
-          <ConnectForm
-            exchange={selected}
-            pending={connect.isPending}
-            error={connect.error}
-            onSubmit={(vars) => connect.mutateAsync({ exchange: selected.id, ...vars })}
-          />
+          <>
+            <ConnectForm
+              exchange={selected}
+              pending={connect.isPending}
+              error={connect.error}
+              onSubmit={(vars) => connect.mutateAsync({ exchange: selected.id, ...vars })}
+              notice={
+                selected.needsReconnect
+                  ? 'Ключи сохранены, но сервер не может их прочитать — они зашифрованы другим мастер-ключом. Введите их заново.'
+                  : undefined
+              }
+            />
+            {/* Битое подключение всё равно числится подключением, и убрать его
+                надо уметь, не вводя ключи заново. */}
+            {selected.connected && (
+              <DisconnectZone
+                exchange={selected}
+                onDisconnect={askDisconnect}
+                disconnecting={disconnect.isPending}
+              />
+            )}
+          </>
         )}
       </div>
 
@@ -166,18 +209,41 @@ function ConnectedExchange({
         </Button>
       )}
 
-      <div className="risk-zone">
-        <h2 style={{ color: 'var(--color-down)', borderColor: 'var(--color-down)' }}>
-          Отключение биржи
-        </h2>
-        <p className="muted" style={{ marginBottom: 'var(--s3)' }}>
-          История сделок и теги останутся в Virex. Новые данные перестанут приходить.
-        </p>
-        <Button variant="risk" disabled={disconnecting} onClick={onDisconnect}>
-          {disconnecting ? 'Отключение…' : `Отключить ${exchange.label}`}
-        </Button>
-      </div>
+      <DisconnectZone
+        exchange={exchange}
+        onDisconnect={onDisconnect}
+        disconnecting={disconnecting}
+      />
     </>
+  );
+}
+
+/**
+ * Опасная зона под красной линейкой. Отдельным компонентом, потому что нужна
+ * не только подключённой бирже: подключение с нечитаемыми ключами тоже надо
+ * уметь снять, а карточки с ключами у него нет.
+ */
+function DisconnectZone({
+  exchange,
+  onDisconnect,
+  disconnecting,
+}: {
+  exchange: ExchangeInfo;
+  onDisconnect: () => void;
+  disconnecting: boolean;
+}) {
+  return (
+    <div className="risk-zone">
+      <h2 style={{ color: 'var(--color-down)', borderColor: 'var(--color-down)' }}>
+        Отключение биржи
+      </h2>
+      <p className="muted" style={{ marginBottom: 'var(--s3)' }}>
+        История сделок и теги останутся в Virex. Новые данные перестанут приходить.
+      </p>
+      <Button variant="risk" disabled={disconnecting} onClick={onDisconnect}>
+        {disconnecting ? 'Отключение…' : `Отключить ${exchange.label}`}
+      </Button>
+    </div>
   );
 }
 
@@ -186,11 +252,14 @@ function ConnectForm({
   pending,
   error,
   onSubmit,
+  notice,
 }: {
   exchange: ExchangeInfo;
   pending: boolean;
   error: unknown;
   onSubmit: (vars: { apiKey: string; apiSecret: string; passphrase?: string }) => Promise<unknown>;
+  /** Почему форма показана снова, когда биржа уже числится подключённой. */
+  notice?: string;
 }) {
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
@@ -218,7 +287,8 @@ function ConnectForm({
 
   return (
     <>
-      <h2>{exchange.label} — не подключено</h2>
+      <h2>{exchange.label} — {notice ? 'ключи не читаются' : 'не подключено'}</h2>
+      {notice && <p className="neg">{notice}</p>}
       <Field label="API-ключ" htmlFor="api-key">
         <Input
           id="api-key"
