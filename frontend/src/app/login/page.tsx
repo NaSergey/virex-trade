@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { useAuth } from '@/features/auth';
 import { Button } from '@/shared/ui/Button';
 import { Field, Input } from '@/shared/ui/Field';
@@ -16,6 +17,7 @@ type Mode = 'login' | 'register';
 export default function LoginPage() {
   const { user, loading, login, register } = useAuth();
   const router = useRouter();
+  const t = useTranslations('auth');
 
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
@@ -38,7 +40,7 @@ export default function LoginPage() {
       else await register(email, password, name || undefined);
       router.replace('/');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка');
+      setError(err instanceof Error ? err.message : t('genericError'));
     } finally {
       setSubmitting(false);
     }
@@ -59,19 +61,17 @@ export default function LoginPage() {
     >
       <div style={{ width: '100%', maxWidth: 360 }}>
         <div className="mark" style={{ marginBottom: 'var(--s5)' }}>
-          Virex
+          {t('brand')}
         </div>
 
-        <h1>{mode === 'login' ? 'Вход' : 'Регистрация'}</h1>
+        <h1>{mode === 'login' ? t('loginTitle') : t('registerTitle')}</h1>
         <p className="lede" style={{ marginBottom: 'var(--s4)' }}>
-          {mode === 'login'
-            ? 'Журнал криптофьючерсов: сделки, разметка и статистика по ней.'
-            : 'Создайте аккаунт — дальше подключите биржевые ключи в настройках.'}
+          {mode === 'login' ? t('loginLede') : t('registerLede')}
         </p>
 
         <form onSubmit={onSubmit}>
           {mode === 'register' && (
-            <Field label="Имя (необязательно)" htmlFor="name">
+            <Field label={t('nameLabel')} htmlFor="name">
               <Input
                 id="name"
                 full
@@ -82,7 +82,7 @@ export default function LoginPage() {
             </Field>
           )}
 
-          <Field label="Почта" htmlFor="email">
+          <Field label={t('emailLabel')} htmlFor="email">
             <Input
               id="email"
               full
@@ -94,7 +94,7 @@ export default function LoginPage() {
             />
           </Field>
 
-          <Field label="Пароль" htmlFor="password">
+          <Field label={t('passwordLabel')} htmlFor="password">
             <Input
               id="password"
               full
@@ -114,7 +114,7 @@ export default function LoginPage() {
           )}
 
           <Button type="submit" variant="solid" style={{ width: '100%' }} disabled={submitting}>
-            {submitting ? 'Подождите…' : mode === 'login' ? 'Войти' : 'Зарегистрироваться'}
+            {submitting ? t('submitting') : mode === 'login' ? t('submitLogin') : t('submitRegister')}
           </Button>
         </form>
 
@@ -126,7 +126,7 @@ export default function LoginPage() {
             setError(null);
           }}
         >
-          {mode === 'login' ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
+          {mode === 'login' ? t('switchToRegister') : t('switchToLogin')}
         </Button>
       </div>
     </div>

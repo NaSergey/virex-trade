@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { API_BASE_URL } from '@/shared/config/api';
-import { setUnauthenticatedHandler } from '@/shared/api/http';
+import { resolveApiError, setUnauthenticatedHandler } from '@/shared/api/http';
 import { tokenStore } from '@/shared/lib/tokenStore';
 
 export interface User {
@@ -30,9 +30,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 async function readError(res: Response): Promise<string> {
   const data = await res.json().catch(() => ({}));
-  const message = (data as { message?: string | string[] }).message;
-  if (Array.isArray(message)) return message.join(', ');
-  return message || 'Ошибка авторизации';
+  return resolveApiError(data as { code?: string; message?: string | string[] });
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
