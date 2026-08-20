@@ -3,6 +3,7 @@ import { JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { QueryProvider } from "./(internal)/QueryProvider";
 import { AuthProvider } from "@/features/auth";
+import { LocaleProvider } from "@/shared/i18n";
 
 /**
  * Два голоса, и только два: серифы — речь (заголовки, пояснения, названия
@@ -33,9 +34,11 @@ export default function RootLayout({
     <html lang="ru" className={jetbrainsMono.variable}>
       <body>
         <QueryProvider>
-          <AuthProvider>
-            {children}
-          </AuthProvider>
+          <LocaleProvider>
+            <AuthProvider>
+              {children}
+            </AuthProvider>
+          </LocaleProvider>
         </QueryProvider>
       </body>
     </html>
