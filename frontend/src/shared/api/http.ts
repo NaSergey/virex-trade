@@ -73,6 +73,38 @@ export async function apiFetch(
   return res;
 }
 
+// Текущий перевод ошибок API. LocaleProvider вызывает setErrorMessages при
+// каждой смене языка — тот же приём, что setUnauthenticatedHandler выше:
+// модуль вне React, но должен реагировать на локаль без прокидывания её
+// через каждый вызов apiFetch/apiJson.
+let errorMessages: Record<string, string> = {};
+
+export function setErrorMessages(messages: Record<string, string>): void {
+  errorMessages = messages;
+}
+
+interface ApiErrorBody {
+  code?: string;
+  message?: string | string[];
+  error?: string;
+}
+
+/**
+ * Переводит ошибку API в текст текущего языка: по `code`, если для него
+ * есть перевод в каталоге текущей локали. Иначе — сырой `message`/`error` с
+ * бэкенда как раньше (обычно по-русски, пока код не заведён на этом
+ * эндпоинте — так ведут себя все ещё не мигрированные на code эндпоинты).
+ * Если нет вообще ничего — `fallback`, а если и его не передали, то
+ * `errors.generic` из текущего каталога.
+ */
+export function resolveApiError(body: ApiErrorBody, fallback?: string): string {
+  if (body.code && errorMessages[body.code]) return errorMessages[body.code];
+  const raw = Array.isArray(body.message) ? body.message.join(', ') : body.message;
+  if (raw) return raw;
+  if (body.error) return body.error;
+  return fallback ?? errorMessages.generic ?? 'Error';
+}
+
 /**
  * Запрос с разбором JSON и единой ошибкой. Раньше пара «проверить res.ok →
  * res.json()» была скопирована в каждый queryFn, причём в трёх слегка разных
@@ -83,9 +115,9 @@ export async function apiFetch(
 export async function apiJson<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await apiFetch(path, options);
   const data = await res.json().catch(() => ({}));
-  const body = data as { success?: boolean; message?: string; error?: string };
+  const body = data as { success?: boolean } & ApiErrorBody;
   if (!res.ok || body.success === false) {
-    throw new Error(body.message || body.error || `HTTP error! status: ${res.status}`);
+    throw new Error(resolveApiError(body, `HTTP error! status: ${res.status}`));
   }
   return data as T;
 }
