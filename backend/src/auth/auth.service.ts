@@ -42,7 +42,10 @@ export class AuthService {
       where: { email: dto.email },
     });
     if (existing) {
-      throw new ConflictException('Пользователь с таким email уже существует');
+      throw new ConflictException({
+        message: 'Пользователь с таким email уже существует',
+        code: 'USER_EXISTS',
+      });
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
@@ -62,12 +65,18 @@ export class AuthService {
       where: { email: dto.email },
     });
     if (!user) {
-      throw new UnauthorizedException('Неверный email или пароль');
+      throw new UnauthorizedException({
+        message: 'Неверный email или пароль',
+        code: 'INVALID_CREDENTIALS',
+      });
     }
 
     const valid = await bcrypt.compare(dto.password, user.password);
     if (!valid) {
-      throw new UnauthorizedException('Неверный email или пароль');
+      throw new UnauthorizedException({
+        message: 'Неверный email или пароль',
+        code: 'INVALID_CREDENTIALS',
+      });
     }
 
     return this.issueTokens(user);
@@ -76,7 +85,10 @@ export class AuthService {
   // Validate the raw refresh token, rotate it (single-use), issue a new pair.
   async refresh(rawToken: string | undefined): Promise<AuthResult> {
     if (!rawToken) {
-      throw new UnauthorizedException('Refresh-токен отсутствует');
+      throw new UnauthorizedException({
+        message: 'Refresh-токен отсутствует',
+        code: 'REFRESH_TOKEN_MISSING',
+      });
     }
 
     const tokenHash = this.hashToken(rawToken);
@@ -86,7 +98,10 @@ export class AuthService {
     });
 
     if (!stored) {
-      throw new UnauthorizedException('Недействительный refresh-токен');
+      throw new UnauthorizedException({
+        message: 'Недействительный refresh-токен',
+        code: 'REFRESH_TOKEN_INVALID',
+      });
     }
 
     if (stored.expiresAt.getTime() < Date.now()) {
@@ -94,7 +109,10 @@ export class AuthService {
       await this.prisma.refreshToken
         .delete({ where: { id: stored.id } })
         .catch(() => undefined);
-      throw new UnauthorizedException('Refresh-токен истёк');
+      throw new UnauthorizedException({
+        message: 'Refresh-токен истёк',
+        code: 'REFRESH_TOKEN_EXPIRED',
+      });
     }
 
     // Consuming the presented token and persisting its replacement happen in
@@ -113,7 +131,10 @@ export class AuthService {
   async getProfile(userId: string): Promise<PublicUser> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
-      throw new UnauthorizedException('Пользователь не найден');
+      throw new UnauthorizedException({
+        message: 'Пользователь не найден',
+        code: 'USER_NOT_FOUND',
+      });
     }
     return this.toPublicUser(user);
   }
@@ -157,7 +178,10 @@ export class AuthService {
         // The delete found nothing: another request rotated this same token
         // first. Single-use means the loser is rejected, not handed a second
         // valid session off one stolen token.
-        throw new UnauthorizedException('Недействительный refresh-токен');
+        throw new UnauthorizedException({
+          message: 'Недействительный refresh-токен',
+          code: 'REFRESH_TOKEN_INVALID',
+        });
       }
     } else {
       await create;
