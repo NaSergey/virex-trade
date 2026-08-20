@@ -95,12 +95,13 @@ export function formatPrice(value: string | number | null | undefined): string {
 }
 
 /**
- * Format an ISO date string as a short ru-RU day/month, hour:minute string.
+ * Format an ISO date string as a short day/month, hour:minute string.
  * @param iso - ISO date string
+ * @param locale - BCP-47 локаль для Intl (по умолчанию 'ru-RU')
  * @returns Formatted date string
  */
-export function formatTradeDate(iso: string): string {
-  return new Date(iso).toLocaleString('ru-RU', {
+export function formatTradeDate(iso: string, locale = 'ru-RU'): string {
+  return new Date(iso).toLocaleString(locale, {
     day: '2-digit',
     month: '2-digit',
     hour: '2-digit',
