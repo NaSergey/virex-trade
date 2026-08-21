@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/features/auth';
 import { Button } from '@/shared/ui/Button';
 import { KeyValue } from '@/shared/ui/Lookup';
+import { VirexLogo } from '@/shared/ui/VirexLogo';
 
 type Tab = 'overview' | 'tags' | 'lab' | 'analytics' | 'settings';
 
@@ -49,7 +50,10 @@ export function TopNav({ activeTab, onTabChange }: { activeTab: Tab; onTabChange
   return (
     <header className="top">
       <div className="top-in">
-        <div className="mark">Virex</div>
+        <div className="mark">
+          <VirexLogo width={30} height={30} />
+          Virex
+        </div>
 
         <nav className="nav" role="tablist" aria-label="Разделы" ref={navRef}>
           {NAV.map((item) => (
