@@ -16,7 +16,6 @@ export function Positioning({ data }: { data?: MarketSentimentData }) {
 
   return (
     <>
-      <h2>Позиционирование участников</h2>
       <div className="coef" style={{ borderTop: 0 }}>
         <div>
           <div className="lbl">Long / Short</div>

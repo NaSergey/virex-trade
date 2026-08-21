@@ -498,7 +498,8 @@
     height: auto;
   }
 
-  /* второй уровень: три коэффициента, разделённые волосяными линейками */
+  /* второй уровень: три коэффициента в строку, разделённые только отступом —
+     волосяная линейка слева упиралась в цифру без отступа под неё. */
   .coef {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -507,9 +508,7 @@
   }
   .coef > div {
     padding: var(--s3) var(--s4) var(--s3) 0;
-    border-left: 1px solid var(--hair);
   }
-  .coef > div:first-child { border-left: 0; }
   .coef-v {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;

@@ -1,13 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { useMarketData, useFearAndGreed, useMarketSentiment, useVolatility } from './api/hooks';
+import { useMarketSentiment } from './api/hooks';
 import { useHourlyStats, useMarketCorrelation } from './api/market-events-hooks';
 import { Wrap } from '@/shared/ui/Wrap';
 import { Seg } from '@/shared/ui/Seg';
-import { PageHead } from '@/shared/ui/PageHead';
 import { SectionHead } from '@/shared/ui/SectionHead';
-import { MarketMetrics } from './components/MarketMetrics';
 import { Positioning } from './components/Positioning';
 import { HourlyVolatility } from './components/HourlyVolatility';
 import { WeekdayOdds } from './components/WeekdayOdds';
@@ -24,35 +22,29 @@ const HISTORY = [
 ];
 
 /**
- * Рынок: общий фон, к вашим сделкам не привязанный. Сказано это прямо в
- * подзаголовке — иначе страница со статистикой рядом со страницами со
- * статистикой читается как «моя статистика», и «винрейт роста 62 %» можно
- * принять за свой.
+ * Рынок: общий фон, к вашим сделкам не привязанный — раздел уже назван так в
+ * навигации, отдельный заголовок страницы поверх него был бы повтором.
  *
- * Два переключателя наверху страницы, а не внутри блоков: инструмент и глубина
- * истории задают, о чём вообще идёт речь ниже.
+ * Каждый переключатель стоит на линейке того раздела, которым управляет
+ * (инструмент — у «Позиционирования», глубина истории — у «Волатильности по
+ * часам»), а не общей парой над всей страницей: до того, к чему они относятся,
+ * было два экрана вниз.
  */
 export const AnalyticsPage = () => {
   const [symbol, setSymbol] = useState('BTCUSDT');
   const [historyDays, setHistoryDays] = useState(365);
 
-  const { data: marketData } = useMarketData();
-  const { data: fgData } = useFearAndGreed();
   const { data: sentimentData } = useMarketSentiment(symbol);
-  const { data: volData } = useVolatility(symbol);
   const { data: hourly } = useHourlyStats(historyDays);
   const { data: corr } = useMarketCorrelation(historyDays);
 
   return (
-    <Wrap page>
-      <PageHead title="Рынок" lede="Общерыночный фон. К вашим сделкам не привязан.">
-        <Seg options={SYMBOLS} value={symbol} onChange={setSymbol} ariaLabel="Инструмент" />
-      </PageHead>
-
-      <MarketMetrics marketData={marketData} fgData={fgData} volData={volData} />
-
-      <div className="asym" style={{ marginTop: 'var(--s5)' }}>
+    <Wrap page style={{ paddingTop: 'var(--s4)' }}>
+      <div className="asym">
         <div>
+          <SectionHead title="Позиционирование участников">
+            <Seg options={SYMBOLS} value={symbol} onChange={setSymbol} ariaLabel="Инструмент" />
+          </SectionHead>
           <Positioning data={sentimentData} />
 
           <SectionHead title="Волатильность по часам · UTC" style={{ marginTop: 'var(--s5)' }}>
