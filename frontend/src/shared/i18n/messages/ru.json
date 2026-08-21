@@ -1,0 +1,44 @@
+{
+  "common": {
+    "restoringSession": "Восстанавливаем сессию…",
+    "language": "Язык"
+  },
+  "nav": {
+    "sections": "Разделы",
+    "overview": "Обзор",
+    "tags": "Теги",
+    "lab": "Выборка",
+    "analytics": "Рынок",
+    "settings": "Настройки",
+    "profile": "Профиль",
+    "logout": "Выйти",
+    "who": "кто",
+    "email": "почта",
+    "noName": "без имени"
+  },
+  "auth": {
+    "brand": "Virex",
+    "loginTitle": "Вход",
+    "registerTitle": "Регистрация",
+    "loginLede": "Журнал криптофьючерсов: сделки, разметка и статистика по ней.",
+    "registerLede": "Создайте аккаунт — дальше подключите биржевые ключи в настройках.",
+    "nameLabel": "Имя (необязательно)",
+    "emailLabel": "Почта",
+    "passwordLabel": "Пароль",
+    "submitLogin": "Войти",
+    "submitRegister": "Зарегистрироваться",
+    "submitting": "Подождите…",
+    "switchToRegister": "Нет аккаунта? Зарегистрироваться",
+    "switchToLogin": "Уже есть аккаунт? Войти",
+    "genericError": "Ошибка"
+  },
+  "errors": {
+    "INVALID_CREDENTIALS": "Неверный email или пароль",
+    "USER_EXISTS": "Пользователь с таким email уже существует",
+    "REFRESH_TOKEN_MISSING": "Refresh-токен отсутствует",
+    "REFRESH_TOKEN_INVALID": "Недействительный refresh-токен",
+    "REFRESH_TOKEN_EXPIRED": "Refresh-токен истёк",
+    "USER_NOT_FOUND": "Пользователь не найден",
+    "generic": "Ошибка авторизации"
+  }
+}

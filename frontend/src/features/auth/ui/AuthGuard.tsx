@@ -2,12 +2,14 @@
 
 import { useEffect, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { useAuth } from '../model/AuthContext';
 
 // Wrap protected content. Redirects to /login when there is no session.
 export function AuthGuard({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const t = useTranslations('common');
 
   useEffect(() => {
     if (!loading && !user) {
@@ -27,7 +29,7 @@ export function AuthGuard({ children }: { children: ReactNode }) {
           justifyContent: 'center',
         }}
       >
-        <span className="lbl">Восстанавливаем сессию…</span>
+        <span className="lbl">{t('restoringSession')}</span>
       </div>
     );
   }

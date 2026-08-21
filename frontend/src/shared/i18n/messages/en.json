@@ -1,0 +1,44 @@
+{
+  "common": {
+    "restoringSession": "Restoring session…",
+    "language": "Language"
+  },
+  "nav": {
+    "sections": "Sections",
+    "overview": "Overview",
+    "tags": "Tags",
+    "lab": "Lab",
+    "analytics": "Market",
+    "settings": "Settings",
+    "profile": "Profile",
+    "logout": "Log out",
+    "who": "who",
+    "email": "email",
+    "noName": "unnamed"
+  },
+  "auth": {
+    "brand": "Virex",
+    "loginTitle": "Log in",
+    "registerTitle": "Sign up",
+    "loginLede": "Crypto futures journal: trades, tagging, and the stats built on it.",
+    "registerLede": "Create an account — connect exchange keys in settings next.",
+    "nameLabel": "Name (optional)",
+    "emailLabel": "Email",
+    "passwordLabel": "Password",
+    "submitLogin": "Log in",
+    "submitRegister": "Sign up",
+    "submitting": "Please wait…",
+    "switchToRegister": "No account? Sign up",
+    "switchToLogin": "Already have an account? Log in",
+    "genericError": "Error"
+  },
+  "errors": {
+    "INVALID_CREDENTIALS": "Invalid email or password",
+    "USER_EXISTS": "A user with this email already exists",
+    "REFRESH_TOKEN_MISSING": "Refresh token missing",
+    "REFRESH_TOKEN_INVALID": "Invalid refresh token",
+    "REFRESH_TOKEN_EXPIRED": "Refresh token expired",
+    "USER_NOT_FOUND": "User not found",
+    "generic": "Authorization error"
+  }
+}

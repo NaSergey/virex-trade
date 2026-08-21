@@ -66,4 +66,15 @@ describe('formatTradeDate', () => {
     });
     expect(formatTradeDate(iso)).toBe(expected);
   });
+
+  it('принимает locale и форматирует по нему', () => {
+    const iso = '2026-07-09T14:23:00Z';
+    const expected = new Date(iso).toLocaleString('en-US', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    expect(formatTradeDate(iso, 'en-US')).toBe(expected);
+  });
 });

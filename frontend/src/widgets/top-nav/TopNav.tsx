@@ -1,19 +1,21 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { useAuth } from '@/features/auth';
 import { Button } from '@/shared/ui/Button';
 import { KeyValue } from '@/shared/ui/Lookup';
+import { LocaleSwitch } from '@/shared/ui/LocaleSwitch';
 import { VirexLogo } from '@/shared/ui/VirexLogo';
 
 type Tab = 'overview' | 'tags' | 'lab' | 'analytics' | 'settings';
 
-const NAV: { id: Tab; label: string }[] = [
-  { id: 'overview', label: 'Обзор' },
-  { id: 'tags', label: 'Теги' },
-  { id: 'lab', label: 'Выборка' },
-  { id: 'analytics', label: 'Рынок' },
-  { id: 'settings', label: 'Настройки' },
+const NAV: { id: Tab; labelKey: 'overview' | 'tags' | 'lab' | 'analytics' | 'settings' }[] = [
+  { id: 'overview', labelKey: 'overview' },
+  { id: 'tags', labelKey: 'tags' },
+  { id: 'lab', labelKey: 'lab' },
+  { id: 'analytics', labelKey: 'analytics' },
+  { id: 'settings', labelKey: 'settings' },
 ];
 
 /**
@@ -25,6 +27,7 @@ const NAV: { id: Tab; label: string }[] = [
  */
 export function TopNav({ activeTab, onTabChange }: { activeTab: Tab; onTabChange: (tab: Tab) => void }) {
   const { user, logout } = useAuth();
+  const t = useTranslations('nav');
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLElement>(null);
@@ -55,7 +58,7 @@ export function TopNav({ activeTab, onTabChange }: { activeTab: Tab; onTabChange
           Virex
         </div>
 
-        <nav className="nav" role="tablist" aria-label="Разделы" ref={navRef}>
+        <nav className="nav" role="tablist" aria-label={t('sections')} ref={navRef}>
           {NAV.map((item) => (
             <Button
               key={item.id}
@@ -64,12 +67,13 @@ export function TopNav({ activeTab, onTabChange }: { activeTab: Tab; onTabChange
               aria-selected={activeTab === item.id}
               onClick={() => onTabChange(item.id)}
             >
-              {item.label}
+              {t(item.labelKey)}
             </Button>
           ))}
         </nav>
 
         <div className="top-r" ref={menuRef}>
+          <LocaleSwitch />
           <Button
             variant="none"
             className="acct"
@@ -77,12 +81,12 @@ export function TopNav({ activeTab, onTabChange }: { activeTab: Tab; onTabChange
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((v) => !v)}
           >
-            Профиль
+            {t('profile')}
           </Button>
           {menuOpen && (
             <div className="acct-menu" role="menu">
-              <KeyValue label="кто">{user?.name || 'без имени'}</KeyValue>
-              <KeyValue label="почта">{user?.email}</KeyValue>
+              <KeyValue label={t('who')}>{user?.name || t('noName')}</KeyValue>
+              <KeyValue label={t('email')}>{user?.email}</KeyValue>
               <Button
                 variant="risk"
                 style={{ marginTop: 'var(--s3)', width: '100%' }}
@@ -91,7 +95,7 @@ export function TopNav({ activeTab, onTabChange }: { activeTab: Tab; onTabChange
                   void logout();
                 }}
               >
-                Выйти
+                {t('logout')}
               </Button>
             </div>
           )}
