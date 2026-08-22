@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CredentialsCryptoService } from './credentials-crypto.service';
 import { ExchangeCredentials, ExchangeId } from '../exchanges/exchange.types';
@@ -6,8 +6,14 @@ import { ExchangeCredentials, ExchangeId } from '../exchanges/exchange.types';
 /** A connection as the settings page sees it — never carries a live secret. */
 export interface ConnectionStatus {
   exchange: ExchangeId;
-  apiKeyMasked: string;
+  /** Null when the stored blob can't be opened — see `needsReconnect`. */
+  apiKeyMasked: string | null;
   connectedAt: Date;
+  /**
+   * The row exists but its secrets are unreadable under the current
+   * CREDENTIALS_ENCRYPTION_KEY: the user has to enter the keys again.
+   */
+  needsReconnect: boolean;
 }
 
 /**
@@ -19,6 +25,8 @@ export interface ConnectionStatus {
  */
 @Injectable()
 export class CredentialsService {
+  private readonly logger = new Logger(CredentialsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly crypto: CredentialsCryptoService,
@@ -30,11 +38,23 @@ export class CredentialsService {
       where: { userId_exchange: { userId, exchange } },
     });
     if (!row) return null;
-    return {
-      apiKey: this.crypto.decrypt(row.apiKeyEnc),
-      apiSecret: this.crypto.decrypt(row.apiSecretEnc),
-      ...(row.passphraseEnc ? { passphrase: this.crypto.decrypt(row.passphraseEnc) } : {}),
-    };
+    try {
+      return {
+        apiKey: this.crypto.decrypt(row.apiKeyEnc),
+        apiSecret: this.crypto.decrypt(row.apiSecretEnc),
+        ...(row.passphraseEnc ? { passphrase: this.crypto.decrypt(row.passphraseEnc) } : {}),
+      };
+    } catch (e) {
+      // A raw throw here surfaced as a bare 500 "Internal server error", which
+      // told the user nothing and named no way out. The cause is an operator
+      // one (key rotated, DB restored under another key), so it goes to the
+      // log; the client gets the one sentence that describes the remedy.
+      this.logger.error(`cannot decrypt ${exchange} credentials of user ${userId}: ${e}`);
+      throw new BadRequestException(
+        `Сохранённые ключи «${exchange}» не читаются: они зашифрованы другим ключом сервера. ` +
+          'Подключите биржу заново на странице «Настройки».',
+      );
+    }
   }
 
   /** Which exchange this user is currently working with, if any. */
@@ -85,16 +105,34 @@ export class CredentialsService {
     return creds;
   }
 
+  /**
+   * Every connection this user holds, for the settings page.
+   *
+   * A key that won't decrypt must not take the list down with it: this is the
+   * only page from which the user can re-enter the keys, and a throw here left
+   * it stuck on its loading skeleton — the one screen that fixes the problem
+   * was the one screen the problem closed. Such a row comes back as connected
+   * but `needsReconnect`, without a masked key it cannot produce.
+   */
   async list(userId: string): Promise<ConnectionStatus[]> {
     const rows = await this.prisma.exchangeConnection.findMany({
       where: { userId },
       orderBy: { connectedAt: 'asc' },
     });
-    return rows.map((r) => ({
-      exchange: r.exchange as ExchangeId,
-      apiKeyMasked: this.maskKey(this.crypto.decrypt(r.apiKeyEnc)),
-      connectedAt: r.connectedAt,
-    }));
+    return rows.map((r) => {
+      const exchange = r.exchange as ExchangeId;
+      try {
+        return {
+          exchange,
+          apiKeyMasked: this.maskKey(this.crypto.decrypt(r.apiKeyEnc)),
+          connectedAt: r.connectedAt,
+          needsReconnect: false,
+        };
+      } catch (e) {
+        this.logger.error(`cannot decrypt ${exchange} credentials of user ${userId}: ${e}`);
+        return { exchange, apiKeyMasked: null, connectedAt: r.connectedAt, needsReconnect: true };
+      }
+    });
   }
 
   /**

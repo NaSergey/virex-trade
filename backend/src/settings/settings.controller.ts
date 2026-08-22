@@ -50,6 +50,9 @@ export class SettingsController {
           connected: !!conn,
           apiKeyMasked: conn?.apiKeyMasked ?? null,
           connectedAt: conn?.connectedAt ?? null,
+          // Connected, but the stored secrets no longer open: the page shows
+          // the connect form again instead of a key it cannot display.
+          needsReconnect: conn?.needsReconnect ?? false,
         };
       }),
     };
