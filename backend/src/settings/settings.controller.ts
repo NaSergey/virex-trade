@@ -71,12 +71,20 @@ export class SettingsController {
     const passphrase = dto.passphrase?.trim();
 
     if (meta.needsPassphrase && !passphrase) {
-      throw new BadRequestException(`${meta.label} требует passphrase вместе с ключом и секретом`);
+      throw new BadRequestException({
+        message: `${meta.label} требует passphrase вместе с ключом и секретом`,
+        code: 'PASSPHRASE_REQUIRED',
+        params: { label: meta.label },
+      });
     }
     // Sending one to an exchange that doesn't use it is a sign the caller has
     // the wrong form open; storing it would be dead weight in the DB.
     if (!meta.needsPassphrase && passphrase) {
-      throw new BadRequestException(`${meta.label} не использует passphrase`);
+      throw new BadRequestException({
+        message: `${meta.label} не использует passphrase`,
+        code: 'PASSPHRASE_NOT_SUPPORTED',
+        params: { label: meta.label },
+      });
     }
 
     const credentials = {
@@ -87,10 +95,15 @@ export class SettingsController {
 
     const check = await this.exchanges.get(id).verifyCredentials(credentials);
     if (!check.success) {
-      throw new BadRequestException(
-        check.error ||
-          `Не удалось подключиться к ${meta.label} с этими ключами. Проверьте их и права доступа.`,
-      );
+      // check.error — сырой ответ биржи (её собственный текст, обычно
+      // по-английски): переводить нечем и незачем, он и так конкретен. Без
+      // него — наш общий текст, у него есть code.
+      if (check.error) throw new BadRequestException(check.error);
+      throw new BadRequestException({
+        message: `Не удалось подключиться к ${meta.label} с этими ключами. Проверьте их и права доступа.`,
+        code: 'EXCHANGE_VERIFY_FAILED',
+        params: { label: meta.label },
+      });
     }
 
     // Virex only reads. A key that can also trade or withdraw turns a leaked
@@ -105,11 +118,14 @@ export class SettingsController {
       ].filter(Boolean);
 
       if (excess.length > 0) {
-        throw new BadRequestException(
-          `Этот ключ разрешает ${excess.join(' и ')}. Virex только читает историю сделок, ` +
+        throw new BadRequestException({
+          message:
+            `Этот ключ разрешает ${excess.join(' и ')}. Virex только читает историю сделок, ` +
             `поэтому принимает ключи с правом «только чтение». Создайте на ${meta.label} ` +
             `новый ключ без прав на торговлю и вывод и подключите его.`,
-        );
+          code: 'EXCHANGE_KEY_EXCESS_PERMISSIONS',
+          params: { label: meta.label },
+        });
       }
     }
 
@@ -141,7 +157,11 @@ export class SettingsController {
     // Path params bypass the DTO pipe, so the id is validated against the
     // catalog here rather than trusted into a DB lookup.
     if (!isExchangeId(value)) {
-      throw new BadRequestException(`Неизвестная биржа: ${value}`);
+      throw new BadRequestException({
+        message: `Неизвестная биржа: ${value}`,
+        code: 'EXCHANGE_UNKNOWN',
+        params: { exchange: value },
+      });
     }
     return value;
   }

@@ -1,12 +1,11 @@
-// Подписи измерений Выборки и порог доверия к срезу. Вынесены из Page.tsx:
-// их читают и чипы, и конфиг групп фильтров, и сводка — страница сама теперь
-// только собирает блоки.
+// Языконезависимые подписи и порог доверия к срезу. Переводимые подписи — в
+// useLabLabels: им нужен useTranslations, а этот файл читают и не-компоненты
+// (Page.tsx собирает RANGE_TF_LABELS из RANGE_TF_OPTIONS вне рендера).
 
 /** Ниже этого числа сделок цифры среза — шум, а не закономерность. */
 export { MIN_N } from '@/shared/lib/utils/confidence';
 
-export const SESSION_LABELS: Record<string, string> = { asia: 'Азия', london: 'Лондон', ny: 'Нью-Йорк', night: 'Ночь' };
-
+// Час суток один и тот же в любой локали — торговые сессии не переводятся.
 export const SESSION_HINTS: Record<string, string> = {
   asia: '00:00–08:00 UTC',
   london: '08:00–14:00 UTC',
@@ -14,29 +13,8 @@ export const SESSION_HINTS: Record<string, string> = {
   night: '21:00–24:00 UTC',
 };
 
-export const TREND_LABELS: Record<string, string> = {
-  trend_up: 'Тренд 4H ↑',
-  trend_down: 'Тренд 4H ↓',
-  range: 'Боковик 4H',
-};
-
+// 'Long'/'Short' совпадают в обеих локалях — переводить нечего.
 export const DIR_LABELS: Record<string, string> = { long: 'Long', short: 'Short' };
-export const EMA_LABELS: Record<string, string> = { above: 'Выше EMA200', below: 'Ниже EMA200' };
-export const ATR_LABELS: Record<string, string> = { high: 'ATR высокий', low: 'ATR низкий' };
-export const VOL_LABELS: Record<string, string> = { high: 'Объём высокий', low: 'Объём низкий' };
-
-/** Куда пришёлся вход по шкале диапазона ТФ: 0–33 / 33–66 / 66–100. */
-export const RANGE_LABELS: Record<string, string> = {
-  low: 'Низ диапазона',
-  mid: 'Середина',
-  high: 'Верх диапазона',
-};
-
-export const RANGE_HINTS: Record<string, string> = {
-  low: 'Вход в нижней трети диапазона таймфрейма (0–33%). Пробой вниз тоже здесь.',
-  mid: 'Вход в середине диапазона таймфрейма (33–66%).',
-  high: 'Вход в верхней трети диапазона таймфрейма (66–100%). Пробой вверх тоже здесь.',
-};
 
 /** Окно, по которому считается диапазон каждого ТФ (см. TradeContextService). */
 export const RANGE_TF_OPTIONS = [
@@ -46,11 +24,3 @@ export const RANGE_TF_OPTIONS = [
   { value: '4h' as const, label: '4H' },
   { value: '1d' as const, label: 'D' },
 ];
-
-export const RANGE_TF_WINDOWS: Record<string, string> = {
-  '15m': 'Диапазон последних 48 пятнадцатиминутных свечей (12 часов)',
-  '30m': 'Диапазон последних 48 получасовых свечей (сутки)',
-  '1h': 'Диапазон последних 48 часовых свечей (2 дня)',
-  '4h': 'Диапазон последних 60 четырёхчасовых свечей (10 дней)',
-  '1d': 'Диапазон последних 60 дневных свечей (2 месяца)',
-};

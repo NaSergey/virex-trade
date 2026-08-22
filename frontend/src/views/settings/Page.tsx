@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Wrap } from '@/shared/ui/Wrap';
 import { Button } from '@/shared/ui/Button';
 import { Field, Input } from '@/shared/ui/Field';
@@ -19,6 +20,26 @@ import {
 } from './api/hooks';
 
 /**
+ * Подсказка о правах ключа — переводится на фронте по id биржи, а не приходит
+ * с бэкенда: это тот же случай, что и коды ошибок (см. `resolveApiError`), но
+ * для каталога бирж такого механизма ещё нет. Неизвестный id (новая биржа в
+ * каталоге бэкенда, ещё не добавленная сюда) — откатывается на `permissionsHint`
+ * с бэкенда как есть, по-русски: fallback, а не «безопасное» умолчание.
+ */
+function usePermissionsHints(): Record<string, string> {
+  const t = useTranslations('settings');
+  return {
+    bybit: t('permissionsHintBybit'),
+    okx: t('permissionsHintOkx'),
+    bitget: t('permissionsHintBitget'),
+    kucoin: t('permissionsHintKucoin'),
+    gate: t('permissionsHintGate'),
+    binance: t('permissionsHintBinance'),
+    mexc: t('permissionsHintMexc'),
+  };
+}
+
+/**
  * Настройки: подключение биржевых аккаунтов, и только оно.
  *
  * Бирж может быть подключено несколько, но работает приложение с одной —
@@ -31,6 +52,7 @@ import {
  * поступление данных, и оно не должно случаться от промаха мышью.
  */
 export const SettingsPage = () => {
+  const t = useTranslations('settings');
   const { data, isLoading } = useExchanges();
   const connect = useConnectExchange();
   const disconnect = useDisconnectExchange();
@@ -50,7 +72,7 @@ export const SettingsPage = () => {
   if (isLoading || !selected) {
     return (
       <Wrap page>
-        <PageHead title="Настройки" lede="Подключение биржевого аккаунта." />
+        <PageHead title={t('pageTitle')} lede={t('pageLede')} />
         <div className="set">
           <Skeleton />
           <Skeleton width="60%" />
@@ -63,22 +85,24 @@ export const SettingsPage = () => {
 
   return (
     <Wrap page>
-      <PageHead title="Настройки" lede="Подключение биржевого аккаунта." />
+      <PageHead title={t('pageTitle')} lede={t('pageLede')} />
 
       <div className="set">
         {/* Переключатель нужен, только когда выбирать есть из чего: одна
             поддерживаемая биржа — это не выбор, а лишний орган управления. */}
         {exchanges.length > 1 && (
-          <Field label="Биржа" htmlFor="exchange-pick">
+          <Field label={t('exchangeLabel')} htmlFor="exchange-pick">
             <Seg
               options={exchanges.map((e) => ({
                 value: e.id,
                 label: e.connected ? `${e.label} ✓` : e.label,
-                title: e.connected ? `${e.label} — подключено` : `${e.label} — не подключено`,
+                title: e.connected
+                  ? t('exchangeConnectedTitle', { label: e.label })
+                  : t('exchangeNotConnectedTitle', { label: e.label }),
               }))}
               value={selected.id}
               onChange={setSelectedId}
-              ariaLabel="Биржа"
+              ariaLabel={t('exchangeLabel')}
             />
           </Field>
         )}
@@ -92,14 +116,14 @@ export const SettingsPage = () => {
             onActivate={() => setActive.mutate(selected.id)}
             onDisconnect={() =>
               setConfirm({
-                title: `Отключить ${selected.label}?`,
-                subtitle: 'История сделок и теги останутся в Virex.',
+                title: t('disconnectConfirmTitle', { label: selected.label }),
+                subtitle: t('disconnectConfirmSubtitle'),
                 consequences: [
-                  'открытые позиции перестанут обновляться',
-                  'новые сделки не будут подгружаться',
-                  'ордера на бирже останутся как есть — отменить их можно будет только после повторного подключения тех же ключей',
+                  t('disconnectConsequence1'),
+                  t('disconnectConsequence2'),
+                  t('disconnectConsequence3'),
                 ],
-                word: 'ОТКЛЮЧИТЬ',
+                word: t('disconnectWord'),
                 onConfirm: () => disconnect.mutate(selected.id),
               })
             }
@@ -137,15 +161,17 @@ function ConnectedExchange({
   onDisconnect: () => void;
   disconnecting: boolean;
 }) {
+  const t = useTranslations('settings');
   return (
     <>
       <h2>
-        {exchange.label} — подключено{isActive ? ' · активная' : ''}
+        {t('exchangeConnectedTitle', { label: exchange.label })}
+        {isActive ? t('exchangeActiveSuffix') : ''}
       </h2>
-      <KeyValue label="API-ключ" valueClassName="mask">
+      <KeyValue label={t('apiKeyLabel')} valueClassName="mask">
         {exchange.apiKeyMasked ?? '—'}
       </KeyValue>
-      <KeyValue label="Секрет" valueClassName="mask">
+      <KeyValue label={t('secretLabel')} valueClassName="mask">
         ••••••••••••••••••
       </KeyValue>
       {exchange.needsPassphrase && (
@@ -153,28 +179,25 @@ function ConnectedExchange({
           ••••••••••••
         </KeyValue>
       )}
-      <p className="foot">
-        Ключ и секрет хранятся зашифрованными и используются только вашим аккаунтом — для баланса,
-        позиций, ордеров и синхронизации сделок.
-      </p>
+      <p className="foot">{t('keysStorageNote')}</p>
 
       {/* Кнопка появляется, только когда подключено больше одной биржи:
           «сделать активной» единственную — действие без последствий. */}
       {canActivate && !isActive && (
         <Button variant="solid" disabled={activating} onClick={onActivate}>
-          {activating ? 'Переключение…' : `Работать с ${exchange.label}`}
+          {activating ? t('switching') : t('workWith', { label: exchange.label })}
         </Button>
       )}
 
       <div className="risk-zone">
         <h2 style={{ color: 'var(--color-down)', borderColor: 'var(--color-down)' }}>
-          Отключение биржи
+          {t('disconnectSectionTitle')}
         </h2>
         <p className="muted" style={{ marginBottom: 'var(--s3)' }}>
-          История сделок и теги останутся в Virex. Новые данные перестанут приходить.
+          {t('disconnectNote')}
         </p>
         <Button variant="risk" disabled={disconnecting} onClick={onDisconnect}>
-          {disconnecting ? 'Отключение…' : `Отключить ${exchange.label}`}
+          {disconnecting ? t('disconnecting') : t('disconnectButton', { label: exchange.label })}
         </Button>
       </div>
     </>
@@ -192,6 +215,8 @@ function ConnectForm({
   error: unknown;
   onSubmit: (vars: { apiKey: string; apiSecret: string; passphrase?: string }) => Promise<unknown>;
 }) {
+  const t = useTranslations('settings');
+  const permissionsHints = usePermissionsHints();
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
   const [passphrase, setPassphrase] = useState('');
@@ -218,18 +243,18 @@ function ConnectForm({
 
   return (
     <>
-      <h2>{exchange.label} — не подключено</h2>
-      <Field label="API-ключ" htmlFor="api-key">
+      <h2>{t('exchangeNotConnectedTitle', { label: exchange.label })}</h2>
+      <Field label={t('apiKeyLabel')} htmlFor="api-key">
         <Input
           id="api-key"
           full
           autoComplete="off"
-          placeholder={`из личного кабинета ${exchange.label}`}
+          placeholder={t('apiKeyPlaceholder', { label: exchange.label })}
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
         />
       </Field>
-      <Field label="Секрет" htmlFor="api-secret">
+      <Field label={t('secretLabel')} htmlFor="api-secret">
         <Input
           id="api-secret"
           full
@@ -246,23 +271,23 @@ function ConnectForm({
             full
             type="password"
             autoComplete="off"
-            placeholder={`задаётся при создании ключа в ${exchange.label}`}
+            placeholder={t('passphrasePlaceholder', { label: exchange.label })}
             value={passphrase}
             onChange={(e) => setPassphrase(e.target.value)}
           />
         </Field>
       )}
       <p className="foot">
-        {exchange.permissionsHint} Ключ и секрет хранятся зашифрованными.
+        {permissionsHints[exchange.id] ?? exchange.permissionsHint} {t('keysEncryptedShort')}
       </p>
-      <ErrorNote error={error} fallback="Не удалось подключить ключи" />
+      <ErrorNote error={error} fallback={t('connectFailed')} />
       <Button
         variant="solid"
         style={{ marginTop: 'var(--s3)' }}
         disabled={pending || !ready}
         onClick={() => void submit()}
       >
-        {pending ? 'Проверка ключей…' : 'Подключить'}
+        {pending ? t('checkingKeys') : t('connect')}
       </Button>
     </>
   );

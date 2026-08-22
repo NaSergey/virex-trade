@@ -1,6 +1,7 @@
 'use client';
 
 import { memo } from 'react';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/shared/ui/Button';
 
 export interface PaginationProps {
@@ -17,6 +18,7 @@ export interface PaginationProps {
  * краях диапазона, а гаснут — иначе строка меняет ширину и подпись прыгает.
  */
 export const Pagination = memo(({ page, pageSize, total, onPrev, onNext }: PaginationProps) => {
+  const t = useTranslations('common');
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(total, page * pageSize);
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
@@ -32,15 +34,13 @@ export const Pagination = memo(({ page, pageSize, total, onPrev, onNext }: Pagin
         flexWrap: 'wrap',
       }}
     >
-      <span className="lbl">
-        {from}—{to} из {total}
-      </span>
+      <span className="lbl">{t('recordsRange', { from, to, total })}</span>
       <div style={{ display: 'flex', gap: 'var(--s2)' }}>
         <Button onClick={onPrev} disabled={page <= 1}>
-          ← Назад
+          {t('prevPage')}
         </Button>
         <Button onClick={onNext} disabled={page >= lastPage}>
-          Вперёд →
+          {t('nextPage')}
         </Button>
       </div>
     </div>

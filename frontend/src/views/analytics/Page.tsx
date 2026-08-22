@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { useMarketSentiment } from './api/hooks';
 import { useHourlyStats, useMarketCorrelation } from './api/market-events-hooks';
 import { Wrap } from '@/shared/ui/Wrap';
@@ -16,11 +17,6 @@ const SYMBOLS = [
   { value: 'SOLUSDT', label: 'SOL' },
 ];
 
-const HISTORY = [
-  { value: 365, label: '1 год' },
-  { value: 730, label: '2 года' },
-];
-
 /**
  * Рынок: общий фон, к вашим сделкам не привязанный — раздел уже назван так в
  * навигации, отдельный заголовок страницы поверх него был бы повтором.
@@ -31,8 +27,14 @@ const HISTORY = [
  * было два экрана вниз.
  */
 export const AnalyticsPage = () => {
+  const t = useTranslations('analytics');
   const [symbol, setSymbol] = useState('BTCUSDT');
   const [historyDays, setHistoryDays] = useState(365);
+
+  const HISTORY = [
+    { value: 365, label: t('history1y') },
+    { value: 730, label: t('history2y') },
+  ];
 
   const { data: sentimentData } = useMarketSentiment(symbol);
   const { data: hourly } = useHourlyStats(historyDays);
@@ -42,19 +44,19 @@ export const AnalyticsPage = () => {
     <Wrap page style={{ paddingTop: 'var(--s4)' }}>
       <div className="asym">
         <div>
-          <SectionHead title="Позиционирование участников">
-            <Seg options={SYMBOLS} value={symbol} onChange={setSymbol} ariaLabel="Инструмент" />
+          <SectionHead title={t('positioningTitle')}>
+            <Seg options={SYMBOLS} value={symbol} onChange={setSymbol} ariaLabel={t('instrumentAriaLabel')} />
           </SectionHead>
           <Positioning data={sentimentData} />
 
-          <SectionHead title="Волатильность по часам · UTC" style={{ marginTop: 'var(--s5)' }}>
-            <Seg options={HISTORY} value={historyDays} onChange={setHistoryDays} ariaLabel="Глубина истории" />
+          <SectionHead title={t('hourlyVolatilityTitle')} style={{ marginTop: 'var(--s5)' }}>
+            <Seg options={HISTORY} value={historyDays} onChange={setHistoryDays} ariaLabel={t('historyDepthAriaLabel')} />
           </SectionHead>
           <HourlyVolatility hours={hourly?.hourly ?? []} />
         </div>
 
         <aside className="marg">
-          <h2>Вероятности по дням недели</h2>
+          <h2>{t('weekdayOddsTitle')}</h2>
           <WeekdayOdds corr={corr} />
         </aside>
       </div>

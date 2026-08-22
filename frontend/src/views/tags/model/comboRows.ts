@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import {
   useTagComboStats,
   useCreateSavedCombo,
@@ -38,6 +39,7 @@ export const comboKey = (tagIds: string[]) => [...tagIds].sort().join('|');
  * диалогом продукта, а владеть его состоянием должна страница, а не строка.
  */
 export function useComboRows(days: number, askConfirm: (request: ConfirmRequest) => void): ComboRow[] {
+  const t = useTranslations('tags');
   const { data } = useTagComboStats(days);
   const pin = useCreateSavedCombo();
   const updateCombo = useUpdateSavedCombo();
@@ -62,14 +64,14 @@ export function useComboRows(days: number, askConfirm: (request: ConfirmRequest)
           ? undefined
           : () =>
               askConfirm({
-                title: 'Удалить комбинацию?',
-                subtitle: `«${c.tagNames.join(' + ')}» исчезнет из списка.`,
+                title: t('deleteComboConfirmTitle'),
+                subtitle: t('deleteComboSubtitle', { names: c.tagNames.join(' + ') }),
                 consequences: [
-                  'сами теги и сделки не пострадают',
-                  'комбинация перестанет предлагаться',
-                  'её можно будет собрать заново вручную',
+                  t('deleteComboConsequence1'),
+                  t('deleteComboConsequence2'),
+                  t('deleteComboConsequence3'),
                 ],
-                word: 'УДАЛИТЬ',
+                word: t('deleteWord'),
                 onConfirm: () => deleteCombo.mutate(c.id),
               }),
       })),

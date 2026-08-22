@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useTags } from '@/entities/tag';
 import { Seg } from '@/shared/ui/Seg';
 import { Button } from '@/shared/ui/Button';
@@ -7,22 +8,12 @@ import { SectionHead } from '@/shared/ui/SectionHead';
 import { Select } from '@/shared/ui/Field';
 import { Lookup, KeyValue } from '@/shared/ui/Lookup';
 import type { LabFacetValue, LabResponse, RangeTf } from '../api/hooks';
-import { WEEKDAY_LABELS, WEEKDAY_ORDER } from '@/shared/lib/utils/period';
+import { weekdayLabels, WEEKDAY_ORDER } from '@/shared/lib/utils/period';
+import { useLocaleControl } from '@/shared/i18n';
 import { FilterGroup, type FilterOption } from './FilterGroup';
 import { EMPTY_FACET, useStickySymbols } from '../model/facets';
-import {
-  ATR_LABELS,
-  DIR_LABELS,
-  EMA_LABELS,
-  RANGE_HINTS,
-  RANGE_LABELS,
-  RANGE_TF_OPTIONS,
-  RANGE_TF_WINDOWS,
-  SESSION_HINTS,
-  SESSION_LABELS,
-  TREND_LABELS,
-  VOL_LABELS,
-} from '../model/constants';
+import { DIR_LABELS, RANGE_TF_OPTIONS, SESSION_HINTS } from '../model/constants';
+import { useLabLabels } from '../model/useLabLabels';
 import type { LabFiltersState } from '../model/useLabFilters';
 
 type FacetLookup = (dimension: string, key: string) => LabFacetValue | undefined;
@@ -76,6 +67,7 @@ function HourSelect({
  * ошибка программы.
  */
 function Coverage({ coverage }: { coverage: LabResponse['coverage'] }) {
+  const t = useTranslations('lab');
   const pct = coverage.total > 0 ? (coverage.withContext / coverage.total) * 100 : 0;
   const missing = coverage.total - coverage.withContext;
   const noRange = coverage.withContext - coverage.withRange;
@@ -88,24 +80,15 @@ function Coverage({ coverage }: { coverage: LabResponse['coverage'] }) {
   return (
     <div className="cov">
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-        <span className="lbl dbt">Покрытие контекстом</span>
+        <span className="lbl dbt">{t('contextCoverage')}</span>
         <span className="n dbt">{pct.toFixed(1)} %</span>
       </div>
       <div className="cov-b">
         <i className="cov-f" style={{ width: `${pct.toFixed(1)}%` }} />
       </div>
       <p className="foot" style={{ marginTop: 0 }}>
-        {missing > 0 && (
-          <>
-            Без контекста <span className="n">{missing}</span> из{' '}
-            <span className="n">{coverage.total}</span> — под фильтры по контексту они не попадут.{' '}
-          </>
-        )}
-        {noRange > 0 && (
-          <>
-            Диапазон входа не посчитан ещё у <span className="n">{noRange}</span>.
-          </>
-        )}
+        {missing > 0 && t('missingContextNote', { missing, total: coverage.total })}
+        {noRange > 0 && t('missingRangeNote', { n: noRange })}
       </p>
     </div>
   );
@@ -124,6 +107,12 @@ export function LabFilters({
   data?: LabResponse;
   fv: FacetLookup;
 }) {
+  const t = useTranslations('lab');
+  const tNav = useTranslations('nav');
+  const { locale } = useLocaleControl();
+  const WEEKDAY_LABELS = weekdayLabels(locale);
+  const { sessionLabels, trendLabels, emaLabels, atrLabels, volLabels, rangeLabels, rangeHints, rangeTfWindows } =
+    useLabLabels();
   const { filters, set, toggleMulti, toggleSingle, toggleWeekday } = state;
   const { data: tagsData } = useTags();
   const tags = tagsData?.tags ?? [];
@@ -131,12 +120,12 @@ export function LabFilters({
   const facetSymbols = data?.facets.find((f) => f.dimension === 'symbol')?.values.map((v) => v.key) ?? [];
   const symbolKeys = useStickySymbols(facetSymbols, filters.symbols);
 
-  const tagOptions: FilterOption[] = tags.map((t) => ({
-    key: t.id,
-    label: t.name,
-    active: filters.tagIds.includes(t.id),
-    stats: fv('tags', t.id) ?? EMPTY_FACET(t.id),
-    onToggle: () => toggleMulti('tagIds', t.id),
+  const tagOptions: FilterOption[] = tags.map((tag) => ({
+    key: tag.id,
+    label: tag.name,
+    active: filters.tagIds.includes(tag.id),
+    stats: fv('tags', tag.id) ?? EMPTY_FACET(tag.id),
+    onToggle: () => toggleMulti('tagIds', tag.id),
   }));
 
   const symbolOptions: FilterOption[] = symbolKeys.map((s) => ({
@@ -148,9 +137,9 @@ export function LabFilters({
   }));
 
   const timeOptions: FilterOption[] = [
-    ...Object.keys(SESSION_LABELS).map((s) => ({
+    ...Object.keys(sessionLabels).map((s) => ({
       key: `session-${s}`,
-      label: SESSION_LABELS[s],
+      label: sessionLabels[s],
       hint: SESSION_HINTS[s],
       active: filters.sessions.includes(s),
       stats: fv('session', s),
@@ -166,35 +155,33 @@ export function LabFilters({
   ];
 
   const ctxOptions: FilterOption[] = [
-    ...Object.keys(TREND_LABELS).map((t) => ({
-      key: `trend-${t}`,
-      label: TREND_LABELS[t],
-      active: filters.trend4h.includes(t),
-      stats: fv('trend4h', t),
-      onToggle: () => toggleMulti('trend4h', t),
+    ...Object.keys(trendLabels).map((tr) => ({
+      key: `trend-${tr}`,
+      label: trendLabels[tr],
+      active: filters.trend4h.includes(tr),
+      stats: fv('trend4h', tr),
+      onToggle: () => toggleMulti('trend4h', tr),
     })),
     ...(['above', 'below'] as const).map((e) => ({
       key: `ema-${e}`,
-      label: EMA_LABELS[e],
+      label: emaLabels[e],
       active: filters.ema200 === e,
       stats: fv('ema200', e),
       onToggle: () => toggleSingle('ema200', e),
     })),
     ...(['high', 'low'] as const).map((a) => ({
       key: `atr-${a}`,
-      label: ATR_LABELS[a],
-      hint: data?.medians.atrPct != null ? `Медиана ATR за период: ${data.medians.atrPct.toFixed(2)} %` : undefined,
+      label: atrLabels[a],
+      hint: data?.medians.atrPct != null ? t('atrMedianHint', { v: data.medians.atrPct.toFixed(2) }) : undefined,
       active: filters.atr === a,
       stats: fv('atr', a),
       onToggle: () => toggleSingle('atr', a),
     })),
     ...(['high', 'low'] as const).map((v) => ({
       key: `vol-${v}`,
-      label: VOL_LABELS[v],
+      label: volLabels[v],
       hint:
-        data?.medians.volRel != null
-          ? `Медиана объёма за период: ×${data.medians.volRel.toFixed(2)} от среднего`
-          : undefined,
+        data?.medians.volRel != null ? t('volMedianHint', { v: data.medians.volRel.toFixed(2) }) : undefined,
       active: filters.vol === v,
       stats: fv('vol', v),
       onToggle: () => toggleSingle('vol', v),
@@ -203,8 +190,8 @@ export function LabFilters({
 
   const rangeOptions: FilterOption[] = (['low', 'mid', 'high'] as const).map((k) => ({
     key: k,
-    label: RANGE_LABELS[k],
-    hint: RANGE_HINTS[k],
+    label: rangeLabels[k],
+    hint: rangeHints[k],
     active: filters.range === k,
     stats: fv('range', k),
     onToggle: () => toggleSingle('range', k),
@@ -227,30 +214,30 @@ export function LabFilters({
       {/* Сброс стоит над самими условиями, а не в шапке страницы: он относится
           к ним, а не ко всей «Выборке», и счётчик активных условий читается
           рядом с тем, что он считает. */}
-      <SectionHead title="Фильтры">
+      <SectionHead title={t('filtersTitle')}>
         <Button variant="bare" tight onClick={state.reset} disabled={state.activeCount === 0}>
-          Сбросить{state.activeCount > 0 ? ` · ${state.activeCount}` : ''}
+          {t('reset')}{state.activeCount > 0 ? ` · ${state.activeCount}` : ''}
         </Button>
       </SectionHead>
       {data?.coverage && <Coverage coverage={data.coverage} />}
 
-      <FilterGroup title="Теги" options={tagOptions} />
-      <FilterGroup title="Символы" options={symbolOptions} />
-      <FilterGroup title="Время" options={timeOptions}>
+      <FilterGroup title={tNav('tags')} options={tagOptions} />
+      <FilterGroup title={t('symbolsGroupTitle')} options={symbolOptions} />
+      <FilterGroup title={t('timeGroupTitle')} options={timeOptions}>
         <Lookup one style={{ marginBottom: 'var(--s2)' }}>
-          <KeyValue label="Часы входа" valueClassName="">
+          <KeyValue label={t('entryHours')} valueClassName="">
             <span style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--s1)' }}>
               <HourSelect
-                ariaLabel="Час входа, с"
-                placeholder="с —"
+                ariaLabel={t('hourFromAriaLabel')}
+                placeholder={t('fromPlaceholder')}
                 minute="00"
                 value={filters.hourFrom}
                 onChange={(hourFrom) => set({ hourFrom })}
               />
               <span className="lbl">–</span>
               <HourSelect
-                ariaLabel="Час входа, до"
-                placeholder="до —"
+                ariaLabel={t('hourToAriaLabel')}
+                placeholder={t('toPlaceholder')}
                 minute="59"
                 value={filters.hourTo}
                 onChange={(hourTo) => set({ hourTo })}
@@ -259,8 +246,8 @@ export function LabFilters({
           </KeyValue>
         </Lookup>
       </FilterGroup>
-      <FilterGroup title="Рыночный контекст" options={ctxOptions} />
-      <FilterGroup title="Диапазон входа" options={rangeOptions}>
+      <FilterGroup title={t('marketContextGroupTitle')} options={ctxOptions} />
+      <FilterGroup title={t('entryRangeGroupTitle')} options={rangeOptions}>
         {/* Тумблер ТФ живёт в этой группе, а не в общем баре: он ничего не
             фильтрует, а выбирает, какую из пяти шкал читают условия ниже. */}
         <div style={{ marginBottom: 'var(--s2)' }}>
@@ -268,14 +255,14 @@ export function LabFilters({
             options={RANGE_TF_OPTIONS}
             value={filters.rangeTf}
             onChange={(tf: RangeTf) => set({ rangeTf: tf })}
-            ariaLabel="Таймфрейм диапазона"
+            ariaLabel={t('rangeTfAriaLabel')}
           />
           <p className="lbl" style={{ marginTop: 'var(--s1)', letterSpacing: '.04em' }}>
-            {RANGE_TF_WINDOWS[filters.rangeTf]}
+            {rangeTfWindows[filters.rangeTf]}
           </p>
         </div>
       </FilterGroup>
-      <FilterGroup title="Направление" options={sideOptions} />
+      <FilterGroup title={t('directionGroupTitle')} options={sideOptions} />
       </div>
     </aside>
   );

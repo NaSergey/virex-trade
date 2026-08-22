@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type { RangeCheckResponse } from '@/entities/trade';
 import { formatPriceGrouped } from '@/shared/lib/utils/format';
+import { useLocaleControl } from '@/shared/i18n';
 
 const W = 660;
 const H = 240;
@@ -54,9 +56,9 @@ function spread(levels: Level[], gap: number, bottom: number): Level[] {
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 const at = (unixSec: number) => new Date(unixSec * 1000);
-const fmtDay = (t: number) =>
-  at(t).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }).replace('.', '');
-const fmtClock = (t: number) => at(t).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+const fmtDay = (t: number, locale: string) =>
+  at(t).toLocaleDateString(locale, { day: 'numeric', month: 'short' }).replace('.', '');
+const fmtClock = (t: number, locale: string) => at(t).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 const sameDay = (a: number, b: number) => at(a).toDateString() === at(b).toDateString();
 
 /**
@@ -67,6 +69,9 @@ const sameDay = (a: number, b: number) => at(a).toDateString() === at(b).toDateS
  * свои рамки, и всё это приходится переопределять по одному свойству.
  */
 export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
+  const t = useTranslations('rangeCheck');
+  const { locale } = useLocaleControl();
+  const intlLocale = locale === 'en' ? 'en-US' : 'ru-RU';
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<{ x: number; from: number; to: number } | null>(null);
   const [span, setSpan] = useState<{ from: number; to: number } | null>(null);
@@ -147,9 +152,12 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
   const ticks = visible
     .map((c, k) => ({ time: c.time, i: vFrom + k }))
     .filter(({ i }) => (i - vFrom) % tickStep === 0)
-    .map((t, k, all) => ({
-      ...t,
-      text: daily || k === 0 || !sameDay(t.time, all[k - 1].time) ? fmtDay(t.time) : fmtClock(t.time),
+    .map((tick, k, all) => ({
+      ...tick,
+      text:
+        daily || k === 0 || !sameDay(tick.time, all[k - 1].time)
+          ? fmtDay(tick.time, intlLocale)
+          : fmtClock(tick.time, intlLocale),
     }));
 
   // Колесо мыши слушаем вручную: React вешает wheel пассивным, а без
@@ -211,8 +219,8 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
 
   const levels = spread(
     [
-      data.window.high != null && { value: data.window.high, label: 'верх' },
-      data.window.low != null && { value: data.window.low, label: 'низ' },
+      data.window.high != null && { value: data.window.high, label: t('levelHigh') },
+      data.window.low != null && { value: data.window.low, label: t('levelLow') },
     ]
       .filter((l): l is Omit<Level, 'y' | 'ly'> => Boolean(l))
       .map((l) => ({ ...l, y: y(l.value), ly: y(l.value) })),
@@ -284,7 +292,7 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
         WebkitUserSelect: 'none',
       }}
       role="img"
-      aria-label="Свечи коридора перед входом, его границы и метка входа"
+      aria-label={t('chartAriaLabel')}
       onDragStart={(e) => e.preventDefault()}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -340,10 +348,10 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
       {marker({
         idx: entryIdx,
         side: long ? 'below' : 'above',
-        label: 'ВХОД',
+        label: t('markerEntry'),
         color: 'var(--color-fg)',
       })}
-      {marker({ idx: exitIdx, side: long ? 'above' : 'below', label: 'ВЫХОД', color: pnlColor })}
+      {marker({ idx: exitIdx, side: long ? 'above' : 'below', label: t('markerExit'), color: pnlColor })}
 
       {ticks.map((t) => (
         <text
@@ -398,8 +406,8 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
             paintOrder="stroke"
           >
             {daily
-              ? fmtDay(candles[cursor.i].time)
-              : `${fmtDay(candles[cursor.i].time)} ${fmtClock(candles[cursor.i].time)}`}
+              ? fmtDay(candles[cursor.i].time, intlLocale)
+              : `${fmtDay(candles[cursor.i].time, intlLocale)} ${fmtClock(candles[cursor.i].time, intlLocale)}`}
           </text>
         </g>
       )}

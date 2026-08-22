@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import type { RangeTf, Trade } from '@/entities/trade';
 import { Tags } from '@/entities/tag';
 import { Button } from '@/shared/ui/Button';
@@ -7,26 +8,27 @@ import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { Money } from '@/shared/ui/Money';
 import { TradeOrders } from './TradeOrders';
-import { formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
+import { formatPriceGrouped, formatQty, durationUnitLabels } from '@/shared/lib/utils/format';
 import { formatRangePos } from '@/shared/lib/utils/range';
+import { useLocaleControl } from '@/shared/i18n';
 
 /** «28 июл 11:42» — день с месяцем словом, как в записи журнала. */
-function fmtClosed(iso: string): string {
+function fmtClosed(iso: string, locale: string): string {
   return new Date(iso)
-    .toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+    .toLocaleString(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
     .replace('.', '');
 }
 
 /** Сколько сделка держалась — от входа до закрытия. */
-function fmtHold(openedAt: string | null, closedAt: string): string {
+function fmtHold(openedAt: string | null, closedAt: string, units: { d: string; h: string; m: string }): string {
   if (!openedAt) return '—';
   const min = Math.round((new Date(closedAt).getTime() - new Date(openedAt).getTime()) / 60_000);
   if (!Number.isFinite(min) || min < 0) return '—';
   const d = Math.floor(min / 1440);
   const h = Math.floor((min % 1440) / 60);
   const m = String(min % 60).padStart(2, '0');
-  if (d > 0) return `${d} д ${h} ч ${m} м`;
-  return h > 0 ? `${h} ч ${m} м` : `${min} м`;
+  if (d > 0) return `${d} ${units.d} ${h} ${units.h} ${m} ${units.m}`;
+  return h > 0 ? `${h} ${units.h} ${m} ${units.m}` : `${min} ${units.m}`;
 }
 
 /** Колонка снимка, в которой лежит диапазон входа этого ТФ. */
@@ -92,51 +94,56 @@ export function TradesTable({
   /** Чем заменить таблицу, когда сделок нет. */
   empty?: React.ReactNode;
 }) {
+  const t = useTranslations('tradesTable');
+  const { locale } = useLocaleControl();
+  const intlLocale = locale === 'en' ? 'en-US' : 'ru-RU';
+  const units = durationUnitLabels(locale);
+
   const columns: LedgerColumn<Trade>[] = [
     {
       key: 'closedAt',
-      header: 'Закрыта',
+      header: t('colClosed'),
       cellClassName: 'n',
-      render: (t) => <span className="muted">{fmtClosed(t.closedAt)}</span>,
+      render: (tr) => <span className="muted">{fmtClosed(tr.closedAt, intlLocale)}</span>,
     },
-    { key: 'symbol', header: 'Символ', render: (t) => <span className="sym">{t.symbol}</span> },
+    { key: 'symbol', header: t('colSymbol'), render: (tr) => <span className="sym">{tr.symbol}</span> },
     {
       key: 'direction',
-      header: 'Напр.',
-      label: 'Напр.',
-      render: (t) => <span className={`dir${t.direction === 'short' ? ' short' : ''}`}>{t.direction}</span>,
+      header: t('colDirection'),
+      label: t('colDirection'),
+      render: (tr) => <span className={`dir${tr.direction === 'short' ? ' short' : ''}`}>{tr.direction}</span>,
     },
     {
       key: 'entry',
-      header: 'Вход',
+      header: t('colEntry'),
       align: 'right',
       cellClassName: 'n',
-      render: (t) => formatPriceGrouped(t.avgEntryPrice),
+      render: (tr) => formatPriceGrouped(tr.avgEntryPrice),
     },
     {
       key: 'exit',
-      header: 'Выход',
+      header: t('colExit'),
       align: 'right',
       cellClassName: 'n',
-      render: (t) => formatPriceGrouped(t.avgExitPrice),
+      render: (tr) => formatPriceGrouped(tr.avgExitPrice),
     },
     ...(range
       ? [
           {
             key: 'range',
-            header: `Диапазон ${range.label}`,
-            label: 'Диапазон',
+            header: t('colRange', { tf: range.label }),
+            label: t('colRangeLabel'),
             align: 'right',
             cellClassName: 'n',
-            render: (t: Trade) => (
-              <span className="muted">{formatRangePos(rangeOf(t, range.tf))}</span>
+            render: (tr: Trade) => (
+              <span className="muted">{formatRangePos(rangeOf(tr, range.tf), locale)}</span>
             ),
           } satisfies LedgerColumn<Trade>,
         ]
       : []),
     {
       key: 'qty',
-      header: 'Размер',
+      header: t('colSize'),
       align: 'right',
       cellClassName: 'n',
       // Размер деньгами, а не в монете: 47 UNI и 47 SOL между собой не
@@ -144,20 +151,20 @@ export function TradesTable({
       // колонке меряется той же мерой. Считается по входу: это объём, которым
       // в позицию заходили. Сколько это было монет, говорит подсказка — так же,
       // как у ордеров раскрытой записи.
-      render: (t) => (
-        <span title={`${formatQty(t.qty)} в монете`}>
-          {formatPriceGrouped(t.qty * t.avgEntryPrice)}
+      render: (tr) => (
+        <span title={t('qtyTitle', { qty: formatQty(tr.qty) })}>
+          {formatPriceGrouped(tr.qty * tr.avgEntryPrice)}
           {/* ×3 — позиция закрывалась тремя ордерами: размер сложен из частей. */}
-          {t.parts > 1 && <span className="lbl"> ×{t.parts}</span>}
+          {tr.parts > 1 && <span className="lbl"> ×{tr.parts}</span>}
         </span>
       ),
     },
     {
       key: 'hold',
-      header: 'В позиции',
+      header: t('colInPosition'),
       align: 'right',
       cellClassName: 'n',
-      render: (t) => <span className="muted">{fmtHold(t.openedAt, t.closedAt)}</span>,
+      render: (tr) => <span className="muted">{fmtHold(tr.openedAt, tr.closedAt, units)}</span>,
     },
     {
       key: 'pnl',
@@ -166,24 +173,24 @@ export function TradesTable({
       cellClassName: 'n',
       // Крупный кегль P&L — привилегия широкой раскладки: в тесной он ломает
       // строку, а ведущей величиной там всё равно стоит диапазон.
-      render: (t) => <Money value={t.closedPnl} large={!compact} />,
+      render: (tr) => <Money value={tr.closedPnl} large={!compact} />,
     },
     {
       key: 'tags',
-      header: 'Теги',
+      header: t('colTags'),
       cellClassName: 'cell-tags',
-      render: (t) => (
-        <Tags tags={t.tags ?? []}>
+      render: (tr) => (
+        <Tags tags={tr.tags ?? []}>
           {onEditTags && (
             <Button
               variant="add"
               onClick={(e) => {
                 // Иначе клик уйдёт в строку и заодно раскроет её.
                 e.stopPropagation();
-                onEditTags(t);
+                onEditTags(tr);
               }}
             >
-              {(t.tags ?? []).length === 0 ? '+ тег' : '+'}
+              {(tr.tags ?? []).length === 0 ? t('addTag') : '+'}
             </Button>
           )}
         </Tags>
@@ -195,14 +202,12 @@ export function TradesTable({
     <LedgerTable
       columns={compact ? columns.filter((c) => !ROOMY_ONLY.has(c.key)) : columns}
       rows={trades}
-      rowKey={(t) => t.id}
+      rowKey={(tr) => tr.id}
       isLoading={isLoading}
-      renderExpanded={(t) => <TradeOrders trade={t} />}
+      renderExpanded={(tr) => <TradeOrders trade={tr} />}
       empty={
         empty ?? (
-          <EmptyState title="За этот период сделок нет">
-            Смените период в рейке выше — или синхронизируйте историю с биржей в настройках.
-          </EmptyState>
+          <EmptyState title={t('emptyTitle')}>{t('emptyBody')}</EmptyState>
         )
       }
     />

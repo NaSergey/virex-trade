@@ -172,6 +172,16 @@ export function buildEquityGeometry(data: EquityPoint[], height: number) {
 export type EquityGeometry = NonNullable<ReturnType<typeof buildEquityGeometry>>;
 
 /**
+ * Индекс наведения, действительный для этой геометрии. Ряд меняется под
+ * курсором — на выборке это смена фильтров, — а индекс переживает смену и
+ * указывает в сделку, которой в новом ряду уже нет. Поэтому его проверяют на
+ * каждом проходе, а не только в момент наведения.
+ */
+export function hoverIndex(chart: EquityGeometry, i: number | null): number | null {
+  return i != null && i >= 0 && i < chart.points.length ? i : null;
+}
+
+/**
  * Яма, в которой эта сделка сидит под водой. Ни вершина, с которой пошли вниз,
  * ни точка возврата к ней ямой не считаются: там кривая на рекорде, и просадки
  * в этот момент нет — называть её было бы враньём.

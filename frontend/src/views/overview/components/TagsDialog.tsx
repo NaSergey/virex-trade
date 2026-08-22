@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { useTranslations } from 'next-intl';
 import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader } from '@/shared/ui/dialog';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { useIdSet } from '@/shared/lib/hooks/useIdSet';
@@ -34,6 +35,8 @@ export function TagsDialog({
   onSave: (tagIds: string[]) => void;
   onClose: () => void;
 }) {
+  const t = useTranslations('overview');
+  const tc = useTranslations('common');
   const { data: tagsData } = useTags();
   const { selected, toggle, ids } = useIdSet(initialTagIds);
 
@@ -46,12 +49,12 @@ export function TagsDialog({
           {note && <p className="foot">{note}</p>}
           <ErrorNote
             error={error}
-            fallback="Не удалось сохранить теги"
+            fallback={t('saveTagsFailed')}
             style={{ marginTop: 'var(--s2)' }}
           />
         </DialogBody>
         <DialogActions
-          confirmLabel={isPending ? 'Сохранение…' : 'Сохранить'}
+          confirmLabel={isPending ? tc('saving') : tc('save')}
           confirmDisabled={isPending}
           onConfirm={() => onSave(ids)}
           onCancel={onClose}

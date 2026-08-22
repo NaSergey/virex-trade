@@ -1,13 +1,13 @@
 'use client';
 
-import { PERIODS } from '../model/usePeriodFilter';
+import { useTranslations } from 'next-intl';
+import { PERIOD_VALUES } from '../model/usePeriodFilter';
 import { Seg } from '@/shared/ui/Seg';
 import { Input } from '@/shared/ui/Field';
 import { formatPeriodRange } from '@/shared/lib/utils/period';
+import { useLocaleControl } from '@/shared/i18n';
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
-
-const PERIOD_OPTIONS = PERIODS.map((p) => ({ value: p.value, label: p.label }));
 
 /**
  * Рейка периода: слева — за что именно посчитан свод (даты прописью и число
@@ -44,10 +44,27 @@ export function PeriodRail({
   onSelectDays: (days: number) => void;
   onCustomDate: (iso: string | null) => void;
 }) {
+  const t = useTranslations('period');
+  const { locale } = useLocaleControl();
+  const intlLocale = locale === 'en' ? 'en-US' : 'ru-RU';
+
+  const PERIOD_OPTIONS = PERIOD_VALUES.map((value) => ({
+    value,
+    label:
+      value === 7 ? t('days7') : value === 30 ? t('days30') : value === 90 ? t('days90') : t('allTime'),
+  }));
+
   const effectiveDays = customActive ? -1 : days;
-  const range = customActive && customDate
-    ? `с ${new Date(customDate).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })}`
-    : formatPeriodRange(days);
+  const range =
+    customActive && customDate
+      ? t('since', {
+          date: new Date(customDate).toLocaleDateString(intlLocale, {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+          }),
+        })
+      : formatPeriodRange(days, intlLocale, t('allTimeLower'));
 
   return (
     <div className="strip-rail">
@@ -60,15 +77,15 @@ export function PeriodRail({
         )}
         {trades != null && (
           <>
-            <b>{trades}</b> сделок
+            <b>{trades}</b> {t('tradesSuffix')}
           </>
         )}
       </span>
       <div className="period">
         <Input
           type="date"
-          aria-label="Начало периода"
-          title={!customActive && customDate ? 'Своя дата сохранена — нажмите на поле, чтобы снова применить её' : undefined}
+          aria-label={t('startDate')}
+          title={!customActive && customDate ? t('customDateSavedTitle') : undefined}
           className={!customActive && customDate ? 'inactive' : undefined}
           max={todayIso()}
           value={customDate ?? ''}
@@ -81,7 +98,7 @@ export function PeriodRail({
           }}
           onChange={(e) => onCustomDate(e.target.value || null)}
         />
-        <Seg options={PERIOD_OPTIONS} value={effectiveDays} onChange={onSelectDays} ariaLabel="Период" />
+        <Seg options={PERIOD_OPTIONS} value={effectiveDays} onChange={onSelectDays} ariaLabel={t('periodAriaLabel')} />
       </div>
     </div>
   );

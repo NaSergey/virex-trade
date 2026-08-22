@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader } from '@/shared/ui/dialog';
 import { useIdSet } from '@/shared/lib/hooks/useIdSet';
 import { TagPicker, type TagItem } from '@/entities/tag';
@@ -22,20 +23,18 @@ export function CreateComboDialog({
   onCreate: (tagIds: string[]) => void;
   onClose: () => void;
 }) {
+  const t = useTranslations('tags');
   const { selected, toggle, ids } = useIdSet();
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent>
-        <DialogHeader
-          title="Новая комбинация"
-          subtitle="Выберите два и более тега — статистика посчитается по сделкам, где они встретились вместе"
-        />
+        <DialogHeader title={t('newComboTitle')} subtitle={t('newComboSubtitle')} />
         <DialogBody>
           <TagPicker tags={tags} selected={selected} onToggle={toggle} />
         </DialogBody>
         <DialogActions
-          confirmLabel="Создать"
+          confirmLabel={t('create')}
           confirmDisabled={selected.size < 2 || isPending}
           onConfirm={() => onCreate(ids)}
           onCancel={onClose}

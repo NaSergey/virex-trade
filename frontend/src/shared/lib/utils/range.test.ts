@@ -32,6 +32,12 @@ describe('formatRangePos', () => {
   it('renders a dash when there is nothing to show', () => {
     expect(formatRangePos(null)).toBe('—');
   });
+
+  it('translates the bucket label for en', () => {
+    expect(formatRangePos(82, 'en')).toBe('82% · high');
+    expect(formatRangePos(50, 'en')).toBe('50% · mid');
+    expect(formatRangePos(4.4, 'en')).toBe('4% · low');
+  });
 });
 
 describe('rangePosColor', () => {

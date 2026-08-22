@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { TAG_TYPES, TAG_TYPE_LABELS, useCreateTag, type TagType } from '@/entities/tag';
+import { useTranslations } from 'next-intl';
+import { TAG_TYPES, useCreateTag, useTagTypeLabels, type TagType } from '@/entities/tag';
 import { Button } from '@/shared/ui/Button';
 import { Input, Select } from '@/shared/ui/Field';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
@@ -16,6 +17,8 @@ import { ErrorNote } from '@/shared/ui/ErrorNote';
  * справа добавляют новое.
  */
 export function NewTagRow() {
+  const t = useTranslations('tags');
+  const typeLabels = useTagTypeLabels();
   const [name, setName] = useState('');
   const [type, setType] = useState<TagType>('setup');
   const create = useCreateTag();
@@ -32,8 +35,8 @@ export function NewTagRow() {
           объясняться одинаково. aria-label держит имя для скринридера,
           которому плейсхолдер исчезает вместе с первой набранной буквой. */}
       <Input
-        placeholder="новый тег"
-        aria-label="Название нового тега"
+        placeholder={t('newTagPlaceholder')}
+        aria-label={t('newTagAriaLabel')}
         maxLength={30}
         style={{ width: 180 }}
         value={name}
@@ -41,16 +44,16 @@ export function NewTagRow() {
         onKeyDown={(e) => e.key === 'Enter' && submit()}
       />
       <Select value={type} onChange={(e) => setType(e.target.value as TagType)}>
-        {TAG_TYPES.map((t) => (
-          <option key={t} value={t}>
-            {TAG_TYPE_LABELS[t]}
+        {TAG_TYPES.map((tt) => (
+          <option key={tt} value={tt}>
+            {typeLabels[tt]}
           </option>
         ))}
       </Select>
       <Button variant="solid" disabled={!name.trim() || create.isPending} onClick={submit}>
-        Создать
+        {t('create')}
       </Button>
-      <ErrorNote as="span" error={create.error} fallback="Не удалось создать тег" />
+      <ErrorNote as="span" error={create.error} fallback={t('createTagFailed')} />
     </div>
   );
 }

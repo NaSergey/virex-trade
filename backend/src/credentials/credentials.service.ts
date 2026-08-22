@@ -67,9 +67,10 @@ export class CredentialsService {
   ): Promise<{ exchange: ExchangeId; credentials: ExchangeCredentials }> {
     const active = await this.getActive(userId);
     if (!active) {
-      throw new BadRequestException(
-        'Биржа не подключена. Добавьте API-ключи на странице «Настройки».',
-      );
+      throw new BadRequestException({
+        message: 'Биржа не подключена. Добавьте API-ключи на странице «Настройки».',
+        code: 'EXCHANGE_NOT_CONNECTED',
+      });
     }
     return active;
   }
@@ -78,9 +79,11 @@ export class CredentialsService {
   async require(userId: string, exchange: ExchangeId): Promise<ExchangeCredentials> {
     const creds = await this.get(userId, exchange);
     if (!creds) {
-      throw new BadRequestException(
-        `Биржа «${exchange}» не подключена. Добавьте API-ключи на странице «Настройки».`,
-      );
+      throw new BadRequestException({
+        message: `Биржа «${exchange}» не подключена. Добавьте API-ключи на странице «Настройки».`,
+        code: 'EXCHANGE_NOT_CONNECTED_NAMED',
+        params: { exchange },
+      });
     }
     return creds;
   }
@@ -159,7 +162,10 @@ export class CredentialsService {
       select: { id: true },
     });
     if (!connected) {
-      throw new BadRequestException('Сначала подключите API-ключи этой биржи');
+      throw new BadRequestException({
+        message: 'Сначала подключите API-ключи этой биржи',
+        code: 'EXCHANGE_NOT_CONNECTED',
+      });
     }
     await this.prisma.user.update({ where: { id: userId }, data: { activeExchange: exchange } });
   }

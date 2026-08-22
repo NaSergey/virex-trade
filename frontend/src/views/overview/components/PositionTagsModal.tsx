@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useSetPositionTags } from '@/entities/tag';
 import { formatMoney } from '@/shared/lib/utils/format';
 import { TagsDialog } from './TagsDialog';
@@ -25,13 +26,14 @@ export function PositionTagsModal({
   initialTagIds: string[];
   onClose: () => void;
 }) {
+  const t = useTranslations('overview');
   const setPositionTags = useSetPositionTags();
 
   return (
     <TagsDialog
-      title="Теги открытой позиции"
-      subtitle={`${symbol} · ${direction} · ещё в рынке · ${formatMoney(unrealisedPnl)} USDT`}
-      note="Теги останутся на позиции, пока она открыта, и перейдут на все её закрытые сделки — включая частичные тейки."
+      title={t('positionTagsTitle')}
+      subtitle={`${symbol} · ${direction} · ${t('stillOpen')} · ${formatMoney(unrealisedPnl)} USDT`}
+      note={t('positionTagsNote')}
       initialTagIds={initialTagIds}
       isPending={setPositionTags.isPending}
       error={setPositionTags.error}

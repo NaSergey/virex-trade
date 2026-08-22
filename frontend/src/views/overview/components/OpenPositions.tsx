@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   useOpenPositions,
   useOpenPositionContext,
@@ -16,8 +17,9 @@ import { Seg } from '@/shared/ui/Seg';
 import { Money } from '@/shared/ui/Money';
 import { RangeScale } from './RangeScale';
 import { PositionTagsModal } from './PositionTagsModal';
-import { useRangeTf, RANGE_TF_OPTIONS, type RangeTfPref } from '../model/useRangeTf';
-import { formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
+import { useRangeTf, useRangeTfOptions, type RangeTfPref } from '../model/useRangeTf';
+import { formatPriceGrouped, formatQty, durationUnitLabels } from '@/shared/lib/utils/format';
+import { useLocaleControl } from '@/shared/i18n';
 
 interface TaggingTarget {
   symbol: string;
@@ -27,14 +29,14 @@ interface TaggingTarget {
 }
 
 /** Возраст позиции по нашим часам (см. openedAt в usePositionTags). */
-function fmtAge(iso: string | null | undefined): string {
+function fmtAge(iso: string | null | undefined, units: { d: string; h: string; m: string }): string {
   if (!iso) return '—';
   const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
   if (!Number.isFinite(min) || min < 0) return '—';
   const d = Math.floor(min / 1440);
   const h = Math.floor((min % 1440) / 60);
-  if (d > 0) return `${d} д ${h} ч`;
-  return h > 0 ? `${h} ч ${String(min % 60).padStart(2, '0')} м` : `${min} м`;
+  if (d > 0) return `${d} ${units.d} ${h} ${units.h}`;
+  return h > 0 ? `${h} ${units.h} ${String(min % 60).padStart(2, '0')} ${units.m}` : `${min} ${units.m}`;
 }
 
 /**
@@ -44,7 +46,8 @@ function fmtAge(iso: string | null | undefined): string {
  */
 function AgeCell({ position }: { position: ExchangePosition }) {
   const { data } = usePositionTags(position.symbol, position.direction);
-  return <span className="muted">{fmtAge(data?.openedAt)}</span>;
+  const { locale } = useLocaleControl();
+  return <span className="muted">{fmtAge(data?.openedAt, durationUnitLabels(locale))}</span>;
 }
 
 /** Порядок горизонтов на шкале — от короткого к длинному, как в тумблере. */
@@ -74,6 +77,7 @@ function RangeCell({ position, rangeTf }: { position: ExchangePosition; rangeTf:
 }
 
 function TagsCell({ position, onEdit }: { position: ExchangePosition; onEdit: (t: TaggingTarget) => void }) {
+  const t = useTranslations('overview');
   const direction = position.direction;
   const { data } = usePositionTags(position.symbol, direction);
   const tags = data?.tags ?? [];
@@ -83,9 +87,9 @@ function TagsCell({ position, onEdit }: { position: ExchangePosition; onEdit: (t
     <Tags tags={tags}>
       <Button
         variant="add"
-        onClick={() => onEdit({ symbol: position.symbol, direction, unrealisedPnl: pnl, tagIds: tags.map((t) => t.id) })}
+        onClick={() => onEdit({ symbol: position.symbol, direction, unrealisedPnl: pnl, tagIds: tags.map((tg) => tg.id) })}
       >
-        {tags.length === 0 ? '+ тег' : '+'}
+        {tags.length === 0 ? t('addTag') : '+'}
       </Button>
     </Tags>
   );
@@ -101,6 +105,8 @@ function TagsCell({ position, onEdit }: { position: ExchangePosition; onEdit: (t
  * только здесь. Когда открытых позиций нет — полосы нет вовсе.
  */
 export function OpenPositions() {
+  const t = useTranslations('overview');
+  const rangeTfOptions = useRangeTfOptions();
   const [tagging, setTagging] = useState<TaggingTarget | null>(null);
   const { rangeTf, setRangeTf } = useRangeTf();
   const { data } = useOpenPositions();
@@ -111,65 +117,65 @@ export function OpenPositions() {
   const totalPnl = positions.reduce((s, p) => s + (parseFloat(p.unrealisedPnl ?? '') || 0), 0);
 
   const columns: LedgerColumn<ExchangePosition>[] = [
-    { key: 'symbol', header: 'Символ', render: (p) => <span className="sym">{p.symbol}</span> },
+    { key: 'symbol', header: t('colSymbol'), render: (p) => <span className="sym">{p.symbol}</span> },
     {
       key: 'direction',
-      header: 'Напр.',
+      header: t('colDirection'),
       render: (p) => <span className={`dir${p.direction === 'short' ? ' short' : ''}`}>{p.direction}</span>,
     },
     {
       key: 'size',
-      header: 'Размер',
+      header: t('colSize'),
       align: 'right',
       cellClassName: 'n',
       // Как и у закрытых сделок — деньгами. Номинал биржа считает сама
       // (positionValue), пересчитывать его из размера и цены незачем.
-      render: (p) => <span title={`${formatQty(p.size)} в монете`}>{formatPriceGrouped(p.positionValue)}</span>,
+      render: (p) => <span title={t('qtyTitle', { qty: formatQty(p.size) })}>{formatPriceGrouped(p.positionValue)}</span>,
     },
     {
       key: 'entry',
-      header: 'Вход',
+      header: t('colEntry'),
       align: 'right',
       cellClassName: 'n',
       render: (p) => formatPriceGrouped(p.avgPrice),
     },
     {
       key: 'mark',
-      header: 'Маркировка',
+      header: t('colMark'),
       align: 'right',
       cellClassName: 'n',
       render: (p) => formatPriceGrouped(p.markPrice),
     },
     {
       key: 'liq',
-      header: 'Ликвидация',
+      header: t('colLiq'),
       align: 'right',
       cellClassName: 'n neg',
       render: (p) => (parseFloat(p.liqPrice ?? '') > 0 ? formatPriceGrouped(p.liqPrice) : '—'),
     },
     {
       key: 'age',
-      header: 'В позиции',
+      header: t('colInPosition'),
       align: 'right',
       cellClassName: 'n',
       render: (p) => <AgeCell position={p} />,
     },
     {
       key: 'range',
-      header: 'Вход в диапазоне',
+      header: t('colRangeEntry'),
       width: 150,
       render: (p) => <RangeCell position={p} rangeTf={rangeTf} />,
     },
     {
       key: 'pnl',
-      header: 'Нереализ. P&L',
+      header: t('colUnrealizedPnl'),
       align: 'right',
       cellClassName: 'n',
       render: (p) => <Money value={parseFloat(p.unrealisedPnl ?? '') || 0} large />,
     },
     {
       key: 'tags',
-      header: 'Теги',
+      header: t('colTags'),
       cellClassName: 'cell-tags',
       render: (p) => <TagsCell position={p} onEdit={setTagging} />,
     },
@@ -178,13 +184,13 @@ export function OpenPositions() {
   return (
     <div className="now">
       <Wrap>
-        <SectionHead title="Открытые позиции — сейчас">
+        <SectionHead title={t('openPositionsTitle')}>
           <Seg
-            options={RANGE_TF_OPTIONS}
+            options={rangeTfOptions}
             value={rangeTf}
             onChange={setRangeTf}
             className="seg-tight"
-            ariaLabel="Горизонт шкалы «вход в диапазоне»"
+            ariaLabel={t('rangeScaleAriaLabel')}
           />
           <Money value={totalPnl} unit="USDT" className="n" />
         </SectionHead>

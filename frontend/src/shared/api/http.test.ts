@@ -32,4 +32,16 @@ describe('resolveApiError', () => {
     setErrorMessages({ generic: 'Authorization error' });
     expect(resolveApiError({}, 'HTTP error! status: 500')).toBe('HTTP error! status: 500');
   });
+
+  it('подставляет params в переведённый шаблон по code', () => {
+    setErrorMessages({ EXCHANGE_NOT_CONNECTED: '{label} not connected', generic: 'Error' });
+    expect(
+      resolveApiError({ code: 'EXCHANGE_NOT_CONNECTED', message: 'Биржа не подключена', params: { label: 'Bybit' } }),
+    ).toBe('Bybit not connected');
+  });
+
+  it('без params в подходящем по code шаблоне ничего не подставляет', () => {
+    setErrorMessages({ TAG_NOT_FOUND: 'Tag not found', generic: 'Error' });
+    expect(resolveApiError({ code: 'TAG_NOT_FOUND', message: 'Тег не найден' })).toBe('Tag not found');
+  });
 });

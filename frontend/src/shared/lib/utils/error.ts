@@ -6,10 +6,15 @@
  * провода прилетела строка), где-то полная лесенка `instanceof` на четыре
  * строки. Разбор один и тот же везде, а вот запасное слово — своё: «не удалось
  * сохранить теги» полезнее, чем общее «ошибка».
+ *
+ * `fallback` обязателен и без дефолта: у функции нет доступа к локали (она вне
+ * React), поэтому дефолт неизбежно был бы захардкожен на одном языке — молча
+ * подсунуть его вместо перевода хуже, чем заставить каждого вызывающего
+ * передать свой `t(...)` явно.
  * @param error - что поймали
  * @param fallback - что сказать, если внятного сообщения нет
  */
-export function errorMessage(error: unknown, fallback = 'Что-то пошло не так'): string {
+export function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error) return error.message || fallback;
   if (typeof error === 'string') return error || fallback;
   return fallback;

@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
+import { useTranslations } from 'next-intl';
 import { cn } from '@/shared/lib/utils/css';
 import { Button, type ButtonVariant } from '@/shared/ui/Button';
 
@@ -92,7 +93,7 @@ function DialogActions({
   confirmDisabled,
   /** `risk` — для необратимого: цвет убытка вместо заливки. */
   confirmVariant = 'solid',
-  cancelLabel = 'Отмена',
+  cancelLabel,
 }: {
   confirmLabel: React.ReactNode;
   onConfirm: () => void;
@@ -101,10 +102,11 @@ function DialogActions({
   confirmVariant?: Extract<ButtonVariant, 'solid' | 'risk'>;
   cancelLabel?: React.ReactNode;
 }) {
+  const t = useTranslations('common');
   return (
     <DialogFooter>
       <Button variant="bare" onClick={onCancel}>
-        {cancelLabel}
+        {cancelLabel ?? t('cancel')}
       </Button>
       <Button variant={confirmVariant} disabled={confirmDisabled} onClick={onConfirm}>
         {confirmLabel}

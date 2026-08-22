@@ -1,6 +1,8 @@
 'use client';
 
-import { TAG_TYPES, TAG_TYPE_LABELS, type TagItem, type TagType } from '@/entities/tag/api/types';
+import { useTranslations } from 'next-intl';
+import { TAG_TYPES, type TagItem, type TagType } from '@/entities/tag/api/types';
+import { useTagTypeLabels } from './useTagTypeLabels';
 import { Button } from '@/shared/ui/Button';
 import { FieldGroup } from '@/shared/ui/Field';
 
@@ -21,12 +23,13 @@ export function TagPicker({
   selected: Set<string>;
   onToggle: (id: string) => void;
 }) {
+  const t = useTranslations('tags');
   return (
     <>
       {TAG_TYPES.map((type) => (
         <TagPickerGroup key={type} type={type} tags={tags} selected={selected} onToggle={onToggle} />
       ))}
-      {tags.length === 0 && <p className="muted">Тегов пока нет — их создают на странице «Теги».</p>}
+      {tags.length === 0 && <p className="muted">{t('noTagsYet')}</p>}
     </>
   );
 }
@@ -42,11 +45,12 @@ function TagPickerGroup({
   selected: Set<string>;
   onToggle: (id: string) => void;
 }) {
+  const typeLabels = useTagTypeLabels();
   const group = tags.filter((t) => (t.type ?? 'setup') === type);
   if (group.length === 0) return null;
 
   return (
-    <FieldGroup label={TAG_TYPE_LABELS[type]}>
+    <FieldGroup label={typeLabels[type]}>
       <div>
         {group.map((t) => (
           <Button

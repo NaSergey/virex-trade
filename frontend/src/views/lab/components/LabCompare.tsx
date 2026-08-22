@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import type { LabAgg } from '../api/hooks';
 import { formatMoney, moneyClass } from '@/shared/lib/utils/format';
 
@@ -9,30 +10,31 @@ import { formatMoney, moneyClass } from '@/shared/lib/utils/format';
  * значит ничего: он может быть и лучше обычного, и хуже.
  */
 export function LabCompare({ filtered, baseline }: { filtered?: LabAgg; baseline?: LabAgg }) {
+  const t = useTranslations('lab');
   const cells = [
     {
-      label: 'Сделок',
+      label: t('trades'),
       value: filtered ? String(filtered.trades) : '—',
       base: baseline ? String(baseline.trades) : '—',
       delta: pct(filtered?.trades, baseline?.trades),
       tone: undefined as string | undefined,
     },
     {
-      label: 'Винрейт',
+      label: t('winrate'),
       value: filtered ? `${filtered.winRate.toFixed(1)} %` : '—',
       base: baseline ? `${baseline.winRate.toFixed(1)} %` : '—',
       delta: pct(filtered?.winRate, baseline?.winRate),
       tone: undefined,
     },
     {
-      label: 'Чистый P&L',
+      label: t('netPnl'),
       value: filtered ? formatMoney(filtered.totalPnl) : '—',
       base: baseline ? formatMoney(baseline.totalPnl) : '—',
       delta: pct(filtered?.totalPnl, baseline?.totalPnl),
       tone: filtered ? moneyClass(filtered.totalPnl) : undefined,
     },
     {
-      label: 'Средняя',
+      label: t('average'),
       value: filtered ? formatMoney(filtered.avgPnl) : '—',
       base: baseline ? formatMoney(baseline.avgPnl) : '—',
       delta: pct(filtered?.avgPnl, baseline?.avgPnl),

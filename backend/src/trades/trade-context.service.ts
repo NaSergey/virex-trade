@@ -383,7 +383,7 @@ export class TradeContextService {
       where: { id: tradeId },
       include: { context: true },
     });
-    if (!trade || trade.userId !== userId) throw new NotFoundException('Сделка не найдена');
+    if (!trade || trade.userId !== userId) throw new NotFoundException({ message: 'Сделка не найдена', code: 'TRADE_NOT_FOUND' });
 
     const { interval, tfMs, window, lookback } = RANGE_TF_SPEC[tf];
     const { ms: anchorMs, basis } = entryTimeOf(trade);

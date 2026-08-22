@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useTranslations } from 'next-intl';
 import type { SentimentPoint } from '../api/hooks';
+import { useLocaleControl, type Locale } from '@/shared/i18n';
 
 const W = 900;
 const PT = 18;
@@ -16,10 +18,10 @@ const MIN_PX = 150;
 const MAX_PX = 260;
 
 /** $6.1B / $840M — компактные доллары для подписи. */
-export function fmtUsdCompact(v: number): string {
+export function fmtUsdCompact(v: number, locale: Locale = 'ru'): string {
   if (v >= 1e9) return `$${(v / 1e9).toFixed(1)} B`;
   if (v >= 1e6) return `$${(v / 1e6).toFixed(0)} M`;
-  return `$${Math.round(v).toLocaleString('ru-RU')}`;
+  return `$${Math.round(v).toLocaleString(locale === 'en' ? 'en-US' : 'ru-RU')}`;
 }
 
 /**
@@ -31,6 +33,9 @@ export function fmtUsdCompact(v: number): string {
  * данных нет. Его текущее значение стоит числом в коэффициентах выше.
  */
 export function SentimentChart({ data, height = 180 }: { data: SentimentPoint[]; height?: number }) {
+  const t = useTranslations('analytics');
+  const { locale } = useLocaleControl();
+  const intlLocale = locale === 'en' ? 'en-US' : 'ru-RU';
   const boxRef = useRef<HTMLDivElement>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [boxW, setBoxW] = useState(0);
@@ -85,7 +90,7 @@ export function SentimentChart({ data, height = 180 }: { data: SentimentPoint[];
     };
   }, [data, vbHeight, pt, pb]);
 
-  if (!chart) return <p className="muted">Данных за период нет</p>;
+  if (!chart) return <p className="muted">{t('noDataForPeriod')}</p>;
 
   const onMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     const rect = boxRef.current?.getBoundingClientRect();
@@ -94,11 +99,16 @@ export function SentimentChart({ data, height = 180 }: { data: SentimentPoint[];
     setHoverIdx(Math.max(0, Math.min(data.length - 1, Math.round(frac * (data.length - 1)))));
   };
 
-  const hover = hoverIdx != null ? { point: data[hoverIdx], value: chart.values[hoverIdx] } : null;
+  // Не hoverIdx напрямую: ряд под курсором меняется (смена периода или
+  // символа), а индекс наведения переживает смену и указывает в точку, которой
+  // в новом ряду уже нет. Проверяем на каждом проходе, а не только в onMove.
+  const idx = hoverIdx != null && hoverIdx < data.length ? hoverIdx : null;
+  const hover = idx != null ? { point: data[idx], value: chart.values[idx] } : null;
+  const hx = idx != null ? chart.x(idx) : 0;
 
   return (
     <div ref={boxRef} onPointerMove={onMove} onPointerLeave={() => setHoverIdx(null)}>
-      <svg viewBox={`0 0 ${W} ${vbHeight}`} style={{ display: 'block', width: '100%', height: 'auto' }} role="img" aria-label="Доля лонг-аккаунтов во времени">
+      <svg viewBox={`0 0 ${W} ${vbHeight}`} style={{ display: 'block', width: '100%', height: 'auto' }} role="img" aria-label={t('longShareAriaLabel')}>
         <line
           x1="0"
           y1={chart.neutralY.toFixed(1)}
@@ -115,7 +125,7 @@ export function SentimentChart({ data, height = 180 }: { data: SentimentPoint[];
           fontSize={(11 * u).toFixed(1)}
           fontFamily="var(--font-mono)"
         >
-          50 % — нейтрально
+          {t('neutralLabel')}
         </text>
         {/* Толщина линий — тоже в единицах холста: на телефоне полуторная
             обращалась в шесть десятых пикселя, и кривая выцветала. */}
@@ -130,30 +140,34 @@ export function SentimentChart({ data, height = 180 }: { data: SentimentPoint[];
         {hover && (
           <g>
             <line
-              x1={chart.x(hoverIdx!).toFixed(1)}
+              x1={hx.toFixed(1)}
               y1={(pt - 10 * u).toFixed(1)}
-              x2={chart.x(hoverIdx!).toFixed(1)}
+              x2={hx.toFixed(1)}
               y2={(vbHeight - pb + 10 * u).toFixed(1)}
               stroke="var(--color-line-strong)"
               strokeWidth={u.toFixed(2)}
               shapeRendering="crispEdges"
             />
             <text
-              x={(chart.x(hoverIdx!) > W * 0.7 ? chart.x(hoverIdx!) - 8 * u : chart.x(hoverIdx!) + 8 * u).toFixed(1)}
+              x={(hx > W * 0.7 ? hx - 8 * u : hx + 8 * u).toFixed(1)}
               y={(pt - 2 * u).toFixed(1)}
-              textAnchor={chart.x(hoverIdx!) > W * 0.7 ? 'end' : 'start'}
+              textAnchor={hx > W * 0.7 ? 'end' : 'start'}
               fill="var(--color-fg)"
               fontSize={(12 * u).toFixed(1)}
               fontFamily="var(--font-mono)"
             >
-              лонг {hover.value.toFixed(1)} % ·{' '}
-              {new Date(hover.point.timestamp).toLocaleString('ru-RU', {
-                day: '2-digit',
-                month: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
+              {t('hoverLabel', {
+                value: hover.value.toFixed(1),
+                date: new Date(hover.point.timestamp).toLocaleString(intlLocale, {
+                  day: '2-digit',
+                  month: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }),
               })}
-              {hover.point.openInterestUsd > 0 ? ` · OI ${fmtUsdCompact(hover.point.openInterestUsd)}` : ''}
+              {hover.point.openInterestUsd > 0
+                ? t('oiSuffix', { oi: fmtUsdCompact(hover.point.openInterestUsd, locale) })
+                : ''}
             </text>
           </g>
         )}

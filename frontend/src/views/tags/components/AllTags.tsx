@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Tag, TAG_TYPE_LABELS, useDeleteTag, type TagBucket } from '@/entities/tag';
+import { useTranslations } from 'next-intl';
+import { Tag, useDeleteTag, useTagTypeLabels, type TagBucket } from '@/entities/tag';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Field';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
@@ -35,6 +36,8 @@ export function AllTags({
   onEditTag: (tagId: string) => void;
   askConfirm: (request: ConfirmRequest) => void;
 }) {
+  const t = useTranslations('tags');
+  const typeLabels = useTagTypeLabels();
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'trades', dir: -1 });
   const deleteTag = useDeleteTag();
@@ -44,48 +47,48 @@ export function AllTags({
   // пересечения — считаем её, а не показываем сноску всем подряд: у того, кто
   // ставит по одному тегу, суммы сходятся и предупреждать не о чем.
   const overlapping = useMemo(
-    () => tags.filter((t) => t.id != null).reduce((sum, t) => sum + t.trades, 0) > taggedTrades,
+    () => tags.filter((tag) => tag.id != null).reduce((sum, tag) => sum + tag.trades, 0) > taggedTrades,
     [tags, taggedTrades],
   );
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const list = tags.filter((t) => t.name.toLowerCase().includes(q));
+    const list = tags.filter((tag) => tag.name.toLowerCase().includes(q));
     return [...list].sort((a, b) => (a[sort.key] - b[sort.key]) * sort.dir);
   }, [tags, search, sort]);
 
   const columns: LedgerColumn<TagBucket>[] = [
     {
       key: 'name',
-      header: 'Тег',
-      render: (t) =>
+      header: t('colName'),
+      render: (row) =>
         // Строка «без тегов» — не тег: её нельзя ни переименовать, ни удалить.
-        t.id == null ? (
-          <span className="muted">{t.name}</span>
+        row.id == null ? (
+          <span className="muted">{row.name}</span>
         ) : (
           <Button
             variant="none"
-            title="Переименовать или сменить категорию"
+            title={t('renameTitle')}
             style={{ appearance: 'none', background: 'none', border: 0, padding: 0, cursor: 'pointer' }}
-            onClick={() => onEditTag(t.id!)}
+            onClick={() => onEditTag(row.id!)}
           >
-            <Tag name={t.name} color={t.color} />
+            <Tag name={row.name} color={row.color} />
           </Button>
         ),
     },
     {
       key: 'type',
-      header: 'Категория',
-      render: (t) => <span className="muted">{t.type ? TAG_TYPE_LABELS[t.type] : '—'}</span>,
+      header: t('colCategory'),
+      render: (row) => <span className="muted">{row.type ? typeLabels[row.type] : '—'}</span>,
     },
-    { key: 'trades', header: 'Сделок', align: 'right', cellClassName: 'n', sortKey: 'trades', render: (t) => t.trades },
+    { key: 'trades', header: t('colTrades'), align: 'right', cellClassName: 'n', sortKey: 'trades', render: (row) => row.trades },
     {
       key: 'winRate',
-      header: 'Винрейт',
+      header: t('colWinrate'),
       align: 'right',
       cellClassName: 'n',
       sortKey: 'winRate',
-      render: (t) => `${t.winRate.toFixed(1)} %`,
+      render: (row) => `${row.winRate.toFixed(1)} %`,
     },
     {
       key: 'profitFactor',
@@ -93,44 +96,44 @@ export function AllTags({
       align: 'right',
       cellClassName: 'n',
       sortKey: 'profitFactor',
-      render: (t) => (
-        <span className={t.profitFactor >= 1 ? 'pos' : 'neg'}>
-          {formatProfitFactor(t.profitFactor, t.wins, t.losses)}
+      render: (row) => (
+        <span className={row.profitFactor >= 1 ? 'pos' : 'neg'}>
+          {formatProfitFactor(row.profitFactor, row.wins, row.losses)}
         </span>
       ),
     },
     {
       key: 'avgWin',
-      header: 'Ср. прибыль',
+      header: t('colAvgWin'),
       align: 'right',
       cellClassName: 'n pos',
       sortKey: 'avgWin',
-      render: (t) => formatMoney(t.avgWin),
+      render: (row) => formatMoney(row.avgWin),
     },
     {
       key: 'avgLoss',
-      header: 'Ср. убыток',
+      header: t('colAvgLoss'),
       align: 'right',
       cellClassName: 'n neg',
       sortKey: 'avgLoss',
-      render: (t) => formatMoney(t.avgLoss),
+      render: (row) => formatMoney(row.avgLoss),
     },
     {
       key: 'totalPnl',
-      header: 'Итог',
+      header: t('colTotal'),
       align: 'right',
       cellClassName: 'n',
       sortKey: 'totalPnl',
-      render: (t) => <Money value={t.totalPnl} large />,
+      render: (row) => <Money value={row.totalPnl} large />,
     },
     {
       key: 'spark',
-      header: 'Динамика',
+      header: t('colDynamics'),
       width: 84,
-      render: (t) => (
+      render: (row) => (
         <Sparkline
-          values={t.equity.map((p) => p.value)}
-          color={t.totalPnl >= 0 ? 'var(--color-up)' : 'var(--color-down)'}
+          values={row.equity.map((p) => p.value)}
+          color={row.totalPnl >= 0 ? 'var(--color-up)' : 'var(--color-down)'}
         />
       ),
     },
@@ -138,22 +141,22 @@ export function AllTags({
       key: 'del',
       width: 20,
       align: 'right',
-      render: (t) =>
-        t.id == null ? null : (
+      render: (row) =>
+        row.id == null ? null : (
           <Button
             variant="bare"
-            title="Удалить тег"
+            title={t('deleteTagTitle')}
             onClick={() =>
               askConfirm({
-                title: `Удалить тег «${t.name}»?`,
-                subtitle: 'Тег снимется со всех сделок, где он стоит.',
+                title: t('deleteTagConfirmTitle', { name: row.name }),
+                subtitle: t('deleteTagSubtitle'),
                 consequences: [
-                  `тег исчезнет с ${t.trades} сделок`,
-                  'комбинации будут пересчитаны',
-                  'отменить нельзя',
+                  t('deleteTagConsequence1', { n: row.trades }),
+                  t('deleteTagConsequence2'),
+                  t('deleteConsequenceIrreversible'),
                 ],
-                word: 'УДАЛИТЬ',
-                onConfirm: () => t.id && deleteTag.mutate(t.id),
+                word: t('deleteWord'),
+                onConfirm: () => row.id && deleteTag.mutate(row.id),
               })
             }
           >
@@ -171,8 +174,8 @@ export function AllTags({
           списку целиком, поэтому и стоят над ним вместе, а не порознь. */}
       <div className="newrow">
         <Input
-          placeholder="поиск по названию…"
-          aria-label="Поиск по названию тега"
+          placeholder={t('searchPlaceholder')}
+          aria-label={t('searchAriaLabel')}
           style={{ width: 190 }}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -183,7 +186,7 @@ export function AllTags({
       <LedgerTable
         columns={columns}
         rows={rows}
-        rowKey={(t) => t.id ?? t.name}
+        rowKey={(row) => row.id ?? row.name}
         minWidth={900}
         sort={sort}
         onSort={(key) =>
@@ -191,21 +194,14 @@ export function AllTags({
             s.key === key ? { key: s.key, dir: (s.dir * -1) as 1 | -1 } : { key: key as SortKey, dir: -1 },
           )
         }
-        empty={search ? 'Ни один тег не подошёл под поиск.' : 'За этот период сделок с тегами нет.'}
+        empty={search ? t('emptySearch') : t('emptyNoTags')}
       />
 
       {/* Без этой оговорки первый же человек, сложивший столбец P&L, решит, что
           у него сломана математика. Сделка не делится между своими тегами —
           она целиком принадлежит каждому, иначе «пробой» приносил бы треть
           того, что принёс на самом деле, и число не значило бы ничего. */}
-      {overlapping && (
-        <p className="foot">
-          У сделки может быть несколько тегов, и в каждую строку она попадает <b>целиком</b>.
-          Поэтому строки пересекаются, а столбцы «Сделки» и «P&L» не суммируются в общий итог по
-          периоду — каждая строка отвечает на вопрос «как торгуется с этим тегом», а не «какая
-          доля результата приходится на него».
-        </p>
-      )}
+      {overlapping && <p className="foot">{t('overlapNote')}</p>}
     </div>
   );
 }

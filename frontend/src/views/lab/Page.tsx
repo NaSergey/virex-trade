@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useLab, type LabFilters as LabFiltersType } from './api/hooks';
 import { Wrap } from '@/shared/ui/Wrap';
 import { SectionHead } from '@/shared/ui/SectionHead';
@@ -39,6 +40,7 @@ const RANGE_TF_LABELS: Record<string, string> = Object.fromEntries(
  * собой переименование по проводу.
  */
 export const LabPage = () => {
+  const t = useTranslations('lab');
   const period = usePeriodFilter();
   const state = useLabFilters();
 
@@ -54,7 +56,7 @@ export const LabPage = () => {
 
   return (
     <Wrap page>
-      <PeriodStrip spaced period={period} title="Выборка из периода" trades={data?.baseline.trades} />
+      <PeriodStrip spaced period={period} title={t('periodTitle')} trades={data?.baseline.trades} />
 
       {/* Шапки страницы нет вовсе: раздел уже назван вкладкой в верхней рейке,
           а рейка периода над ней говорит, за что считаем. Название и абзац под
@@ -69,9 +71,8 @@ export const LabPage = () => {
             {equity.length > 1 ? (
               <EquityChart data={equity} height={EQUITY_H} />
             ) : (
-              <EmptyState title={isLoading ? 'Считаем…' : 'Ни одна сделка не подошла'}>
-                Условия взаимоисключающие. Снимите одно — рядом с каждым видно, сколько сделок оно
-                оставляет.
+              <EmptyState title={isLoading ? t('calculating') : t('noTradesMatched')}>
+                {t('mutuallyExclusiveNote')}
               </EmptyState>
             )}
           </div>
@@ -81,7 +82,7 @@ export const LabPage = () => {
               над пустым местом обещают список, которого нет. */}
           {trades.length > 0 && (
             <div className="lab-sec">
-              <SectionHead title="Подходящие сделки" />
+              <SectionHead title={t('matchingTrades')} />
               <TradesTable
                 trades={trades}
                 isLoading={isLoading}
