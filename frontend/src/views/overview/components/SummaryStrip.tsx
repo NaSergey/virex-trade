@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { useTranslations } from 'next-intl';
 import type { TradeStats } from '@/entities/trade';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import { formatMoney, formatProfitFactor, moneyClass } from '@/shared/lib/utils/format';
@@ -43,10 +44,11 @@ function GaugeBar({ fill, threshold }: Gauge) {
  * независимых плашек.
  */
 export function SummaryStrip({ stats }: { stats: TradeStats }) {
+  const t = useTranslations('overview');
   const profitFactor = formatProfitFactor(stats.profitFactor, stats.wins, stats.losses);
   const metrics: Metric[] = [
     { label: 'Net P&L · USDT', value: formatMoney(stats.totalPnl), tone: moneyClass(stats.totalPnl) },
-    { label: 'Сделок', value: String(stats.totalTrades) },
+    { label: t('trades'), value: String(stats.totalTrades) },
     {
       label: 'Winrate',
       value: `${stats.winRate.toFixed(1)} %`,
@@ -71,8 +73,8 @@ export function SummaryStrip({ stats }: { stats: TradeStats }) {
     },
     { label: 'Avg trade · USDT', value: formatMoney(stats.avgPnl), tone: moneyClass(stats.avgPnl) },
     { label: 'Fees · USDT', value: formatMoney(-Math.abs(stats.totalFees)) },
-    { label: 'Лучшая · USDT', value: formatMoney(stats.bestPnl), tone: moneyClass(stats.bestPnl) },
-    { label: 'Худшая · USDT', value: formatMoney(stats.worstPnl), tone: moneyClass(stats.worstPnl) },
+    { label: t('best'), value: formatMoney(stats.bestPnl), tone: moneyClass(stats.bestPnl) },
+    { label: t('worst'), value: formatMoney(stats.worstPnl), tone: moneyClass(stats.worstPnl) },
   ];
 
   return (

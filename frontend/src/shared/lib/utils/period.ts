@@ -1,5 +1,10 @@
+const WEEKDAY_LABELS_RU = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+const WEEKDAY_LABELS_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
 /** Подписи дней недели по индексу JS getDay(): 0 — воскресенье. */
-export const WEEKDAY_LABELS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+export function weekdayLabels(locale: 'ru' | 'en'): string[] {
+  return locale === 'en' ? WEEKDAY_LABELS_EN : WEEKDAY_LABELS_RU;
+}
 
 /** Порядок показа: неделя начинается с понедельника, а не с getDay()-нуля. */
 export const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
@@ -31,11 +36,14 @@ export function daysSinceDefault(): number {
  * датами, за которые он посчитан, — иначе «30 дней» остаётся абстракцией, и по
  * снимку экрана уже не сказать, какой это был месяц.
  * @param days - глубина периода в днях; 0 — всё время
+ * @param locale - BCP-47 локаль для Intl (по умолчанию 'ru-RU')
+ * @param allTimeLabel - что показать при days <= 0 (по умолчанию русский — для
+ *   мест, ещё не подключивших перевод)
  */
-export function formatPeriodRange(days: number): string {
-  if (days <= 0) return 'всё время';
+export function formatPeriodRange(days: number, locale = 'ru-RU', allTimeLabel = 'всё время'): string {
+  if (days <= 0) return allTimeLabel;
   const to = new Date();
   const from = new Date(to.getTime() - (days - 1) * 86400000);
-  const short = (d: Date) => d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }).replace('.', '');
+  const short = (d: Date) => d.toLocaleDateString(locale, { day: 'numeric', month: 'short' }).replace('.', '');
   return `${short(from)} — ${short(to)} ${to.getFullYear()}`;
 }

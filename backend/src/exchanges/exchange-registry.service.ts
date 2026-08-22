@@ -43,7 +43,11 @@ export class ExchangeRegistry {
     if (!adapter) {
       // Reachable if a connection row outlives its adapter (an exchange removed
       // from the build while users still have it connected).
-      throw new BadRequestException(`Биржа «${id}» не поддерживается этой версией приложения`);
+      throw new BadRequestException({
+        message: `Биржа «${id}» не поддерживается этой версией приложения`,
+        code: 'EXCHANGE_UNSUPPORTED',
+        params: { exchange: id },
+      });
     }
     return adapter;
   }

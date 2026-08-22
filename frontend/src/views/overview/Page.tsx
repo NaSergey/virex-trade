@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { useTradeStats, useTimeStats, useTrades, type Trade } from '@/entities/trade';
 import { Wrap } from '@/shared/ui/Wrap';
 import { Pagination } from '@/shared/ui/Pagination';
@@ -25,6 +26,7 @@ const PAGE_SIZE = 10;
  * возникает от предыдущего.
  */
 export function OverviewPage() {
+  const t = useTranslations('overview');
   const period = usePeriodFilter();
   const [page, setPage] = useState(1);
   const [taggingTrade, setTaggingTrade] = useState<Trade | null>(null);
@@ -71,20 +73,20 @@ export function OverviewPage() {
           {/* Колонка — flex, чтобы список дней (.wk-list) забрал всю её высоту
               и кончился на одной линии с маргиналиями справа. */}
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <h2>По дням недели</h2>
+            <h2>{t('byWeekday')}</h2>
             {timeData ? <WeekdayRows buckets={timeData.byWeekday} /> : <Skeleton />}
           </div>
           <aside className="marg">
-            <h2>По часам входа</h2>
+            <h2>{t('byHour')}</h2>
             <HourBars buckets={timeData?.byHour ?? []} />
-            <p className="foot">Высота — число сделок, заливка — винрейт.</p>
+            <p className="foot">{t('hourBarsCaption')}</p>
             {timeData && <HoldTimes duration={timeData.duration} peak={curve?.peak} />}
           </aside>
         </div>
       </Wrap>
 
       <Wrap page className="trades" style={{ marginTop: 'var(--s5)' }}>
-        <h2>Закрытые сделки</h2>
+        <h2>{t('closedTrades')}</h2>
         <TradesTable
           trades={tradesData?.trades ?? []}
           isLoading={tradesLoading && !tradesData}

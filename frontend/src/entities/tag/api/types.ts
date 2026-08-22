@@ -3,11 +3,8 @@
 // separately.
 export const TAG_TYPES = ['setup', 'emotion', 'mistake'] as const;
 export type TagType = (typeof TAG_TYPES)[number];
-export const TAG_TYPE_LABELS: Record<TagType, string> = {
-  setup: 'Сетап',
-  emotion: 'Эмоция',
-  mistake: 'Ошибка',
-};
+// Подписи категорий — в useTagTypeLabels (entities/tag/ui): нужен useTranslations,
+// а этот файл — чистые типы и значения, без 'use client'.
 
 export interface TagItem {
   id: string;

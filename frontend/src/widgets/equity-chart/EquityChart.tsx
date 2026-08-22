@@ -8,23 +8,15 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
+import { useTranslations } from 'next-intl';
 import type { EquityPoint } from '@/entities/trade';
 import { formatMoney } from '@/shared/lib/utils/format';
-import { buildEquityGeometry, dipAt, W } from './model/geometry';
+import { useLocaleControl } from '@/shared/i18n';
+import { buildEquityGeometry, dipAt, hoverIndex, W } from './model/geometry';
 import { DrawdownCurve, DrawdownLayer, HoverCursor } from './ui/layers';
 
-const fmtDate = (unixSec: number) =>
-  new Date(unixSec * 1000).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }).replace('.', '');
-
-/** «2 сделки», а не «2 сделок»: числа в табличке читают глазами, а не парсером. */
-const trades = (n: number) => {
-  const tail = n % 100;
-  if (tail > 10 && tail < 20) return `${n} сделок`;
-  const last = n % 10;
-  if (last === 1) return `${n} сделка`;
-  if (last >= 2 && last <= 4) return `${n} сделки`;
-  return `${n} сделок`;
-};
+const fmtDate = (unixSec: number, locale: string) =>
+  new Date(unixSec * 1000).toLocaleDateString(locale, { day: 'numeric', month: 'short' }).replace('.', '');
 
 /** Зазор между точкой на кривой и табличкой. */
 const GAP = 12;
@@ -80,6 +72,9 @@ function readoutAt(point: { x: number; y: number }, u: number, boxW: number) {
  * `model/geometry`, как это выглядит — `ui/layers`.
  */
 export function EquityChart({ data, height = 300 }: { data: EquityPoint[]; height?: number }) {
+  const t = useTranslations('equityChart');
+  const { locale } = useLocaleControl();
+  const intlLocale = locale === 'en' ? 'en-US' : 'ru-RU';
   const boxRef = useRef<HTMLDivElement>(null);
   // Кривых на странице две (обзор и выборка) — id градиента должен быть свой,
   // иначе вторая подхватит растяжку первой.
@@ -122,12 +117,25 @@ export function EquityChart({ data, height = 300 }: { data: EquityPoint[]; heigh
     setHoverIdx(Math.max(0, Math.min(data.length - 1, Math.round(frac * (data.length - 1)))));
   };
 
-  const hover = hoverIdx != null ? { point: chart.points[hoverIdx], ...data[hoverIdx] } : null;
+  // Не hoverIdx напрямую: ряд под курсором меняется (смена фильтров на
+  // выборке), и прежний индекс указывал бы в сделку, которой в нём уже нет.
+  const idx = hoverIndex(chart, hoverIdx);
+  const hover = idx != null ? { point: chart.points[idx], ...data[idx] } : null;
   const worst = chart.worstDrawdown;
 
   // Просадка — только если точка и правда внутри ямы, и та самая, в которую
   // попал курсор, а не худшая за период. На подъёме второй строки нет вовсе.
-  const dip = hoverIdx != null ? dipAt(chart, hoverIdx) : null;
+  const dip = idx != null ? dipAt(chart, idx) : null;
+
+  const ariaLabel =
+    t('ariaBase', { pnl: formatMoney(chart.last.value), n: data.length }) +
+    (worst
+      ? t('ariaDrawdowns', {
+          count: chart.underwater.length,
+          worst: formatMoney(-worst.depth),
+          n: worst.endIdx - worst.fromIdx,
+        }) + (worst.recovered ? t('ariaRecovered') : t('ariaNotRecovered'))
+      : '');
 
   return (
     <div
@@ -140,13 +148,7 @@ export function EquityChart({ data, height = 300 }: { data: EquityPoint[]; heigh
         viewBox={`0 0 ${W} ${vbHeight}`}
         style={{ display: 'block', width: '100%', height: 'auto' }}
         role="img"
-        aria-label={
-          `Накопленный P&L: ${formatMoney(chart.last.value)} USDT за ${data.length} сделок` +
-          (worst
-            ? `; просадок ${chart.underwater.length}, худшая ${formatMoney(-worst.depth)} на протяжении ${worst.endIdx - worst.fromIdx} сделок` +
-              (worst.recovered ? ', отыграна' : ', не отыграна')
-            : '')
-        }
+        aria-label={ariaLabel}
       >
         <line
           x1="0"
@@ -189,12 +191,15 @@ export function EquityChart({ data, height = 300 }: { data: EquityPoint[]; heigh
         <div className="eq-readout" style={readoutAt(hover.point, u, boxW)}>
           <div className="n">
             {formatMoney(hover.value)}
-            <span className="eq-readout-dim"> · {fmtDate(hover.time)}</span>
+            <span className="eq-readout-dim"> · {fmtDate(hover.time, intlLocale)}</span>
           </div>
           {dip && (
             <div className="n eq-readout-dip">
-              {formatMoney(-dip.depth)} просадка за {trades(dip.endIdx - dip.fromIdx)}
-              {dip.recovered ? '' : ', не отыграна'}
+              {t('dipLabel', {
+                amount: formatMoney(-dip.depth),
+                trades: t('dipTrades', { n: dip.endIdx - dip.fromIdx }),
+              })}
+              {dip.recovered ? '' : t('ariaNotRecovered')}
             </div>
           )}
         </div>

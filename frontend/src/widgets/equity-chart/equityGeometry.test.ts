@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildEquityGeometry, dipAt } from './model/geometry';
+import { buildEquityGeometry, dipAt, hoverIndex } from './model/geometry';
 import type { EquityPoint } from '@/entities/trade';
 
 const points = (...values: number[]): EquityPoint[] =>
@@ -89,5 +89,24 @@ describe('buildEquityGeometry', () => {
     const g = buildEquityGeometry(points(42), 300)!;
     expect(g.points[0].x).toBe(680);
     expect(g.area).toBe('');
+  });
+});
+
+describe('hoverIndex', () => {
+  it('отбрасывает индекс, переживший смену ряда', () => {
+    // Курсор стоял на 7-й сделке, фильтр оставил три: точки под индексом 6 в
+    // новой геометрии нет, и табличка наведения обязана исчезнуть, а не читать
+    // координаты у пустоты.
+    const g = buildEquityGeometry(points(10, 20, 30), 300)!;
+    expect(hoverIndex(g, 6)).toBeNull();
+    expect(hoverIndex(g, 3)).toBeNull();
+    expect(hoverIndex(g, -1)).toBeNull();
+    expect(hoverIndex(g, null)).toBeNull();
+  });
+
+  it('индекс внутри ряда проходит как есть', () => {
+    const g = buildEquityGeometry(points(10, 20, 30), 300)!;
+    expect(hoverIndex(g, 0)).toBe(0);
+    expect(hoverIndex(g, 2)).toBe(2);
   });
 });

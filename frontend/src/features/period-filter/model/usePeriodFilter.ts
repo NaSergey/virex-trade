@@ -3,12 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { daysSince } from '@/shared/lib/utils/period';
 
-export const PERIODS = [
-  { label: '7 дней', value: 7 },
-  { label: '30 дней', value: 30 },
-  { label: '90 дней', value: 90 },
-  { label: 'Всё время', value: 0 },
-] as const;
+// Подписи — в PeriodRail: там доступен t() из next-intl, а значения периода
+// (в днях) — часть модели фильтра и от локали не зависят.
+export const PERIOD_VALUES = [7, 30, 90, 0] as const;
 
 const DAYS_STORAGE_KEY = 'virex:stats:days';
 const CUSTOM_DATE_STORAGE_KEY = 'virex:stats:customDateFrom';

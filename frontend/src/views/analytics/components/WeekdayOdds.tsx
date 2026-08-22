@@ -1,6 +1,8 @@
 'use client';
 
-import { WEEKDAY_LABELS, WEEKDAY_ORDER } from '@/shared/lib/utils/period';
+import { useTranslations } from 'next-intl';
+import { weekdayLabels, WEEKDAY_ORDER } from '@/shared/lib/utils/period';
+import { useLocaleControl } from '@/shared/i18n';
 import type { MarketCorrelation } from '../api/market-events-hooks';
 
 /**
@@ -11,8 +13,12 @@ import type { MarketCorrelation } from '../api/market-events-hooks';
  * «вторник 57 % рост» читается как торговый сигнал.
  */
 export function WeekdayOdds({ corr }: { corr?: MarketCorrelation }) {
+  const t = useTranslations('analytics');
+  const { locale } = useLocaleControl();
+  const WEEKDAY_LABELS = weekdayLabels(locale);
+
   if (!corr || corr.totalDays === 0) {
-    return <p className="muted">Нет данных</p>;
+    return <p className="muted">{t('noData')}</p>;
   }
 
   return (
@@ -27,7 +33,7 @@ export function WeekdayOdds({ corr }: { corr?: MarketCorrelation }) {
               {b?.days ? `${b.winRateLongPct.toFixed(0)} %` : '—'}
               <span className="lbl" style={{ letterSpacing: '.06em' }}>
                 {' '}
-                рост
+                {t('growthWord')}
               </span>
             </span>
             <span className={`evt-i ${b?.days ? (up ? 'pos' : 'neg') : ''}`}>
@@ -36,10 +42,7 @@ export function WeekdayOdds({ corr }: { corr?: MarketCorrelation }) {
           </div>
         );
       })}
-      <p className="foot">
-        Доля дней, закрывшихся выше открытия, и средний ход за {corr.totalDays} дней. Отклонение от 50 % на
-        такой выборке — намёк, а не закономерность.
-      </p>
+      <p className="foot">{t('weekdayFooterNote', { days: corr.totalDays })}</p>
     </>
   );
 }

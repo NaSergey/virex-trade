@@ -20,7 +20,8 @@ export function ErrorNote({
 }: {
   /** Что поймали; null/undefined — компонент не рендерится. */
   error: unknown;
-  fallback?: string;
+  /** Обязателен: без него запасной текст неоткуда перевести (см. errorMessage). */
+  fallback: string;
   as?: 'p' | 'span';
   style?: CSSProperties;
 }) {

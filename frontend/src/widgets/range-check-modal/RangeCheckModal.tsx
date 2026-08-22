@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@/shared/ui/dialog';
 import { Seg } from '@/shared/ui/Seg';
 import { Button } from '@/shared/ui/Button';
@@ -10,6 +11,7 @@ import { Lookup, KeyValue } from '@/shared/ui/Lookup';
 import { useRangeCheck, type RangeTf, type Trade } from '@/entities/trade';
 import { formatPriceGrouped } from '@/shared/lib/utils/format';
 import { formatRangePos } from '@/shared/lib/utils/range';
+import { useLocaleControl } from '@/shared/i18n';
 import { RangeCheckChart } from './RangeCheckChart';
 
 const TF_OPTIONS = [
@@ -22,22 +24,6 @@ const TF_OPTIONS = [
 
 const TF_HOURS: Record<RangeTf, number> = { '15m': 0.25, '30m': 0.5, '1h': 1, '4h': 4, '1d': 24 };
 
-
-/**
- * Длина коридора человеческими словами: «за сутки» вместо «24 свечи 1H».
- * Сколько там свечей и какого таймфрейма — вопрос реализации, а не то, что
- * человек хочет знать, глядя на два числа.
- */
-function windowAge(tf: RangeTf, candles: number): string {
-  const hours = candles * TF_HOURS[tf];
-  if (hours <= 24) return hours === 24 ? 'за сутки' : `за ${hours} ч`;
-  const days = Math.round(hours / 24);
-  const last = days % 10;
-  const teen = days % 100 >= 11 && days % 100 <= 14;
-  const word = !teen && last === 1 ? 'день' : !teen && last >= 2 && last <= 4 ? 'дня' : 'дней';
-  return `за ${days} ${word}`;
-}
-
 /**
  * «Диапазон входа» глазами: свечи таймфрейма, границы коридора, в котором цена
  * ходила до входа, и метки входа с выходом.
@@ -48,46 +34,57 @@ function windowAge(tf: RangeTf, candles: number): string {
  * то есть ровно тогда, когда фильтрам диапазона в «Выборке» верить нельзя.
  */
 export function RangeCheckModal({ trade, onClose }: { trade: Trade; onClose: () => void }) {
+  const t = useTranslations('rangeCheck');
+  const tc = useTranslations('common');
+  const { locale } = useLocaleControl();
   const [tf, setTf] = useState<RangeTf>('4h');
   const { data, isLoading, isError } = useRangeCheck(trade.id, tf);
 
-  // Расхождение в пределах округления — не расхождение: в базе значение с двумя
-  // знаками, здесь оно пересчитано по свежезагруженным свечам.
-  const drift = data?.stored != null && data.recomputed != null ? Math.abs(data.stored - data.recomputed) : null;
+  /**
+   * Длина коридора человеческими словами: «за сутки» вместо «24 свечи 1H».
+   * Сколько там свечей и какого таймфрейма — вопрос реализации, а не то, что
+   * человек хочет знать, глядя на два числа.
+   */
+  const windowAge = (rangeTf: RangeTf, candles: number): string => {
+    const hours = candles * TF_HOURS[rangeTf];
+    if (hours <= 24) return hours === 24 ? t('windowDay') : t('windowHours', { hours });
+    const days = Math.round(hours / 24);
+    return t('windowDays', { days });
+  };
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent wide>
         <DialogHeader
-          title="Диапазон входа"
-          subtitle={`${trade.symbol} · ${trade.direction} · вход ${formatPriceGrouped(trade.avgEntryPrice)}${
-            data ? ` · коридор ${windowAge(tf, data.window.expected)}` : ''
+          title={t('title')}
+          subtitle={`${trade.symbol} · ${trade.direction} · ${t('entryWord')} ${formatPriceGrouped(trade.avgEntryPrice)}${
+            data ? ` · ${t('corridorPrefix')} ${windowAge(tf, data.window.expected)}` : ''
           }`}
         />
         <DialogBody>
-          <SectionHead title="Цена вокруг входа">
-            <Seg options={TF_OPTIONS} value={tf} onChange={setTf} ariaLabel="Таймфрейм" />
+          <SectionHead title={t('priceAroundEntry')}>
+            <Seg options={TF_OPTIONS} value={tf} onChange={setTf} ariaLabel={t('timeframeAriaLabel')} />
           </SectionHead>
 
           {isLoading ? (
             <Skeleton height={120} />
           ) : isError ? (
-            <p className="neg">Не удалось загрузить свечи</p>
+            <p className="neg">{t('candlesLoadFailed')}</p>
           ) : data && data.candles.length > 0 ? (
             /* key: смена таймфрейма — это другой график, а не тот же самый в
                новом масштабе, поэтому вид сбрасывается вместе с ней. */
             <RangeCheckChart key={tf} data={data} />
           ) : (
-            <p className="muted">Биржа не отдала свечи за этот период</p>
+            <p className="muted">{t('noCandlesForPeriod')}</p>
           )}
 
           {data && (
             <>
               <Lookup style={{ marginTop: 'var(--s3)' }}>
-                <KeyValue label="Диапазон входа">
-                  {formatRangePos(data.stored ?? data.recomputed)}
+                <KeyValue label={t('title')}>
+                  {formatRangePos(data.stored ?? data.recomputed, locale)}
                 </KeyValue>
-                <KeyValue label={`Цена ходила ${windowAge(tf, data.window.expected)}`}>
+                <KeyValue label={`${t('priceMovedPrefix')} ${windowAge(tf, data.window.expected)}`}>
                   {data.window.low != null && data.window.high != null
                     ? `${formatPriceGrouped(data.window.low)} – ${formatPriceGrouped(data.window.high)}`
                     : '—'}
@@ -98,7 +95,7 @@ export function RangeCheckModal({ trade, onClose }: { trade: Trade; onClose: () 
         </DialogBody>
         <DialogFooter>
           <Button variant="solid" onClick={onClose}>
-            Закрыть
+            {tc('close')}
           </Button>
         </DialogFooter>
       </DialogContent>

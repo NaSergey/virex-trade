@@ -49,11 +49,11 @@ export class TagsService {
 
   async create(userId: string, name: string, type?: string) {
     const trimmed = name.trim();
-    if (!trimmed) throw new BadRequestException('Пустое имя тега');
+    if (!trimmed) throw new BadRequestException({ message: 'Пустое имя тега', code: 'TAG_NAME_EMPTY' });
     const existing = await this.prisma.tag.findUnique({
       where: { userId_name: { userId, name: trimmed } },
     });
-    if (existing) throw new ConflictException('Такой тег уже есть');
+    if (existing) throw new ConflictException({ message: 'Такой тег уже есть', code: 'TAG_NAME_DUPLICATE' });
     const tag = await this.prisma.tag.create({
       data: { userId, name: trimmed, color: await this.pickColor(userId), ...(type ? { type } : {}) },
     });
@@ -63,16 +63,16 @@ export class TagsService {
   /** Rename and/or re-categorize a tag. Stats keep working — links are by id. */
   async update(id: string, userId: string, patch: { name?: string; type?: string }) {
     const tag = await this.prisma.tag.findUnique({ where: { id } });
-    if (!tag || tag.userId !== userId) throw new NotFoundException('Тег не найден');
+    if (!tag || tag.userId !== userId) throw new NotFoundException({ message: 'Тег не найден', code: 'TAG_NOT_FOUND' });
     const data: { name?: string; type?: string } = {};
     if (patch.name != null) {
       const trimmed = patch.name.trim();
-      if (!trimmed) throw new BadRequestException('Пустое имя тега');
+      if (!trimmed) throw new BadRequestException({ message: 'Пустое имя тега', code: 'TAG_NAME_EMPTY' });
       if (trimmed !== tag.name) {
         const dupe = await this.prisma.tag.findUnique({
           where: { userId_name: { userId, name: trimmed } },
         });
-        if (dupe) throw new ConflictException('Такой тег уже есть');
+        if (dupe) throw new ConflictException({ message: 'Такой тег уже есть', code: 'TAG_NAME_DUPLICATE' });
         data.name = trimmed;
       }
     }
@@ -89,13 +89,15 @@ export class TagsService {
    * near-duplicates ("отскок EMA" vs "EMA bounce").
    */
   async merge(userId: string, sourceId: string, intoTagId: string) {
-    if (sourceId === intoTagId) throw new BadRequestException('Нельзя слить тег сам в себя');
+    if (sourceId === intoTagId)
+      throw new BadRequestException({ message: 'Нельзя слить тег сам в себя', code: 'TAG_MERGE_SELF' });
     const [source, target] = await Promise.all([
       this.prisma.tag.findUnique({ where: { id: sourceId } }),
       this.prisma.tag.findUnique({ where: { id: intoTagId } }),
     ]);
-    if (!source || source.userId !== userId) throw new NotFoundException('Тег не найден');
-    if (!target || target.userId !== userId) throw new NotFoundException('Целевой тег не найден');
+    if (!source || source.userId !== userId) throw new NotFoundException({ message: 'Тег не найден', code: 'TAG_NOT_FOUND' });
+    if (!target || target.userId !== userId)
+      throw new NotFoundException({ message: 'Целевой тег не найден', code: 'TAG_MERGE_TARGET_NOT_FOUND' });
 
     await this.prisma.$transaction(async (tx) => {
       const tradeLinks = await tx.tradeTag.findMany({
@@ -127,7 +129,7 @@ export class TagsService {
   async remove(id: string, userId: string) {
     const tag = await this.prisma.tag.findUnique({ where: { id } });
     // Same "not found" for wrong owner as for a nonexistent id.
-    if (!tag || tag.userId !== userId) throw new NotFoundException('Тег не найден');
+    if (!tag || tag.userId !== userId) throw new NotFoundException({ message: 'Тег не найден', code: 'TAG_NOT_FOUND' });
     // Cascades wipe TradeTag/PositionTag rows — past stats lose this tag too.
     // SavedTagCombo rows referencing the tag self-heal on the next stats read.
     await this.prisma.tag.delete({ where: { id } });
@@ -141,15 +143,16 @@ export class TagsService {
    */
   async createSavedCombo(userId: string, tagIds: string[]) {
     const unique = [...new Set(tagIds)];
-    if (unique.length < 2) throw new BadRequestException('Выбери хотя бы два тега');
+    if (unique.length < 2) throw new BadRequestException({ message: 'Выбери хотя бы два тега', code: 'TAG_COMBO_MIN_TWO' });
     const owned = await this.prisma.tag.count({ where: { userId, id: { in: unique } } });
-    if (owned !== unique.length) throw new BadRequestException('Некоторые теги не найдены');
+    if (owned !== unique.length)
+      throw new BadRequestException({ message: 'Некоторые теги не найдены', code: 'TAGS_NOT_FOUND' });
     const sorted = [...unique].sort();
     const key = sorted.join('|');
     const existing = await this.prisma.savedTagCombo.findUnique({
       where: { userId_key: { userId, key } },
     });
-    if (existing) throw new ConflictException('Такая комбинация уже сохранена');
+    if (existing) throw new ConflictException({ message: 'Такая комбинация уже сохранена', code: 'TAG_COMBO_DUPLICATE' });
     const combo = await this.prisma.savedTagCombo.create({
       data: { userId, tagIds: sorted, key },
     });
@@ -163,23 +166,26 @@ export class TagsService {
    */
   async updateSavedCombo(id: string, userId: string, patch: { tagIds?: string[]; pinned?: boolean }) {
     const combo = await this.prisma.savedTagCombo.findUnique({ where: { id } });
-    if (!combo || combo.userId !== userId) throw new NotFoundException('Комбинация не найдена');
+    if (!combo || combo.userId !== userId)
+      throw new NotFoundException({ message: 'Комбинация не найдена', code: 'TAG_COMBO_NOT_FOUND' });
 
     const data: { tagIds?: string[]; key?: string; pinned?: boolean } = {};
     if (patch.pinned !== undefined) data.pinned = patch.pinned;
 
     if (patch.tagIds !== undefined) {
       const unique = [...new Set(patch.tagIds)];
-      if (unique.length < 2) throw new BadRequestException('Выбери хотя бы два тега');
+      if (unique.length < 2) throw new BadRequestException({ message: 'Выбери хотя бы два тега', code: 'TAG_COMBO_MIN_TWO' });
       const owned = await this.prisma.tag.count({ where: { userId, id: { in: unique } } });
-      if (owned !== unique.length) throw new BadRequestException('Некоторые теги не найдены');
+      if (owned !== unique.length)
+        throw new BadRequestException({ message: 'Некоторые теги не найдены', code: 'TAGS_NOT_FOUND' });
       const sorted = [...unique].sort();
       const key = sorted.join('|');
       if (key !== combo.key) {
         const existing = await this.prisma.savedTagCombo.findUnique({
           where: { userId_key: { userId, key } },
         });
-        if (existing) throw new ConflictException('Такая комбинация уже сохранена');
+        if (existing)
+          throw new ConflictException({ message: 'Такая комбинация уже сохранена', code: 'TAG_COMBO_DUPLICATE' });
       }
       data.tagIds = sorted;
       data.key = key;
@@ -192,7 +198,8 @@ export class TagsService {
   /** Hard delete — the explicit, deliberate "Удалить" action (not unpin). */
   async deleteSavedCombo(id: string, userId: string) {
     const combo = await this.prisma.savedTagCombo.findUnique({ where: { id } });
-    if (!combo || combo.userId !== userId) throw new NotFoundException('Комбинация не найдена');
+    if (!combo || combo.userId !== userId)
+      throw new NotFoundException({ message: 'Комбинация не найдена', code: 'TAG_COMBO_NOT_FOUND' });
     await this.prisma.savedTagCombo.delete({ where: { id } });
     return { success: true };
   }
@@ -239,7 +246,8 @@ export class TagsService {
     const unique = [...new Set(tagIds)];
     if (unique.length > 0) {
       const owned = await this.prisma.tag.count({ where: { userId, id: { in: unique } } });
-      if (owned !== unique.length) throw new BadRequestException('Некоторые теги не найдены');
+      if (owned !== unique.length)
+        throw new BadRequestException({ message: 'Некоторые теги не найдены', code: 'TAGS_NOT_FOUND' });
     }
     await this.prisma.$transaction([
       this.prisma.positionTag.deleteMany({ where: { userId, symbol, direction } }),
@@ -262,12 +270,13 @@ export class TagsService {
    */
   async setTradeTags(userId: string, tradeId: string, tagIds: string[]) {
     const trade = await this.prisma.trade.findUnique({ where: { id: tradeId } });
-    if (!trade || trade.userId !== userId) throw new NotFoundException('Сделка не найдена');
+    if (!trade || trade.userId !== userId) throw new NotFoundException({ message: 'Сделка не найдена', code: 'TRADE_NOT_FOUND' });
 
     const unique = [...new Set(tagIds)];
     if (unique.length > 0) {
       const owned = await this.prisma.tag.count({ where: { userId, id: { in: unique } } });
-      if (owned !== unique.length) throw new BadRequestException('Некоторые теги не найдены');
+      if (owned !== unique.length)
+        throw new BadRequestException({ message: 'Некоторые теги не найдены', code: 'TAGS_NOT_FOUND' });
     }
     await this.prisma.$transaction([
       this.prisma.tradeTag.deleteMany({ where: { tradeId } }),

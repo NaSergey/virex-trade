@@ -1,17 +1,19 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import type { TimeStatsResponse, TimeBucket } from '@/entities/trade';
 import { Lookup, KeyValue } from '@/shared/ui/Lookup';
 import { Money } from '@/shared/ui/Money';
-import { WEEKDAY_LABELS, WEEKDAY_ORDER } from '@/shared/lib/utils/period';
-import { formatMoney } from '@/shared/lib/utils/format';
+import { weekdayLabels, WEEKDAY_ORDER } from '@/shared/lib/utils/period';
+import { formatMoney, durationUnitLabels } from '@/shared/lib/utils/format';
+import { useLocaleControl } from '@/shared/i18n';
 
 /** Часы и минуты словами: «3 ч 42 м». */
-function fmtDuration(min: number): string {
+function fmtDuration(min: number, units: { h: string; m: string }): string {
   if (!Number.isFinite(min) || min <= 0) return '—';
   const h = Math.floor(min / 60);
   const m = Math.round(min % 60);
-  return h > 0 ? `${h} ч ${String(m).padStart(2, '0')} м` : `${m} м`;
+  return h > 0 ? `${h} ${units.h} ${String(m).padStart(2, '0')} ${units.m}` : `${m} ${units.m}`;
 }
 
 /**
@@ -21,6 +23,9 @@ function fmtDuration(min: number): string {
  * величина — цифрой; ни то, ни другое не требует наведения.
  */
 export function WeekdayRows({ buckets }: { buckets: TimeBucket[] }) {
+  const t = useTranslations('overview');
+  const { locale } = useLocaleControl();
+  const labels = weekdayLabels(locale);
   const maxAbs = Math.max(1, ...buckets.map((b) => Math.abs(b?.totalPnl ?? 0)));
 
   return (
@@ -31,7 +36,7 @@ export function WeekdayRows({ buckets }: { buckets: TimeBucket[] }) {
         const width = (Math.abs(pnl) / maxAbs) * 50;
         return (
           <div className="wk" key={d}>
-            <span className="lbl">{WEEKDAY_LABELS[d]}</span>
+            <span className="lbl">{labels[d]}</span>
             <span className="wk-t">
               <i className="wk-z" />
               {b?.trades ? (
@@ -47,7 +52,7 @@ export function WeekdayRows({ buckets }: { buckets: TimeBucket[] }) {
               ) : null}
             </span>
             {b?.trades ? <Money value={pnl} className="wk-v" /> : <span className="wk-v">—</span>}
-            <span className="wk-s">{b?.trades ? `${b.winRate.toFixed(0)} % · ${b.trades}` : 'нет сделок'}</span>
+            <span className="wk-s">{b?.trades ? `${b.winRate.toFixed(0)} % · ${b.trades}` : t('noTrades')}</span>
           </div>
         );
       })}
@@ -62,6 +67,7 @@ export function WeekdayRows({ buckets }: { buckets: TimeBucket[] }) {
  * тремя сделками и винрейтом 100% нельзя спутать с часом с двадцатью.
  */
 export function HourBars({ buckets }: { buckets: TimeBucket[] }) {
+  const t = useTranslations('overview');
   const hours = buckets.length === 24 ? buckets : Array.from({ length: 24 }, () => null);
   const maxTrades = Math.max(1, ...hours.map((b) => b?.trades ?? 0));
 
@@ -75,8 +81,8 @@ export function HourBars({ buckets }: { buckets: TimeBucket[] }) {
             style={{ height: `${(((b?.trades ?? 0) / maxTrades) * 100).toFixed(0)}%` }}
             title={
               b?.trades
-                ? `${String(h).padStart(2, '0')}:00 — ${b.trades} сделок, винрейт ${b.winRate.toFixed(0)} %`
-                : `${String(h).padStart(2, '0')}:00 — нет сделок`
+                ? t('hourTooltip', { hour: String(h).padStart(2, '0'), trades: b.trades, winRate: b.winRate.toFixed(0) })
+                : t('hourTooltipEmpty', { hour: String(h).padStart(2, '0') })
             }
           >
             <i style={{ height: '100%' }} />
@@ -107,18 +113,21 @@ export function HoldTimes({
   duration: TimeStatsResponse['duration'];
   peak?: number;
 }) {
+  const t = useTranslations('overview');
+  const { locale } = useLocaleControl();
+  const units = durationUnitLabels(locale);
   return (
     <Lookup one style={{ marginTop: 'var(--s3)' }}>
-      <KeyValue label="Среднее удержание">{fmtDuration(duration.avgHoldMin)}</KeyValue>
-      <KeyValue label="У прибыльных" valueClassName="n pos">
-        {fmtDuration(duration.avgWinHoldMin)}
+      <KeyValue label={t('avgHold')}>{fmtDuration(duration.avgHoldMin, units)}</KeyValue>
+      <KeyValue label={t('avgWinHold')} valueClassName="n pos">
+        {fmtDuration(duration.avgWinHoldMin, units)}
       </KeyValue>
-      <KeyValue label="У убыточных" valueClassName="n neg">
-        {fmtDuration(duration.avgLossHoldMin)}
+      <KeyValue label={t('avgLossHold')} valueClassName="n neg">
+        {fmtDuration(duration.avgLossHoldMin, units)}
       </KeyValue>
       {/* Пик кривой не красится знаком: он всегда «сколько было в лучшей точке»,
           а не результат — цвет здесь означал бы то, чего в числе нет. */}
-      {peak != null && <KeyValue label="Пик кривой">{formatMoney(peak)}</KeyValue>}
+      {peak != null && <KeyValue label={t('curvePeak')}>{formatMoney(peak)}</KeyValue>}
     </Lookup>
   );
 }

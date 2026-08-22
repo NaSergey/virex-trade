@@ -1,16 +1,21 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 
 /** Какой горизонт показывает шкала «вход в диапазоне»: один или все три сразу. */
 export type RangeTfPref = '1h' | '4h' | '1d' | 'all';
 
-export const RANGE_TF_OPTIONS = [
-  { value: '1h' as const, label: '1H', title: 'Только часовой диапазон' },
-  { value: '4h' as const, label: '4H', title: 'Только четырёхчасовой диапазон' },
-  { value: '1d' as const, label: 'D', title: 'Только дневной диапазон' },
-  { value: 'all' as const, label: 'Все', title: 'Все три горизонта' },
-];
+/** Опции тумблера горизонта — с переводом; подписи '1H'/'4H'/'D' не переводятся. */
+export function useRangeTfOptions() {
+  const t = useTranslations('overview');
+  return [
+    { value: '1h' as const, label: '1H', title: t('rangeTfHour') },
+    { value: '4h' as const, label: '4H', title: t('rangeTfFourHour') },
+    { value: '1d' as const, label: 'D', title: t('rangeTfDay') },
+    { value: 'all' as const, label: t('rangeTfAll'), title: t('rangeTfAllTitle') },
+  ];
+}
 
 const STORAGE_KEY = 'virex:positions:rangeTf';
 

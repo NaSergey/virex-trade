@@ -14,11 +14,20 @@ export const RANGE_HIGH_MIN = 66;
 
 export type RangeBucket = 'low' | 'mid' | 'high';
 
-export const RANGE_BUCKET_LABELS: Record<RangeBucket, string> = {
+const RANGE_BUCKET_LABELS_RU: Record<RangeBucket, string> = {
   low: 'низ',
   mid: 'середина',
   high: 'верх',
 };
+const RANGE_BUCKET_LABELS_EN: Record<RangeBucket, string> = {
+  low: 'low',
+  mid: 'mid',
+  high: 'high',
+};
+
+export function rangeBucketLabels(locale: 'ru' | 'en'): Record<RangeBucket, string> {
+  return locale === 'en' ? RANGE_BUCKET_LABELS_EN : RANGE_BUCKET_LABELS_RU;
+}
 
 /** Корзина значения, либо null если диапазон для сделки не посчитан. */
 export function rangeBucket(v: number | null | undefined): RangeBucket | null {
@@ -29,11 +38,12 @@ export function rangeBucket(v: number | null | undefined): RangeBucket | null {
 /**
  * Готовая подпись: «82% · верх». Проценты округляем до целых — доли процента
  * в такой метрике всё равно шум.
+ * @param locale - 'ru' | 'en' (по умолчанию 'ru' — для мест, ещё не подключивших перевод)
  */
-export function formatRangePos(v: number | null | undefined): string {
+export function formatRangePos(v: number | null | undefined, locale: 'ru' | 'en' = 'ru'): string {
   const bucket = rangeBucket(v);
   if (bucket == null) return '—';
-  return `${Math.round(v as number)}% · ${RANGE_BUCKET_LABELS[bucket]}`;
+  return `${Math.round(v as number)}% · ${rangeBucketLabels(locale)[bucket]}`;
 }
 
 /**

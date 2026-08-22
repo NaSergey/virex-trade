@@ -87,18 +87,31 @@ interface ApiErrorBody {
   code?: string;
   message?: string | string[];
   error?: string;
+  /**
+   * Именованные значения для подстановки в переведённый шаблон (`{label}` и
+   * т.п.) — для ошибок, где `message` с бэкенда несёт не только текст, но и
+   * конкретику (какая биржа, что именно запрещено). Без параметров перевод по
+   * `code` откатывал бы эту конкретику до общей фразы даже на языке бэкенда.
+   */
+  params?: Record<string, string>;
+}
+
+/** Подставляет `{key}` из params; ключ без значения — пустая строка, а не «[object]». */
+function interpolate(template: string, params?: Record<string, string>): string {
+  if (!params) return template;
+  return template.replace(/\{(\w+)\}/g, (_, key: string) => params[key] ?? '');
 }
 
 /**
  * Переводит ошибку API в текст текущего языка: по `code`, если для него
- * есть перевод в каталоге текущей локали. Иначе — сырой `message`/`error` с
- * бэкенда как раньше (обычно по-русски, пока код не заведён на этом
- * эндпоинте — так ведут себя все ещё не мигрированные на code эндпоинты).
- * Если нет вообще ничего — `fallback`, а если и его не передали, то
- * `errors.generic` из текущего каталога.
+ * есть перевод в каталоге текущей локали (с подстановкой `params`, если они
+ * есть). Иначе — сырой `message`/`error` с бэкенда как раньше (обычно
+ * по-русски, пока код не заведён на этом эндпоинте — так ведут себя все ещё
+ * не мигрированные на code эндпоинты). Если нет вообще ничего — `fallback`,
+ * а если и его не передали, то `errors.generic` из текущего каталога.
  */
 export function resolveApiError(body: ApiErrorBody, fallback?: string): string {
-  if (body.code && errorMessages[body.code]) return errorMessages[body.code];
+  if (body.code && errorMessages[body.code]) return interpolate(errorMessages[body.code], body.params);
   const raw = Array.isArray(body.message) ? body.message.join(', ') : body.message;
   if (raw) return raw;
   if (body.error) return body.error;

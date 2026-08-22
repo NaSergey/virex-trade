@@ -1,25 +1,21 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { useTradeOrders, type Trade, type TradeOrder } from '@/entities/trade';
 import { Button } from '@/shared/ui/Button';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { SkeletonLines } from '@/shared/ui/Skeleton';
 import { KeyValue } from '@/shared/ui/Lookup';
 import { Money } from '@/shared/ui/Money';
-import { formatPriceGrouped, formatQty, plural } from '@/shared/lib/utils/format';
+import { formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
 import { formatRangePos } from '@/shared/lib/utils/range';
+import { useLocaleControl } from '@/shared/i18n';
 import { RangeCheckModal } from '@/widgets/range-check-modal';
 
-const TREND_WORDS: Record<string, string> = {
-  trend_up: 'восходящий',
-  trend_down: 'нисходящий',
-  range: 'боковик',
-};
-
 /** Время ордера — с секундами: внутри одной позиции ордера идут плотно. */
-function fmtOrderTime(iso: string): string {
-  return new Date(iso).toLocaleString('ru-RU', {
+function fmtOrderTime(iso: string, locale: string): string {
+  return new Date(iso).toLocaleString(locale, {
     day: '2-digit',
     month: '2-digit',
     hour: '2-digit',
@@ -28,32 +24,44 @@ function fmtOrderTime(iso: string): string {
   });
 }
 
-/** Ликвидацию/ADL видно только по execType — трейдеру это важнее всего. */
-function execTypeLabel(types: string[]): string | null {
-  if (types.includes('BustTrade')) return 'ликвидация';
-  if (types.includes('AdlTrade')) return 'ADL';
-  return null;
-}
-
-function OrderRow({ order, index }: { order: TradeOrder; index: number }) {
-  const note = execTypeLabel(order.execTypes);
+function OrderRow({
+  order,
+  index,
+  t,
+  entryWord,
+  exitWord,
+}: {
+  order: TradeOrder;
+  index: number;
+  t: ReturnType<typeof useTranslations<'tradesTable'>>;
+  entryWord: string;
+  exitWord: string;
+}) {
+  const { locale } = useLocaleControl();
+  const intlLocale = locale === 'en' ? 'en-US' : 'ru-RU';
+  /** Ликвидацию/ADL видно только по execType — трейдеру это важнее всего. */
+  const note = order.execTypes.includes('BustTrade')
+    ? t('liquidation')
+    : order.execTypes.includes('AdlTrade')
+      ? 'ADL'
+      : null;
   return (
     <tr className="order-row-in" style={{ '--i': index } as React.CSSProperties}>
-      <td>{order.kind === 'entry' ? 'вход' : 'выход'}</td>
+      <td>{order.kind === 'entry' ? entryWord : exitWord}</td>
       <td className="muted">
         {order.side === 'Buy' ? 'buy' : 'sell'}
-        {order.fills > 1 && <span className="lbl"> · {order.fills} исп.</span>}
+        {order.fills > 1 && <span className="lbl"> · {t('fillsSuffix', { n: order.fills })}</span>}
         {note && <span className="neg"> · {note}</span>}
       </td>
       {/* Объём деньгами, а не в монете: 47 UNI и 47 SOL — величины, которые
           между собой не сравнить, а USDT сравнимы со всем остальным в журнале.
           Сколько это было монет, говорит подсказка. */}
-      <td className="r n" title={`${formatQty(order.qty)} в монете`}>
+      <td className="r n" title={t('qtyTitle', { qty: formatQty(order.qty) })}>
         {formatPriceGrouped(order.value)}
       </td>
       <td className="r n">{formatPriceGrouped(order.avgPrice)}</td>
       <td className="r n">{order.pnl == null ? '—' : <Money value={order.pnl} />}</td>
-      <td className="n muted">{fmtOrderTime(order.time)}</td>
+      <td className="n muted">{fmtOrderTime(order.time, intlLocale)}</td>
     </tr>
   );
 }
@@ -69,10 +77,20 @@ function OrderRow({ order, index }: { order: TradeOrder; index: number }) {
  * строка и есть её разбор.
  */
 export function TradeOrders({ trade }: { trade: Trade }) {
+  const t = useTranslations('tradesTable');
+  const { locale } = useLocaleControl();
   const { data, isLoading, isError } = useTradeOrders(trade.id);
   const [rangeCheck, setRangeCheck] = useState(false);
   const orders = data?.orders ?? [];
   const ctx = trade.context;
+
+  const TREND_WORDS: Record<string, string> = {
+    trend_up: t('trendWordUp'),
+    trend_down: t('trendWordDown'),
+    range: t('trendWordRange'),
+  };
+  const entryWord = t('entryWord');
+  const exitWord = t('exitWord');
 
   return (
     <div>
@@ -80,21 +98,19 @@ export function TradeOrders({ trade }: { trade: Trade }) {
           держатся вместе, а не половина здесь и половина в стилях. */}
       <div className="order-ctx">
         <div>
-          <SectionHead title="Исполнения" />
+          <SectionHead title={t('executionsTitle')} />
 
           {isLoading ? (
             <SkeletonLines />
           ) : isError ? (
-            <p className="neg">Не удалось загрузить ордера</p>
+            <p className="neg">{t('ordersLoadFailed')}</p>
           ) : orders.length === 0 ? (
-            <p className="muted">
-              История исполнений по этой сделке не сохранена — синхронизируйте сделки заново.
-            </p>
+            <p className="muted">{t('noOrdersHistory')}</p>
           ) : (
             <table className="fills" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <tbody>
                 {orders.map((o, i) => (
-                  <OrderRow key={o.orderId} order={o} index={i} />
+                  <OrderRow key={o.orderId} order={o} index={i} t={t} entryWord={entryWord} exitWord={exitWord} />
                 ))}
               </tbody>
             </table>
@@ -106,12 +122,8 @@ export function TradeOrders({ trade }: { trade: Trade }) {
               под ними, а не сбоку, — это продолжение того же счёта. */}
           {data?.funding && (
             <p className="foot">
-              Фандинг за время удержания: <Money value={data.funding.total} />{' '}
-              <span className="muted">
-                ({data.funding.payments}{' '}
-                {plural(data.funding.payments, 'списание', 'списания', 'списаний')})
-              </span>
-              . В P&L сделки он не входит.
+              {t('fundingPrefix')} <Money value={data.funding.total} />{' '}
+              <span className="muted">({t('fundingPayments', { n: data.funding.payments })})</span>. {t('fundingNote')}
             </p>
           )}
         </div>
@@ -120,7 +132,7 @@ export function TradeOrders({ trade }: { trade: Trade }) {
           {/* Кнопка стоит над теми самыми строками «Диапазон 1H/4H», которые
               и открывает на графике, — а не над исполнениями, к которым она
               отношения не имеет. */}
-          <SectionHead title="Контекст входа">
+          <SectionHead title={t('entryContextTitle')}>
             <Button
               variant="bare"
               tight
@@ -129,36 +141,34 @@ export function TradeOrders({ trade }: { trade: Trade }) {
                 e.stopPropagation();
                 setRangeCheck(true);
               }}
-              title="Показать на графике, где был вход внутри диапазона таймфрейма"
+              title={t('showOnChartTitle')}
             >
-              Диапазон
+              {t('rangeButton')}
             </Button>
           </SectionHead>
           {ctx?.ok ? (
             <>
-              <KeyValue label="Тренд 4H">{TREND_WORDS[ctx.trend4h ?? ''] ?? '—'}</KeyValue>
-              <KeyValue label="Цена к EMA200">
-                {ctx.ema200Above == null ? '—' : ctx.ema200Above ? 'выше' : 'ниже'}
+              <KeyValue label={t('trend4hLabel')}>{TREND_WORDS[ctx.trend4h ?? ''] ?? '—'}</KeyValue>
+              <KeyValue label={t('priceToEma')}>
+                {ctx.ema200Above == null ? '—' : ctx.ema200Above ? t('above') : t('below')}
               </KeyValue>
-              <KeyValue label="Волатильность (ATR)">
+              <KeyValue label={t('volatilityAtr')}>
                 {ctx.atrPct != null ? `${ctx.atrPct.toFixed(2)} %` : '—'}
               </KeyValue>
-              <KeyValue label="Объём к медиане">
+              <KeyValue label={t('volumeToMedian')}>
                 {ctx.volRel != null ? `×${ctx.volRel.toFixed(2)}` : '—'}
               </KeyValue>
-              <KeyValue label="Диапазон 1H">{formatRangePos(ctx.rangePos1h)}</KeyValue>
-              <KeyValue label="Диапазон 4H">{formatRangePos(ctx.rangePos4h)}</KeyValue>
+              <KeyValue label={t('colRange', { tf: '1H' })}>{formatRangePos(ctx.rangePos1h, locale)}</KeyValue>
+              <KeyValue label={t('colRange', { tf: '4H' })}>{formatRangePos(ctx.rangePos4h, locale)}</KeyValue>
               {ctx.basis === 'closed' && (
                 <p className="foot">
-                  <b>†</b> Время входа неизвестно — снимок привязан к закрытию сделки.
+                  <b>†</b> {t('entryTimeUnknownNote')}
                 </p>
               )}
             </>
           ) : (
             <p className="muted">
-              {ctx?.ok === false
-                ? 'У символа не хватило истории свечей — контекст этой сделки не посчитан.'
-                : 'Контекст этой сделки пока не посчитан.'}
+              {ctx?.ok === false ? t('notEnoughHistory') : t('contextNotComputed')}
             </p>
           )}
         </div>

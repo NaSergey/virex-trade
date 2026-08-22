@@ -95,6 +95,17 @@ export function formatPrice(value: string | number | null | undefined): string {
 }
 
 /**
+ * Буквы единиц длительности («3 ч 42 м», «2 д 5 ч») — общий источник для всех
+ * мест, что считают возраст позиции или время удержания сделки: каждое из них
+ * складывает д/ч/м по-своему (см. fmtAge, fmtDuration, fmtHold), но буквы
+ * должны быть одни и те же и меняться с языком вместе.
+ * @param locale - 'ru' | 'en'
+ */
+export function durationUnitLabels(locale: 'ru' | 'en'): { d: string; h: string; m: string } {
+  return locale === 'en' ? { d: 'd', h: 'h', m: 'm' } : { d: 'д', h: 'ч', m: 'м' };
+}
+
+/**
  * Format an ISO date string as a short day/month, hour:minute string.
  * @param iso - ISO date string
  * @param locale - BCP-47 локаль для Intl (по умолчанию 'ru-RU')

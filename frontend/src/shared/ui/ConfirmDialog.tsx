@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader } from '@/shared/ui/dialog';
 import { Field, Input } from '@/shared/ui/Field';
 
@@ -29,6 +30,7 @@ export interface ConfirmRequest {
  * требование напечатать слово без единого объяснения, зачем.
  */
 export function ConfirmDialog({ request, onClose }: { request: ConfirmRequest; onClose: () => void }) {
+  const t = useTranslations('common');
   const [typed, setTyped] = useState('');
   const matches = typed.trim().toUpperCase() === request.word.toUpperCase();
 
@@ -43,7 +45,7 @@ export function ConfirmDialog({ request, onClose }: { request: ConfirmRequest; o
             className="cfm-word"
             label={
               <>
-                Наберите <span className="cfm-key">{request.word}</span>
+                {t('typeWordPrefix')} <span className="cfm-key">{request.word}</span>
               </>
             }
             htmlFor="confirm-word"
@@ -62,7 +64,7 @@ export function ConfirmDialog({ request, onClose }: { request: ConfirmRequest; o
           </Field>
         </DialogBody>
         <DialogActions
-          confirmLabel="Подтвердить"
+          confirmLabel={t('confirm')}
           confirmVariant="risk"
           confirmDisabled={!matches}
           onConfirm={() => {

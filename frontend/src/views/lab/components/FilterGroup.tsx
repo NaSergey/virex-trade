@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import type { LabFacetValue } from '../api/hooks';
 import { MIN_N } from '@/shared/lib/utils/confidence';
 import { Money } from '@/shared/ui/Money';
@@ -68,6 +69,7 @@ export function FilterGroup({
   /** Управление, относящееся ко всей группе (например, выбор таймфрейма). */
   children?: React.ReactNode;
 }) {
+  const t = useTranslations('lab');
   const active = options.filter((o) => o.active).length;
 
   return (
@@ -84,7 +86,7 @@ export function FilterGroup({
         {options.map(({ key, ...opt }, i) => (
           <OptionRow key={key} {...opt} index={Math.min(i + (children ? 1 : 0), 12)} />
         ))}
-        {options.length === 0 && <p className="subtle">Нет данных за период</p>}
+        {options.length === 0 && <p className="subtle">{t('noDataForPeriod')}</p>}
       </div>
     </details>
   );
