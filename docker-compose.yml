@@ -58,6 +58,10 @@ services:
       - ./frontend:/app
       - web_node_modules:/app/node_modules
       - web_next:/app/.next
+    # Ставим зависимости на старте: web_node_modules переживает пересборку
+    # образа, поэтому npm install из Dockerfile перекрывается старым volume
+    # и новые пакеты (next-intl и т.п.) в контейнер не попадают.
+    command: sh -c "npm install && npm run dev -- -p 8090 -H 0.0.0.0"
 
 volumes:
   pgdata:
