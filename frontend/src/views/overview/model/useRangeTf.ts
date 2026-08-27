@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { usePersistentValue } from '@/shared/lib/storage/usePersistentValue';
 
 /** Какой горизонт показывает шкала «вход в диапазоне»: один или все три сразу. */
 export type RangeTfPref = '1h' | '4h' | '1d' | 'all';
@@ -22,11 +22,7 @@ const STORAGE_KEY = 'virex:positions:rangeTf';
 const isPref = (v: string | null): v is RangeTfPref =>
   v === '1h' || v === '4h' || v === '1d' || v === 'all';
 
-const readStored = (): RangeTfPref => {
-  if (typeof window === 'undefined') return 'all';
-  const saved = localStorage.getItem(STORAGE_KEY);
-  return isPref(saved) ? saved : 'all';
-};
+const decode = (raw: string | null): RangeTfPref => (isPref(raw) ? raw : 'all');
 
 /**
  * Выбор горизонта для шкалы в таблице открытых позиций.
@@ -39,16 +35,11 @@ const readStored = (): RangeTfPref => {
  *
  * Выбор живёт в localStorage: это настройка рабочего места, а не состояние
  * сессии, и переживать перезагрузку она должна так же, как период на «Обзоре»
- * (см. usePeriodFilter). Читается сразу в ленивом инициализаторе useState — с
- * useEffect после монтирования на кадр мелькали бы все три строки.
+ * (см. usePeriodFilter). Через `usePersistentValue`, а не `useState` с чтением
+ * хранилища в инициализаторе: на сервере хранилища нет, и такой инициализатор
+ * разводил серверную разметку с клиентской.
  */
 export function useRangeTf() {
-  const [rangeTf, setRangeTfState] = useState<RangeTfPref>(readStored);
-
-  const setRangeTf = (v: RangeTfPref) => {
-    setRangeTfState(v);
-    localStorage.setItem(STORAGE_KEY, v);
-  };
-
+  const [rangeTf, setRangeTf] = usePersistentValue(STORAGE_KEY, decode, 'all' as RangeTfPref, (v) => v);
   return { rangeTf, setRangeTf };
 }

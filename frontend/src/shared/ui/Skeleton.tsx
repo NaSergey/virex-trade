@@ -10,6 +10,12 @@ export interface SkeletonProps {
   flush?: boolean;
   /** `span` — когда заглушка стоит в строке или в ячейке grid'а. */
   as?: 'div' | 'span';
+  /**
+   * Заглушка стоит внутри строки текста и обязана вести себя как слово:
+   * держать базовую линию и не разрывать фразу. Без этого `span` раскладывается
+   * блоком и уводит остаток предложения на следующую строку.
+   */
+  inline?: boolean;
   className?: string;
 }
 
@@ -19,13 +25,23 @@ export interface SkeletonProps {
  * Одна полоса краски в 7 % — не «анимированный шиммер»: мигание на тёмном листе
  * читается как ошибка, а не как ожидание.
  */
-export function Skeleton({ width, height, flush, as = 'div', className }: SkeletonProps) {
+export function Skeleton({ width, height, flush, as = 'div', inline, className }: SkeletonProps) {
   const Tag = as;
   return (
     <Tag
-      className={cn('skel', className)}
+      // `flush` — классом, а не инлайновым `margin: 0`. Инлайновый стиль сильнее
+      // любого правила таблицы стилей и снимал заодно `margin-left: auto` у
+      // .skel-r: заглушки во всех числовых колонках стояли слева, под
+      // заголовками, выровненными вправо, — и таблица читалась как россыпь
+      // обрывков, а не как таблица.
+      className={cn('skel', flush && 'skel-flush', className)}
       // display нужен только span'у: у него он inline, и height бы не сработала.
-      style={{ width, height, display: as === 'span' ? 'block' : undefined, margin: flush ? 0 : undefined }}
+      style={{
+        width,
+        height,
+        display: inline ? 'inline-block' : as === 'span' ? 'block' : undefined,
+        verticalAlign: inline ? 'middle' : undefined,
+      }}
     />
   );
 }

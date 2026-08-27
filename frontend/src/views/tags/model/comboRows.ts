@@ -38,9 +38,16 @@ export const comboKey = (tagIds: string[]) => [...tagIds].sort().join('|');
  * `askConfirm` передаётся снаружи: удаление необратимо и подтверждается общим
  * диалогом продукта, а владеть его состоянием должна страница, а не строка.
  */
-export function useComboRows(days: number, askConfirm: (request: ConfirmRequest) => void): ComboRow[] {
+export function useComboRows(
+  days: number,
+  askConfirm: (request: ConfirmRequest) => void,
+): { rows: ComboRow[]; isLoading: boolean } {
   const t = useTranslations('tags');
-  const { data } = useTagComboStats(days);
+  // isLoading, а не isFetching: при смене периода прежние комбинации остаются
+  // на месте (keepPreviousData), и сыпать поверх них заглушки значило бы
+  // стирать уже прочитанное ради полусекунды ожидания. Заглушки — только на
+  // первом заходе, когда показывать нечего.
+  const { data, isLoading } = useTagComboStats(days);
   const pin = useCreateSavedCombo();
   const updateCombo = useUpdateSavedCombo();
   const deleteCombo = useDeleteSavedCombo();
@@ -48,7 +55,7 @@ export function useComboRows(days: number, askConfirm: (request: ConfirmRequest)
 
   const savedKeys = new Set((data?.saved ?? []).map((s) => comboKey(s.tagIds)));
 
-  return [
+  const rows = [
     // Закреплённые — первыми: открепление не убирает карточку из списка, поэтому
     // без этой сортировки нажатие «открепить» никак не отражалось бы на порядке.
     ...[...(data?.saved ?? [])]
@@ -85,4 +92,6 @@ export function useComboRows(days: number, askConfirm: (request: ConfirmRequest)
         onDismiss: () => dismiss.mutate(c.tagIds),
       })),
   ];
+
+  return { rows, isLoading };
 }

@@ -62,7 +62,17 @@ export function LocaleProvider({
 
   return (
     <LocaleContext.Provider value={value}>
-      <NextIntlClientProvider locale={locale} messages={MESSAGES[locale]}>
+      {/*
+        timeZone обязателен: без него next-intl на сервере берёт зону из
+        окружения Node, на клиенте — из браузера, и предупреждает про
+        расхождение разметки (ENVIRONMENT_FALLBACK). Значение здесь ни на что
+        не влияет по факту — ни один компонент не форматирует даты через
+        next-intl, всё идёт через toLocaleString в зоне браузера
+        (shared/lib/utils/format.ts и графики). Фиксируем UTC как нейтральный
+        детерминированный дефолт; если однажды даты пойдут через
+        `useFormatter`, зону надо будет выбирать осознанно.
+      */}
+      <NextIntlClientProvider locale={locale} messages={MESSAGES[locale]} timeZone="UTC">
         {children}
       </NextIntlClientProvider>
     </LocaleContext.Provider>

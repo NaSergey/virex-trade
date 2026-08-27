@@ -5,6 +5,8 @@ import { QueryProvider } from "./(internal)/QueryProvider";
 import { AuthProvider } from "@/features/auth";
 import { LocaleProvider } from "@/shared/i18n";
 import { getServerLocale } from "@/shared/i18n/server-locale";
+import { ThemeProvider } from "@/shared/theme";
+import { getServerTheme } from "@/shared/theme/server-theme";
 import ruMessages from "@/shared/i18n/messages/ru.json";
 import enMessages from "@/shared/i18n/messages/en.json";
 
@@ -45,16 +47,28 @@ export default async function RootLayout({
   // компромисс, принятый вместо вспышки RU→EN и hydration mismatch на каждой
   // загрузке у EN-пользователей.
   const initialLocale = await getServerLocale();
+  // Тема читается той же парой «кука + серверный компонент», что и локаль, и
+  // по той же причине: атрибут должен стоять на <html> уже в присланной
+  // разметке, иначе выбравший светлую тему получает кадр чёрного на каждой
+  // загрузке. Дефолт (тёмная) не пишет ничего лишнего — палитра :root и есть
+  // тёмная, атрибут нужен только светлой.
+  const initialTheme = await getServerTheme();
 
   return (
-    <html lang={initialLocale} className={jetbrainsMono.variable}>
+    <html
+      lang={initialLocale}
+      data-theme={initialTheme}
+      className={jetbrainsMono.variable}
+    >
       <body>
         <QueryProvider>
-          <LocaleProvider initialLocale={initialLocale}>
-            <AuthProvider>
-              {children}
-            </AuthProvider>
-          </LocaleProvider>
+          <ThemeProvider initialTheme={initialTheme}>
+            <LocaleProvider initialLocale={initialLocale}>
+              <AuthProvider>
+                {children}
+              </AuthProvider>
+            </LocaleProvider>
+          </ThemeProvider>
         </QueryProvider>
       </body>
     </html>

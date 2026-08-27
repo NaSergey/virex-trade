@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { daysSince } from '@/shared/lib/utils/period';
+import { usePersistentValue } from '@/shared/lib/storage/usePersistentValue';
 
 // Подписи — в PeriodRail: там доступен t() из next-intl, а значения периода
 // (в днях) — часть модели фильтра и от локали не зависят.
@@ -20,11 +21,9 @@ const COMMIT_DELAY_MS = 400;
 // года. Календарь всё равно ограничен снизу здравым смыслом, а не этим числом.
 const MIN_YEAR = 2000;
 
-const readStoredDays = () => {
-  if (typeof window === 'undefined') return 30;
-  const saved = localStorage.getItem(DAYS_STORAGE_KEY);
-  return saved ? Number(saved) : 30;
-};
+const DEFAULT_DAYS = 30;
+
+const decodeDays = (raw: string | null): number => (raw ? Number(raw) : DEFAULT_DAYS);
 
 /**
  * Дата, которую уже осмысленно отправлять на сервер.
@@ -41,12 +40,8 @@ const isUsableDate = (iso: string | null): boolean => {
   return Number(iso.slice(0, 4)) >= MIN_YEAR && ts <= Date.now();
 };
 
-const readStoredCustomDate = () => {
-  if (typeof window === 'undefined') return null;
-  const saved = localStorage.getItem(CUSTOM_DATE_STORAGE_KEY);
-  // Мусор мог осесть в хранилище до появления проверки — не тащим его дальше.
-  return isUsableDate(saved) ? saved : null;
-};
+// Мусор мог осесть в хранилище до появления проверки — не тащим его дальше.
+const decodeDate = (raw: string | null): string | null => (isUsableDate(raw) ? raw : null);
 
 /**
  * Какой из двух селекторов сейчас управляет фильтром — пресет или своя дата.
@@ -54,11 +49,12 @@ const readStoredCustomDate = () => {
  * наличием в хранилище; при первом заходе после обновления сохраняем то же
  * поведение, а не сбрасываем всех на пресет.
  */
-const readStoredMode = (hasStoredDate: boolean): Mode => {
-  if (typeof window === 'undefined') return 'preset';
-  const saved = localStorage.getItem(MODE_STORAGE_KEY);
-  if (saved === 'custom' || saved === 'preset') return saved;
-  return hasStoredDate ? 'custom' : 'preset';
+const decodeMode = (raw: string | null): Mode => {
+  if (raw === 'custom' || raw === 'preset') return raw;
+  // Ключа режима ещё нет — значит, человек последний раз был здесь до его
+  // появления. Тогда активность своей даты определялась одним её наличием;
+  // сохраняем то же поведение, а не сбрасываем всех на пресет.
+  return localStorage.getItem(CUSTOM_DATE_STORAGE_KEY) ? 'custom' : 'preset';
 };
 
 /**
@@ -67,11 +63,11 @@ const readStoredMode = (hasStoredDate: boolean): Mode => {
  * навигации, поэтому период живёт в localStorage: переход между ними и
  * перезагрузка страницы не сбрасывают выбранный период.
  *
- * Значения читаются из localStorage сразу в лениво инициализаторе useState, а
- * не в useEffect после монтирования — страницы в AppShell полностью
- * размонтируются/монтируются заново при каждом переключении вкладки, и с
- * useEffect на секунду мелькал дефолт (30 дней, без своей даты), а потом блок
- * дёргался на сохранённое значение.
+ * Значения живут в `usePersistentValue`, а не в `useState` с чтением
+ * хранилища в инициализаторе: страница рендерится и на сервере, где хранилища
+ * нет, и такой инициализатор разводил серверную разметку с клиентской —
+ * человек с выбранной своей датой видел на кнопке «30 дней». Подробности
+ * там же.
  *
  * Пресет и своя дата не вытесняют друг друга из памяти — только по очереди
  * управляют фильтром. Клик по «30 дней» после того, как была введена своя
@@ -88,50 +84,55 @@ const readStoredMode = (hasStoredDate: boolean): Mode => {
  * дату, поэтому запросы не летят на каждую цифру.
  */
 export function usePeriodFilter() {
-  const [days, setDaysState] = useState<number>(readStoredDays);
-  const [customDate, setCustomDateState] = useState<string | null>(readStoredCustomDate);
-  const [committedDate, setCommittedDate] = useState<string | null>(readStoredCustomDate);
-  const [mode, setModeState] = useState<Mode>(() => readStoredMode(readStoredCustomDate() != null));
+  const [days, setStoredDays] = usePersistentValue(DAYS_STORAGE_KEY, decodeDays, DEFAULT_DAYS, String);
+  const [committedDate, setCommittedDate] = usePersistentValue(
+    CUSTOM_DATE_STORAGE_KEY,
+    decodeDate,
+    null,
+    (v) => v,
+  );
+  const [mode, setMode] = usePersistentValue(MODE_STORAGE_KEY, decodeMode, 'preset' as Mode, (v) => v);
+
+  /*
+   * Что стоит в поле прямо сейчас. Не состояние с собственным начальным
+   * значением, а поправка поверх подтверждённой даты: пока человек не тронул
+   * поле, показывается подтверждённая. Своим `useState`, снятым с хранилища,
+   * это быть не может — начальное значение схватывалось бы во время гидрации,
+   * когда хранилище ещё не прочитано, и поле навсегда осталось бы пустым.
+   *
+   * `undefined` — «не трогали», в отличие от `null` — «очистили».
+   */
+  const [draft, setDraft] = useState<string | null | undefined>(undefined);
+  const customDate = draft === undefined ? committedDate : draft;
+
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const cancelPending = () => {
+  const cancelPending = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
-  };
+  }, []);
 
-  useEffect(() => cancelPending, []);
-
-  const setMode = (m: Mode) => {
-    setModeState(m);
-    localStorage.setItem(MODE_STORAGE_KEY, m);
-  };
-
-  const commit = (iso: string | null) => {
-    setCommittedDate(iso);
-    if (iso) localStorage.setItem(CUSTOM_DATE_STORAGE_KEY, iso);
-    else localStorage.removeItem(CUSTOM_DATE_STORAGE_KEY);
-  };
+  useEffect(() => cancelPending, [cancelPending]);
 
   const setDays = (d: number) => {
     cancelPending();
-    setDaysState(d);
-    localStorage.setItem(DAYS_STORAGE_KEY, String(d));
+    setStoredDays(d);
     setMode('preset');
   };
 
   const setCustomDate = (iso: string | null) => {
-    setCustomDateState(iso);
+    setDraft(iso);
     cancelPending();
     // Сброс — явное действие (очистка поля), а не набор: применяем сразу и
     // стираем дату насовсем, в отличие от переключения на пресет.
     if (iso === null) {
       setMode('preset');
-      commit(null);
+      setCommittedDate(null);
       return;
     }
     setMode('custom');
     if (!isUsableDate(iso)) return;
-    timer.current = setTimeout(() => commit(iso), COMMIT_DELAY_MS);
+    timer.current = setTimeout(() => setCommittedDate(iso), COMMIT_DELAY_MS);
   };
 
   const customActive = mode === 'custom';

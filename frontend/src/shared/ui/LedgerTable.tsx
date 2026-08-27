@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useState, type ReactNode } from 'react';
-import { SkeletonLines } from '@/shared/ui/Skeleton';
+import { Skeleton } from '@/shared/ui/Skeleton';
 
 /** Описание одной колонки журнала. */
 export interface LedgerColumn<T> {
@@ -22,8 +22,29 @@ export interface LedgerColumn<T> {
   cellClassName?: string;
   /** Ключ сортировки. Есть — заголовок становится кликабельным. */
   sortKey?: string;
+  /**
+   * Колонка не рисует заглушку при загрузке. Ставится там, где ячейка несёт не
+   * значение, а действие (звезда закрепа, крестик удаления): полоса краски на
+   * этом месте обещает число, которое никогда не придёт, — а кнопка появится
+   * сама, когда появится строка.
+   */
+  noSkeleton?: boolean;
   render: (row: T) => ReactNode;
 }
+
+/**
+ * Ряды ширин заглушек в процентах от ячейки — свой для текста и свой для чисел.
+ *
+ * Ряд один на всю таблицу был ошибкой: в колонке «Сделок» стоит «14», а
+ * заглушка занимала под него 88 % ячейки — обещание длинного значения там, где
+ * придут два знака. Числа короткие и прижаты вправо, слова длинные и идут
+ * влево, и заглушка обязана врать не больше, чем на пару символов.
+ *
+ * Семь значений в каждом ряду — простое число: при любом числе колонок узор не
+ * ложится столбиками.
+ */
+const SKEL_TEXT = [76, 58, 88, 64, 82, 52, 70];
+const SKEL_NUM = [42, 56, 34, 48, 38, 60, 44];
 
 export interface LedgerSort {
   key: string;
@@ -38,6 +59,12 @@ interface LedgerTableProps<T> {
   /** Минимальная ширина, ниже которой таблица уезжает в горизонтальную прокрутку. */
   minWidth?: number;
   isLoading?: boolean;
+  /**
+   * Сколько строк-заглушек рисовать при загрузке. По умолчанию пять; страница
+   * с известным размером листа передаёт его, и тогда таблица занимает ровно ту
+   * высоту, которую займут пришедшие строки.
+   */
+  skeletonRows?: number;
   /** Что показать вместо строк, когда их нет. */
   empty?: ReactNode;
   sort?: LedgerSort;
@@ -73,6 +100,7 @@ export function LedgerTable<T>({
   rowKey,
   minWidth,
   isLoading,
+  skeletonRows = 5,
   empty,
   sort,
   onSort,
@@ -98,6 +126,17 @@ export function LedgerTable<T>({
     [c.align === 'right' ? 'r' : null, c.cellClassName].filter(Boolean).join(' ') || undefined;
 
   const labelOf = (c: LedgerColumn<T>) => c.label ?? (typeof c.header === 'string' ? c.header : '');
+
+  /**
+   * Ширина заглушки в ячейке. Не случайная — иначе полосы пересобираются на
+   * каждом рендере и таблица шевелится, — а снятая с постоянного ряда по
+   * номеру строки и колонки: соседние ячейки выходят разной длины, и блок
+   * читается как текст, а не как сетка одинаковых плашек.
+   */
+  const skelWidth = (row: number, col: number, numeric: boolean) => {
+    const ring = numeric ? SKEL_NUM : SKEL_TEXT;
+    return ring[(row * 3 + col * 2) % ring.length];
+  };
 
   return (
     <div className="scroll">
@@ -134,11 +173,31 @@ export function LedgerTable<T>({
         </thead>
         <tbody>
           {isLoading ? (
-            <tr>
-              <td colSpan={cols.length} data-l="">
-                <SkeletonLines widths={[100, 92, 84, 76]} />
-              </td>
-            </tr>
+            // Строки-заглушки по числу колонок, а не одна полоса на всю
+            // ширину: журнал грузится в свою же разметку — те же колонки, те
+            // же линейки, та же высота строки, — поэтому приход данных ничего
+            // не двигает. На узком экране таблица рассыпается в записи по
+            // `data-l`, и заглушкам подписи нужны ровно так же, как строкам.
+            Array.from({ length: skeletonRows }, (_, r) => (
+              <tr key={`skel-${r}`} aria-hidden>
+                {cols.map((c, i) => (
+                  <td key={c.key} data-l={labelOf(c)} className={cellClass(c)}>
+                    {c.key === '__caret' || c.noSkeleton ? null : (
+                      <Skeleton
+                        as="span"
+                        flush
+                        // 11px — рост строчной цифры этого набора: заглушка
+                        // занимает столько же места по вертикали, сколько
+                        // займёт число, и строка не садится при подстановке.
+                        height={11}
+                        width={`${skelWidth(r, i, c.align === 'right')}%`}
+                        className={c.align === 'right' ? 'skel-r' : undefined}
+                      />
+                    )}
+                  </td>
+                ))}
+              </tr>
+            ))
           ) : rows.length === 0 ? (
             <tr>
               <td colSpan={cols.length} data-l="" className="muted">

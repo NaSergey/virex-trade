@@ -1,13 +1,16 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/features/auth';
 import { Button } from '@/shared/ui/Button';
 import { Field, Input } from '@/shared/ui/Field';
 
 type Mode = 'login' | 'register';
+
+/** Путь внутри продукта: один слэш, дальше не слэш (иначе это чужой домен). */
+const NEXT_PATH = /^\/(?!\/)/;
 
 /**
  * Вход. Ни карточки, ни рамки: форма стоит на том же единственном фоне, что и
@@ -17,7 +20,19 @@ type Mode = 'login' | 'register';
 export default function LoginPage() {
   const { user, loading, login, register } = useAuth();
   const router = useRouter();
+  const params = useSearchParams();
   const t = useTranslations('auth');
+
+  /*
+   * Куда возвращать после входа: на страницу, с которой человека сюда завернул
+   * AuthGuard, иначе на Обзор.
+   *
+   * Принимается только путь внутри продукта — начинающийся с одного слэша.
+   * Без этой проверки `?next=//evil.example` браузер прочтёт как адрес чужого
+   * сайта и уведёт туда сразу после ввода пароля.
+   */
+  const nextParam = params.get('next');
+  const next = nextParam && NEXT_PATH.test(nextParam) ? nextParam : '/overview';
 
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
@@ -28,8 +43,8 @@ export default function LoginPage() {
 
   // Уже авторизован → в приложение.
   useEffect(() => {
-    if (!loading && user) router.replace('/');
-  }, [loading, user, router]);
+    if (!loading && user) router.replace(next);
+  }, [loading, user, next, router]);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -38,7 +53,7 @@ export default function LoginPage() {
     try {
       if (mode === 'login') await login(email, password);
       else await register(email, password, name || undefined);
-      router.replace('/');
+      router.replace(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('genericError'));
     } finally {

@@ -27,9 +27,13 @@ export function TagsPage() {
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
   const { data: tagsData } = useTags();
-  const { data: statsData } = useTagStats(effectiveDays);
+  // isLoading, а не isFetching: смена периода перечитывает срез, но прежние
+  // строки при этом остаются (keepPreviousData), и подменять их заглушками
+  // значило бы прятать то, что уже прочитано. Заглушки — только на первом
+  // заходе, когда на их месте пусто.
+  const { data: statsData, isLoading: statsLoading } = useTagStats(effectiveDays);
   const pin = useCreateSavedCombo();
-  const comboRows = useComboRows(effectiveDays, setConfirm);
+  const { rows: comboRows, isLoading: combosLoading } = useComboRows(effectiveDays, setConfirm);
 
   return (
     <Wrap page>
@@ -39,11 +43,12 @@ export function TagsPage() {
           названа пунктом навигации, а что за таблица — говорит подпись первой
           колонки. Создание живёт последней строкой самой таблицы — отдельной
           строкой над ней кнопка висела в поле, ни к чему не привязанная. */}
-      <ComboTable rows={comboRows} onCreate={() => setComboDialog(true)} />
+      <ComboTable rows={comboRows} isLoading={combosLoading} onCreate={() => setComboDialog(true)} />
 
       <AllTags
         tags={statsData?.tags ?? []}
         taggedTrades={(statsData?.totalTrades ?? 0) - (statsData?.untagged.trades ?? 0)}
+        isLoading={statsLoading}
         onEditTag={(tagId) => {
           const tag = (tagsData?.tags ?? []).find((x) => x.id === tagId);
           if (tag) setEditing(tag);

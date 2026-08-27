@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { PERIOD_VALUES } from '../model/usePeriodFilter';
 import { Seg } from '@/shared/ui/Seg';
+import { Skeleton } from '@/shared/ui/Skeleton';
 import { Input } from '@/shared/ui/Field';
 import { formatPeriodRange } from '@/shared/lib/utils/period';
 import { useLocaleControl } from '@/shared/i18n';
@@ -72,13 +73,19 @@ export function PeriodRail({
         {title && (
           <>
             {title} · <b>{range}</b>
-            {trades != null && ' · '}
+            {' · '}
           </>
         )}
-        {trades != null && (
+        {/* Пока числа нет — заглушка на его месте, а не пустота: счётчик стоит
+            в одной строке с периодом, и появление цифры сдвигало бы уже
+            прочитанную фразу. Ширина взята под трёхзначное число — самый
+            частый случай, — так что подстановка почти не двигает хвост. */}
+        {trades != null ? (
           <>
             <b>{trades}</b> {t('tradesSuffix')}
           </>
+        ) : (
+          <Skeleton as="span" inline flush height={9} width={72} />
         )}
       </span>
       <div className="period">

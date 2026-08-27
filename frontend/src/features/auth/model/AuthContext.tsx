@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { API_BASE_URL } from '@/shared/config/api';
-import { resolveApiError, setUnauthenticatedHandler } from '@/shared/api/http';
+import { refreshSession, resolveApiError, setUnauthenticatedHandler } from '@/shared/api/http';
 import { tokenStore } from '@/shared/lib/tokenStore';
 
 export interface User {
@@ -37,28 +37,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // On mount, try to restore the session from the HttpOnly refresh cookie.
+  /*
+   * При загрузке страницы сессия восстанавливается из HttpOnly-куки.
+   *
+   * Через общий `refreshSession`, а не своим fetch'ем: тот же обмен затевают
+   * запросы страницы, которая рисуется одновременно с этим, а refresh-токен у
+   * бэкенда одноразовый — два параллельных обмена отняли бы куку друг у друга.
+   * Там обмен один на всех, и кто пришёл вторым, дожидается первого.
+   */
   useEffect(() => {
     let active = true;
-    (async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
-          method: 'POST',
-          credentials: 'include',
-        });
-        if (res.ok) {
-          const data = await res.json();
-          tokenStore.set(data.accessToken ?? null);
-          if (active) setUser(data.user ?? null);
-        } else {
-          tokenStore.set(null);
-        }
-      } catch {
-        tokenStore.set(null);
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
+    void refreshSession().then(({ user: restored }) => {
+      if (!active) return;
+      setUser((restored as User | null) ?? null);
+      setLoading(false);
+    });
     return () => {
       active = false;
     };

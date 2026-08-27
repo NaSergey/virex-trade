@@ -36,9 +36,12 @@ export const AnalyticsPage = () => {
     { value: 730, label: t('history2y') },
   ];
 
-  const { data: sentimentData } = useMarketSentiment(symbol);
-  const { data: hourly } = useHourlyStats(historyDays);
-  const { data: corr } = useMarketCorrelation(historyDays);
+  // isLoading, а не isFetching: смена инструмента или глубины истории
+  // перечитывает срез, и подменять уже показанные числа заглушками значило бы
+  // мигать страницей на каждом щелчке тумблера.
+  const { data: sentimentData, isLoading: sentimentLoading } = useMarketSentiment(symbol);
+  const { data: hourly, isLoading: hourlyLoading } = useHourlyStats(historyDays);
+  const { data: corr, isLoading: corrLoading } = useMarketCorrelation(historyDays);
 
   return (
     <Wrap page style={{ paddingTop: 'var(--s4)' }}>
@@ -47,17 +50,17 @@ export const AnalyticsPage = () => {
           <SectionHead title={t('positioningTitle')}>
             <Seg options={SYMBOLS} value={symbol} onChange={setSymbol} ariaLabel={t('instrumentAriaLabel')} />
           </SectionHead>
-          <Positioning data={sentimentData} />
+          <Positioning data={sentimentData} isLoading={sentimentLoading} />
 
           <SectionHead title={t('hourlyVolatilityTitle')} style={{ marginTop: 'var(--s5)' }}>
             <Seg options={HISTORY} value={historyDays} onChange={setHistoryDays} ariaLabel={t('historyDepthAriaLabel')} />
           </SectionHead>
-          <HourlyVolatility hours={hourly?.hourly ?? []} />
+          <HourlyVolatility hours={hourly?.hourly ?? []} isLoading={hourlyLoading} />
         </div>
 
         <aside className="marg">
           <h2>{t('weekdayOddsTitle')}</h2>
-          <WeekdayOdds corr={corr} />
+          <WeekdayOdds corr={corr} isLoading={corrLoading} />
         </aside>
       </div>
     </Wrap>

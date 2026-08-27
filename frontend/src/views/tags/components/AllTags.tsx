@@ -27,12 +27,15 @@ type SortKey = 'trades' | 'winRate' | 'profitFactor' | 'avgWin' | 'avgLoss' | 't
 export function AllTags({
   tags,
   taggedTrades,
+  isLoading,
   onEditTag,
   askConfirm,
 }: {
   tags: TagBucket[];
   /** Сколько всего сделок несут хотя бы один тег — база для проверки пересечений. */
   taggedTrades: number;
+  /** Первая загрузка среза: таблица держит место заглушками. */
+  isLoading?: boolean;
   onEditTag: (tagId: string) => void;
   askConfirm: (request: ConfirmRequest) => void;
 }) {
@@ -141,6 +144,7 @@ export function AllTags({
       key: 'del',
       width: 20,
       align: 'right',
+      noSkeleton: true,
       render: (row) =>
         row.id == null ? null : (
           <Button
@@ -188,6 +192,8 @@ export function AllTags({
         rows={rows}
         rowKey={(row) => row.id ?? row.name}
         minWidth={900}
+        isLoading={isLoading}
+        skeletonRows={6}
         sort={sort}
         onSort={(key) =>
           setSort((s) =>

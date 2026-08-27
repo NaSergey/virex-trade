@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  memo,
   useEffect,
   useId,
   useMemo,
@@ -71,7 +72,20 @@ function readoutAt(point: { x: number; y: number }, u: number, boxW: number) {
  * Сам компонент — только порядок слоёв и наведение: что где лежит, считает
  * `model/geometry`, как это выглядит — `ui/layers`.
  */
-export function EquityChart({ data, height = 300 }: { data: EquityPoint[]; height?: number }) {
+/**
+ * Холст под memo: на Обзоре кривая стоит над журналом, и перелистывание
+ * страницы журнала перерисовывало родителя — вместе с ним пересобиралась вся
+ * геометрия кривой, к сделкам на листе никакого отношения не имеющая. Ряд
+ * точек приходит из кэша запроса и по ссылке не меняется, поэтому сравнение
+ * пропсов здесь честно отсекает лишнюю работу.
+ */
+export const EquityChart = memo(function EquityChart({
+  data,
+  height = 300,
+}: {
+  data: EquityPoint[];
+  height?: number;
+}) {
   const t = useTranslations('equityChart');
   const { locale } = useLocaleControl();
   const intlLocale = locale === 'en' ? 'en-US' : 'ru-RU';
@@ -206,4 +220,4 @@ export function EquityChart({ data, height = 300 }: { data: EquityPoint[]; heigh
       )}
     </div>
   );
-}
+});

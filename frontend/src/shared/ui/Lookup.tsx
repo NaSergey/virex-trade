@@ -18,15 +18,24 @@ export function KeyValue({
   children,
   /** Значение набирается не цифрами: `mask` — маскированный ключ, `n pos` и т.п. */
   valueClassName = 'n',
+  control = false,
 }: {
   label: ReactNode;
   children: ReactNode;
   valueClassName?: string;
+  /**
+   * Справа не значение, а орган управления (переключатель языка в меню
+   * профиля). Меняется только тег обёртки — span не имеет права содержать
+   * блочную разметку, из которой собран `Seg`. Строка, линейка и подпись
+   * остаются теми же: пара «подпись → что-то справа» в продукте одна.
+   */
+  control?: boolean;
 }) {
+  const Value = control ? 'div' : 'span';
   return (
-    <div className="kv">
+    <div className={cn('kv', control && 'ctl')}>
       <span className="lbl">{label}</span>
-      <span className={valueClassName || undefined}>{children}</span>
+      <Value className={valueClassName || undefined}>{children}</Value>
     </div>
   );
 }

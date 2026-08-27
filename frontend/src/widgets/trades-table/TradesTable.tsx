@@ -78,6 +78,7 @@ const ROOMY_ONLY = new Set(['exit', 'qty', 'hold']);
 export function TradesTable({
   trades,
   isLoading,
+  skeletonRows,
   onEditTags,
   range,
   compact,
@@ -85,6 +86,8 @@ export function TradesTable({
 }: {
   trades: Trade[];
   isLoading?: boolean;
+  /** Сколько строк-заглушек показать при загрузке — размер листа страницы. */
+  skeletonRows?: number;
   /** Без обработчика тег из таблицы не завести — плашки останутся только на чтение. */
   onEditTags?: (trade: Trade) => void;
   /** Показать колонку «Диапазон» выбранного таймфрейма. */
@@ -204,6 +207,7 @@ export function TradesTable({
       rows={trades}
       rowKey={(tr) => tr.id}
       isLoading={isLoading}
+      skeletonRows={skeletonRows}
       renderExpanded={(tr) => <TradeOrders trade={tr} />}
       empty={
         empty ?? (

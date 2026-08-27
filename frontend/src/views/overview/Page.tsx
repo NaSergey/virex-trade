@@ -5,12 +5,18 @@ import { useTranslations } from 'next-intl';
 import { useTradeStats, useTimeStats, useTrades, type Trade } from '@/entities/trade';
 import { Wrap } from '@/shared/ui/Wrap';
 import { Pagination } from '@/shared/ui/Pagination';
-import { Skeleton } from '@/shared/ui/Skeleton';
 import { usePeriodFilter, PeriodStrip } from '@/features/period-filter';
-import { buildEquityGeometry, EquityChart } from '@/widgets/equity-chart';
+import { buildEquityGeometry, EquityChart, EquityChartSkeleton } from '@/widgets/equity-chart';
 import { SummaryStrip, SummaryStripSkeleton } from './components/SummaryStrip';
 import { OpenPositions } from './components/OpenPositions';
-import { HourBars, HoldTimes, WeekdayRows } from './components/TimeBreakdown';
+import {
+  HourBars,
+  HourBarsSkeleton,
+  HoldTimes,
+  HoldTimesSkeleton,
+  WeekdayRows,
+  WeekdayRowsSkeleton,
+} from './components/TimeBreakdown';
 import { TradesTable } from '@/widgets/trades-table';
 import { TradeTagsModal } from './components/TradeTagsModal';
 
@@ -60,10 +66,20 @@ export function OverviewPage() {
         </PeriodStrip>
       </Wrap>
 
-      {equity.length > 1 && (
+      {/* Холст держит место, пока свод не пришёл: без заглушки блок кривой
+          занимает ноль, а с ответом вырастает и сдвигает вниз всю страницу.
+          Когда ответ пришёл и рисовать нечего (сделок нет), блока нет вовсе —
+          пустой холст обещал бы кривую, которой не будет. */}
+      {!statsData ? (
         <div className="bleed">
-          <EquityChart data={equity} />
+          <EquityChartSkeleton />
         </div>
+      ) : (
+        equity.length > 1 && (
+          <div className="bleed">
+            <EquityChart data={equity} />
+          </div>
+        )
       )}
 
       <OpenPositions />
@@ -74,13 +90,17 @@ export function OverviewPage() {
               и кончился на одной линии с маргиналиями справа. */}
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <h2>{t('byWeekday')}</h2>
-            {timeData ? <WeekdayRows buckets={timeData.byWeekday} /> : <Skeleton />}
+            {timeData ? <WeekdayRows buckets={timeData.byWeekday} /> : <WeekdayRowsSkeleton />}
           </div>
           <aside className="marg">
             <h2>{t('byHour')}</h2>
-            <HourBars buckets={timeData?.byHour ?? []} />
+            {timeData ? <HourBars buckets={timeData.byHour} /> : <HourBarsSkeleton />}
             <p className="foot">{t('hourBarsCaption')}</p>
-            {timeData && <HoldTimes duration={timeData.duration} peak={curve?.peak} />}
+            {timeData ? (
+              <HoldTimes duration={timeData.duration} peak={curve?.peak} />
+            ) : (
+              <HoldTimesSkeleton />
+            )}
           </aside>
         </div>
       </Wrap>
@@ -90,6 +110,7 @@ export function OverviewPage() {
         <TradesTable
           trades={tradesData?.trades ?? []}
           isLoading={tradesLoading && !tradesData}
+          skeletonRows={PAGE_SIZE}
           onEditTags={setTaggingTrade}
         />
         {tradesData && tradesData.total > 0 && (

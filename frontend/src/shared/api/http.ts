@@ -8,10 +8,30 @@ export function setUnauthenticatedHandler(fn: (() => void) | null): void {
   onUnauthenticated = fn;
 }
 
-// Single-flight refresh: many parallel 401s should trigger only one /auth/refresh.
-let refreshPromise: Promise<string | null> | null = null;
+/** Что вернул `/auth/refresh`: новый токен доступа и владелец сессии. */
+export interface RefreshedSession {
+  token: string | null;
+  /** Форму знает слой auth; здесь это просто тело ответа, которое надо донести. */
+  user: unknown | null;
+}
 
-export async function refreshAccessToken(): Promise<string | null> {
+// Single-flight refresh: many parallel 401s should trigger only one /auth/refresh.
+let refreshPromise: Promise<RefreshedSession> | null = null;
+
+/**
+ * Восстановление сессии по HttpOnly-куке — одно на всех.
+ *
+ * Одно, а не по одному на вызывающего: у бэкенда refresh-токен одноразовый, и
+ * два параллельных обмена (загрузка AuthProvider плюс первый же запрос
+ * страницы) гонятся за одну и ту же куку — выигравший обесценивает токен
+ * проигравшего, и сессия рвётся на ровном месте. Поэтому и AuthProvider, и
+ * `apiFetch` ходят сюда, а не каждый своим fetch'ем.
+ *
+ * Пользователь возвращается вместе с токеном, потому что бэкенд отдаёт их
+ * одним ответом. Тип у него `unknown`: http-слой не обязан знать, как устроен
+ * пользователь продукта, — его разбирает тот, кто спрашивал.
+ */
+export async function refreshSession(): Promise<RefreshedSession> {
   if (!refreshPromise) {
     refreshPromise = (async () => {
       try {
@@ -21,15 +41,15 @@ export async function refreshAccessToken(): Promise<string | null> {
         });
         if (!res.ok) {
           tokenStore.set(null);
-          return null;
+          return { token: null, user: null };
         }
         const data = await res.json();
         const token: string | null = data?.accessToken ?? null;
         tokenStore.set(token);
-        return token;
+        return { token, user: data?.user ?? null };
       } catch {
         tokenStore.set(null);
-        return null;
+        return { token: null, user: null };
       }
     })();
     void refreshPromise.finally(() => {
@@ -37,6 +57,10 @@ export async function refreshAccessToken(): Promise<string | null> {
     });
   }
   return refreshPromise;
+}
+
+export async function refreshAccessToken(): Promise<string | null> {
+  return (await refreshSession()).token;
 }
 
 // Authenticated fetch: attaches the access token, sends cookies, and on a 401
@@ -58,7 +82,22 @@ export async function apiFetch(
     });
   };
 
-  let res = await doFetch(tokenStore.get());
+  /*
+   * Токена нет — значит, сессия ещё восстанавливается (он живёт только в памяти
+   * вкладки и умирает вместе со страницей). Ждём общее восстановление, а не
+   * стреляем без него.
+   *
+   * Это и есть то, что позволяет странице рисоваться сразу: её запросы просто
+   * висят, пока едет сессия, и всё это время человек видит заглушки самой
+   * страницы. Раньше на их месте стоял общий экран ожидания — один и тот же на
+   * все пять разделов, потому что рисовался он до того, как страница вообще
+   * бралась за дело.
+   *
+   * Без токена запрос всё равно ушёл бы — получил 401 и пошёл обновляться уже
+   * после; лишний круг по сети на каждый запрос первого экрана.
+   */
+  const token = tokenStore.get() ?? (await refreshSession()).token;
+  let res = await doFetch(token);
 
   if (res.status === 401) {
     const newToken = await refreshAccessToken();

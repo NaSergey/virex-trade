@@ -36,7 +36,15 @@ const SORT_VALUE: Record<string, (r: ComboRow) => number> = {
  * середину списка по чужому признаку — терять как раз то, ради чего её
  * закрепили. Внутри каждой из двух групп порядок уже задаёт колонка.
  */
-export function ComboTable({ rows, onCreate }: { rows: ComboRow[]; onCreate: () => void }) {
+export function ComboTable({
+  rows,
+  isLoading,
+  onCreate,
+}: {
+  rows: ComboRow[];
+  isLoading?: boolean;
+  onCreate: () => void;
+}) {
   const t = useTranslations('tags');
   const [sort, setSort] = useState<LedgerSort>({ key: 'trades', dir: -1 });
 
@@ -59,6 +67,7 @@ export function ComboTable({ rows, onCreate }: { rows: ComboRow[]; onCreate: () 
       key: 'pin',
       width: 28,
       cellClassName: 'pin-cell',
+      noSkeleton: true,
       render: (r) => (
         <Button
           variant="none"
@@ -120,6 +129,7 @@ export function ComboTable({ rows, onCreate }: { rows: ComboRow[]; onCreate: () 
     key: 'acts',
     width: 180,
     align: 'right',
+    noSkeleton: true,
     header: (
       <span className="acts">
         <Button variant="bare" onClick={onCreate}>
@@ -161,6 +171,10 @@ export function ComboTable({ rows, onCreate }: { rows: ComboRow[]; onCreate: () 
       rows={sorted}
       rowKey={(r) => r.key}
       minWidth={980}
+      isLoading={isLoading}
+      // Четыре строки — столько же, сколько обычно приходит комбинаций: лист
+      // не подпрыгивает ни вверх, ни вниз, когда заглушки сменяются данными.
+      skeletonRows={4}
       sort={sort}
       // Первый клик по колонке — по убыванию: вопрос к любой из них «где
       // больше», а не «где меньше». Повторный переворачивает.

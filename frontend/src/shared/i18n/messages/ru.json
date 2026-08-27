@@ -6,6 +6,8 @@
   "common": {
     "restoringSession": "Восстанавливаем сессию…",
     "language": "Язык",
+    "themeLight": "Светлая тема",
+    "themeDark": "Тёмная тема",
     "cancel": "Отмена",
     "prevPage": "← Назад",
     "nextPage": "Вперёд →",

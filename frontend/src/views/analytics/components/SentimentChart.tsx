@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointer
 import { useTranslations } from 'next-intl';
 import type { SentimentPoint } from '../api/hooks';
 import { useLocaleControl, type Locale } from '@/shared/i18n';
+import { Skeleton } from '@/shared/ui/Skeleton';
 
 const W = 900;
 const PT = 18;
@@ -172,6 +173,34 @@ export function SentimentChart({ data, height = 180 }: { data: SentimentPoint[];
           </g>
         )}
       </svg>
+    </div>
+  );
+}
+
+/**
+ * Место кривой настроений, пока её нечем нарисовать.
+ *
+ * Тот же приём, что и у кривой P&L: невидимый холст держит мерку — высота
+ * выходит ровно та, что займёт ответ при любой ширине экрана, — а видимое
+ * место занимает общая краска заглушки, приглушённая до холстовой.
+ *
+ * Подобие кривой здесь рисовать нельзя: у неё есть направление, а направление
+ * — это и есть ответ.
+ */
+export function SentimentChartSkeleton({ height = 180 }: { height?: number }) {
+  return (
+    <div style={{ position: 'relative' }} aria-hidden>
+      <svg
+        viewBox={`0 0 ${W} ${height}`}
+        style={{ display: 'block', width: '100%', height: 'auto', visibility: 'hidden' }}
+      />
+      {/* Обёртка держит место, краска заполняет её целиком. Своей высотой
+          заглушка этого не умеет: `.skel` объявляет height: 12px, и на
+          абсолютно спозиционированном узле эта высота сильнее растяжки по
+          inset — холст в треть экрана выходил полоской в двенадцать пикселей. */}
+      <div style={{ position: 'absolute', inset: 0 }}>
+        <Skeleton as="span" flush height="100%" className="skel-canvas" />
+      </div>
     </div>
   );
 }

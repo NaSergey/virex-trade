@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import type { LabFacetValue } from '../api/hooks';
 import { MIN_N } from '@/shared/lib/utils/confidence';
 import { Money } from '@/shared/ui/Money';
+import { Skeleton } from '@/shared/ui/Skeleton';
 
 /** Одно условие выборки: чем оно обернётся, видно рядом с ним. */
 export interface FilterOption {
@@ -60,11 +61,18 @@ function OptionRow({
 export function FilterGroup({
   title,
   options,
+  isLoading,
   defaultOpen,
   children,
 }: {
   title: string;
   options: FilterOption[];
+  /**
+   * Список условий ещё едет. Без этого признака пустой список во время загрузки
+   * неотличим от пустого по существу, и группа успевала сказать «нет данных за
+   * период» про период, в котором данные есть.
+   */
+  isLoading?: boolean;
   defaultOpen?: boolean;
   /** Управление, относящееся ко всей группе (например, выбор таймфрейма). */
   children?: React.ReactNode;
@@ -86,7 +94,20 @@ export function FilterGroup({
         {options.map(({ key, ...opt }, i) => (
           <OptionRow key={key} {...opt} index={Math.min(i + (children ? 1 : 0), 12)} />
         ))}
-        {options.length === 0 && <p className="subtle">{t('noDataForPeriod')}</p>}
+        {options.length === 0 &&
+          (isLoading ? (
+            // Четыре строки той же высоты, что и условия: раскрытая группа не
+            // схлопывается и не растёт, когда список приезжает.
+            <div aria-hidden>
+              {[68, 44, 76, 52].map((w, i) => (
+                <span className="opt" key={i}>
+                  <Skeleton as="span" flush height={9} width={`${w}%`} />
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="subtle">{t('noDataForPeriod')}</p>
+          ))}
       </div>
     </details>
   );

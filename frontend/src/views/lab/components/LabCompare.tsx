@@ -3,13 +3,23 @@
 import { useTranslations } from 'next-intl';
 import type { LabAgg } from '../api/hooks';
 import { formatMoney, moneyClass } from '@/shared/lib/utils/format';
+import { Skeleton } from '@/shared/ui/Skeleton';
 
 /**
  * Выборка против базовой линии периода. У каждой величины под ней стоит то же
  * число по всем сделкам и отклонение в процентах — иначе «винрейт 63 %» не
  * значит ничего: он может быть и лучше обычного, и хуже.
  */
-export function LabCompare({ filtered, baseline }: { filtered?: LabAgg; baseline?: LabAgg }) {
+export function LabCompare({
+  filtered,
+  baseline,
+  isLoading,
+}: {
+  filtered?: LabAgg;
+  baseline?: LabAgg;
+  /** Считаем первую выборку: на месте чисел заглушки, а не прочерки. */
+  isLoading?: boolean;
+}) {
   const t = useTranslations('lab');
   const cells = [
     {
@@ -46,8 +56,18 @@ export function LabCompare({ filtered, baseline }: { filtered?: LabAgg; baseline
     <div className="cmp">
       {cells.map((c) => (
         <div key={c.label}>
+          {/* Подписи стоят и во время счёта: они известны заранее и не зависят
+              от ответа. Прятать их под заглушку значило бы отнимать у человека
+              то, что уже можно прочесть, — какие четыре величины он сравнивает. */}
           <span className="lbl">{c.label}</span>
-          <div className={`cmp-v${c.tone ? ` ${c.tone}` : ''}`}>{c.value}</div>
+          <div className={`cmp-v${c.tone ? ` ${c.tone}` : ''}`}>
+            {/* Прочерк здесь означает «сделок нет», и во время счёта он врёт:
+                выборка ещё не посчитана, а не пуста. */}
+            {/* Мерка в пикселях, а не в процентах ячейки: ячейка широкая, а
+                значение в ней короткое («14», «63.2 %»), и доля от ячейки
+                обещала бы число вчетверо длиннее того, что придёт. */}
+            {isLoading ? <Skeleton as="span" flush height={17} width={96} /> : c.value}
+          </div>
         </div>
       ))}
     </div>

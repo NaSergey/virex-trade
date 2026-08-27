@@ -73,10 +73,7 @@ export const SettingsPage = () => {
     return (
       <Wrap page>
         <PageHead title={t('pageTitle')} lede={t('pageLede')} />
-        <div className="set">
-          <Skeleton />
-          <Skeleton width="60%" />
-        </div>
+        <SettingsSkeleton />
       </Wrap>
     );
   }
@@ -350,5 +347,40 @@ function ConnectForm({
         {pending ? t('checkingKeys') : t('connect')}
       </Button>
     </>
+  );
+}
+
+/**
+ * Настройки, пока каталог бирж едет.
+ *
+ * Раньше здесь стояли две полосы поперёк листа — они не были похожи ни на один
+ * из двух видов этой страницы, и приход ответа перестраивал экран целиком.
+ * Заглушка повторяет вид подключённой биржи: переключатель, заголовок, три
+ * справочные пары и сноска о хранении ключей. Это чаще всего и приезжает —
+ * человек, у которого ключей ещё нет, доходит сюда один раз, а тот, у кого они
+ * есть, открывает эту страницу снова и снова.
+ *
+ * Опасная зона в заглушке не воспроизводится: красная линейка и слово
+ * «Отключить» под ней — обещание, которое нельзя давать вслепую, пока неясно,
+ * подключено ли вообще что-нибудь.
+ */
+function SettingsSkeleton() {
+  return (
+    <div className="set" aria-hidden>
+      <Skeleton height={9} width={64} />
+      <Skeleton height={26} width={220} />
+      <div style={{ marginTop: 'var(--s4)' }}>
+        <Skeleton height={16} width="46%" />
+      </div>
+      {[0, 1, 2].map((i) => (
+        <div className="kv" key={i}>
+          <Skeleton as="span" flush height={9} width={92} />
+          <Skeleton as="span" flush height={9} width={168} />
+        </div>
+      ))}
+      <p className="foot">
+        <Skeleton as="span" flush height={8} width="78%" />
+      </p>
+    </div>
   );
 }

@@ -6,6 +6,8 @@
   "common": {
     "restoringSession": "Restoring session…",
     "language": "Language",
+    "themeLight": "Light theme",
+    "themeDark": "Dark theme",
     "cancel": "Cancel",
     "prevPage": "← Back",
     "nextPage": "Next →",

@@ -1,40 +1,43 @@
 'use client';
 
 import { useEffect, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '../model/AuthContext';
 
-// Wrap protected content. Redirects to /login when there is no session.
+/**
+ * Пускает к содержимому продукта, а без сессии уводит на /login.
+ *
+ * Пока сессия восстанавливается — содержимое РИСУЕТСЯ. Это главное решение
+ * этого файла, и раньше оно было противоположным: guard держал экран
+ * ожидания, пока не придёт ответ от `/auth/refresh`, и всё, что человек видел
+ * при перезагрузке любого из пяти разделов, — один и тот же общий блок.
+ * Постраничные заглушки — свод «Обзора», две таблицы «Тегов», условия
+ * «Выборки» — начинались только после него и успевали мелькнуть.
+ *
+ * Ничего страшного при этом не происходит: запросы страницы уходят через
+ * `apiFetch`, а он без токена сам дожидается общего восстановления сессии
+ * (см. `refreshSession`). То есть страница просто стоит в своих заглушках
+ * ровно столько же, сколько раньше стоял общий экран, — но это её заглушки, на
+ * местах её чисел.
+ *
+ * Адрес, на который человек шёл, передаётся входу параметром `next`: ссылку на
+ * «Настройки» можно положить в закладки, и возвращать её владельца на Обзор
+ * только потому, что сессия истекла, значит терять то, ради чего он пришёл.
+ */
 export function AuthGuard({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
-  const t = useTranslations('common');
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!loading && !user) {
-      router.replace('/login');
+      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
     }
-  }, [loading, user, router]);
+  }, [loading, user, pathname, router]);
 
-  if (loading) {
-    // Крутящегося колечка тут быть не может: радиус в этой системе нулевой,
-    // так что «спиннер» — это квадрат. Ожидание показывается словом.
-    return (
-      <div
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <span className="lbl">{t('restoringSession')}</span>
-      </div>
-    );
-  }
-
-  if (!user) return null;
+  // Проверка закончилась, сессии нет — переход на вход уже начат. Держать в
+  // это мгновение заглушки значило бы обещать содержимое, которого не будет.
+  if (!loading && !user) return null;
 
   return <>{children}</>;
 }

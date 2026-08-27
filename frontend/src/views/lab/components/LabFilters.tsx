@@ -114,7 +114,7 @@ export function LabFilters({
   const { sessionLabels, trendLabels, emaLabels, atrLabels, volLabels, rangeLabels, rangeHints, rangeTfWindows } =
     useLabLabels();
   const { filters, set, toggleMulti, toggleSingle, toggleWeekday } = state;
-  const { data: tagsData } = useTags();
+  const { data: tagsData, isLoading: tagsLoading } = useTags();
   const tags = tagsData?.tags ?? [];
 
   const facetSymbols = data?.facets.find((f) => f.dimension === 'symbol')?.values.map((v) => v.key) ?? [];
@@ -221,8 +221,8 @@ export function LabFilters({
       </SectionHead>
       {data?.coverage && <Coverage coverage={data.coverage} />}
 
-      <FilterGroup title={tNav('tags')} options={tagOptions} />
-      <FilterGroup title={t('symbolsGroupTitle')} options={symbolOptions} />
+      <FilterGroup title={tNav('tags')} options={tagOptions} isLoading={tagsLoading} />
+      <FilterGroup title={t('symbolsGroupTitle')} options={symbolOptions} isLoading={!data} />
       <FilterGroup title={t('timeGroupTitle')} options={timeOptions}>
         <Lookup one style={{ marginBottom: 'var(--s2)' }}>
           <KeyValue label={t('entryHours')} valueClassName="">
