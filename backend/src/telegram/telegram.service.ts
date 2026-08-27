@@ -24,6 +24,8 @@ export interface OpenedPositionInfo {
   size?: string;
   avgPrice?: string;
   leverage?: string;
+  /** Стоп на бирже. Отсутствует и когда его нет, и когда биржа его не отдаёт. */
+  stopLoss?: string;
 }
 
 /**

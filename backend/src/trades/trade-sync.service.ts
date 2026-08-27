@@ -14,6 +14,19 @@ const BACKFILL_WEEKS = 26; // first run: import ~6 months of history
 const SYNC_INTERVAL_MS = 60_000; // periodic incremental sync
 
 /**
+ * Стоп с биржи — десятичная строка. Ноль и пустая строка у нескольких бирж
+ * означают «стопа нет», и превращать их в 0 нельзя: planned_risk_pct тогда
+ * покажет 100% там, где стопа просто не было, и правило соврёт в сторону,
+ * которая выглядит как забота о пользователе.
+ */
+export function stopLossOf(raw: string | undefined): number | null {
+  if (!raw) return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}
+
+/**
  * Keeps each connected user's local `trades` table in sync with the realized-PnL
  * history of whichever exchange they have active. On boot (and then on an
  * interval) it loops over every user with a connected exchange and pulls their
@@ -139,7 +152,7 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     // registry row still exists; must run before the prune below drops the
     // rows of closed positions.
     try {
-      const filled = await this.fillOpenedAt(userId);
+      const filled = await this.fillEntryStamps(userId);
       if (filled > 0) this.logger.log(`stamped openedAt on ${filled} trade(s)`);
     } catch (e) {
       this.logger.warn(`openedAt fill failed: ${e}`);
@@ -157,7 +170,7 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
       this.logger.warn(`position rebuild failed: ${e}`);
     }
     // Market-context snapshots for trades that don't have one yet (new trades
-    // + progressive backfill of history). Must run AFTER fillOpenedAt so the
+    // + progressive backfill of history). Must run AFTER fillEntryStamps so the
     // snapshot anchors at the entry time whenever we know it.
     try {
       const ctx = await this.tradeContext.computeMissing(userId);
@@ -187,6 +200,7 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
             size: p.size,
             avgPrice: p.avgPrice,
             leverage: p.leverage,
+            stopLoss: p.stopLoss,
           }));
         await this.trackOpenPositions(userId, positions);
       }
@@ -216,7 +230,7 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
       if (existingKeys.has(`${p.symbol}|${p.direction}`)) continue;
       await this.prisma.openPositionSeen.upsert({
         where: { userId_symbol_direction: { userId, symbol: p.symbol, direction: p.direction } },
-        create: { userId, symbol: p.symbol, direction: p.direction },
+        create: { userId, symbol: p.symbol, direction: p.direction, stopLoss: stopLossOf(p.stopLoss) },
         update: {}, // first-seen time never moves while the position stays open
       });
       // A failed telegram send must never break the sync loop.
@@ -296,12 +310,19 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
   }
 
   /**
-   * Copy first-seen times onto freshly synced trades of the same position
-   * (closedAt >= firstSeenAt guards against stamping an earlier position's
-   * trades). Trades whose position opened while the server was down keep
-   * openedAt = null and are simply skipped by time-based stats.
+   * Проставить свежесинхронизированным сделкам то, что известно только из
+   * реестра открытых позиций: время входа и объявленный на входе стоп.
+   *
+   * Guard `closedAt >= firstSeenAt` не даёт пометить сделки предыдущей позиции
+   * по тому же символу. Сделки, чья позиция открылась при лежащем сервере,
+   * остаются без обоих полей — статистика по времени их просто пропускает, а
+   * правило по плановому риску не считает их ни нарушением, ни соблюдением.
+   *
+   * Стоп ставится тем же updateMany и под тем же условием `openedAt: null`, а
+   * не своим: оба поля приходят из одной строки реестра в один момент, и
+   * второе условие развело бы их при первом же частичном сбое.
    */
-  private async fillOpenedAt(userId: string): Promise<number> {
+  private async fillEntryStamps(userId: string): Promise<number> {
     const rows = await this.prisma.openPositionSeen.findMany({ where: { userId } });
     let filled = 0;
     for (const r of rows) {
@@ -313,7 +334,7 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
           openedAt: null,
           closedAt: { gte: r.firstSeenAt },
         },
-        data: { openedAt: r.firstSeenAt },
+        data: { openedAt: r.firstSeenAt, stopLoss: r.stopLoss },
       });
       filled += res.count;
     }
