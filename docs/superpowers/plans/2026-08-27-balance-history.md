@@ -688,15 +688,28 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { Flow } from './balance-chain';
 
 /**
+ * Биржи, у которых closedPnl НЕ включает комиссии, — их надо вычесть отдельно.
+ *
+ * Разведка (Task 1) показала, что шесть бирж из семи отдают реализованный PnL
+ * уже за вычетом комиссий, а Binance — нет: сотрудник Binance на форуме
+ * разработчиков прямо пишет, что «REALIZED_PNL doesn't include the fee so
+ * you'll need to deduct the fees from it», и комиссия приезжает отдельным
+ * полем commission.
+ *
+ * Ошибиться здесь можно в обе стороны, и обе дают один симптом. Вычесть
+ * комиссии там, где они уже вычтены, — ряд поедет вниз. Не вычесть там, где
+ * они не вычтены, — поедет вверх. Поехавший в любую сторону ряд код прочитает
+ * как ввод или вывод средств, то есть придумает пользователю движение денег,
+ * которого не было.
+ */
+const FEES_EXCLUDED_FROM_PNL = new Set<string>(['binance']);
+
+/**
  * Торговые потоки между двумя моментами: всё, что двигало баланс торговлей.
  *
- * closedPnl биржи уже включает комиссии (проверено по каждому адаптеру в
- * Task 1), поэтому openFee и closeFee здесь НЕ вычитаются повторно. Вычтенные
- * дважды, они сдвинули бы ряд, а сдвинутый ряд код прочитает как ввод средств
- * — то есть придумает пользователю пополнение, которого не было.
- *
- * Фандинг лежит отдельной моделью и в closedPnl не входит. Его знак — «плюс
- * значит пользователь заплатил», поэтому в поток он идёт со знаком минус.
+ * Фандинг лежит отдельной моделью и ни в один из вариантов closedPnl не
+ * входит. Его знак — «плюс значит пользователь заплатил», поэтому в поток он
+ * идёт со знаком минус.
  */
 export async function loadFlows(
   prisma: PrismaService,
@@ -708,19 +721,63 @@ export async function loadFlows(
   const [trades, funding] = await Promise.all([
     prisma.trade.findMany({
       where: { userId, exchange, closedAt: { gt: from, lte: to } },
-      select: { closedAt: true, closedPnl: true },
+      select: { closedAt: true, closedPnl: true, openFee: true, closeFee: true },
     }),
     prisma.fundingFee.findMany({
       where: { userId, exchange, at: { gt: from, lte: to } },
       select: { at: true, amount: true },
     }),
   ]);
+  const deductFees = FEES_EXCLUDED_FROM_PNL.has(exchange);
   return [
-    ...trades.map((t) => ({ at: t.closedAt, amount: t.closedPnl })),
+    ...trades.map((t) => ({
+      at: t.closedAt,
+      amount: deductFees ? t.closedPnl - t.openFee - t.closeFee : t.closedPnl,
+    })),
     ...funding.map((f) => ({ at: f.at, amount: -f.amount })),
   ].sort((a, b) => a.at.getTime() - b.at.getTime());
 }
 ```
+
+Перед реализацией сверить знак `openFee` и `closeFee` в базе на реальных строках: если адаптер уже кладёт их отрицательными, вычитание превратится в прибавление. Проверяется одним запросом — `SELECT "openFee", "closeFee" FROM trades WHERE exchange = 'binance' LIMIT 5`.
+
+- [ ] **Step 3a-bis: Покрыть тестом расхождение бирж по комиссиям**
+
+Ровно та ошибка, которую разведка нашла в первоначальном плане, поэтому она обязана иметь тест. Создать `backend/src/balance/flows.spec.ts`:
+
+```ts
+import { loadFlows } from './flows';
+
+const T0 = new Date('2026-08-01T10:00:00Z');
+const T1 = new Date('2026-08-01T12:00:00Z');
+
+const prismaWith = (trade: { closedPnl: number; openFee: number; closeFee: number }) =>
+  ({
+    trade: {
+      findMany: jest.fn().mockResolvedValue([{ at: T0, closedAt: T0, ...trade }]),
+    },
+    fundingFee: { findMany: jest.fn().mockResolvedValue([]) },
+  }) as never;
+
+describe('loadFlows', () => {
+  const trade = { closedPnl: 100, openFee: 3, closeFee: 2 };
+
+  // Шесть бирж из семи отдают PnL уже за вычетом комиссий. Вычесть их второй
+  // раз значит увести ряд вниз, а уехавший ряд читается как вывод средств.
+  it('не вычитает комиссии там, где биржа их уже вычла', async () => {
+    const flows = await loadFlows(prismaWith(trade), 'u1', 'bybit', T0, T1);
+    expect(flows[0].amount).toBe(100);
+  });
+
+  // Binance — единственное исключение: его realizedPnl комиссий не содержит.
+  it('вычитает комиссии у Binance', async () => {
+    const flows = await loadFlows(prismaWith(trade), 'u1', 'binance', T0, T1);
+    expect(flows[0].amount).toBe(95);
+  });
+});
+```
+
+Запустить: `npx jest src/balance/flows.spec.ts` — сначала должен упасть на отсутствии модуля, после Step 3a пройти оба теста.
 
 - [ ] **Step 3b: Написать сервис**
 
@@ -835,10 +892,19 @@ export class BalanceSnapshotService implements OnApplicationBootstrap, OnModuleD
 ```ts
 /**
  * Биржи, у которых getBalance включает нереализованный PnL (см. «Разведка
- * адаптеров» в спеке). У них якорь снимается только на плоском счёте.
+ * адаптеров» в спеке). У них якорь снимается только на плоском счёте: иначе
+ * он дышит вместе с рынком, и каждое движение цены по открытой позиции код
+ * прочитает как ввод или вывод средств.
+ *
+ * MEXC включён, хотя вывод по нему собран из двух источников, а не из прямой
+ * цитаты: цена ошибки несимметрична. Ложно исключить биржу отсюда — значит
+ * показать пользователю выдуманные пополнения; ложно включить — эпизодически
+ * пропустить часовой тик, что дешевле.
  */
-const ANCHOR_REQUIRES_FLAT = new Set<string>([/* заполнить по Task 1 */]);
+const ANCHOR_REQUIRES_FLAT = new Set<string>(['okx', 'bitget', 'kucoin', 'mexc']);
 ```
+
+Значение `GAP_TOLERANCE_PCT` — `0.005`. Оно закрывает только шум округления: накопленную погрешность float по сделкам в окне и рассинхронизацию на секунды между чтением баланса и последней учтённой сделкой. Задачу «не спутать плавающую прибыль с вводом средств» решает не допуск, а `ANCHOR_REQUIRES_FLAT` — плавающая прибыль бывает любого размера, и никакой допуск её не отфильтрует.
 
 Пересчёт метрик риска сюда пока не подключается: `TradeRiskService` появляется только в Task 7, и ссылка на него здесь уронит Nest на неразрешённой зависимости — Task 5 не пройдёт свой Step 6. Task 7 добавит вызов сам.
 
