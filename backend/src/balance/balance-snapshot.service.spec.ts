@@ -153,4 +153,73 @@ describe('BalanceSnapshotService.captureFor', () => {
     await expect(service.captureFor('u1', T0)).resolves.toBe('failed');
     expect(created).toHaveLength(0);
   });
+
+  // Допуск должен ловить накопленное округление, а не спутать его с пополнением
+  // или выводом. Константа 0.5% = половина процента, а формула делит на 100.
+  it('не ставит разрыв на расхождении меньше 0.5% от баланса', async () => {
+    // 1000 * 0.5% = 5. Расхождение в 4.9 должно не считаться разрывом.
+    const { service, created } = serviceWith({
+      balance: 1004.9,
+      prevAnchor: { at: T0, balance: 1000 },
+      flows: [],
+    });
+
+    await service.captureFor('u1', T1);
+    expect(created[0]).toMatchObject({ balance: 1004.9, gap: null });
+  });
+
+  it('ставит разрыв на расхождении больше 0.5% от баланса', async () => {
+    // 1000 * 0.5% = 5. Расхождение в 5.1 должно считаться разрывом.
+    const { service, created } = serviceWith({
+      balance: 1005.1,
+      prevAnchor: { at: T0, balance: 1000 },
+      flows: [],
+    });
+
+    await service.captureFor('u1', T1);
+    expect(created[0]).toMatchObject({ balance: 1005.1 });
+    expect(created[0].gap).toBeCloseTo(5.1, 5);
+  });
+});
+
+describe('BalanceSnapshotService.captureAll', () => {
+  it('вызывает computeMissing даже когда якорь снять не удалось из-за открытых позиций', async () => {
+    const userId = 'u1';
+    const exchange = 'okx';
+    const created: Record<string, unknown>[] = [];
+    const computeMissingMock = jest.fn().mockResolvedValue(0);
+    const prisma = {
+      user: { findMany: jest.fn().mockResolvedValue([{ id: userId, activeExchange: exchange }]) },
+      balanceSnapshot: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockImplementation(({ data }) => {
+          created.push(data);
+          return data;
+        }),
+      },
+      trade: { findMany: jest.fn().mockResolvedValue([]) },
+      fundingFee: { findMany: jest.fn().mockResolvedValue([]) },
+    } as never;
+
+    const adapter = {
+      getBalance: jest.fn().mockResolvedValue({ success: true, balance: 1000 }),
+      getOpenPositions: jest.fn().mockResolvedValue({
+        success: true,
+        positions: [{ symbol: 'BTCUSDT', size: 1 }],
+      }),
+    };
+    const exchanges = { get: () => adapter } as never;
+    const credentials = {
+      getActive: jest.fn().mockResolvedValue({ exchange, credentials: { apiKey: 'k' } }),
+    } as never;
+    const risk = { computeMissing: computeMissingMock } as never;
+
+    const service = new BalanceSnapshotService(prisma, exchanges, credentials, risk);
+    await service.captureAll(new Date());
+
+    // captureFor вернёт 'skipped' из-за открытой позиции на okx
+    expect(created).toHaveLength(0);
+    // Но computeMissing всё равно был вызван
+    expect(computeMissingMock).toHaveBeenCalledWith(userId);
+  });
 });

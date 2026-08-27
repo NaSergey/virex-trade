@@ -2,13 +2,20 @@ import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@ne
 import { PrismaService } from '../prisma/prisma.service';
 import { ExchangeRegistry } from '../exchanges/exchange-registry.service';
 import { CredentialsService } from '../credentials/credentials.service';
-import { detectGap, sumFlows, type Flow } from './balance-chain';
+import { detectGap, sumFlows } from './balance-chain';
 import { loadFlows } from './flows';
 import { TradeRiskService } from './trade-risk.service';
 
 const SNAPSHOT_INTERVAL_MS = 60 * 60 * 1000;
-/** Из Task 1: доля баланса, ниже которой расхождение — округление биржи. */
-const GAP_TOLERANCE_PCT = 0.05;
+/**
+ * Допуск на расхождение якоря с ожиданием по цепочке, в процентах.
+ * Выражается в ПРОЦЕНТАХ; формула делит на 100, поэтому константа = 0.5, а не 0.005.
+ * Ловит накопленное округление float и рассинхронизацию на секунды между чтением
+ * баланса и последней сделкой, вошедшей в ожидание. Не отличает пополнение от
+ * роста цены открытой позиции на биржах, где баланс включает нереализованный PnL —
+ * для них ANCHOR_REQUIRES_FLAT снимает якорь только на плоском счёте.
+ */
+const GAP_TOLERANCE_PCT = 0.5;
 
 /**
  * Биржи, у которых getBalance включает нереализованный PnL (см. «Разведка
@@ -67,6 +74,18 @@ export class BalanceSnapshotService implements OnApplicationBootstrap, OnModuleD
       } catch (e) {
         this.logger.warn(`balance capture failed for user ${u.id}: ${e}`);
       }
+
+      // Снятие якоря и расчёт метрик риска — независимые задачи. На биржах
+      // из ANCHOR_REQUIRES_FLAT якорь пишется только на плоском счёте, но
+      // баланс на момент входа можно вычислить от якоря более раннего — новый
+      // якорь для этого не требуется. Расчёт метрик считается отдельно и
+      // независимо от исхода captureFor: даже когда новый якорь не записан,
+      // раскрытие баланса на момент входа открыло могло в истории.
+      try {
+        await this.risk.computeMissing(u.id);
+      } catch (e) {
+        this.logger.warn(`risk recompute failed for user ${u.id}: ${e}`);
+      }
     }
   }
 
@@ -112,15 +131,6 @@ export class BalanceSnapshotService implements OnApplicationBootstrap, OnModuleD
     await this.prisma.balanceSnapshot.create({
       data: { userId, exchange, at, balance, source: 'snapshot', gap },
     });
-
-    // Новый якорь мог открыть баланс сделкам, для которых он был неизвестен.
-    // Провал расчёта не должен ронять уже записанный якорь — тот же приём,
-    // что с Telegram в trackOpenPositions.
-    try {
-      await this.risk.computeMissing(userId);
-    } catch (e) {
-      this.logger.warn(`risk recompute failed for user ${userId}: ${e}`);
-    }
 
     return 'written';
   }
