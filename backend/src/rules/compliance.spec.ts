@@ -28,7 +28,12 @@ describe('evaluate', () => {
       { subjectId: 'a', value: 50 },
       { subjectId: 'b', value: null },
     ]);
-    expect(res).toMatchObject({ followed: 1, violated: 0, unchecked: 1 });
+    expect(res).toMatchObject({
+      followed: 1,
+      violated: 0,
+      unchecked: 1,
+      violatingIds: [],
+    });
   });
 
   it('оператор gte разворачивает сравнение', () => {
@@ -53,6 +58,37 @@ describe('evaluate', () => {
       metric: 'exposure_pct',
       operator: 'lte',
       threshold: 100,
+    });
+  });
+
+  // Нечисловые значения (NaN, Infinity) обрабатываются вместе с null, потому что
+  // они тоже означают «не удалось вычислить». Формулы могут меняться, и деление
+  // на баланс (нулевой или неизвестный) рано или поздно вернёт Infinity как
+  // признак несчётного риска. Без этой проверки Infinity однажды тихо станет
+  // нарушением, потому что Infinity > threshold всегда истинно.
+  it('значение NaN попадает в unchecked, не в violated и не в violatingIds', () => {
+    const res = evaluate(RULE, [
+      { subjectId: 'a', value: 50 },
+      { subjectId: 'b', value: NaN },
+    ]);
+    expect(res).toMatchObject({
+      followed: 1,
+      violated: 0,
+      unchecked: 1,
+      violatingIds: [],
+    });
+  });
+
+  it('значение Infinity попадает в unchecked, не в violated и не в violatingIds', () => {
+    const res = evaluate(RULE, [
+      { subjectId: 'a', value: 50 },
+      { subjectId: 'b', value: Infinity },
+    ]);
+    expect(res).toMatchObject({
+      followed: 1,
+      violated: 0,
+      unchecked: 1,
+      violatingIds: [],
     });
   });
 });
