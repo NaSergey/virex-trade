@@ -12,6 +12,7 @@ import { BalanceModule } from './balance/balance.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { SettingsModule } from './settings/settings.module';
 import { TagsModule } from './tags/tags.module';
+import { RulesModule } from './rules/rules.module';
 import { TelegramModule } from './telegram/telegram.module';
 import { MarketEventsModule } from './market-events/market-events.module';
 
@@ -35,6 +36,7 @@ import { MarketEventsModule } from './market-events/market-events.module';
     AnalyticsModule,
     SettingsModule,
     TagsModule,
+    RulesModule,
     TelegramModule,
     MarketEventsModule,
   ],
