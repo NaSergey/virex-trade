@@ -363,7 +363,10 @@
     "noTradesInPeriod": "No trades to check for this period",
     "unknownMetric": "Metric is no longer supported",
     "rulesViolatedTitle": "Violated rules",
-    "violated": "{metric} {value} {unit} against your threshold of {threshold} {unit}"
+    "violated": "{metric} {value} {unit} against your threshold of {threshold} {unit}",
+    "loadFailed": "Couldn't load rules",
+    "saveFailed": "Couldn't save rule",
+    "deleteFailed": "Couldn't delete rule"
   },
   "settings": {
     "pageTitle": "Settings",

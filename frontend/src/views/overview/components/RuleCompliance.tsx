@@ -7,19 +7,14 @@ import { EmptyState } from '@/shared/ui/EmptyState';
 import { Lookup, KeyValue } from '@/shared/ui/Lookup';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
+import { getMetricLabelKey } from '@/features/rules/lib/metric-labels';
 
 /**
  * Маппирование ключей метрик на ключи локализации для подписей.
  */
 function getMetricLabel(metricKey: string, t: (key: string) => string): string {
-  const labelMap: Record<string, string> = {
-    exposurePct: t('metricExposurePct'),
-    plannedRiskPct: t('metricPlannedRiskPct'),
-    leverage: t('metricLeverage'),
-    tradesPerDay: t('metricTradesPerDay'),
-    dailyLossPct: t('metricDailyLossPct'),
-  };
-  return labelMap[metricKey] ?? metricKey;
+  const labelKey = getMetricLabelKey(metricKey);
+  return t(labelKey);
 }
 
 /**
@@ -85,7 +80,7 @@ export function RuleCompliance({ days }: RuleComplianceProps) {
     return (
       <div style={{ marginTop: 'var(--s5)' }}>
         <SectionHead title={t('overviewTitle')} />
-        <ErrorNote error={error} fallback={t('overviewTitle')} />
+        <ErrorNote error={error} fallback={t('loadFailed')} />
       </div>
     );
   }

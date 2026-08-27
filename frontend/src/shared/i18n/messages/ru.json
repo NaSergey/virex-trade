@@ -334,7 +334,10 @@
     "noTradesInPeriod": "За период нет сделок, которые можно проверить",
     "unknownMetric": "Показатель больше не поддерживается",
     "rulesViolatedTitle": "Нарушенные правила",
-    "violated": "{metric} {value} {unit} при вашем пороге {threshold} {unit}"
+    "violated": "{metric} {value} {unit} при вашем пороге {threshold} {unit}",
+    "loadFailed": "Не удалось загрузить правила",
+    "saveFailed": "Не удалось сохранить правило",
+    "deleteFailed": "Не удалось удалить правило"
   },
   "settings": {
     "pageTitle": "Настройки",

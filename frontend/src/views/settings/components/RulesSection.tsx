@@ -17,20 +17,15 @@ import {
   type MetricDef,
   type RuleRow,
 } from '@/features/rules/api/hooks';
+import { getMetricLabelKey } from '@/features/rules/lib/metric-labels';
 
 /** Маппирование ключей метрик на ключи локализации */
 function getMetricLabel(
   metricKey: string,
   t: (key: string) => string,
 ): string {
-  const labelMap: Record<string, string> = {
-    exposurePct: t('metricExposurePct'),
-    plannedRiskPct: t('metricPlannedRiskPct'),
-    leverage: t('metricLeverage'),
-    tradesPerDay: t('metricTradesPerDay'),
-    dailyLossPct: t('metricDailyLossPct'),
-  };
-  return labelMap[metricKey] ?? metricKey;
+  const labelKey = getMetricLabelKey(metricKey);
+  return t(labelKey);
 }
 
 /**
@@ -122,7 +117,7 @@ export const RulesSection = () => {
     return (
       <div className="set">
         <SectionHead title={t('settingsTitle')} />
-        <ErrorNote error={error} fallback={t('settingsTitle')} />
+        <ErrorNote error={error} fallback={t('loadFailed')} />
       </div>
     );
   }
@@ -187,7 +182,7 @@ export const RulesSection = () => {
               </div>
             </Field>
 
-            <ErrorNote error={upsert.error} fallback={t('settingsTitle')} />
+            <ErrorNote error={upsert.error} fallback={t('saveFailed')} />
             <Button
               variant="solid"
               style={{ marginTop: 'var(--s3)' }}
@@ -204,14 +199,14 @@ export const RulesSection = () => {
       {rules.length > 0 ? (
         <div style={{ marginTop: 'var(--s4)' }}>
           <h3>{t('overviewTitle')}</h3>
-          <ErrorNote error={deleteRule.error} fallback={t('settingsTitle')} />
+          <ErrorNote error={deleteRule.error} fallback={t('deleteFailed')} />
           <Lookup one>
             {rules.map((rule) => {
               const metricDef = metrics.find((m) => m.key === rule.metric);
               const isUnknown = !metricDef;
               // Блокируем только конкретное правило, которое удаляется сейчас
               const isDeleting = deleteRule.isPending && deleteRule.variables === rule.metric;
-              const isDisabled = isUnknown;
+              const isDisabled = isDeleting;
 
               return (
                 <div

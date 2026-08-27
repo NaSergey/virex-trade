@@ -13,6 +13,7 @@ import { formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
 import { formatRangePos } from '@/shared/lib/utils/range';
 import { useLocaleControl } from '@/shared/i18n';
 import { RangeCheckModal } from '@/widgets/range-check-modal';
+import { getMetricLabelKey, getUnitTypeForMetric as getUnitType } from '@/features/rules/lib/metric-labels';
 
 /** Время ордера — с секундами: внутри одной позиции ордера идут плотно. */
 function fmtOrderTime(iso: string, locale: string): string {
@@ -27,26 +28,13 @@ function fmtOrderTime(iso: string, locale: string): string {
 
 /** Маппирование ключей метрик на ключи локализации для подписей. */
 function getMetricLabel(metricKey: string, t: (key: string) => string): string {
-  const labelMap: Record<string, string> = {
-    exposurePct: t('metricExposurePct'),
-    plannedRiskPct: t('metricPlannedRiskPct'),
-    leverage: t('metricLeverage'),
-    tradesPerDay: t('metricTradesPerDay'),
-    dailyLossPct: t('metricDailyLossPct'),
-  };
-  return labelMap[metricKey] ?? metricKey;
+  const labelKey = getMetricLabelKey(metricKey);
+  return t(labelKey);
 }
 
 /** Маппирование ключей метрик на типы единиц. */
 function getUnitTypeForMetric(metricKey: string): string {
-  const unitMap: Record<string, string> = {
-    exposurePct: 'pct',
-    plannedRiskPct: 'pct',
-    leverage: 'x',
-    tradesPerDay: 'count',
-    dailyLossPct: 'pct',
-  };
-  return unitMap[metricKey] ?? 'x';
+  return getUnitType(metricKey);
 }
 
 /** Маппирование типов единиц на ключи локализации. */
