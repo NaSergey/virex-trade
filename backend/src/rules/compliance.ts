@@ -13,6 +13,8 @@ export interface RuleCompliance extends RuleSpec {
   unchecked: number;
   /** Trade.id или YYYY-MM-DD нарушивших — для отметок в журнале. */
   violatingIds: string[];
+  /** Фактические значения метрик нарушивших, для отображения в UI. */
+  violatingValues: Record<string, number | null>;
 }
 
 /**
@@ -30,6 +32,7 @@ export function evaluate(rule: RuleSpec, values: MetricValue[]): RuleCompliance 
   let violated = 0;
   let unchecked = 0;
   const violatingIds: string[] = [];
+  const violatingValues: Record<string, number | null> = {};
 
   for (const v of values) {
     if (v.value === null || !Number.isFinite(v.value)) {
@@ -42,8 +45,9 @@ export function evaluate(rule: RuleSpec, values: MetricValue[]): RuleCompliance 
     } else {
       violated += 1;
       violatingIds.push(v.subjectId);
+      violatingValues[v.subjectId] = v.value;
     }
   }
 
-  return { ...rule, followed, violated, unchecked, violatingIds };
+  return { ...rule, followed, violated, unchecked, violatingIds, violatingValues };
 }

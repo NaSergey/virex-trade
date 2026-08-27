@@ -362,6 +362,7 @@
     "noRulesLede": "A rule is what you promised yourself to follow. Declare one, and we'll show how you're doing.",
     "noTradesInPeriod": "No trades to check for this period",
     "unknownMetric": "Metric is no longer supported",
+    "rulesViolatedTitle": "Violated rules",
     "violated": "{metric} {value} against your threshold of {threshold}"
   },
   "settings": {

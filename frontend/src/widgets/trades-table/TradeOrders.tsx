@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useTradeOrders, type Trade, type TradeOrder } from '@/entities/trade';
+import { type RuleCompliance } from '@/features/rules';
 import { Button } from '@/shared/ui/Button';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { SkeletonLines } from '@/shared/ui/Skeleton';
@@ -13,7 +14,7 @@ import { formatRangePos } from '@/shared/lib/utils/range';
 import { useLocaleControl } from '@/shared/i18n';
 import { RangeCheckModal } from '@/widgets/range-check-modal';
 
-/** Время ордера — с секундами: внутри одной позиции ордера идут плотно. */
+/** Время ордера — с секундами: внутри одной позиции ордера идят плотно. */
 function fmtOrderTime(iso: string, locale: string): string {
   return new Date(iso).toLocaleString(locale, {
     day: '2-digit',
@@ -22,6 +23,18 @@ function fmtOrderTime(iso: string, locale: string): string {
     minute: '2-digit',
     second: '2-digit',
   });
+}
+
+/** Маппирование ключей метрик на ключи локализации для подписей. */
+function getMetricLabel(metricKey: string, t: (key: string) => string): string {
+  const labelMap: Record<string, string> = {
+    exposurePct: t('metricExposurePct'),
+    plannedRiskPct: t('metricPlannedRiskPct'),
+    leverage: t('metricLeverage'),
+    tradesPerDay: t('metricTradesPerDay'),
+    dailyLossPct: t('metricDailyLossPct'),
+  };
+  return labelMap[metricKey] ?? metricKey;
 }
 
 function OrderRow({
@@ -76,8 +89,15 @@ function OrderRow({
  * же, а не колонкой таблицы: это инструмент разбора одной сделки, а раскрытая
  * строка и есть её разбор.
  */
-export function TradeOrders({ trade }: { trade: Trade }) {
+export function TradeOrders({
+  trade,
+  violatedRules,
+}: {
+  trade: Trade;
+  violatedRules?: RuleCompliance[];
+}) {
   const t = useTranslations('tradesTable');
+  const tr = useTranslations('rules');
   const { locale } = useLocaleControl();
   const { data, isLoading, isError } = useTradeOrders(trade.id);
   const [rangeCheck, setRangeCheck] = useState(false);
@@ -173,6 +193,27 @@ export function TradeOrders({ trade }: { trade: Trade }) {
           )}
         </div>
       </div>
+
+      {/* Нарушенные правила показываются отдельным блоком ниже деталей входа. */}
+      {violatedRules && violatedRules.length > 0 && (
+        <div style={{ marginTop: 'var(--s5)' }}>
+          <SectionHead title={tr('rulesViolatedTitle')} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s2)' }}>
+            {violatedRules.map((rule, idx) => {
+              const value = rule.violatingValues[trade.id];
+              return (
+                <div key={idx} className="neg">
+                  {tr('violated', {
+                    metric: getMetricLabel(rule.metric, tr),
+                    value: value != null ? value.toFixed(2) : '?',
+                    threshold: rule.threshold,
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {rangeCheck && <RangeCheckModal trade={trade} onClose={() => setRangeCheck(false)} />}
     </div>

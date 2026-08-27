@@ -31,6 +31,8 @@ export interface RuleCompliance {
   violated: number;
   unchecked: number;
   violatingIds: string[];
+  /** Фактические значения метрик нарушивших, для отображения в UI. */
+  violatingValues: Record<string, number | null>;
 }
 
 export interface UpsertRuleVars {
