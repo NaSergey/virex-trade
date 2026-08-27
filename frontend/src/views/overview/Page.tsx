@@ -9,6 +9,7 @@ import { usePeriodFilter, PeriodStrip } from '@/features/period-filter';
 import { buildEquityGeometry, EquityChart, EquityChartSkeleton } from '@/widgets/equity-chart';
 import { SummaryStrip, SummaryStripSkeleton } from './components/SummaryStrip';
 import { OpenPositions } from './components/OpenPositions';
+import { RuleCompliance } from './components/RuleCompliance';
 import {
   HourBars,
   HourBarsSkeleton,
@@ -64,6 +65,13 @@ export function OverviewPage() {
         >
           {stats ? <SummaryStrip stats={stats} /> : <SummaryStripSkeleton />}
         </PeriodStrip>
+      </Wrap>
+
+      {/* Блок соблюдения правил показывается после свода, но до кривой: соблюдение
+          это про поведение, и оно должно попадаться на глаза раньше, чем результат
+          в виде кривой доходности. */}
+      <Wrap style={{ marginTop: 'var(--s4)' }}>
+        <RuleCompliance days={effectiveDays} />
       </Wrap>
 
       {/* Холст держит место, пока свод не пришёл: без заглушки блок кривой
