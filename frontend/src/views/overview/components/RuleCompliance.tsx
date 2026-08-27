@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useCompliance, useRules, type RuleCompliance as RuleComplianceRow } from '@/features/rules';
+import { useCompliance, useRules } from '@/features/rules';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { Lookup, KeyValue } from '@/shared/ui/Lookup';
