@@ -91,4 +91,20 @@ describe('evaluate', () => {
       violatingIds: [],
     });
   });
+
+  // violatingValues нужны для отметки нарушений в журнале сделок на фронте:
+  // там показывается «экспозиция 412% при пороге 200%». Нельзя показать
+  // отметку без значения — это врало бы в приятную сторону, потому что
+  // пользователь не узнает, насколько сильно перешагнул. Поле должно быть
+  // точным: в нём только нарушившие, с их фактическими значениями.
+  it('violatingValues содержит только нарушившие с их фактическими значениями', () => {
+    const res = evaluate(RULE, [
+      { subjectId: 'a', value: 50 },   // соблюдение
+      { subjectId: 'b', value: 150 },  // нарушение
+      { subjectId: 'c', value: null }, // непроверено
+    ]);
+    expect(res.violatingValues).toEqual({ b: 150 });
+    expect(res.violatingValues).not.toHaveProperty('a');
+    expect(res.violatingValues).not.toHaveProperty('c');
+  });
 });

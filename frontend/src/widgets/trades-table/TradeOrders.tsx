@@ -14,7 +14,7 @@ import { formatRangePos } from '@/shared/lib/utils/range';
 import { useLocaleControl } from '@/shared/i18n';
 import { RangeCheckModal } from '@/widgets/range-check-modal';
 
-/** Время ордера — с секундами: внутри одной позиции ордера идят плотно. */
+/** Время ордера — с секундами: внутри одной позиции ордера идут плотно. */
 function fmtOrderTime(iso: string, locale: string): string {
   return new Date(iso).toLocaleString(locale, {
     day: '2-digit',
@@ -35,6 +35,28 @@ function getMetricLabel(metricKey: string, t: (key: string) => string): string {
     dailyLossPct: t('metricDailyLossPct'),
   };
   return labelMap[metricKey] ?? metricKey;
+}
+
+/** Маппирование ключей метрик на типы единиц. */
+function getUnitTypeForMetric(metricKey: string): string {
+  const unitMap: Record<string, string> = {
+    exposurePct: 'pct',
+    plannedRiskPct: 'pct',
+    leverage: 'x',
+    tradesPerDay: 'count',
+    dailyLossPct: 'pct',
+  };
+  return unitMap[metricKey] ?? 'x';
+}
+
+/** Маппирование типов единиц на ключи локализации. */
+function getUnitLabel(unitType: string, t: (key: string) => string): string {
+  const unitMap: Record<string, string> = {
+    'pct': t('unitPct'),
+    'x': t('unitX'),
+    'count': t('unitCount'),
+  };
+  return unitMap[unitType] ?? unitType;
 }
 
 function OrderRow({
@@ -199,14 +221,17 @@ export function TradeOrders({
         <div style={{ marginTop: 'var(--s5)' }}>
           <SectionHead title={tr('rulesViolatedTitle')} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s2)' }}>
-            {violatedRules.map((rule, idx) => {
+            {violatedRules.map((rule) => {
               const value = rule.violatingValues[trade.id];
+              const unitType = getUnitTypeForMetric(rule.metric);
+              const unit = getUnitLabel(unitType, tr);
               return (
-                <div key={idx} className="neg">
+                <div key={rule.metric} className="neg">
                   {tr('violated', {
                     metric: getMetricLabel(rule.metric, tr),
                     value: value != null ? value.toFixed(2) : '?',
                     threshold: rule.threshold,
+                    unit,
                   })}
                 </div>
               );

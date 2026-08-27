@@ -363,7 +363,7 @@
     "noTradesInPeriod": "No trades to check for this period",
     "unknownMetric": "Metric is no longer supported",
     "rulesViolatedTitle": "Violated rules",
-    "violated": "{metric} {value} against your threshold of {threshold}"
+    "violated": "{metric} {value} {unit} against your threshold of {threshold} {unit}"
   },
   "settings": {
     "pageTitle": "Settings",

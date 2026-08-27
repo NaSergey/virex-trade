@@ -334,7 +334,7 @@
     "noTradesInPeriod": "За период нет сделок, которые можно проверить",
     "unknownMetric": "Показатель больше не поддерживается",
     "rulesViolatedTitle": "Нарушенные правила",
-    "violated": "{metric} {value} при вашем пороге {threshold}"
+    "violated": "{metric} {value} {unit} при вашем пороге {threshold} {unit}"
   },
   "settings": {
     "pageTitle": "Настройки",
