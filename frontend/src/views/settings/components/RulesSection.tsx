@@ -194,7 +194,7 @@ export const RulesSection = () => {
               disabled={upsert.isPending || !ready}
               onClick={() => void handleSave()}
             >
-              {upsert.isPending ? t('save') : t('save')}
+              {upsert.isPending ? t('saving') : t('save')}
             </Button>
           </>
         )}
@@ -204,11 +204,14 @@ export const RulesSection = () => {
       {rules.length > 0 ? (
         <div style={{ marginTop: 'var(--s4)' }}>
           <h3>{t('overviewTitle')}</h3>
+          <ErrorNote error={deleteRule.error} fallback={t('settingsTitle')} />
           <Lookup one>
             {rules.map((rule) => {
               const metricDef = metrics.find((m) => m.key === rule.metric);
               const isUnknown = !metricDef;
-              const isDisabled = isUnknown || deleteRule.isPending;
+              // Блокируем только конкретное правило, которое удаляется сейчас
+              const isDeleting = deleteRule.isPending && deleteRule.variables === rule.metric;
+              const isDisabled = isUnknown;
 
               return (
                 <div
@@ -236,7 +239,7 @@ export const RulesSection = () => {
                             variant="none"
                             tight
                             aria-pressed={rule.active}
-                            disabled={isDisabled}
+                            disabled={isDeleting}
                             onClick={() => void handleToggleActive(rule)}
                           >
                             {rule.active ? '✓' : '◯'}
@@ -246,7 +249,7 @@ export const RulesSection = () => {
                       <Button
                         variant="risk"
                         onClick={() => handleDelete(rule.metric)}
-                        disabled={isDisabled}
+                        disabled={isDeleting || isDisabled}
                         style={{ fontSize: '0.875rem' }}
                       >
                         {t('remove')}
