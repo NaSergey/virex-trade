@@ -53,6 +53,7 @@ model User {
   savedTagCombos     SavedTagCombo[]
   dismissedTagCombos DismissedTagCombo[]
   balanceSnapshots   BalanceSnapshot[]
+  rules              Rule[]
 
   @@map("users")
 }
@@ -482,4 +483,27 @@ model TradeRisk {
   computedAt     DateTime @default(now())
 
   @@map("trade_risks")
+}
+
+/// Объявленное пользователем числовое правило: «метрика в таком-то отношении
+/// к порогу». Окна здесь нет намеренно — оно свойство метрики, а не правила:
+/// exposure_pct бывает только на сделку, trades_per_day только на день.
+/// Отдельное поле разрешило бы в базе бессмысленные комбинации вроде
+/// «экспозиция за неделю», которые пришлось бы отсеивать валидацией.
+model Rule {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Ключ из каталога метрик в коде (backend/src/rules/metric-catalog.ts).
+  metric    String
+  operator  String   // 'lte' | 'gte'
+  threshold Float
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  /// Одно правило на метрику. «Риск ≤ 2%» и «риск ≤ 5%» одновременно —
+  /// не декларация, а её отсутствие.
+  @@unique([userId, metric])
+  @@index([userId, active])
+  @@map("rules")
 }
