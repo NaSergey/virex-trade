@@ -60,8 +60,9 @@ function serviceWith(opts: {
       .fn()
       .mockResolvedValue({ exchange, credentials: { apiKey: 'k', apiSecret: 's' } }),
   } as never;
+  const risk = { computeMissing: jest.fn().mockResolvedValue(0) } as never;
 
-  return { service: new BalanceSnapshotService(prisma, exchanges, credentials), created };
+  return { service: new BalanceSnapshotService(prisma, exchanges, credentials, risk), created };
 }
 
 describe('BalanceSnapshotService.captureFor', () => {
