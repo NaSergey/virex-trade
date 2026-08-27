@@ -220,6 +220,65 @@ model Rule {
 - **Правило ссылается на метрику, которой нет в каталоге** (откат версии кода) — правило
   показывается выключенным с пояснением, а не роняет экран.
 
+## Разведка адаптеров
+
+Сделано до реализации, потому что от ответа зависит сама формула из раздела «Баланс: якоря и
+вывод»: если `closedPnl` уже включает комиссии, добавлять их в ожидание вторым слагаемым —
+задвоение; если баланс биржи включает нереализованный PnL, допуск на округление не отличит
+пополнение от роста цены. Каждая строка ниже — либо прямая цитата документации биржи (в кавычках,
+со ссылкой), либо явно помечена как вывод из косвенных признаков, когда прямой формулы в доках
+нет. Пустых клеток и правдоподобных догадок, поданных как факт, здесь сознательно избегали:
+ошибка тут проявится как выдуманные пополнения в истории пользователя, а не как заметная поломка.
+
+### Баланс: `getBalance`
+
+| Биржа | Эндпоинт | Поле `balance` | Поле `availableToWithdraw` | Включает нереализ. PnL | Источник |
+|---|---|---|---|---|---|
+| Bybit | `GET /v5/account/wallet-balance` (UNIFIED) | `coin[].walletBalance` | `coin[].availableToWithdraw` | **Нет.** Bybit прямо разводит: `equity = walletBalance + unrealisedPnl` — «Asset Equity = Asset Wallet Balance + Asset Perp UPL + …». Адаптер берёт `walletBalance`, не `equity`. | [Bybit V5 — Get Wallet Balance](https://bybit-exchange.github.io/docs/v5/account/wallet-balance) |
+| OKX | `GET /api/v5/account/balance` (`ccy=USDT`) | `details[].eq` (запасной вариант — `cashBal`) | `details[].availBal` | **Похоже, что да**, но прямой формулы для `eq` в доке нет — только для `upl`/`totalEq`. Вывод из косвенного: `eq` соседствует с отдельным полем `upl` («сумма нереализованного PnL по всем маржинальным и деривативным позициям валюты»), а справочная статья OKX прямо противопоставляет `availBal` и `availEq`: доступный баланс «не учитывает PnL, накопленный в режиме кросс-маржи» — то есть equity его учитывает. Формулы `eq = cashBal + upl` в документации нет, поэтому это не факт, а обоснованный вывод. | Поля: [OKX v5 — Get Balance](https://www.okx.com/docs-v5/en/#trading-account-rest-api-get-balance) (таблица `details[]`, поля `eq`/`cashBal`/`upl`). Разница balance/equity: [OKX — Multi-currency margin mode: cross margin trading](https://www.okx.com/en-us/help/iv-multi-currency-margin-mode-cross-margin-trading) |
+| Bitget | `GET /api/v2/mix/account/accounts` | `accountEquity` | `available` | **Да.** Bitget определяет equity монеты как «Balance + Frozen margin + unrealized PnL» на уровне терминологии счёта, применяемой ко всем `account`-эндпоинтам, включая `mix/account/accounts`. | [Bitget — Get Account List](https://www.bitget.com/api-doc/contract/account/Get-Account-List) |
+| KuCoin | `GET /api/v1/account-overview` (`currency=USDT`) | `accountEquity` | `availableBalance` | **Да**, с оговоркой по источнику: `accountEquity = marginBalance + unrealisedPNL` — так это описано в официальном Go SDK KuCoin Futures (поля `AccountEquity`/`MarginBalance`/`UnrealisedPNL` в одной модели ответа `account-overview`) и в справке KuCoin про расчёт unrealised PnL. Текущий сайт `docs-new` — SPA, отдающий поисковым и автоматическим клиентам страницу без содержимого, поэтому прямой цитаты из таблицы полей той самой страницы получить не удалось. | [kucoin-futures-go-sdk — account.go](https://github.com/Kucoin/kucoin-futures-go-sdk/blob/main/account.go), [KuCoin — PNL Calculation Unrealized vs Realized](https://www.kucoin.com/support/26695061760793) |
+| Gate.io | `GET /api/v4/futures/{settle}/accounts` | `total` | `available` | **Нет.** Официально: «the balance after the user's accumulated deposit, withdraw, profit and loss (including realized profit and loss, fund, fee and referral rebate), **excluding unrealized profit and loss**» — `total = SUM(history_dnw, history_pnl, history_fee, history_refr, history_fund)`. Поле `unrealised_pnl` появилось в том же ответе отдельным полем (changelog v4.105.1), что подтверждает: `total` его не содержит. | [Gate API v4 — Futures Account](https://www.gate.com/docs/developers/apiv4/en/), модель [gateapi-go — model_futures_account.go](https://github.com/gateio/gateapi-go/blob/master/model_futures_account.go) |
+| Binance | `GET /fapi/v2/balance` | `balance` | `availableBalance` | **Нет.** Официальное описание поля — «Wallet balance»; нереализованный PnL идёт отдельным полем `crossUnPnl` («Unrealized profit of crossed positions») в том же ответе. | [Binance — Futures Account Balance V2](https://developers.binance.com/docs/derivatives/usds-margined-futures/account/rest-api/Futures-Account-Balance-V2) |
+| MEXC | `GET /api/v1/private/account/asset/USDT` | `equity` | `availableBalance` | **По всей видимости, да.** Таблица полей называет `equity` просто «Total equity» без формулы, но статья с методикой расчёта прямо даёт «Total Equity = Wallet Balance + Unrealized PNL», а в самом ответе рядом лежит отдельное поле `unrealized`. Прямой формулы в таблице параметров API нет — вывод собран из справочной статьи и структуры ответа. | [MEXC — Get All Account Assets](https://www.mexc.com/api-docs/futures/account-and-trading-endpoints/get-all-account-assets), [MEXC Futures Calculation Guide](https://www.mexc.com/support/article/mexc-futures-calculation-guide-312060306409668608) |
+
+### Закрытые сделки: `closedPnl`
+
+| Биржа | Эндпоинт / поле | `closedPnl` включает комиссии | Источник |
+|---|---|---|---|
+| Bybit | `GET /v5/position/closed-pnl` → `closedPnl` | **Да.** «Closed P&L = Position P&L − Fee to open − Fee to close − Sum of all funding fees paid/received». (Формула из справки упоминает и фандинг — но фандинг в `Trade.closedPnl` проекта не хранится по отдельному решению из CLAUDE.md, это вне вопроса Task 1). | [Bybit — P&L Calculations (USDT Perpetual and Expiry Contracts)](https://www.bybit.com/en/help-center/article/Profit-Loss-calculations-USDT-Contract) |
+| OKX | `GET /api/v5/account/positions-history` → `realizedPnl` | **Да**, дословно: «`realizedPnl` = `pnl` + `fee` + `fundingFee` + `liqPenalty` + `settledPnl`», где `pnl` отдельно описан как «Profit and loss (excluding the fee)». Адаптер берёт именно `realizedPnl`, не голый `pnl`. | [OKX v5 — Get Positions History](https://www.okx.com/docs-v5/en/#trading-account-rest-api-get-positions-history) (таблица параметров ответа) |
+| Bitget | `GET /api/v2/mix/position/history-position` → `pnl` (не `netProfit`) | **Да.** «Position PnL = Closing Profits + Opening Fees + Closing Fees + Funding Fees», где `openFee`/`closeFee` в ответе всегда отрицательны (уже вычтены). Адаптер использует `pnl`, комментарий в коде адаптера («`netProfit` is realized PnL after fees; `pnl` is before») этому противоречит — см. concern в отчёте. | [Bitget — Get Historical Position](https://www.bitget.com/api-doc/contract/position/Get-History-Position) |
+| KuCoin | `GET /api/v1/history-positions` → `pnl` | **Да.** «The profit or loss incurred when closing or reducing positions, which includes the PNL from the actual trade, trading fees, and total funding fees for the period». | [KuCoin — Get Positions History](https://www.kucoin.com/docs-new/rest/futures-trading/positions/get-positions-history) |
+| Gate.io | `GET /api/v4/futures/{settle}/position_close` → `pnl` | **Да**, по структуре модели: `pnl` = «PnL» (итог), а `pnl_pnl` / `pnl_fund` / `pnl_fee` — его составляющие («Position P/L», «Funding Fees», «Transaction Fees»). Названия и вложенная структура прямо говорят, что `pnl` — сумма трёх, включая комиссию. | [gateapi-python — PositionClose.md](https://github.com/gateio/gateapi-python/blob/master/docs/PositionClose.md) |
+| Binance | `GET /fapi/v1/userTrades` → `realizedPnl` (на каждый филл) | **Нет.** Сотрудник поддержки Binance на форуме разработчиков: «the 'income' amount in the response has not deducted the fee yet» / «REALIZED_PNL doesn't include the fee so you'll need to deduct the fees from it». Комиссия репортится отдельно в `commission`. | [Binance Developer Community — Does REALIZED_PNL includes fees?](https://dev.binance.vision/t/does-realized-pnl-includes-fees/5324) |
+| MEXC | `GET /api/v1/private/position/list/history_positions` → `realised` | **По всей видимости, да.** В таблице параметров рядом с `realised` («Realized PnL») отдельно есть `closeProfitLoss` — прямо подписанное «Close PnL (**fees excluded**)». Раз в ответе одновременно есть «PnL без комиссий» (`closeProfitLoss`) и «Realized PnL» (`realised`) как разные поля, второе логично читать как то же самое, но с учётом комиссий — это согласуется с формулой из справочной статьи «Total realized PNL = Closing PNL + Funding fees − Opening fee − Closing fee». Прямого предложения «`realised` включает комиссию» в документации нет — это сборка из двух источников. | [MEXC — Get Historical Positions](https://www.mexc.com/api-docs/futures/account-and-trading-endpoints/get-historical-positions), [MEXC Futures Calculation Guide](https://www.mexc.com/support/article/mexc-futures-calculation-guide-312060306409668608) |
+
+### Решения по константам Task 5
+
+- **`GAP_TOLERANCE_PCT = 0.005`** (0.5% от предыдущего якоря). Из таблицы выше видно, что
+  четыре биржи из семи (OKX, Bitget, KuCoin, MEXC) отдают баланс с нереализованным PnL —
+  допуск сам по себе не отличит пополнение от роста цены открытой позиции произвольного
+  размера, ровно как предупреждает бриф. Поэтому допуск здесь не решает задачу «не спутать
+  плавающую прибыль с вводом средств» — эту задачу решает `ANCHOR_REQUIRES_FLAT` ниже. Роль
+  `GAP_TOLERANCE_PCT` — только шум округления: накопленная погрешность float по десяткам
+  сделок в окне между якорями и рассинхронизация на секунды между чтением баланса и последней
+  сделкой, вошедшей в `Σ(closedPnl, …)`. Величина не выведена из документации — это инженерная
+  оценка, а не факт биржи, и её стоит перепроверить по реальным данным после первых недель
+  работы. Она выбрана так, чтобы быть выше правдоподобного накопленного округления и заметно
+  ниже осмысленного пополнения (тот обычно круглая и заметная сумма для трейдера).
+- **`ANCHOR_REQUIRES_FLAT = new Set(['okx', 'bitget', 'kucoin', 'mexc'])`.** Ровно те четыре
+  биржи, у которых `getBalance` включает нереализованный PnL согласно таблице выше. Для них
+  якорь снимается, только когда `getOpenPositions` возвращает пустой список, а часовой тик при
+  открытых позициях пропускается — иначе каждое движение цены по открытой позиции код прочитает
+  как ввод или вывод средств. Bybit, Gate.io и Binance в множество не входят: их баланс —
+  кошельковый, без плавающей прибыли, и якорь для них можно снимать при открытых позициях.
+  MEXC включён, несмотря на то что вывод по нему собран из двух источников, а не из одной прямой
+  цитаты, — потому что цена ошибки здесь несимметрична: ложно исключить биржу из множества
+  (посчитать её как «без нереализованного PnL», когда на самом деле PnL есть) даёт видимые
+  пользователю выдуманные пополнения, а ложно включить — только эпизодически пропущенный
+  часовой тик при открытой позиции, что дешевле.
+
 ## Тестирование
 
 Первым пишется тест на **двойной учёт комиссий**. Нужно проверить по каждому адаптеру, входят
