@@ -18,7 +18,6 @@ import {
   useSetActiveExchange,
   type ExchangeInfo,
 } from './api/hooks';
-import { RulesSection } from './components/RulesSection';
 
 /**
  * Подсказка о правах ключа — переводится на фронте по id биржи, а не приходит
@@ -172,8 +171,6 @@ export const SettingsPage = () => {
           </>
         )}
       </div>
-
-      <RulesSection />
 
       {confirm && <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />}
     </Wrap>
