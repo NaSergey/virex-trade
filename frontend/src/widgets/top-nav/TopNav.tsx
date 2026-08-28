@@ -11,12 +11,13 @@ import { LocaleSwitch } from '@/shared/ui/LocaleSwitch';
 import { ThemeToggle } from '@/shared/ui/ThemeToggle';
 import { VirexLogo } from '@/shared/ui/VirexLogo';
 
-type Tab = 'overview' | 'tags' | 'lab' | 'analytics' | 'settings';
+type Tab = 'overview' | 'tags' | 'lab' | 'rules' | 'analytics' | 'settings';
 
-const NAV: { id: Tab; labelKey: 'overview' | 'tags' | 'lab' | 'analytics' | 'settings' }[] = [
+const NAV: { id: Tab; labelKey: 'overview' | 'tags' | 'lab' | 'rules' | 'analytics' | 'settings' }[] = [
   { id: 'overview', labelKey: 'overview' },
   { id: 'tags', labelKey: 'tags' },
   { id: 'lab', labelKey: 'lab' },
+  { id: 'rules', labelKey: 'rules' },
   { id: 'analytics', labelKey: 'analytics' },
   { id: 'settings', labelKey: 'settings' },
 ];
