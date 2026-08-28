@@ -3,6 +3,7 @@ import {
   getMetricLabelKey,
   getUnitTypeForMetric,
   getSupportedMetricKeys,
+  compliancePct,
   type MetricKey,
 } from './metric-labels';
 
@@ -99,5 +100,19 @@ describe('Консистентность подписей и единиц', () =
       expect(labelKey).not.toBe(key);
       expect(['pct', 'x', 'count']).toContain(unit);
     }
+  });
+});
+
+describe('compliancePct', () => {
+  it('округляет долю соблюдения до целых процентов', () => {
+    expect(compliancePct(23, 25)).toBe(92);
+  });
+
+  it('возвращает 0, когда за период нечего проверять', () => {
+    expect(compliancePct(0, 0)).toBe(0);
+  });
+
+  it('100% при полном соблюдении', () => {
+    expect(compliancePct(10, 10)).toBe(100);
   });
 });

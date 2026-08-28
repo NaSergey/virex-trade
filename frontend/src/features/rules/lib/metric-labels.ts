@@ -62,3 +62,31 @@ export function getUnitTypeForMetric(metricKey: string): UnitType {
 export function getSupportedMetricKeys(): MetricKey[] {
   return Object.keys(METRIC_LABEL_KEYS) as MetricKey[];
 }
+
+/**
+ * Человеческая подпись метрики. Обёртка над `getMetricLabelKey`, вызывающая
+ * `t()` — сам маппинг ключей от языка не зависит, а вызов `t()` зависит.
+ */
+export function metricLabel(metricKey: string, t: (key: string) => string): string {
+  return t(getMetricLabelKey(metricKey));
+}
+
+/** Подпись оператора правила: «не больше» / «не меньше». */
+export function operatorLabel(operator: 'lte' | 'gte', t: (key: string) => string): string {
+  return operator === 'lte' ? t('opLte') : t('opGte');
+}
+
+/**
+ * Подпись единицы измерения. Неизвестный тип единицы (правило пережило
+ * исчезновение метрики из каталога) возвращается как есть — лучше сырое
+ * значение, чем пустая строка на месте единицы.
+ */
+export function unitLabel(unit: string, t: (key: string) => string): string {
+  const map: Record<string, string> = { pct: t('unitPct'), x: t('unitX'), count: t('unitCount') };
+  return map[unit] ?? unit;
+}
+
+/** Целая доля соблюдения в процентах; 0, если проверять было нечего. */
+export function compliancePct(followed: number, total: number): number {
+  return total > 0 ? Math.round((followed / total) * 100) : 0;
+}
