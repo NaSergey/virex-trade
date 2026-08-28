@@ -302,9 +302,6 @@
     "weekdayFooterNote": "Доля дней, закрывшихся выше открытия, и средний ход за {days} дней. Отклонение от 50 % на такой выборке — намёк, а не закономерность."
   },
   "rules": {
-    "settingsTitle": "Правила",
-    "settingsLede": "Объявите числовое правило — сервис сверит его по вашим сделкам.",
-    "overviewTitle": "Соблюдение правил",
     "metricLabel": "Показатель",
     "operatorLabel": "Условие",
     "thresholdLabel": "Порог",
@@ -327,7 +324,6 @@
     "metricTradesPerDayHint": "Число закрытых сделок за календарные сутки.",
     "metricDailyLossPct": "Дневной убыток",
     "metricDailyLossPctHint": "Убыток за сутки в процентах от депозита на начало дня.",
-    "followed": "Соблюдено {followed} из {total}",
     "followedPct": "{pct}% ({followed} из {total})",
     "unchecked": "Ещё {count} не проверялись",
     "uncheckedWhy": "Нет стопа или неизвестен баланс на момент входа",

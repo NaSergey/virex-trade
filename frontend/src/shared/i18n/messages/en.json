@@ -331,9 +331,6 @@
     "RULE_UNKNOWN_METRIC": "Metric is no longer supported"
   },
   "rules": {
-    "settingsTitle": "Rules",
-    "settingsLede": "Declare a numerical rule — we'll verify it against your trades.",
-    "overviewTitle": "Rule Compliance",
     "metricLabel": "Metric",
     "operatorLabel": "Operator",
     "thresholdLabel": "Threshold",
@@ -356,7 +353,6 @@
     "metricTradesPerDayHint": "Number of closed trades per calendar day.",
     "metricDailyLossPct": "Daily loss",
     "metricDailyLossPctHint": "Daily loss as a percentage of account balance at start of day.",
-    "followed": "{followed} of {total} followed",
     "followedPct": "{pct}% ({followed} of {total})",
     "unchecked": "{count} more unchecked",
     "uncheckedWhy": "Missing stop or unknown balance at entry",
