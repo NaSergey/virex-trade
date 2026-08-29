@@ -535,6 +535,49 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  /* Значок-пояснение рядом с подписью метрики — не для всех, только для
+     непривычных чисел вроде Edge Score, где сама цифра не говорит, что она
+     значит. Залитый квадрат, а не обводка — иначе на мелком шрифте подписи
+     терялся. */
+  .lbl .hint {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    height: 12px;
+    margin-left: 4px;
+    background: var(--meta);
+    color: var(--ground);
+    font-size: 9px;
+    font-style: normal;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    cursor: help;
+    vertical-align: middle;
+  }
+
+  /* ═══════════════ ТУЛТИП ═══════════════ */
+  /* Оформление содержимого Radix Tooltip (shared/ui/Tooltip.tsx) — показ,
+     скрытие и позиционирование (портал в конец body, обход коллизий с краем
+     экрана) решает сам Radix, здесь только внешний вид пузыря и стрелки. */
+  .tooltip-bubble {
+    background: var(--ink);
+    color: var(--ground);
+    font-family: var(--font-sans, inherit);
+    font-size: var(--t-xs);
+    font-weight: 400;
+    font-style: normal;
+    text-transform: none;
+    letter-spacing: normal;
+    white-space: normal;
+    max-width: 220px;
+    line-height: 1.4;
+    padding: var(--s2) var(--s3);
+    border-radius: 4px;
+    z-index: 50;
+  }
+  .tooltip-arrow { fill: var(--ink); }
   .mval {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums lining-nums;

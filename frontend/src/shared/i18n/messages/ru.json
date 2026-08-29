@@ -167,7 +167,8 @@
     "edgeScoreTierSuperb": "Превосходная",
     "edgeScoreTierHolyGrail": "Грааль",
     "entryQualityMetric": "Качество входа",
-    "exitQualityMetric": "Качество выхода"
+    "exitQualityMetric": "Качество выхода",
+    "edgeScoreHint": "Оценка стабильности системы (SQN, Van Tharp) — не прибыльность, а соотношение среднего результата и разброса. Нужно ≥30 сделок в периоде."
   },
   "tags": {
     "typeSetup": "Сетап",

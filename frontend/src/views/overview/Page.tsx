@@ -2,14 +2,15 @@
 
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useTradeStats, useTimeStats, useTrades, useHabits, type Trade } from '@/entities/trade';
+import { useTradeStats, useTimeStats, useTrades, type Trade } from '@/entities/trade';
 import { Wrap } from '@/shared/ui/Wrap';
 import { Pagination } from '@/shared/ui/Pagination';
 import { usePeriodFilter, PeriodStrip } from '@/features/period-filter';
 import { buildEquityGeometry, EquityChart, EquityChartSkeleton } from '@/widgets/equity-chart';
 import { SummaryStrip, SummaryStripSkeleton } from './components/SummaryStrip';
 import { OpenPositions } from './components/OpenPositions';
-import { HabitsBlock } from './components/HabitsBlock';
+// «Цена привычек» временно снята с показа — закомментировано, не удалено.
+// import { HabitsBlock } from './components/HabitsBlock';
 import {
   HourBars,
   HourBarsSkeleton,
@@ -41,7 +42,7 @@ export function OverviewPage() {
   const { effectiveDays } = period;
   const { data: statsData } = useTradeStats({ days: effectiveDays });
   const { data: timeData } = useTimeStats({ days: effectiveDays });
-  const { data: habitsData, isLoading: habitsLoading } = useHabits({ days: effectiveDays });
+  // const { data: habitsData, isLoading: habitsLoading } = useHabits({ days: effectiveDays });
   const { data: tradesData, isLoading: tradesLoading } = useTrades({
     days: effectiveDays,
     page,
@@ -86,9 +87,11 @@ export function OverviewPage() {
 
       <OpenPositions />
 
+      {/* «Цена привычек» временно снята с показа — закомментировано, не удалено.
       <Wrap style={{ marginTop: 'var(--s5)' }}>
         <HabitsBlock data={habitsData} isLoading={habitsLoading && !habitsData} />
       </Wrap>
+      */}
 
       <Wrap style={{ marginTop: 'var(--s5)' }}>
         <div className="asym">

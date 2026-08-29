@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import type { TradeStats } from '@/entities/trade';
 import { Skeleton } from '@/shared/ui/Skeleton';
+import { Tooltip } from '@/shared/ui/Tooltip';
 import { formatMoney, formatProfitFactor, moneyClass } from '@/shared/lib/utils/format';
 import { sqnToScore, sqnTier, type SqnTier } from '@/shared/lib/utils/edgeScore';
 
@@ -21,6 +22,8 @@ interface Metric {
   gauge?: Gauge;
   /** Всплывающая подсказка на ячейке — сейчас только у Edge Score (уровень по SQN). */
   title?: string;
+  /** Пояснение метрики — маленький «!» рядом с подписью, для непривычных чисел. */
+  hint?: string;
 }
 
 /**
@@ -39,7 +42,7 @@ function GaugeBar({ fill, threshold }: Gauge) {
 }
 
 /**
- * Свод периода — двенадцать величин одной строкой, без карточек.
+ * Свод периода — девять величин одной строкой, без карточек.
  *
  * Единицы вынесены в подпись («NET P&L · USDT»), поэтому строка значений
  * осталась чисто числовой: в моноширинной сетке цифры выстраиваются по
@@ -65,6 +68,7 @@ export function SummaryStrip({ stats }: { stats: TradeStats }) {
       value: stats.sqn == null ? '—' : String(sqnToScore(stats.sqn)),
       gauge: stats.sqn == null ? undefined : { fill: sqnToScore(stats.sqn), threshold: 40 },
       title: stats.sqn == null ? undefined : tierLabels[sqnTier(stats.sqn)],
+      hint: t('edgeScoreHint'),
     },
     {
       label: t('entryQualityMetric'),
@@ -76,7 +80,6 @@ export function SummaryStrip({ stats }: { stats: TradeStats }) {
       value: stats.avgExitQuality == null ? '—' : `${Math.round(stats.avgExitQuality)} %`,
       gauge: stats.avgExitQuality == null ? undefined : { fill: stats.avgExitQuality, threshold: 50 },
     },
-    { label: t('trades'), value: String(stats.totalTrades) },
     {
       label: 'Winrate',
       value: `${stats.winRate.toFixed(1)} %`,
@@ -101,15 +104,22 @@ export function SummaryStrip({ stats }: { stats: TradeStats }) {
     },
     { label: 'Avg trade · USDT', value: formatMoney(stats.avgPnl), tone: moneyClass(stats.avgPnl) },
     { label: 'Fees · USDT', value: formatMoney(-Math.abs(stats.totalFees)) },
-    { label: t('best'), value: formatMoney(stats.bestPnl), tone: moneyClass(stats.bestPnl) },
-    { label: t('worst'), value: formatMoney(stats.worstPnl), tone: moneyClass(stats.worstPnl) },
   ];
 
   return (
     <div className="metrics">
       {metrics.map((m) => (
         <div className="mcell" key={m.label} title={m.title}>
-          <span className="lbl">{m.label}</span>
+          <span className="lbl">
+            {m.label}
+            {m.hint && (
+              <Tooltip text={m.hint}>
+                <span className="hint" tabIndex={0}>
+                  !
+                </span>
+              </Tooltip>
+            )}
+          </span>
           <span className={`mval${m.tone ? ` ${m.tone}` : ''}`}>{m.value}</span>
           {m.gauge ? <GaugeBar {...m.gauge} /> : <span />}
         </div>
@@ -118,11 +128,11 @@ export function SummaryStrip({ stats }: { stats: TradeStats }) {
   );
 }
 
-/** Скелет свода: те же двенадцать слотов, чтобы шапка не прыгала при загрузке. */
+/** Скелет свода: те же девять слотов, чтобы шапка не прыгала при загрузке. */
 export function SummaryStripSkeleton() {
   return (
     <div className="metrics" aria-hidden>
-      {Array.from({ length: 12 }, (_, i) => (
+      {Array.from({ length: 9 }, (_, i) => (
         <div className="mcell" key={i}>
           {/* Высоты — под подпись и под значение: три жёсткие строки .mcell
               должны стоять на своих местах ещё до того, как придут числа. */}

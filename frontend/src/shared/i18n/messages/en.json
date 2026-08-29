@@ -167,7 +167,8 @@
     "edgeScoreTierSuperb": "Superb",
     "edgeScoreTierHolyGrail": "Holy grail",
     "entryQualityMetric": "Entry quality",
-    "exitQualityMetric": "Exit quality"
+    "exitQualityMetric": "Exit quality",
+    "edgeScoreHint": "System stability score (SQN, Van Tharp) — not profitability, but the ratio of average result to variance. Needs ≥30 trades in the period."
   },
   "tags": {
     "typeSetup": "Setup",
