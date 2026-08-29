@@ -219,7 +219,7 @@ git commit -m "feat(context): формула качества входа/вых�
 - Consumes: `qualityIntervalFor`, `withinTrade`, `computeTradeQuality`, `QUALITY_INTERVALS`-эквивалент через `qualityIntervalFor` (Task 1).
 - Produces: `TradeContext.entryQuality: Float?`, `TradeContext.exitQuality: Float?`, `TradeContext.qualityComputed: Boolean` — этими именами их читает Task 3 (`list()`/`stats()`).
 
-- [ ] **Step 1: Добавить поля в Prisma-схему**
+- [x] **Step 1: Добавить поля в Prisma-схему**
 
 В `backend/prisma/schema.prisma`, в модели `TradeContext`, сразу после `rangePos1d Float?` добавить:
 
@@ -237,12 +237,12 @@ git commit -m "feat(context): формула качества входа/вых�
   qualityComputed Boolean @default(false)
 ```
 
-- [ ] **Step 2: Прогнать миграцию**
+- [x] **Step 2: Прогнать миграцию**
 
 Run: `cd backend && npx prisma migrate dev --name add_trade_quality`
 Expected: миграция создаётся и применяется без ошибок, `npx prisma generate` отрабатывает как часть команды.
 
-- [ ] **Step 3: Написать падающий тест**
+- [x] **Step 3: Написать падающий тест**
 
 Создать `backend/src/trades/trade-context.quality.spec.ts`:
 
@@ -333,12 +333,12 @@ describe('TradeContextService.computeMissingQuality', () => {
 });
 ```
 
-- [ ] **Step 4: Запустить тест и убедиться, что он падает**
+- [x] **Step 4: Запустить тест и убедиться, что он падает**
 
 Run: `cd backend && npx jest trade-context.quality.spec`
 Expected: FAIL — `computeMissingQuality` не существует на сервисе (`TypeError: ... is not a function`).
 
-- [ ] **Step 5: Добавить `computeMissingQuality` и вызвать её из `computeMissing`**
+- [x] **Step 5: Добавить `computeMissingQuality` и вызвать её из `computeMissing`**
 
 В `backend/src/trades/trade-context.service.ts`, после метода `computeMissing` (перед `dropStale`), добавить новый приватный метод:
 
@@ -502,17 +502,17 @@ const QUALITY_INTERVALS_BY_KEY = new Map(QUALITY_INTERVALS.map((q) => [q.interva
 
 (Изменение: старый ранний `if (pending.length === 0) return 0;` убирал бы и возможность досчитать качество для уже существующих контекстов, когда новых «сырых» контекстов в этот тик нет — поэтому досчёт качества теперь не зависит от того, было ли что досчитывать в основном снимке.)
 
-- [ ] **Step 6: Запустить тест и убедиться, что он проходит**
+- [x] **Step 6: Запустить тест и убедиться, что он проходит**
 
 Run: `cd backend && npx jest trade-context.quality.spec`
 Expected: PASS — оба `it(...)` зелёные.
 
-- [ ] **Step 7: Прогнать полный набор тестов бэкенда**
+- [x] **Step 7: Прогнать полный набор тестов бэкенда**
 
 Run: `cd backend && npx jest`
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add backend/prisma/schema.prisma backend/prisma/migrations backend/src/trades/trade-context.service.ts \
