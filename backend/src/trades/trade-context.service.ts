@@ -50,6 +50,14 @@ const QUALITY_SCALP_MS = 4 * H1_MS; // < 4ч — 5-минутки
 const QUALITY_INTRADAY_MS = 3 * D1_MS; // 4ч–3д — 15м
 const QUALITY_SWING_MS = 30 * D1_MS; // 3д–30д — 1ч, дальше — 4ч
 export const QUALITY_MIN_CANDLES = 3; // меньше — окно из 1-2 свечей, не диапазон
+// getKlinesRange постранично тянет максимум 25 страниц по 1000 свечей — если
+// сделки одного символа и корзины разнесены во времени больше, чем на это
+// умещается (полгода скальпов по одному тикеру — обычное дело), фетч на весь
+// охват группы молча обрежется до свежего конца диапазона, и старые сделки
+// группы останутся без единой свечи. Запас в 20000 вместо честных 25000 —
+// подстраховка на неточность пересчёта диапазона в число страниц у самого
+// getKlinesRange.
+export const MAX_QUALITY_CANDLES_PER_FETCH = 20_000;
 
 export interface QualityInterval {
   maxHoldMs: number;
@@ -105,6 +113,34 @@ export function computeTradeQuality(
     entryQuality: Number(clamp(isLong ? 100 - pos(entryPrice) : pos(entryPrice)).toFixed(2)),
     exitQuality: Number(clamp(isLong ? pos(exitPrice) : 100 - pos(exitPrice)).toFixed(2)),
   };
+}
+
+/**
+ * Делит отсортированные по времени элементы на непрерывные куски, каждый в
+ * пределах maxSpanMs от своего первого элемента — см. MAX_QUALITY_CANDLES_PER_FETCH.
+ * Каждый новый кусок отсчитывает охват заново от своего первого элемента, а
+ * не от начала всего списка.
+ */
+export function chunkBySpan<T>(
+  items: T[],
+  entryMs: (item: T) => number,
+  closeMs: (item: T) => number,
+  maxSpanMs: number,
+): T[][] {
+  const sorted = [...items].sort((a, b) => entryMs(a) - entryMs(b));
+  const chunks: T[][] = [];
+  let current: T[] = [];
+  let chunkStart = 0;
+  for (const item of sorted) {
+    if (current.length > 0 && closeMs(item) - chunkStart > maxSpanMs) {
+      chunks.push(current);
+      current = [];
+    }
+    if (current.length === 0) chunkStart = entryMs(item);
+    current.push(item);
+  }
+  if (current.length > 0) chunks.push(current);
+  return chunks;
 }
 
 /**
@@ -324,26 +360,38 @@ export class TradeContextService {
       const interval = key.slice(key.lastIndexOf(':') + 1);
       const symbol = key.slice(0, key.lastIndexOf(':'));
       const spec = QUALITY_INTERVALS_BY_KEY.get(interval)!;
-      const minMs = Math.min(...items.map((a) => a.entryMs));
-      const maxMs = Math.max(...items.map((a) => a.row.closedAt.getTime()));
-      try {
-        const candles = await this.market.getKlinesRange(symbol, interval, minMs, maxMs);
-        for (const { row, entryMs } of items) {
-          const window = withinTrade(candles, entryMs, row.closedAt.getTime(), spec.tfMs);
-          const { entryQuality, exitQuality } = computeTradeQuality(
-            row.direction,
-            row.avgEntryPrice,
-            row.avgExitPrice,
-            window,
-          );
-          await this.prisma.tradeContext.update({
-            where: { tradeId: row.id },
-            data: { entryQuality, exitQuality, qualityComputed: true },
-          });
-          written++;
+      // Дальше делим ГРУППУ (символ+интервал) на куски, ограниченные по
+      // охвату во времени — иначе разнесённые на месяцы сделки одного символа
+      // ушли бы одним фетчем, который getKlinesRange не дотянет постранично.
+      const maxSpanMs = MAX_QUALITY_CANDLES_PER_FETCH * spec.tfMs;
+      const chunks = chunkBySpan(
+        items,
+        (a) => a.entryMs,
+        (a) => a.row.closedAt.getTime(),
+        maxSpanMs,
+      );
+      for (const chunk of chunks) {
+        const minMs = Math.min(...chunk.map((a) => a.entryMs));
+        const maxMs = Math.max(...chunk.map((a) => a.row.closedAt.getTime()));
+        try {
+          const candles = await this.market.getKlinesRange(symbol, interval, minMs, maxMs);
+          for (const { row, entryMs } of chunk) {
+            const window = withinTrade(candles, entryMs, row.closedAt.getTime(), spec.tfMs);
+            const { entryQuality, exitQuality } = computeTradeQuality(
+              row.direction,
+              row.avgEntryPrice,
+              row.avgExitPrice,
+              window,
+            );
+            await this.prisma.tradeContext.update({
+              where: { tradeId: row.id },
+              data: { entryQuality, exitQuality, qualityComputed: true },
+            });
+            written++;
+          }
+        } catch (e) {
+          this.logger.warn(`quality compute failed for ${symbol}/${interval}: ${e}`);
         }
-      } catch (e) {
-        this.logger.warn(`quality compute failed for ${symbol}/${interval}: ${e}`);
       }
     }
     return written;

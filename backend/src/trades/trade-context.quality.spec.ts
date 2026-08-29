@@ -1,12 +1,12 @@
-import { TradeContextService } from './trade-context.service';
+import { TradeContextService, MAX_QUALITY_CANDLES_PER_FETCH } from './trade-context.service';
 import type { Candle } from './indicators.service';
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
-function flatCandles(fromMs: number, toMs: number, low: number, high: number): Candle[] {
+function flatCandles(fromMs: number, toMs: number, low: number, high: number, stepMs = HOUR): Candle[] {
   const out: Candle[] = [];
-  for (let t = fromMs; t <= toMs; t += HOUR) {
+  for (let t = fromMs; t <= toMs; t += stepMs) {
     out.push({ time: t, open: (low + high) / 2, high, low, close: (low + high) / 2, volume: 100 });
   }
   return out;
@@ -80,5 +80,48 @@ describe('TradeContextService.computeMissingQuality', () => {
     expect(written).toBe(0);
     expect(getKlinesRangeMock).not.toHaveBeenCalled();
     expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it('дробит один (символ, интервал) на несколько фетчей, если охват группы превышает MAX_QUALITY_CANDLES_PER_FETCH свечей', async () => {
+    const base = Date.UTC(2026, 0, 1);
+    const FIVE_MIN = 5 * 60_000;
+    const maxSpanMs = MAX_QUALITY_CANDLES_PER_FETCH * FIVE_MIN;
+    // Обе сделки — скальпы (<4ч), один символ: без разбиения по охвату ушли бы
+    // одним фетчем на ~70 дней, которые getKlinesRange не дотянет постранично
+    // (ровно баг, который это разбиение чинит).
+    const tradeA = {
+      id: 'a', symbol: 'BTCUSDT', direction: 'long', positionId: null,
+      openedAt: new Date(base), closedAt: new Date(base + 30 * 60_000),
+      avgEntryPrice: 100, avgExitPrice: 110,
+    };
+    const tradeB = {
+      id: 'b', symbol: 'BTCUSDT', direction: 'long', positionId: null,
+      openedAt: new Date(base + maxSpanMs + DAY), closedAt: new Date(base + maxSpanMs + DAY + 30 * 60_000),
+      avgEntryPrice: 100, avgExitPrice: 110,
+    };
+
+    const findManyMock = jest.fn().mockResolvedValue([tradeA, tradeB]);
+    const updateMock = jest.fn().mockResolvedValue(undefined);
+    const prisma = { trade: { findMany: findManyMock }, tradeContext: { update: updateMock } } as any;
+
+    const getKlinesRangeMock = jest
+      .fn()
+      .mockImplementation((_symbol: string, _interval: string, fromMs: number, toMs: number) =>
+        Promise.resolve(flatCandles(fromMs, toMs, 90, 120, FIVE_MIN)),
+      );
+    const market = { getKlinesRange: getKlinesRangeMock } as any;
+
+    const service = new TradeContextService(prisma, market, {} as any);
+    const written = await (service as any).computeMissingQuality('u1');
+
+    expect(written).toBe(2);
+    // Один символ, один интервал ('5' — обе сделки короче 4ч), но охват между
+    // ними больше лимита — фетча два, не один.
+    expect(getKlinesRangeMock).toHaveBeenCalledTimes(2);
+    for (const call of getKlinesRangeMock.mock.calls) {
+      expect(call[0]).toBe('BTCUSDT');
+      expect(call[1]).toBe('5');
+      expect((call[3] - call[2]) / FIVE_MIN).toBeLessThanOrEqual(MAX_QUALITY_CANDLES_PER_FETCH);
+    }
   });
 });
