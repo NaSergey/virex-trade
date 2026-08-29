@@ -46,9 +46,35 @@ const SIZE_UP_MULT = 1.5;
 export type Confidence = 'confirmed' | 'likely';
 export type Oos = 'pass' | 'fail' | 'na';
 
+/**
+ * 16 видов кандидата. По этому значению фронтенд (`habit-labels.ts`) выбирает
+ * шаблон подписи/совета — `label`/`advice` ниже остаются как готовый русский
+ * текст только на случай незнакомого фронту `kind` (рассинхрон версий).
+ */
+export type HabitKind =
+  | 'tilt'
+  | 'overtrading'
+  | 'size_up'
+  | 'size_up_after_loss'
+  | 'hold_long'
+  | 'dir'
+  | 'hour'
+  | 'weekday'
+  | 'session'
+  | 'trend4h'
+  | 'ema200'
+  | 'atr'
+  | 'vol'
+  | 'range4h'
+  | 'tag'
+  | 'symbol';
+
 export interface Habit {
   key: string;
   group: 'behaviour' | 'time' | 'context' | 'tag' | 'symbol';
+  kind: HabitKind;
+  /** Подстановки для шаблона label/advice на фронте, см. HabitKind. */
+  params: Record<string, string | number>;
   label: string;
   advice: string;
   n: number;
@@ -66,13 +92,15 @@ export interface Habit {
   confidence: Confidence;
   outlierSafe: boolean;
   oos: Oos;
-  /** Query-параметры /api/trades/lab, открывающие этот срез в «Выборке». */
+  /** Query-параметры /api/trades/lab, открывающие этот срез в «Аналитике». */
   lab: Record<string, string> | null;
 }
 
-interface Candidate {
+export interface Candidate {
   key: string;
   group: Habit['group'];
+  kind: HabitKind;
+  params: Record<string, string | number>;
   label: string;
   advice: string;
   lab: Record<string, string> | null;
@@ -253,6 +281,8 @@ export class HabitsService {
       {
         key: 'tilt',
         group: 'behaviour',
+        kind: 'tilt',
+        params: {},
         label: 'Вход в течение часа после убытка',
         advice: 'Пауза 60 минут после убыточной сделки.',
         lab: null,
@@ -261,6 +291,8 @@ export class HabitsService {
       {
         key: 'overtrading',
         group: 'behaviour',
+        kind: 'overtrading',
+        params: { nth: OVERTRADE_NTH, limit: OVERTRADE_NTH - 1 },
         label: `${OVERTRADE_NTH}-я и следующие сделки за день`,
         advice: `Лимит ${OVERTRADE_NTH - 1} сделки в день.`,
         lab: null,
@@ -269,6 +301,8 @@ export class HabitsService {
       {
         key: 'size_up',
         group: 'behaviour',
+        kind: 'size_up',
+        params: { mult: SIZE_UP_MULT },
         label: `Вход крупнее обычного (от ${SIZE_UP_MULT}× медианы)`,
         advice: 'Фиксированный размер позиции.',
         lab: null,
@@ -277,6 +311,8 @@ export class HabitsService {
       {
         key: 'size_up_after_loss',
         group: 'behaviour',
+        kind: 'size_up_after_loss',
+        params: {},
         label: 'Увеличенный вход сразу после убытка',
         advice: 'Никогда не повышать размер на просадке.',
         lab: null,
@@ -285,6 +321,8 @@ export class HabitsService {
       {
         key: 'hold_long',
         group: 'behaviour',
+        kind: 'hold_long',
+        params: {},
         label: 'Позиции, которые держал дольше обычного',
         advice: 'Ограничить время в позиции.',
         lab: null,
@@ -293,16 +331,20 @@ export class HabitsService {
       {
         key: 'dir:long',
         group: 'context',
+        kind: 'dir',
+        params: { direction: 'long' },
         label: 'Лонги',
-        advice: 'Сравнить с шортами в «Выборке».',
+        advice: 'Сравнить с шортами в «Аналитике».',
         lab: { direction: 'long' },
         test: (r) => r.direction === 'long',
       },
       {
         key: 'dir:short',
         group: 'context',
+        kind: 'dir',
+        params: { direction: 'short' },
         label: 'Шорты',
-        advice: 'Сравнить с лонгами в «Выборке».',
+        advice: 'Сравнить с лонгами в «Аналитике».',
         lab: { direction: 'short' },
         test: (r) => r.direction === 'short',
       },
@@ -314,6 +356,8 @@ export class HabitsService {
       list.push({
         key: `hour:${h}-${to}`,
         group: 'time',
+        kind: 'hour',
+        params: { hourFrom: h, hourTo: to },
         label: `Входы ${String(h).padStart(2, '0')}:00–${String(to).padStart(2, '0')}:59`,
         advice: 'Не открывать в этом окне.',
         lab: { hourFrom: String(h), hourTo: String(to) },
@@ -326,6 +370,8 @@ export class HabitsService {
       list.push({
         key: `weekday:${d}`,
         group: 'time',
+        kind: 'weekday',
+        params: { weekday: d },
         label: `Входы по ${WD[d]}`,
         advice: 'Проверить, что в этот день меняется в подходе.',
         lab: { weekdays: String(d) },
@@ -343,6 +389,8 @@ export class HabitsService {
       list.push({
         key: `session:${s}`,
         group: 'time',
+        kind: 'session',
+        params: { session: s },
         label: `Входы в ${SESSION_RU[s]}`,
         advice: 'Сместить активность на другую сессию.',
         lab: { sessions: s },
@@ -359,6 +407,8 @@ export class HabitsService {
       list.push({
         key: `trend4h:${t}`,
         group: 'context',
+        kind: 'trend4h',
+        params: { trend: t },
         label: `Входы ${TREND_RU[t]}`,
         advice: 'Не торговать этот режим рынка.',
         lab: { trend4h: t },
@@ -370,6 +420,8 @@ export class HabitsService {
       {
         key: 'ema200:above',
         group: 'context',
+        kind: 'ema200',
+        params: { side: 'above' },
         label: 'Входы выше EMA200 (1H)',
         advice: 'Проверить направление относительно EMA200.',
         lab: { ema200: 'above' },
@@ -378,6 +430,8 @@ export class HabitsService {
       {
         key: 'ema200:below',
         group: 'context',
+        kind: 'ema200',
+        params: { side: 'below' },
         label: 'Входы ниже EMA200 (1H)',
         advice: 'Проверить направление относительно EMA200.',
         lab: { ema200: 'below' },
@@ -386,6 +440,8 @@ export class HabitsService {
       {
         key: 'atr:high',
         group: 'context',
+        kind: 'atr',
+        params: { level: 'high' },
         label: 'Входы на повышенной волатильности',
         advice: 'Уменьшать размер на высоком ATR.',
         lab: { atr: 'high' },
@@ -395,6 +451,8 @@ export class HabitsService {
       {
         key: 'atr:low',
         group: 'context',
+        kind: 'atr',
+        params: { level: 'low' },
         label: 'Входы на низкой волатильности',
         advice: 'Пропускать вялый рынок.',
         lab: { atr: 'low' },
@@ -403,6 +461,8 @@ export class HabitsService {
       {
         key: 'vol:high',
         group: 'context',
+        kind: 'vol',
+        params: { level: 'high' },
         label: 'Входы на всплеске объёма',
         advice: 'Проверить, не входите ли в кульминацию движения.',
         lab: { vol: 'high' },
@@ -411,6 +471,8 @@ export class HabitsService {
       {
         key: 'vol:low',
         group: 'context',
+        kind: 'vol',
+        params: { level: 'low' },
         label: 'Входы на низком объёме',
         advice: 'Требовать подтверждения объёмом.',
         lab: { vol: 'low' },
@@ -427,6 +489,8 @@ export class HabitsService {
       list.push({
         key: `range4h:${b}`,
         group: 'context',
+        kind: 'range4h',
+        params: { bucket: b },
         label: `Входы ${RANGE_RU[b]}`,
         advice: 'Дождаться возврата в свою зону диапазона.',
         lab: { rangeTf: '4h', range: b },
@@ -454,6 +518,8 @@ export class HabitsService {
       list.push({
         key: `tag:${id}`,
         group: 'tag',
+        kind: 'tag',
+        params: { tagName: tagNames.get(id) ?? '' },
         label: `Сделки с тегом «${tagNames.get(id)}»`,
         advice: 'Пересмотреть или отказаться от этого сетапа.',
         lab: { tags: id },
@@ -465,6 +531,8 @@ export class HabitsService {
       list.push({
         key: `symbol:${sym}`,
         group: 'symbol',
+        kind: 'symbol',
+        params: { symbol: sym },
         label: `Сделки по ${sym}`,
         advice: 'Убрать инструмент из списка или пересмотреть подход к нему.',
         lab: { symbols: sym },
@@ -511,6 +579,8 @@ export class HabitsService {
     return {
       key: c.key,
       group: c.group,
+      kind: c.kind,
+      params: c.params,
       label: c.label,
       advice: c.advice,
       n: S.length,
