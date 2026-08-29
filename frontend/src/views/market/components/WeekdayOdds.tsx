@@ -14,7 +14,7 @@ import { Skeleton } from '@/shared/ui/Skeleton';
  * «вторник 57 % рост» читается как торговый сигнал.
  */
 export function WeekdayOdds({ corr, isLoading }: { corr?: MarketCorrelation; isLoading?: boolean }) {
-  const t = useTranslations('analytics');
+  const t = useTranslations('market');
   const { locale } = useLocaleControl();
   const WEEKDAY_LABELS = weekdayLabels(locale);
 

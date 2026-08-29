@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useTradeStats, useTimeStats, useTrades, type Trade } from '@/entities/trade';
-import { useCompliance, type RuleCompliance } from '@/features/rules';
 import { Wrap } from '@/shared/ui/Wrap';
 import { Pagination } from '@/shared/ui/Pagination';
 import { usePeriodFilter, PeriodStrip } from '@/features/period-filter';
@@ -46,34 +45,12 @@ export function OverviewPage() {
     page,
     pageSize: PAGE_SIZE,
   });
-  const { data: complianceData } = useCompliance(effectiveDays);
 
   const stats = statsData?.stats;
   const equity = useMemo(() => statsData?.equity ?? [], [statsData]);
   // Пик и просадка снимаются с той же геометрии, что рисует кривую, — иначе
   // подпись в маргиналии и картинка могли бы разойтись.
   const curve = useMemo(() => buildEquityGeometry(equity, 300), [equity]);
-
-  // Построить маппинг "трейд → нарушенные правила с окном 'trade'".
-  // Дневные правила не включаются: их субъект — сутки, а не сделка.
-  const violatedRulesMap = useMemo(() => {
-    const map = new Map<string, RuleCompliance[]>();
-    if (!complianceData?.rules) return map;
-
-    complianceData.rules.forEach((rule) => {
-      // Включаем только правила с окном 'trade' — дневные в журнал не идут
-      if (rule.window !== 'trade') return;
-
-      rule.violatingIds.forEach((id) => {
-        if (!map.has(id)) {
-          map.set(id, []);
-        }
-        map.get(id)!.push(rule);
-      });
-    });
-
-    return map;
-  }, [complianceData]);
 
   return (
     <>
@@ -135,7 +112,6 @@ export function OverviewPage() {
           isLoading={tradesLoading && !tradesData}
           skeletonRows={PAGE_SIZE}
           onEditTags={setTaggingTrade}
-          violatedRulesMap={violatedRulesMap}
         />
         {tradesData && tradesData.total > 0 && (
           <Pagination

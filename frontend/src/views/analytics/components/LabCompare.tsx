@@ -20,7 +20,7 @@ export function LabCompare({
   /** Считаем первую выборку: на месте чисел заглушки, а не прочерки. */
   isLoading?: boolean;
 }) {
-  const t = useTranslations('lab');
+  const t = useTranslations('analytics');
   const cells = [
     {
       label: t('trades'),

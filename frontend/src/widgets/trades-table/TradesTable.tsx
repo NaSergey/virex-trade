@@ -2,7 +2,6 @@
 
 import { useTranslations } from 'next-intl';
 import type { RangeTf, Trade } from '@/entities/trade';
-import { type RuleCompliance } from '@/features/rules';
 import { Tags } from '@/entities/tag';
 import { Button } from '@/shared/ui/Button';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
@@ -84,7 +83,6 @@ export function TradesTable({
   range,
   compact,
   empty,
-  violatedRulesMap,
 }: {
   trades: Trade[];
   isLoading?: boolean;
@@ -98,8 +96,6 @@ export function TradesTable({
   compact?: boolean;
   /** Чем заменить таблицу, когда сделок нет. */
   empty?: React.ReactNode;
-  /** Маппинг трейд → нарушенные правила (только для окна 'trade'). */
-  violatedRulesMap?: Map<string, RuleCompliance[]>;
 }) {
   const t = useTranslations('tradesTable');
   const { locale } = useLocaleControl();
@@ -212,7 +208,7 @@ export function TradesTable({
       rowKey={(tr) => tr.id}
       isLoading={isLoading}
       skeletonRows={skeletonRows}
-      renderExpanded={(tr) => <TradeOrders trade={tr} violatedRules={violatedRulesMap?.get(tr.id)} />}
+      renderExpanded={(tr) => <TradeOrders trade={tr} />}
       empty={
         empty ?? (
           <EmptyState title={t('emptyTitle')}>{t('emptyBody')}</EmptyState>

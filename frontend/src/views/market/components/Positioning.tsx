@@ -14,7 +14,7 @@ import { useLocaleControl } from '@/shared/i18n';
  * «где рынок сейчас» и «как он туда пришёл», — поэтому стоят вместе.
  */
 export function Positioning({ data, isLoading }: { data?: MarketSentimentData; isLoading?: boolean }) {
-  const t = useTranslations('analytics');
+  const t = useTranslations('market');
   const { locale } = useLocaleControl();
   const latest = data?.points.at(-1);
   const longShort = latest && latest.sellRatio > 0 ? latest.buyRatio / latest.sellRatio : null;

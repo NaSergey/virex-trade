@@ -4,7 +4,7 @@ import { useTranslations } from 'next-intl';
 
 /** Переводимые подписи и подсказки измерений «Выборки» — с переводом. */
 export function useLabLabels() {
-  const t = useTranslations('lab');
+  const t = useTranslations('analytics');
   return {
     sessionLabels: {
       asia: t('sessionAsia'),

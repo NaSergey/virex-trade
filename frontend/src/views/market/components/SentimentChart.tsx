@@ -34,7 +34,7 @@ export function fmtUsdCompact(v: number, locale: Locale = 'ru'): string {
  * данных нет. Его текущее значение стоит числом в коэффициентах выше.
  */
 export function SentimentChart({ data, height = 180 }: { data: SentimentPoint[]; height?: number }) {
-  const t = useTranslations('analytics');
+  const t = useTranslations('market');
   const { locale } = useLocaleControl();
   const intlLocale = locale === 'en' ? 'en-US' : 'ru-RU';
   const boxRef = useRef<HTMLDivElement>(null);

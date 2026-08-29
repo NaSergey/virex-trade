@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -10,15 +10,15 @@ import { KeyValue } from '@/shared/ui/Lookup';
 import { LocaleSwitch } from '@/shared/ui/LocaleSwitch';
 import { ThemeToggle } from '@/shared/ui/ThemeToggle';
 import { VirexLogo } from '@/shared/ui/VirexLogo';
+import { useLocaleControl } from '@/shared/i18n';
 
-type Tab = 'overview' | 'tags' | 'lab' | 'rules' | 'analytics' | 'settings';
+type Tab = 'overview' | 'tags' | 'analytics' | 'market' | 'settings';
 
-const NAV: { id: Tab; labelKey: 'overview' | 'tags' | 'lab' | 'rules' | 'analytics' | 'settings' }[] = [
+const NAV: { id: Tab; labelKey: 'overview' | 'tags' | 'analytics' | 'market' | 'settings' }[] = [
   { id: 'overview', labelKey: 'overview' },
   { id: 'tags', labelKey: 'tags' },
-  { id: 'lab', labelKey: 'lab' },
-  { id: 'rules', labelKey: 'rules' },
   { id: 'analytics', labelKey: 'analytics' },
+  { id: 'market', labelKey: 'market' },
   { id: 'settings', labelKey: 'settings' },
 ];
 
@@ -53,8 +53,10 @@ export function TopNav() {
   const { user, logout } = useAuth();
   const t = useTranslations('nav');
   const tc = useTranslations('common');
+  const { locale } = useLocaleControl();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLElement>(null);
 
@@ -66,6 +68,25 @@ export function TopNav() {
     const active = navRef.current?.querySelector('[aria-current="page"]');
     active?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
   }, [pathname]);
+
+  // Плашка активного раздела едет по рейке, а не перескакивает: её left/width
+  // снимаются с самого активного пункта, а не считаются заранее, — тогда она
+  // не может разойтись с тем, что реально на экране, даже когда подпись
+  // меняет длину при смене языка. useLayoutEffect, а не useEffect: позиция
+  // готова до отрисовки кадра, и при заходе на страницу плашка не дёргается
+  // из нуля в исходную точку на глазах.
+  useLayoutEffect(() => {
+    const place = () => {
+      const active = navRef.current?.querySelector<HTMLElement>('[aria-current="page"]');
+      if (active) setIndicator({ left: active.offsetLeft, width: active.offsetWidth });
+    };
+    place();
+    // Шрифт рейки — моноширинный веб-шрифт; если он догружается уже после
+    // первого измерения, ширины подписей могут чуть сместиться.
+    document.fonts?.ready?.then(place);
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [pathname, locale]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -88,6 +109,18 @@ export function TopNav() {
             пункты меняют. Скринридер должен услышать навигацию по разделам
             сайта, а не переключатель панелей внутри одной страницы. */}
         <nav className="nav" aria-label={t('sections')} ref={navRef}>
+          {/* Сама плашка активного раздела — общий слой под текстом ссылок, а
+              не фон отдельной ссылки: так у неё есть что ехать, а не только
+              где появляться. Первый кадр без indicator её не рисует вовсе —
+              нечем дёрнуть из нуля, пока useLayoutEffect не снял реальные
+              left/width с уже отрисованной активной ссылки. */}
+          {indicator && (
+            <span
+              className="nav-indicator"
+              style={{ left: indicator.left, width: indicator.width }}
+              aria-hidden
+            />
+          )}
           {NAV.map((item) => (
             <Link
               key={item.id}

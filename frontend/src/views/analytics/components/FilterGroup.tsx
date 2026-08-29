@@ -77,7 +77,7 @@ export function FilterGroup({
   /** Управление, относящееся ко всей группе (например, выбор таймфрейма). */
   children?: React.ReactNode;
 }) {
-  const t = useTranslations('lab');
+  const t = useTranslations('analytics');
   const active = options.filter((o) => o.active).length;
 
   return (

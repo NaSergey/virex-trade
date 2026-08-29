@@ -34,9 +34,8 @@
     "sections": "Sections",
     "overview": "Overview",
     "tags": "Tags",
-    "lab": "Lab",
-    "rules": "Rules",
-    "analytics": "Market",
+    "analytics": "Analytics",
+    "market": "Market",
     "settings": "Settings",
     "profile": "Profile",
     "logout": "Log out",
@@ -156,7 +155,7 @@
     "deleteComboConsequence2": "the combination will stop being suggested",
     "deleteComboConsequence3": "it can be rebuilt manually later"
   },
-  "lab": {
+  "analytics": {
     "periodTitle": "Lab over the period",
     "calculating": "Calculating…",
     "noTradesMatched": "No trade matched",
@@ -277,7 +276,7 @@
     "dipTrades": "{n, plural, one {# trade} other {# trades}}",
     "dipLabel": "{amount} drawdown over {trades}"
   },
-  "analytics": {
+  "market": {
     "history1y": "1 year",
     "history2y": "2 years",
     "positioningTitle": "Participant positioning",
@@ -327,44 +326,7 @@
     "EXCHANGE_VERIFY_FAILED": "Couldn't connect to {label} with these keys. Check them and their permissions.",
     "EXCHANGE_KEY_EXCESS_PERMISSIONS": "This key grants more permissions than needed. Virex only reads trade history, so it only accepts read-only keys. Create a new key on {label} without trading or withdrawal permissions and connect that instead.",
     "EXCHANGE_KEYS_UNREADABLE": "The saved keys for “{exchange}” can't be read: they were encrypted with a different server key. Reconnect the exchange on the Settings page.",
-    "generic": "Authorization error",
-    "RULE_UNKNOWN_METRIC": "Metric is no longer supported"
-  },
-  "rules": {
-    "metricLabel": "Metric",
-    "operatorLabel": "Operator",
-    "thresholdLabel": "Threshold",
-    "opLte": "not more than",
-    "opGte": "not less than",
-    "add": "Add rule",
-    "save": "Save",
-    "saving": "Saving…",
-    "remove": "Delete",
-    "unitPct": "%",
-    "unitX": "x",
-    "unitCount": "units",
-    "metricExposurePct": "Position nominal to account balance",
-    "metricExposurePctHint": "How much money is exposed relative to account balance. With leverage it can be many times over 100%.",
-    "metricPlannedRiskPct": "Planned risk per stop",
-    "metricPlannedRiskPctHint": "How much you'd lose if your stop triggers. Only calculated for trades with exchange stops set.",
-    "metricLeverage": "Leverage",
-    "metricLeverageHint": "Position leverage as reported by the exchange.",
-    "metricTradesPerDay": "Trades per day",
-    "metricTradesPerDayHint": "Number of closed trades per calendar day.",
-    "metricDailyLossPct": "Daily loss",
-    "metricDailyLossPctHint": "Daily loss as a percentage of account balance at start of day.",
-    "followedPct": "{pct}% ({followed} of {total})",
-    "unchecked": "{count} more unchecked",
-    "uncheckedWhy": "Missing stop or unknown balance at entry",
-    "noRules": "No rules yet",
-    "noRulesLede": "A rule is what you promised yourself to follow. Declare one, and we'll show how you're doing.",
-    "noTradesInPeriod": "No trades to check for this period",
-    "unknownMetric": "Metric is no longer supported",
-    "rulesViolatedTitle": "Violated rules",
-    "violated": "{metric} {value} {unit} against your threshold of {threshold} {unit}",
-    "loadFailed": "Couldn't load rules",
-    "saveFailed": "Couldn't save rule",
-    "deleteFailed": "Couldn't delete rule"
+    "generic": "Authorization error"
   },
   "settings": {
     "pageTitle": "Settings",

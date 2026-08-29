@@ -67,7 +67,7 @@ function HourSelect({
  * ошибка программы.
  */
 function Coverage({ coverage }: { coverage: LabResponse['coverage'] }) {
-  const t = useTranslations('lab');
+  const t = useTranslations('analytics');
   const pct = coverage.total > 0 ? (coverage.withContext / coverage.total) * 100 : 0;
   const missing = coverage.total - coverage.withContext;
   const noRange = coverage.withContext - coverage.withRange;
@@ -107,7 +107,7 @@ export function LabFilters({
   data?: LabResponse;
   fv: FacetLookup;
 }) {
-  const t = useTranslations('lab');
+  const t = useTranslations('analytics');
   const tNav = useTranslations('nav');
   const { locale } = useLocaleControl();
   const WEEKDAY_LABELS = weekdayLabels(locale);

@@ -27,7 +27,7 @@ const HOUR_SKELETON = [
  * значило бы утверждать то, чего в данных нет. Об этом сказано и подписью.
  */
 export function HourlyVolatility({ hours, isLoading }: { hours: HourlyBucket[]; isLoading?: boolean }) {
-  const t = useTranslations('analytics');
+  const t = useTranslations('market');
   const maxVol = Math.max(0, ...hours.map((b) => b.avgVolatilityPct));
   const hottest =
     hours.length > 0 ? [...hours].sort((a, b) => b.avgVolatilityPct - a.avgVolatilityPct)[0] : null;
