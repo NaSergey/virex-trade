@@ -370,7 +370,18 @@
     "hoverLabel": "long {value} % · {date}",
     "oiSuffix": " · OI {oi}",
     "growthWord": "up",
-    "weekdayFooterNote": "Share of days that closed above open, and the average move, over {days} days. A deviation from 50 % on a sample this size is a hint, not a pattern."
+    "weekdayFooterNote": "Share of days that closed above open, and the average move, over {days} days. A deviation from 50 % on a sample this size is a hint, not a pattern.",
+    "macroTitle": "Overall market backdrop",
+    "marketCap": "Market cap",
+    "top20Index": "Top-20 index",
+    "top20IndexHint": "Market-cap-weighted average price of the top 20 CoinGecko coins — not an official CoinMarketCap index (no CMC key is configured in this project). A gauge of overall market movement, not exchange-index \"points\".",
+    "fngExtremeFear": "Extreme fear",
+    "fngFear": "Fear",
+    "fngNeutral": "Neutral",
+    "fngGreed": "Greed",
+    "fngExtremeGreed": "Extreme greed",
+    "currentVolatility": "Volatility",
+    "volatilityElevated": "above normal"
   },
   "errors": {
     "INVALID_CREDENTIALS": "Invalid email or password",
