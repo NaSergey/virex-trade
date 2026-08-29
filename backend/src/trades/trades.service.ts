@@ -16,6 +16,29 @@ export interface TradeStats {
   avgPnl: number;
   bestPnl: number;
   worstPnl: number;
+  /**
+   * System Quality Number (Van Tharp): √N × mean(P&L) / stdev(P&L) по сделкам
+   * периода. null — меньше MIN_SQN_POSITIONS сделок или нулевая дисперсия
+   * (все P&L периода одинаковы — SQN не определён).
+   */
+  sqn: number | null;
+}
+
+// Порог значимости самой SQN (Van Tharp) — не число, придуманное для Virex.
+export const MIN_SQN_POSITIONS = 30;
+
+/**
+ * SQN на «сырых» P&L, без R-нормировки на риск сделки (официально равноценный
+ * вариант формулы — не даёт делить на несуществующий у части сделок стоп-лосс).
+ * Выборочное стандартное отклонение (делитель N-1).
+ */
+export function computeSqn(pnls: number[]): number | null {
+  const n = pnls.length;
+  if (n < MIN_SQN_POSITIONS) return null;
+  const mean = pnls.reduce((a, b) => a + b, 0) / n;
+  const variance = pnls.reduce((a, p) => a + (p - mean) ** 2, 0) / (n - 1);
+  const stdev = Math.sqrt(variance);
+  return stdev > 0 ? Number(((Math.sqrt(n) * mean) / stdev).toFixed(2)) : null;
 }
 
 export interface EquityPoint {
@@ -798,6 +821,7 @@ export class TradesService {
       avgPnl: totalTrades ? Number((totalPnl / totalTrades).toFixed(4)) : 0,
       bestPnl: Number(bestPnl.toFixed(4)),
       worstPnl: Number(worstPnl.toFixed(4)),
+      sqn: computeSqn(trades.map((t) => t.closedPnl)),
     };
 
     return { success: true, stats, equity };
