@@ -3,7 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { SentimentChart, SentimentChartSkeleton, fmtUsdCompact } from './SentimentChart';
 import { Skeleton } from '@/shared/ui/Skeleton';
-import type { MarketSentimentData } from '../api/hooks';
+import type { MarketSentimentData, VolatilityData } from '../api/hooks';
 import { useLocaleControl } from '@/shared/i18n';
 
 /**
@@ -13,7 +13,17 @@ import { useLocaleControl } from '@/shared/i18n';
  * Три коэффициента и кривая под ними отвечают на один вопрос с двух сторон —
  * «где рынок сейчас» и «как он туда пришёл», — поэтому стоят вместе.
  */
-export function Positioning({ data, isLoading }: { data?: MarketSentimentData; isLoading?: boolean }) {
+export function Positioning({
+  data,
+  isLoading,
+  volatility,
+  volatilityLoading,
+}: {
+  data?: MarketSentimentData;
+  isLoading?: boolean;
+  volatility?: VolatilityData;
+  volatilityLoading?: boolean;
+}) {
   const t = useTranslations('market');
   const { locale } = useLocaleControl();
   const latest = data?.points.at(-1);
@@ -29,7 +39,7 @@ export function Positioning({ data, isLoading }: { data?: MarketSentimentData; i
 
   return (
     <>
-      <div className="coef" style={{ borderTop: 0 }}>
+      <div className="coef coef-4" style={{ borderTop: 0 }}>
         <div>
           <div className="lbl">Long / Short</div>
           <div className="coef-v">{coef(longShort ? longShort.toFixed(2) : '—')}</div>
@@ -43,6 +53,19 @@ export function Positioning({ data, isLoading }: { data?: MarketSentimentData; i
         <div>
           <div className="lbl">{t('longShare')}</div>
           <div className="coef-v">{coef(latest ? `${(latest.buyRatio * 100).toFixed(1)} %` : '—')}</div>
+        </div>
+        <div>
+          <div className="lbl">{t('currentVolatility')}</div>
+          <div className={`coef-v${volatility?.elevated ? ' neg' : ''}`}>
+            {volatilityLoading ? (
+              <Skeleton as="span" flush height={16} width="58%" />
+            ) : volatility ? (
+              `${volatility.currentVolPct.toFixed(2)} %`
+            ) : (
+              '—'
+            )}
+          </div>
+          {volatility?.elevated && <div className="coef-sub neg">{t('volatilityElevated')}</div>}
         </div>
       </div>
       <div style={{ marginTop: 'var(--s3)' }}>
