@@ -115,6 +115,8 @@ export interface TradeStats {
   avgPnl: number;
   bestPnl: number;
   worstPnl: number;
+  /** System Quality Number (Van Tharp). null — меньше 30 сделок или нулевая дисперсия P&L. */
+  sqn: number | null;
 }
 
 export interface EquityPoint {

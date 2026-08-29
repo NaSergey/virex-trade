@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import type { TradeStats } from '@/entities/trade';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import { formatMoney, formatProfitFactor, moneyClass } from '@/shared/lib/utils/format';
+import { sqnToScore, sqnTier, type SqnTier } from '@/shared/lib/utils/edgeScore';
 
 interface Gauge {
   /** Заполнение шкалы, 0..100. */
@@ -18,6 +19,8 @@ interface Metric {
   value: ReactNode;
   tone?: 'pos' | 'neg';
   gauge?: Gauge;
+  /** Всплывающая подсказка на ячейке — сейчас только у Edge Score (уровень по SQN). */
+  title?: string;
 }
 
 /**
@@ -36,7 +39,7 @@ function GaugeBar({ fill, threshold }: Gauge) {
 }
 
 /**
- * Свод периода — девять величин одной строкой, без карточек.
+ * Свод периода — десять величин одной строкой, без карточек.
  *
  * Единицы вынесены в подпись («NET P&L · USDT»), поэтому строка значений
  * осталась чисто числовой: в моноширинной сетке цифры выстраиваются по
@@ -46,8 +49,23 @@ function GaugeBar({ fill, threshold }: Gauge) {
 export function SummaryStrip({ stats }: { stats: TradeStats }) {
   const t = useTranslations('overview');
   const profitFactor = formatProfitFactor(stats.profitFactor, stats.wins, stats.losses);
+  const tierLabels: Record<SqnTier, string> = {
+    poor: t('edgeScoreTierPoor'),
+    belowAverage: t('edgeScoreTierBelowAverage'),
+    average: t('edgeScoreTierAverage'),
+    good: t('edgeScoreTierGood'),
+    excellent: t('edgeScoreTierExcellent'),
+    superb: t('edgeScoreTierSuperb'),
+    holyGrail: t('edgeScoreTierHolyGrail'),
+  };
   const metrics: Metric[] = [
     { label: 'Net P&L · USDT', value: formatMoney(stats.totalPnl), tone: moneyClass(stats.totalPnl) },
+    {
+      label: 'Edge Score',
+      value: stats.sqn == null ? '—' : String(sqnToScore(stats.sqn)),
+      gauge: stats.sqn == null ? undefined : { fill: sqnToScore(stats.sqn), threshold: 40 },
+      title: stats.sqn == null ? undefined : tierLabels[sqnTier(stats.sqn)],
+    },
     { label: t('trades'), value: String(stats.totalTrades) },
     {
       label: 'Winrate',
@@ -80,7 +98,7 @@ export function SummaryStrip({ stats }: { stats: TradeStats }) {
   return (
     <div className="metrics">
       {metrics.map((m) => (
-        <div className="mcell" key={m.label}>
+        <div className="mcell" key={m.label} title={m.title}>
           <span className="lbl">{m.label}</span>
           <span className={`mval${m.tone ? ` ${m.tone}` : ''}`}>{m.value}</span>
           {m.gauge ? <GaugeBar {...m.gauge} /> : <span />}
@@ -90,11 +108,11 @@ export function SummaryStrip({ stats }: { stats: TradeStats }) {
   );
 }
 
-/** Скелет свода: те же девять слотов, чтобы шапка не прыгала при загрузке. */
+/** Скелет свода: те же десять слотов, чтобы шапка не прыгала при загрузке. */
 export function SummaryStripSkeleton() {
   return (
     <div className="metrics" aria-hidden>
-      {Array.from({ length: 9 }, (_, i) => (
+      {Array.from({ length: 10 }, (_, i) => (
         <div className="mcell" key={i}>
           {/* Высоты — под подпись и под значение: три жёсткие строки .mcell
               должны стоять на своих местах ещё до того, как придут числа. */}

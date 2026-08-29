@@ -158,7 +158,14 @@
     "habitsCostly": "Cost you",
     "habitsWorking": "Working for you",
     "habitsConfirmed": "confirmed",
-    "habitsLikely": "looks like a pattern"
+    "habitsLikely": "looks like a pattern",
+    "edgeScoreTierPoor": "Poor",
+    "edgeScoreTierBelowAverage": "Below average",
+    "edgeScoreTierAverage": "Average",
+    "edgeScoreTierGood": "Good",
+    "edgeScoreTierExcellent": "Excellent",
+    "edgeScoreTierSuperb": "Superb",
+    "edgeScoreTierHolyGrail": "Holy grail"
   },
   "tags": {
     "typeSetup": "Setup",

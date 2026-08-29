@@ -158,7 +158,14 @@
     "habitsCostly": "Дорого стоило",
     "habitsWorking": "Работает",
     "habitsConfirmed": "подтверждено",
-    "habitsLikely": "похоже на закономерность"
+    "habitsLikely": "похоже на закономерность",
+    "edgeScoreTierPoor": "Плохая",
+    "edgeScoreTierBelowAverage": "Ниже среднего",
+    "edgeScoreTierAverage": "Средняя",
+    "edgeScoreTierGood": "Хорошая",
+    "edgeScoreTierExcellent": "Отличная",
+    "edgeScoreTierSuperb": "Превосходная",
+    "edgeScoreTierHolyGrail": "Грааль"
   },
   "tags": {
     "typeSetup": "Сетап",
