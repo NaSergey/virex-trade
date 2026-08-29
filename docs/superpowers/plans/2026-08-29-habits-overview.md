@@ -613,7 +613,7 @@ git commit -m "feat(habits): kind и params для привычек на бэк�
 - Consumes: ничего нового с бэкенда, кроме формы ответа `/api/trades/habits` из Task 1 (`Habit.kind`, `Habit.params`).
 - Produces: `Habit`, `HabitKind`, `HabitsResponse` из `@/entities/trade`; `useHabits(params?: { days?: number })` из `@/entities/trade`; `habitLabel(h: Habit, t: TFunc): string`, `habitAdvice(h: Habit, t: TFunc): string`, `habitSearchParams(lab: Record<string,string>|null): string | null`, `type TFunc` из `frontend/src/views/overview/lib/habit-labels.ts` — этими именами их использует Task 4.
 
-- [ ] **Step 1: Добавить типы `Habit`/`HabitKind`/`HabitsResponse`**
+- [x] **Step 1: Добавить типы `Habit`/`HabitKind`/`HabitsResponse`**
 
 В конец `frontend/src/entities/trade/api/types.ts` дописать:
 
@@ -677,7 +677,7 @@ export interface HabitsResponse {
 }
 ```
 
-- [ ] **Step 2: Добавить `useHabits`**
+- [x] **Step 2: Добавить `useHabits`**
 
 В `frontend/src/entities/trade/api/hooks.ts` расширить импорт типов и дописать хук после `useTimeStats`:
 
@@ -706,7 +706,7 @@ export const useHabits = (params?: { days?: number }) =>
   });
 ```
 
-- [ ] **Step 3: Написать падающий тест словаря подписей**
+- [x] **Step 3: Написать падающий тест словаря подписей**
 
 Создать `frontend/src/views/overview/lib/habit-labels.test.ts`:
 
@@ -867,12 +867,12 @@ describe('habitSearchParams', () => {
 });
 ```
 
-- [ ] **Step 4: Запустить тест и убедиться, что он падает**
+- [x] **Step 4: Запустить тест и убедиться, что он падает**
 
 Run: `cd frontend && npx vitest run src/views/overview/lib/habit-labels.test.ts`
 Expected: FAIL — `Cannot find module './habit-labels'` (файл ещё не создан).
 
-- [ ] **Step 5: Написать `habit-labels.ts`**
+- [x] **Step 5: Написать `habit-labels.ts`**
 
 Создать `frontend/src/views/overview/lib/habit-labels.ts`:
 
@@ -1040,12 +1040,12 @@ export function habitSearchParams(lab: Record<string, string> | null): string | 
 }
 ```
 
-- [ ] **Step 6: Запустить тест и убедиться, что он проходит**
+- [x] **Step 6: Запустить тест и убедиться, что он проходит**
 
 Run: `cd frontend && npx vitest run src/views/overview/lib/habit-labels.test.ts`
 Expected: PASS — все `it(...)` зелёные.
 
-- [ ] **Step 7: Добавить переводы в оба каталога**
+- [x] **Step 7: Добавить переводы в оба каталога**
 
 В `frontend/src/shared/i18n/messages/ru.json`, внутри объекта `"overview": { ... }`, найти последнюю строку `"rangeTfAllTitle": "Все три горизонта"` и заменить на неё же с запятой в конце плюс новый блок перед закрывающей `}`:
 
@@ -1163,12 +1163,12 @@ Expected: PASS — все `it(...)` зелёные.
     "habitAdviceSymbol": "Drop the instrument or rethink your approach to it."
 ```
 
-- [ ] **Step 8: Проверить, что каталоги остались в паре, и прогнать все фронтовые тесты**
+- [x] **Step 8: Проверить, что каталоги остались в паре, и прогнать все фронтовые тесты**
 
 Run: `cd frontend && npx vitest run`
 Expected: PASS, включая `src/shared/i18n/messages.test.ts` (ключи en/ru совпадают) и новый `habit-labels.test.ts`.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add frontend/src/entities/trade/api/types.ts frontend/src/entities/trade/api/hooks.ts \
