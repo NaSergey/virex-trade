@@ -171,3 +171,61 @@ export interface InstrumentInfo {
   priceFilter?: { minPrice: string; maxPrice: string; tickSize: string };
   error?: string;
 }
+
+// ── Habits: диагностика поведения без тегов ("Цена привычек") ──
+export type HabitKind =
+  | 'tilt'
+  | 'overtrading'
+  | 'size_up'
+  | 'size_up_after_loss'
+  | 'hold_long'
+  | 'dir'
+  | 'hour'
+  | 'weekday'
+  | 'session'
+  | 'trend4h'
+  | 'ema200'
+  | 'atr'
+  | 'vol'
+  | 'range4h'
+  | 'tag'
+  | 'symbol';
+
+export interface Habit {
+  key: string;
+  group: 'behaviour' | 'time' | 'context' | 'tag' | 'symbol';
+  kind: HabitKind;
+  params: Record<string, string | number>;
+  // Сырые русские текст с бэкенда — запасной вариант для незнакомого kind,
+  // см. habit-labels.ts.
+  label: string;
+  advice: string;
+  n: number;
+  nRest: number;
+  avgPnl: number;
+  avgRest: number;
+  lift: number;
+  cost: number;
+  absolute: number;
+  winRate: number;
+  winRateRest: number;
+  p: number;
+  confidence: 'confirmed' | 'likely';
+  outlierSafe: boolean;
+  oos: 'pass' | 'fail' | 'na';
+  // Query-параметры /api/trades/lab — открывают этот срез в Аналитике. null у
+  // поведенческих привычек (tilt/overtrading/…) — там нечего фильтровать.
+  lab: Record<string, string> | null;
+}
+
+export interface HabitsResponse {
+  success: boolean;
+  status: 'need_more' | 'ok';
+  positions: number;
+  need?: number; // только при status: 'need_more'
+  tested?: number; // только при status: 'ok'
+  totalCost: number;
+  habits: Habit[];
+  edges: Habit[];
+  all: Habit[];
+}
