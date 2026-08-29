@@ -150,7 +150,15 @@
     "habitLabelTag": "Trades tagged “{tagName}”",
     "habitAdviceTag": "Revisit or drop this setup.",
     "habitLabelSymbol": "Trades on {symbol}",
-    "habitAdviceSymbol": "Drop the instrument or rethink your approach to it."
+    "habitAdviceSymbol": "Drop the instrument or rethink your approach to it.",
+    "habitsTitle": "Cost of habits",
+    "habitsNeedMoreTitle": "Need more trades",
+    "habitsNeedMoreBody": "{positions} of {need} so far — stats will show up once there's enough.",
+    "habitsNoneFound": "No significant patterns yet.",
+    "habitsCostly": "Cost you",
+    "habitsWorking": "Working for you",
+    "habitsConfirmed": "confirmed",
+    "habitsLikely": "looks like a pattern"
   },
   "tags": {
     "typeSetup": "Setup",

@@ -150,7 +150,15 @@
     "habitLabelTag": "Сделки с тегом «{tagName}»",
     "habitAdviceTag": "Пересмотреть или отказаться от этого сетапа.",
     "habitLabelSymbol": "Сделки по {symbol}",
-    "habitAdviceSymbol": "Убрать инструмент из списка или пересмотреть подход к нему."
+    "habitAdviceSymbol": "Убрать инструмент из списка или пересмотреть подход к нему.",
+    "habitsTitle": "Цена привычек",
+    "habitsNeedMoreTitle": "Нужно больше сделок",
+    "habitsNeedMoreBody": "Сейчас {positions} из {need} — здесь появится статистика, когда наберётся достаточно.",
+    "habitsNoneFound": "Пока не нашлось значимых закономерностей.",
+    "habitsCostly": "Дорого стоило",
+    "habitsWorking": "Работает",
+    "habitsConfirmed": "подтверждено",
+    "habitsLikely": "похоже на закономерность"
   },
   "tags": {
     "typeSetup": "Сетап",
