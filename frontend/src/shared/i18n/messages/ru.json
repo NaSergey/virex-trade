@@ -165,7 +165,9 @@
     "edgeScoreTierGood": "Хорошая",
     "edgeScoreTierExcellent": "Отличная",
     "edgeScoreTierSuperb": "Превосходная",
-    "edgeScoreTierHolyGrail": "Грааль"
+    "edgeScoreTierHolyGrail": "Грааль",
+    "entryQualityMetric": "Качество входа",
+    "exitQualityMetric": "Качество выхода"
   },
   "tags": {
     "typeSetup": "Сетап",
@@ -315,7 +317,9 @@
     "volumeToMedian": "Объём к медиане",
     "entryTimeUnknownNote": "Время входа неизвестно — снимок привязан к закрытию сделки.",
     "notEnoughHistory": "У символа не хватило истории свечей — контекст этой сделки не посчитан.",
-    "contextNotComputed": "Контекст этой сделки пока не посчитан."
+    "contextNotComputed": "Контекст этой сделки пока не посчитан.",
+    "entryQualityLabel": "Качество входа",
+    "exitQualityLabel": "Качество выхода"
   },
   "rangeCheck": {
     "title": "Диапазон входа",

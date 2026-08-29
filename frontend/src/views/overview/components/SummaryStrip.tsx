@@ -39,7 +39,7 @@ function GaugeBar({ fill, threshold }: Gauge) {
 }
 
 /**
- * Свод периода — десять величин одной строкой, без карточек.
+ * Свод периода — двенадцать величин одной строкой, без карточек.
  *
  * Единицы вынесены в подпись («NET P&L · USDT»), поэтому строка значений
  * осталась чисто числовой: в моноширинной сетке цифры выстраиваются по
@@ -65,6 +65,16 @@ export function SummaryStrip({ stats }: { stats: TradeStats }) {
       value: stats.sqn == null ? '—' : String(sqnToScore(stats.sqn)),
       gauge: stats.sqn == null ? undefined : { fill: sqnToScore(stats.sqn), threshold: 40 },
       title: stats.sqn == null ? undefined : tierLabels[sqnTier(stats.sqn)],
+    },
+    {
+      label: t('entryQualityMetric'),
+      value: stats.avgEntryQuality == null ? '—' : `${Math.round(stats.avgEntryQuality)} %`,
+      gauge: stats.avgEntryQuality == null ? undefined : { fill: stats.avgEntryQuality, threshold: 50 },
+    },
+    {
+      label: t('exitQualityMetric'),
+      value: stats.avgExitQuality == null ? '—' : `${Math.round(stats.avgExitQuality)} %`,
+      gauge: stats.avgExitQuality == null ? undefined : { fill: stats.avgExitQuality, threshold: 50 },
     },
     { label: t('trades'), value: String(stats.totalTrades) },
     {
@@ -108,11 +118,11 @@ export function SummaryStrip({ stats }: { stats: TradeStats }) {
   );
 }
 
-/** Скелет свода: те же десять слотов, чтобы шапка не прыгала при загрузке. */
+/** Скелет свода: те же двенадцать слотов, чтобы шапка не прыгала при загрузке. */
 export function SummaryStripSkeleton() {
   return (
     <div className="metrics" aria-hidden>
-      {Array.from({ length: 10 }, (_, i) => (
+      {Array.from({ length: 12 }, (_, i) => (
         <div className="mcell" key={i}>
           {/* Высоты — под подпись и под значение: три жёсткие строки .mcell
               должны стоять на своих местах ещё до того, как придут числа. */}

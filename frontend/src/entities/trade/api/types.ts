@@ -40,6 +40,9 @@ export interface TradeContext {
   rangePos1h: number | null;
   rangePos4h: number | null;
   rangePos1d: number | null;
+  /** Качество входа/выхода относительно диапазона самой сделки, 0..100. null — мало свечей в окне. */
+  entryQuality: number | null;
+  exitQuality: number | null;
 }
 
 // Один ордер раскрытой сделки: филлы биржи, сгруппированные по orderId.
@@ -117,6 +120,9 @@ export interface TradeStats {
   worstPnl: number;
   /** System Quality Number (Van Tharp). null — меньше 30 сделок или нулевая дисперсия P&L. */
   sqn: number | null;
+  /** Среднее качество входа/выхода по сделкам периода с посчитанным контекстом. */
+  avgEntryQuality: number | null;
+  avgExitQuality: number | null;
 }
 
 export interface EquityPoint {

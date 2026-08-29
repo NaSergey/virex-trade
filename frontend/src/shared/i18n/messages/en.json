@@ -165,7 +165,9 @@
     "edgeScoreTierGood": "Good",
     "edgeScoreTierExcellent": "Excellent",
     "edgeScoreTierSuperb": "Superb",
-    "edgeScoreTierHolyGrail": "Holy grail"
+    "edgeScoreTierHolyGrail": "Holy grail",
+    "entryQualityMetric": "Entry quality",
+    "exitQualityMetric": "Exit quality"
   },
   "tags": {
     "typeSetup": "Setup",
@@ -315,7 +317,9 @@
     "volumeToMedian": "Volume vs median",
     "entryTimeUnknownNote": "Entry time unknown — the snapshot is anchored to the trade's close.",
     "notEnoughHistory": "Not enough candle history for this symbol — this trade's context wasn't computed.",
-    "contextNotComputed": "This trade's context hasn't been computed yet."
+    "contextNotComputed": "This trade's context hasn't been computed yet.",
+    "entryQualityLabel": "Entry quality",
+    "exitQualityLabel": "Exit quality"
   },
   "rangeCheck": {
     "title": "Entry range",
