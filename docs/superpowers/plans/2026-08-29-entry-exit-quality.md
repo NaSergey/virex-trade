@@ -685,7 +685,7 @@ git commit -m "feat(trades): качество входа/выхода в жур�
 **Interfaces:**
 - Consumes: `TradeContext.entryQuality`/`exitQuality`, `TradeStats.avgEntryQuality`/`avgExitQuality` (Task 3).
 
-- [ ] **Step 1: Добавить поля в типы**
+- [x] **Step 1: Добавить поля в типы**
 
 В `frontend/src/entities/trade/api/types.ts` заменить `TradeContext`
 
@@ -740,7 +740,7 @@ export interface TradeContext {
   avgExitQuality: number | null;
 ```
 
-- [ ] **Step 2: Добавить переводы в оба каталога**
+- [x] **Step 2: Добавить переводы в оба каталога**
 
 В `frontend/src/shared/i18n/messages/ru.json`, внутри `"overview"`, последняя строка сейчас — восемь ключей `edgeScoreTier*`, последний из них `"edgeScoreTierHolyGrail": "Грааль"` — заменить на неё же с запятой плюс:
 
@@ -774,12 +774,12 @@ export interface TradeContext {
     "exitQualityLabel": "Exit quality"
 ```
 
-- [ ] **Step 3: Прогнать тест каталогов сообщений**
+- [x] **Step 3: Прогнать тест каталогов сообщений**
 
 Run: `cd frontend && npx vitest run src/shared/i18n/messages.test.ts`
 Expected: PASS — en/ru в паре.
 
-- [ ] **Step 4: Добавить две ячейки в `SummaryStrip`**
+- [x] **Step 4: Добавить две ячейки в `SummaryStrip`**
 
 В `frontend/src/views/overview/components/SummaryStrip.tsx` заменить
 
@@ -847,7 +847,7 @@ export function SummaryStripSkeleton() {
       {Array.from({ length: 12 }, (_, i) => (
 ```
 
-- [ ] **Step 5: Добавить две строки в раскрытую запись журнала**
+- [x] **Step 5: Добавить две строки в раскрытую запись журнала**
 
 В `frontend/src/widgets/trades-table/TradeOrders.tsx` заменить
 
@@ -869,27 +869,27 @@ export function SummaryStripSkeleton() {
               </KeyValue>
 ```
 
-- [ ] **Step 6: Проверка типов фронтенда**
+- [x] **Step 6: Проверка типов фронтенда**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: без ошибок.
 
-- [ ] **Step 7: Полный прогон тестов фронтенда**
+- [x] **Step 7: Полный прогон тестов фронтенда**
 
 Run: `cd frontend && npx vitest run`
 Expected: PASS.
 
-- [ ] **Step 8: Полная сборка фронтенда**
+- [x] **Step 8: Полная сборка фронтенда**
 
 Run: `cd frontend && npx next build`
 Expected: PASS, без ошибок и предупреждений.
 
-- [ ] **Step 9: Контрольный прогон бэкенда**
+- [x] **Step 9: Контрольный прогон бэкенда**
 
 Run: `cd backend && npx jest && npx nest build`
 Expected: PASS.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add frontend/src/entities/trade/api/types.ts frontend/src/views/overview/components/SummaryStrip.tsx \
