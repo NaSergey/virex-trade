@@ -532,7 +532,7 @@ git commit -m "feat(context): батч-расчёт качества входа/
 - Consumes: `TradeContext.entryQuality`/`exitQuality` (Task 2).
 - Produces: `averageQuality(values: Array<number | null | undefined>): number | null` (экспортируемая чистая функция), `TradeStats.avgEntryQuality: number | null`, `TradeStats.avgExitQuality: number | null` — этими именами их использует Task 4 на фронте.
 
-- [ ] **Step 1: Написать падающий тест**
+- [x] **Step 1: Написать падающий тест**
 
 Создать `backend/src/trades/trade-quality-average.spec.ts`:
 
@@ -559,12 +559,12 @@ describe('averageQuality', () => {
 });
 ```
 
-- [ ] **Step 2: Запустить тест и убедиться, что он падает**
+- [x] **Step 2: Запустить тест и убедиться, что он падает**
 
 Run: `cd backend && npx jest trade-quality-average.spec`
 Expected: FAIL — `averageQuality` не экспортирована из `trades.service.ts`.
 
-- [ ] **Step 3: Добавить `averageQuality`, поля `TradeStats` и правки `list()`/`stats()`**
+- [x] **Step 3: Добавить `averageQuality`, поля `TradeStats` и правки `list()`/`stats()`**
 
 В `backend/src/trades/trades.service.ts` добавить рядом с `wilsonLower` (после неё):
 
@@ -655,17 +655,17 @@ export function averageQuality(values: Array<number | null | undefined>): number
       avgExitQuality: averageQuality(trades.map((t) => t.context?.exitQuality)),
 ```
 
-- [ ] **Step 4: Запустить тест и убедиться, что он проходит**
+- [x] **Step 4: Запустить тест и убедиться, что он проходит**
 
 Run: `cd backend && npx jest trade-quality-average.spec`
 Expected: PASS.
 
-- [ ] **Step 5: Прогнать полный набор тестов бэкенда**
+- [x] **Step 5: Прогнать полный набор тестов бэкенда**
 
 Run: `cd backend && npx jest`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/src/trades/trades.service.ts backend/src/trades/trade-quality-average.spec.ts
