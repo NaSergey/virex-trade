@@ -259,21 +259,91 @@ export class TradeContextService {
         avgEntryPrice: true,
       },
     });
+
+    let written = 0;
+    if (pending.length > 0) {
+      const bySymbol = new Map<string, typeof pending>();
+      for (const t of pending) {
+        const list = bySymbol.get(t.symbol);
+        if (list) list.push(t);
+        else bySymbol.set(t.symbol, [t]);
+      }
+
+      for (const [symbol, rows] of bySymbol) {
+        try {
+          written += await this.computeSymbol(symbol, rows);
+        } catch (e) {
+          this.logger.warn(`context compute failed for ${symbol}: ${e}`);
+        }
+      }
+    }
+
+    written += await this.computeMissingQuality(userId);
+    return written;
+  }
+
+  /**
+   * Качество входа/выхода — второй, независимый проход. Нужен закрытый выход
+   * (avgExitPrice/closedAt), которого нет у ещё открытой позиции — поэтому не
+   * может жить в buildSnapshot(), общем с snapshotNow(). Свой набор запросов
+   * свечей, сгруппированных по (символ, интервал-по-длительности) — не
+   * переиспользует диапазоны m15/h1/h4/d1 основного снимка: не рискуем уже
+   * работающим rangePos/индикаторами ради экономии запросов к Bybit.
+   */
+  private async computeMissingQuality(userId: string): Promise<number> {
+    const pending = await this.prisma.trade.findMany({
+      where: { userId, context: { qualityComputed: false, ok: true } },
+      orderBy: { closedAt: 'desc' },
+      take: BATCH_LIMIT,
+      select: {
+        id: true,
+        symbol: true,
+        direction: true,
+        positionId: true,
+        openedAt: true,
+        closedAt: true,
+        avgEntryPrice: true,
+        avgExitPrice: true,
+      },
+    });
     if (pending.length === 0) return 0;
 
-    const bySymbol = new Map<string, typeof pending>();
-    for (const t of pending) {
-      const list = bySymbol.get(t.symbol);
-      if (list) list.push(t);
-      else bySymbol.set(t.symbol, [t]);
+    const anchors = pending.map((row) => ({ row, entryMs: entryTimeOf(row).ms }));
+    const groups = new Map<string, typeof anchors>();
+    for (const a of anchors) {
+      const holdMs = a.row.closedAt.getTime() - a.entryMs;
+      const { interval } = qualityIntervalFor(holdMs);
+      const key = `${a.row.symbol}:${interval}`;
+      const list = groups.get(key);
+      if (list) list.push(a);
+      else groups.set(key, [a]);
     }
 
     let written = 0;
-    for (const [symbol, rows] of bySymbol) {
+    for (const [key, items] of groups) {
+      const interval = key.slice(key.lastIndexOf(':') + 1);
+      const symbol = key.slice(0, key.lastIndexOf(':'));
+      const spec = QUALITY_INTERVALS_BY_KEY.get(interval)!;
+      const minMs = Math.min(...items.map((a) => a.entryMs));
+      const maxMs = Math.max(...items.map((a) => a.row.closedAt.getTime()));
       try {
-        written += await this.computeSymbol(symbol, rows);
+        const candles = await this.market.getKlinesRange(symbol, interval, minMs, maxMs);
+        for (const { row, entryMs } of items) {
+          const window = withinTrade(candles, entryMs, row.closedAt.getTime(), spec.tfMs);
+          const { entryQuality, exitQuality } = computeTradeQuality(
+            row.direction,
+            row.avgEntryPrice,
+            row.avgExitPrice,
+            window,
+          );
+          await this.prisma.tradeContext.update({
+            where: { tradeId: row.id },
+            data: { entryQuality, exitQuality, qualityComputed: true },
+          });
+          written++;
+        }
       } catch (e) {
-        this.logger.warn(`context compute failed for ${symbol}: ${e}`);
+        this.logger.warn(`quality compute failed for ${symbol}/${interval}: ${e}`);
       }
     }
     return written;

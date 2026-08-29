@@ -266,6 +266,16 @@ model TradeContext {
   rangePos4h  Float?
   rangePos1d  Float?
 
+  /// Качество входа/выхода относительно диапазона самой сделки (вход→выход),
+  /// не относительно истории до входа, как rangePos. 0..100, клампится.
+  /// null — меньше QUALITY_MIN_CANDLES свечей в окне сделки.
+  entryQuality Float?
+  exitQuality  Float?
+  /// true — попытка расчёта уже была (успешная или нет). Отличает «посчитан
+  /// null, потому что данных мало» от «ещё не пытались» — без этого пустые
+  /// пересчитывались бы на каждом тике синка.
+  qualityComputed Boolean @default(false)
+
   // Field-set version of the snapshot. Snapshots are only ever computed for
   // trades that have none (context == null), so without this a newly added
   // indicator would stay null forever on every already-computed trade —
