@@ -28,7 +28,7 @@
 **Interfaces:**
 - Produces: `computeSqn(pnls: number[]): number | null` (экспортируемая чистая функция), `MIN_SQN_POSITIONS = 30` (экспортируемая константа), `TradeStats.sqn: number | null` — этими именами их использует Task 2 на фронте (копия типа, как и у остальных ответов в проекте — общего пакета типов бэкенд/фронт нет).
 
-- [ ] **Step 1: Написать падающий тест**
+- [x] **Step 1: Написать падающий тест**
 
 Создать `backend/src/trades/trades.service.spec.ts`:
 
@@ -66,12 +66,12 @@ describe('computeSqn', () => {
 });
 ```
 
-- [ ] **Step 2: Запустить тест и убедиться, что он падает**
+- [x] **Step 2: Запустить тест и убедиться, что он падает**
 
 Run: `cd backend && npx jest trades.service.spec`
 Expected: FAIL — `computeSqn`/`MIN_SQN_POSITIONS` не существуют, импорт падает.
 
-- [ ] **Step 3: Добавить `computeSqn`, `MIN_SQN_POSITIONS` и поле `sqn`**
+- [x] **Step 3: Добавить `computeSqn`, `MIN_SQN_POSITIONS` и поле `sqn`**
 
 В `backend/src/trades/trades.service.ts` заменить блок `export interface TradeStats { ... }` (строки 6-19) на:
 
@@ -115,7 +115,7 @@ export function computeSqn(pnls: number[]): number | null {
 }
 ```
 
-- [ ] **Step 4: Подставить `sqn` в возвращаемый объект `stats()`**
+- [x] **Step 4: Подставить `sqn` в возвращаемый объект `stats()`**
 
 В методе `stats()` заменить
 
@@ -158,17 +158,17 @@ export function computeSqn(pnls: number[]): number | null {
     };
 ```
 
-- [ ] **Step 5: Запустить тест и убедиться, что он проходит**
+- [x] **Step 5: Запустить тест и убедиться, что он проходит**
 
 Run: `cd backend && npx jest trades.service.spec`
 Expected: PASS — все 5 `it(...)` зелёные.
 
-- [ ] **Step 6: Прогнать полный набор тестов бэкенда**
+- [x] **Step 6: Прогнать полный набор тестов бэкенда**
 
 Run: `cd backend && npx jest`
 Expected: PASS, число тестов выросло на 5 относительно текущего (153 → 158).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/src/trades/trades.service.ts backend/src/trades/trades.service.spec.ts
