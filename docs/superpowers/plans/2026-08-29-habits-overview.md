@@ -28,7 +28,7 @@
 - Produces: `HabitKind` (16 литералов), `Habit.kind: HabitKind`, `Habit.params: Record<string, string | number>`, `Candidate.kind`, `Candidate.params` — этими именами и этой формой их читает фронтенд в Task 2.
 - Конверт ответа `/trades/habits` (`status`/`positions`/`need`/`tested`/`totalCost`/`habits`/`edges`/`all`) не меняется — `trades.controller.ts` не трогаем.
 
-- [ ] **Step 1: Написать падающий тест**
+- [x] **Step 1: Написать падающий тест**
 
 Создать `backend/src/trades/habits.service.spec.ts`:
 
@@ -194,12 +194,12 @@ describe('HabitsService.evaluate — переносит kind/params в Habit', (
 });
 ```
 
-- [ ] **Step 2: Запустить тест и убедиться, что он падает**
+- [x] **Step 2: Запустить тест и убедиться, что он падает**
 
 Run: `cd backend && npx jest habits.service.spec`
 Expected: FAIL — `kind`/`params` читаются как `undefined`, ассерты вида `expect(undefined).toBe('tilt')` не проходят. Компилируется тест без ошибок: обращение идёт через `any`-каст, TS не проверяет форму объекта на этом пути.
 
-- [ ] **Step 3: Добавить `kind`/`params` в типы**
+- [x] **Step 3: Добавить `kind`/`params` в типы**
 
 В `backend/src/trades/habits.service.ts` заменить блок `export interface Habit { ... }` / `interface Candidate { ... }` (строки 46-81) на:
 
@@ -272,7 +272,7 @@ export interface Candidate {
 
 (Изменения: добавлены `HabitKind`, поля `kind`/`params` на обоих интерфейсах, `interface Candidate` → `export interface Candidate`, комментарий `lab` поправлен на актуальное имя «Аналитика».)
 
-- [ ] **Step 4: Проставить `kind`/`params` на каждом кандидате**
+- [x] **Step 4: Проставить `kind`/`params` на каждом кандидате**
 
 Заменить весь метод `private candidates(...)` (строки 244-476) на:
 
@@ -552,7 +552,7 @@ export interface Candidate {
   }
 ```
 
-- [ ] **Step 5: Перенести `kind`/`params` в `evaluate()`**
+- [x] **Step 5: Перенести `kind`/`params` в `evaluate()`**
 
 В том же файле, в методе `private evaluate(...)`, в объекте, который он возвращает (сейчас строки ~511-530), добавить два поля сразу после `group: c.group,`:
 
@@ -581,17 +581,17 @@ export interface Candidate {
     };
 ```
 
-- [ ] **Step 6: Запустить тест и убедиться, что он проходит**
+- [x] **Step 6: Запустить тест и убедиться, что он проходит**
 
 Run: `cd backend && npx jest habits.service.spec`
 Expected: PASS — все `it(...)` из Step 1 зелёные.
 
-- [ ] **Step 7: Прогнать полный набор тестов бэкенда — не сломалось ли что-то ещё**
+- [x] **Step 7: Прогнать полный набор тестов бэкенда — не сломалось ли что-то ещё**
 
 Run: `cd backend && npx jest`
 Expected: PASS (в частности `trade-sync.stoploss.spec.ts` не задет этими правками).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add backend/src/trades/habits.service.ts backend/src/trades/habits.service.spec.ts
