@@ -190,7 +190,7 @@ git commit -m "feat(stats): SQN (Edge Score) в /api/trades/stats"
 - Consumes: `TradeStats.sqn: number | null` из Task 1.
 - Produces: `sqnToScore(sqn: number): number`, `sqnTier(sqn: number): SqnTier`, `type SqnTier` из `@/shared/lib/utils/edgeScore` — используются только внутри `SummaryStrip.tsx`, наружу из `views/overview` не отдаются.
 
-- [ ] **Step 1: Добавить `sqn` в тип `TradeStats`**
+- [x] **Step 1: Добавить `sqn` в тип `TradeStats`**
 
 В `frontend/src/entities/trade/api/types.ts` заменить
 
@@ -232,7 +232,7 @@ export interface TradeStats {
 }
 ```
 
-- [ ] **Step 2: Написать падающий тест**
+- [x] **Step 2: Написать падающий тест**
 
 Создать `frontend/src/shared/lib/utils/edgeScore.test.ts`:
 
@@ -280,12 +280,12 @@ describe('sqnTier', () => {
 });
 ```
 
-- [ ] **Step 3: Запустить тест и убедиться, что он падает**
+- [x] **Step 3: Запустить тест и убедиться, что он падает**
 
 Run: `cd frontend && npx vitest run src/shared/lib/utils/edgeScore.test.ts`
 Expected: FAIL — `Cannot find module './edgeScore'`.
 
-- [ ] **Step 4: Написать `edgeScore.ts`**
+- [x] **Step 4: Написать `edgeScore.ts`**
 
 Создать `frontend/src/shared/lib/utils/edgeScore.ts`:
 
@@ -332,12 +332,12 @@ export function sqnTier(sqn: number): SqnTier {
 }
 ```
 
-- [ ] **Step 5: Запустить тест и убедиться, что он проходит**
+- [x] **Step 5: Запустить тест и убедиться, что он проходит**
 
 Run: `cd frontend && npx vitest run src/shared/lib/utils/edgeScore.test.ts`
 Expected: PASS — все `it(...)` зелёные.
 
-- [ ] **Step 6: Добавить переводы уровней в оба каталога**
+- [x] **Step 6: Добавить переводы уровней в оба каталога**
 
 В `frontend/src/shared/i18n/messages/ru.json`, внутри `"overview"`, последняя строка сейчас `"habitsLikely": "похоже на закономерность"` — заменить на неё же с запятой в конце плюс новый блок перед закрывающей `}`:
 
@@ -365,7 +365,7 @@ Expected: PASS — все `it(...)` зелёные.
     "edgeScoreTierHolyGrail": "Holy grail"
 ```
 
-- [ ] **Step 7: Подключить Edge Score в `SummaryStrip`**
+- [x] **Step 7: Подключить Edge Score в `SummaryStrip`**
 
 В `frontend/src/views/overview/components/SummaryStrip.tsx`:
 
@@ -489,27 +489,27 @@ export function SummaryStripSkeleton() {
  * Свод периода — десять величин одной строкой, без карточек.
 ```
 
-- [ ] **Step 8: Проверка типов фронтенда**
+- [x] **Step 8: Проверка типов фронтенда**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: без ошибок.
 
-- [ ] **Step 9: Полный прогон тестов фронтенда**
+- [x] **Step 9: Полный прогон тестов фронтенда**
 
 Run: `cd frontend && npx vitest run`
 Expected: PASS, включая `messages.test.ts` (en/ru в паре) и новый `edgeScore.test.ts`.
 
-- [ ] **Step 10: Полная сборка фронтенда**
+- [x] **Step 10: Полная сборка фронтенда**
 
 Run: `cd frontend && npx next build`
 Expected: PASS, без ошибок и предупреждений.
 
-- [ ] **Step 11: Контрольный прогон бэкенда**
+- [x] **Step 11: Контрольный прогон бэкенда**
 
 Run: `cd backend && npx jest && npx nest build`
 Expected: PASS (это уже проверялось в Task 1, здесь — финальная гарантия, что фронтовые правки ничего не задели на бэкенде).
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 git add frontend/src/entities/trade/api/types.ts frontend/src/shared/lib/utils/edgeScore.ts \
