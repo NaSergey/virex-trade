@@ -1,7 +1,8 @@
 'use client';
 
+import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
-import { emptyLabFilters, type LabFilters } from '../api/hooks';
+import { emptyLabFilters, type LabFilters, type RangeTf } from '../api/hooks';
 
 /** Множественные измерения: набор выбранных строковых значений. */
 type MultiKey = 'tagIds' | 'symbols' | 'sessions' | 'trend4h';
@@ -27,15 +28,56 @@ const countActive = (f: LabFilters) =>
   (f.hourFrom != null || f.hourTo != null ? 1 : 0);
 
 /**
- * Состояние фильтров Выборки и все способы его менять. Отделено от
+ * Начальные фильтры из query-строки — дрилдаун из «Цены привычек» на Обзоре
+ * (см. `overview/lib/habit-labels.ts`, `habitSearchParams`) кладёт туда те же
+ * имена, которых ждёт `useLab` (см. `../api/hooks.ts`). Единственное
+ * расхождение имён — `tags` в query против `tagIds` в `LabFilters`.
+ */
+function filtersFromSearchParams(sp: URLSearchParams): LabFilters {
+  const base = emptyLabFilters(0);
+  const str = (key: string) => sp.get(key) ?? undefined;
+  const csv = (key: string) => {
+    const v = sp.get(key);
+    return v ? v.split(',') : [];
+  };
+  const num = (key: string) => {
+    const v = sp.get(key);
+    return v != null && v !== '' ? Number(v) : undefined;
+  };
+  return {
+    ...base,
+    tagIds: csv('tags'),
+    symbols: csv('symbols'),
+    weekdays: csv('weekdays').map(Number),
+    sessions: csv('sessions'),
+    trend4h: csv('trend4h'),
+    direction: str('direction') as LabFilters['direction'],
+    hourFrom: num('hourFrom'),
+    hourTo: num('hourTo'),
+    ema200: str('ema200') as LabFilters['ema200'],
+    atr: str('atr') as LabFilters['atr'],
+    vol: str('vol') as LabFilters['vol'],
+    rangeTf: (str('rangeTf') as RangeTf | undefined) ?? base.rangeTf,
+    range: str('range') as LabFilters['range'],
+  };
+}
+
+/**
+ * Состояние фильтров Аналитики и все способы его менять. Отделено от
  * разметки: у страницы одна причина меняться (как это выглядит), у этого хука
  * другая (что значит «переключить измерение»).
  *
  * `days` здесь всегда 0 — период живёт в usePeriodFilter и подставляется
  * перед запросом, чтобы не заводить второй источник истины.
+ *
+ * Начальное состояние читается из query-строки один раз при маунте (лениво,
+ * через `useState(() => ...)`) — переход по ссылке из привычки Обзора этим и
+ * работает. Дальнейшие правки URL руками фильтры не меняют: это не
+ * двусторонняя синхронизация, а разовая точка входа.
  */
 export function useLabFilters() {
-  const [filters, setFilters] = useState<LabFilters>(() => emptyLabFilters(0));
+  const searchParams = useSearchParams();
+  const [filters, setFilters] = useState<LabFilters>(() => filtersFromSearchParams(searchParams));
   const set = (patch: Partial<LabFilters>) => setFilters((f) => ({ ...f, ...patch }));
 
   return {
