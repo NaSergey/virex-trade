@@ -22,6 +22,9 @@ export interface TradeStats {
    * (все P&L периода одинаковы — SQN не определён).
    */
   sqn: number | null;
+  /** Среднее качество входа по сделкам периода с посчитанным контекстом. null — ни у одной нет. */
+  avgEntryQuality: number | null;
+  avgExitQuality: number | null;
 }
 
 // Порог значимости самой SQN (Van Tharp) — не число, придуманное для Virex.
@@ -81,6 +84,13 @@ export function wilsonLower(wins: number, n: number): number {
   const center = p + z2 / (2 * n);
   const margin = z * Math.sqrt((p * (1 - p)) / n + z2 / (4 * n * n));
   return Number((Math.max(0, (center - margin) / (1 + z2 / n)) * 100).toFixed(2));
+}
+
+/** Среднее по непустым значениям; null — если ни одной сделки периода не считалось. */
+export function averageQuality(values: Array<number | null | undefined>): number | null {
+  const present = values.filter((v): v is number => v != null);
+  if (present.length === 0) return null;
+  return Number((present.reduce((a, b) => a + b, 0) / present.length).toFixed(2));
 }
 
 /** Thin a sparkline series to ≤ max points, always keeping the last one. */
@@ -160,6 +170,8 @@ export class TradesService {
               rangePos1h: context.rangePos1h,
               rangePos4h: context.rangePos4h,
               rangePos1d: context.rangePos1d,
+              entryQuality: context.entryQuality,
+              exitQuality: context.exitQuality,
             }
           : null,
       })),
@@ -770,6 +782,7 @@ export class TradesService {
       await this.prisma.trade.findMany({
         where: this.buildWhere(userId, params),
         orderBy: { closedAt: 'asc' },
+        include: { context: true },
       }),
     );
 
@@ -822,6 +835,8 @@ export class TradesService {
       bestPnl: Number(bestPnl.toFixed(4)),
       worstPnl: Number(worstPnl.toFixed(4)),
       sqn: computeSqn(trades.map((t) => t.closedPnl)),
+      avgEntryQuality: averageQuality(trades.map((t) => t.context?.entryQuality)),
+      avgExitQuality: averageQuality(trades.map((t) => t.context?.exitQuality)),
     };
 
     return { success: true, stats, equity };
