@@ -29,7 +29,7 @@
 **Interfaces:**
 - Produces: `QUALITY_MIN_CANDLES` (константа), `qualityIntervalFor(holdMs: number): { maxHoldMs: number; interval: string; tfMs: number }`, `withinTrade(candles: Candle[], fromMs: number, toMs: number, tfMs: number): Candle[]`, `computeTradeQuality(direction: string, entryPrice: number, exitPrice: number, windowCandles: Candle[]): { entryQuality: number | null; exitQuality: number | null }` — этими именами их использует Task 2.
 
-- [ ] **Step 1: Написать падающий тест**
+- [x] **Step 1: Написать падающий тест**
 
 Создать `backend/src/trades/trade-quality.spec.ts`:
 
@@ -116,12 +116,12 @@ describe('computeTradeQuality', () => {
 });
 ```
 
-- [ ] **Step 2: Запустить тест и убедиться, что он падает**
+- [x] **Step 2: Запустить тест и убедиться, что он падает**
 
 Run: `cd backend && npx jest trade-quality.spec`
 Expected: FAIL — `qualityIntervalFor`/`withinTrade`/`computeTradeQuality` не экспортированы.
 
-- [ ] **Step 3: Добавить константы и функции в `trade-context.service.ts`**
+- [x] **Step 3: Добавить константы и функции в `trade-context.service.ts`**
 
 Найти блок с `RANGE_MIN_CANDLES` (после константы `RANGE_WINDOW_1D`) и добавить рядом:
 
@@ -189,17 +189,17 @@ export function computeTradeQuality(
 }
 ```
 
-- [ ] **Step 4: Запустить тест и убедиться, что он проходит**
+- [x] **Step 4: Запустить тест и убедиться, что он проходит**
 
 Run: `cd backend && npx jest trade-quality.spec`
 Expected: PASS — все `it(...)` зелёные.
 
-- [ ] **Step 5: Прогнать полный набор тестов бэкенда**
+- [x] **Step 5: Прогнать полный набор тестов бэкенда**
 
 Run: `cd backend && npx jest`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/src/trades/trade-context.service.ts backend/src/trades/trade-quality.spec.ts
