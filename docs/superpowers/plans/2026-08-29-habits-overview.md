@@ -1189,7 +1189,7 @@ git commit -m "feat(habits): подписи и совет привычки на 
 - Consumes: `LabFilters`, `emptyLabFilters`, `RangeTf` из `../api/hooks` (уже существуют, без изменений).
 - Produces: `useLabFilters()` возвращает то же самое, что и раньше (`{ filters, set, toggleMulti, toggleWeekday, toggleSingle, reset, activeCount }`) — сигнатура не меняется, меняется только то, чем инициализируется `filters` при первом рендере.
 
-- [ ] **Step 1: Переписать `useLabFilters.ts`**
+- [x] **Step 1: Переписать `useLabFilters.ts`**
 
 Заменить весь файл `frontend/src/views/analytics/model/useLabFilters.ts` на:
 
@@ -1298,7 +1298,7 @@ export type LabFiltersState = ReturnType<typeof useLabFilters>;
 
 (Изменения относительно текущего файла: импорт `useSearchParams` и `RangeTf`, новая функция `filtersFromSearchParams`, и `useState<LabFilters>(() => emptyLabFilters(0))` → `useState<LabFilters>(() => filtersFromSearchParams(searchParams))`. Всё остальное — дословно как было.)
 
-- [ ] **Step 2: Обернуть роут в `Suspense`**
+- [x] **Step 2: Обернуть роут в `Suspense`**
 
 `useSearchParams()` — клиентский хук Next; без `Suspense` вокруг компонента, который его вызывает, маршрут не собирается статически (`next build` останавливается на «useSearchParams() should be wrapped in a suspense boundary»). Заменить весь файл `frontend/src/app/(app)/analytics/page.tsx` на:
 
@@ -1327,17 +1327,17 @@ export default function Page() {
 }
 ```
 
-- [ ] **Step 3: Собрать фронтенд и убедиться, что билд проходит**
+- [x] **Step 3: Собрать фронтенд и убедиться, что билд проходит**
 
 Run: `cd frontend && npx next build`
 Expected: PASS, без предупреждения про `useSearchParams()`/Suspense на `/analytics`.
 
-- [ ] **Step 4: Ручная проверка дрилдауна**
+- [x] **Step 4: Ручная проверка дрилдауна**
 
 Run: `cd frontend && npm run dev` (или использовать уже поднятый dev-сервер), открыть в браузере `http://localhost:8090/analytics?direction=long&hourFrom=8&hourTo=11`.
 Expected: на странице Аналитики сразу активен фильтр «Long» и диапазон часов 8–11 — то же самое, как если бы их выставили руками через `LabFilters`. Остановить dev-сервер после проверки.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/views/analytics/model/useLabFilters.ts "frontend/src/app/(app)/analytics/page.tsx"
