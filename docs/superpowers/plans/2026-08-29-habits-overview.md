@@ -1358,7 +1358,7 @@ git commit -m "feat(analytics): читать фильтры из query-стро�
 - Consumes: `useHabits`, `Habit`, `HabitsResponse` из `@/entities/trade` (Task 2); `habitLabel`, `habitAdvice`, `habitSearchParams`, `TFunc` из `../lib/habit-labels` (Task 2).
 - Produces: `HabitsBlock({ data, isLoading }: { data?: HabitsResponse; isLoading: boolean })` — используется только в `overview/Page.tsx`, наружу из `views/overview` не отдаётся (см. правило CLAUDE.md про `widgets/` — блок одной страницы живёт в `views/<page>/components/`).
 
-- [ ] **Step 1: Добавить CSS**
+- [x] **Step 1: Добавить CSS**
 
 В `frontend/src/app/globals.css` найти строку `/* ═══════════════ ДОВЕРИТЕЛЬНАЯ ШКАЛА ═══════════════ */` (идёт сразу после правила `.hrs-x span { ... }`) и вставить перед ней новую секцию:
 
@@ -1443,7 +1443,7 @@ git commit -m "feat(analytics): читать фильтры из query-стро�
 
 ```
 
-- [ ] **Step 2: Добавить ключи хрома блока в оба каталога**
+- [x] **Step 2: Добавить ключи хрома блока в оба каталога**
 
 В `frontend/src/shared/i18n/messages/ru.json`, внутри `"overview"`, после последней добавленной в Task 2 строки (`"habitAdviceSymbol": "Убрать инструмент из списка или пересмотреть подход к нему."`) добавить запятую и:
 
@@ -1471,7 +1471,7 @@ git commit -m "feat(analytics): читать фильтры из query-стро�
     "habitsLikely": "looks like a pattern"
 ```
 
-- [ ] **Step 3: Написать `HabitsBlock.tsx`**
+- [x] **Step 3: Написать `HabitsBlock.tsx`**
 
 Создать `frontend/src/views/overview/components/HabitsBlock.tsx`:
 
@@ -1589,7 +1589,7 @@ function HabitRows({ items, t }: { items: Habit[]; t: TFunc }) {
 
 Примечание: `useTranslations('overview')` из `next-intl` типом шире, чем `TFunc` (поддерживает больше, чем два параметра), но совместим по вызову — тот же приём уже работал в удалённом `metric-labels.ts` (`t: (key: string) => string`, вызывался с реальным `next-intl` `t`).
 
-- [ ] **Step 4: Подключить блок на Обзоре**
+- [x] **Step 4: Подключить блок на Обзоре**
 
 В `frontend/src/views/overview/Page.tsx` заменить существующую строку импорта
 
@@ -1646,32 +1646,32 @@ import { HabitsBlock } from './components/HabitsBlock';
         <div className="asym">
 ```
 
-- [ ] **Step 5: Проверка типов фронтенда**
+- [x] **Step 5: Проверка типов фронтенда**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: без ошибок.
 
-- [ ] **Step 6: Полная сборка фронтенда**
+- [x] **Step 6: Полная сборка фронтенда**
 
 Run: `cd frontend && npx next build`
 Expected: PASS, без ошибок и предупреждений про Suspense/useSearchParams на затронутых маршрутах.
 
-- [ ] **Step 7: Полный прогон тестов фронтенда**
+- [x] **Step 7: Полный прогон тестов фронтенда**
 
 Run: `cd frontend && npx vitest run`
 Expected: PASS (messages.test.ts, habit-labels.test.ts и все прежние тесты).
 
-- [ ] **Step 8: Полный прогон бэкенда — контрольная проверка, что бэкенд не задет задачами 2-4**
+- [x] **Step 8: Полный прогон бэкенда — контрольная проверка, что бэкенд не задет задачами 2-4**
 
 Run: `cd backend && npx jest && npx nest build`
 Expected: PASS.
 
-- [ ] **Step 9: Ручная проверка на живых данных**
+- [x] **Step 9: Ручная проверка на живых данных**
 
 Run: `cd frontend && npm run dev`, открыть `http://localhost:8090/overview`.
 Expected: под открытыми позициями — блок «Цена привычек». Если сделок меньше 60 позиций — пустое состояние «Нужно больше сделок» с текущим/нужным числом; иначе — списки «Дорого стоило» / «Работает» (или заметка «Пока не нашлось значимых закономерностей», если оба пусты) с суммой в шапке. Клик по строке с фильтром (не по поведенческой) уводит в `/analytics` с применённым фильтром. Остановить dev-сервер после проверки.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add frontend/src/app/globals.css frontend/src/views/overview/components/HabitsBlock.tsx \
