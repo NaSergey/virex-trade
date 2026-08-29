@@ -43,6 +43,70 @@ const RANGE_WINDOW_1D = 60;
 // than a percentage of noise.
 const RANGE_MIN_CANDLES = 10;
 
+// ── Качество входа/выхода: окно — сама сделка (вход→выход), не история до
+// входа, как у rangePos. Свой, независимый от rangePos набор констант и
+// запросов свечей — см. docs/superpowers/specs/2026-08-29-entry-exit-quality-design.md.
+const QUALITY_SCALP_MS = 4 * H1_MS; // < 4ч — 5-минутки
+const QUALITY_INTRADAY_MS = 3 * D1_MS; // 4ч–3д — 15м
+const QUALITY_SWING_MS = 30 * D1_MS; // 3д–30д — 1ч, дальше — 4ч
+export const QUALITY_MIN_CANDLES = 3; // меньше — окно из 1-2 свечей, не диапазон
+
+export interface QualityInterval {
+  maxHoldMs: number;
+  interval: string;
+  tfMs: number;
+}
+
+const QUALITY_INTERVALS: QualityInterval[] = [
+  { maxHoldMs: QUALITY_SCALP_MS, interval: '5', tfMs: 5 * 60_000 },
+  { maxHoldMs: QUALITY_INTRADAY_MS, interval: '15', tfMs: M15_MS },
+  { maxHoldMs: QUALITY_SWING_MS, interval: '60', tfMs: H1_MS },
+  { maxHoldMs: Infinity, interval: '240', tfMs: H4_MS },
+];
+
+const QUALITY_INTERVALS_BY_KEY = new Map(QUALITY_INTERVALS.map((q) => [q.interval, q]));
+
+/** Свечная корзина по длительности удержания сделки — см. QUALITY_INTERVALS. */
+export function qualityIntervalFor(holdMs: number): QualityInterval {
+  return QUALITY_INTERVALS.find((b) => holdMs < b.maxHoldMs) ?? QUALITY_INTERVALS[QUALITY_INTERVALS.length - 1];
+}
+
+/** Свечи, полностью закрытые внутри [fromMs, toMs] — окно самой сделки. */
+export function withinTrade(candles: Candle[], fromMs: number, toMs: number, tfMs: number): Candle[] {
+  return candles.filter((c) => c.time >= fromMs && c.time + tfMs <= toMs);
+}
+
+/**
+ * Качество входа/выхода относительно диапазона самой сделки. null — меньше
+ * QUALITY_MIN_CANDLES свечей в окне. Клампится в [0,100] — в отличие от
+ * rangePos, здесь окно задано самой сделкой, и цена входа/выхода физически не
+ * может лежать вне свечи, в которую сама попала; выход за границы означал бы
+ * только числовую погрешность, а не находку.
+ */
+export function computeTradeQuality(
+  direction: string,
+  entryPrice: number,
+  exitPrice: number,
+  windowCandles: Candle[],
+): { entryQuality: number | null; exitQuality: number | null } {
+  if (windowCandles.length < QUALITY_MIN_CANDLES) return { entryQuality: null, exitQuality: null };
+  let low = Infinity;
+  let high = -Infinity;
+  for (const c of windowCandles) {
+    if (c.low < low) low = c.low;
+    if (c.high > high) high = c.high;
+  }
+  const span = high - low;
+  if (!(span > 0)) return { entryQuality: null, exitQuality: null };
+  const clamp = (v: number) => Math.max(0, Math.min(100, v));
+  const pos = (price: number) => ((price - low) / span) * 100;
+  const isLong = direction === 'long';
+  return {
+    entryQuality: Number(clamp(isLong ? 100 - pos(entryPrice) : pos(entryPrice)).toFixed(2)),
+    exitQuality: Number(clamp(isLong ? pos(exitPrice) : 100 - pos(exitPrice)).toFixed(2)),
+  };
+}
+
 /**
  * Current field-set of a snapshot. Bump whenever a new indicator is added:
  * rows written by an older version are dropped and recomputed, otherwise the
