@@ -2,11 +2,12 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useMarketSentiment } from './api/hooks';
+import { useMarketSentiment, useMarketData, useFearAndGreed, useCMC20, useDeFiTVL, useVolatility } from './api/hooks';
 import { useHourlyStats, useMarketCorrelation } from './api/market-events-hooks';
 import { Wrap } from '@/shared/ui/Wrap';
 import { Seg } from '@/shared/ui/Seg';
 import { SectionHead } from '@/shared/ui/SectionHead';
+import { MacroSnapshot } from './components/MacroSnapshot';
 import { Positioning } from './components/Positioning';
 import { HourlyVolatility } from './components/HourlyVolatility';
 import { WeekdayOdds } from './components/WeekdayOdds';
@@ -31,6 +32,10 @@ const SYMBOLS = [
  * (инструмент — у «Позиционирования», глубина истории — у «Волатильности по
  * часам»), а не общей парой над всей страницей: до того, к чему они относятся,
  * было два экрана вниз.
+ *
+ * `MacroSnapshot` сверху — общий фон рынка, не привязанный к выбранному
+ * инструменту (в отличие от всего, что ниже), поэтому стоит вне `.asym` и
+ * вне переключателя инструмента.
  */
 export const MarketPage = () => {
   const t = useTranslations('market');
@@ -46,17 +51,39 @@ export const MarketPage = () => {
   // перечитывает срез, и подменять уже показанные числа заглушками значило бы
   // мигать страницей на каждом щелчке тумблера.
   const { data: sentimentData, isLoading: sentimentLoading } = useMarketSentiment(symbol);
+  const { data: volatility, isLoading: volatilityLoading } = useVolatility(symbol);
   const { data: hourly, isLoading: hourlyLoading } = useHourlyStats(historyDays);
   const { data: corr, isLoading: corrLoading } = useMarketCorrelation(historyDays);
+  const { data: marketData, isLoading: marketLoading } = useMarketData();
+  const { data: fearGreed, isLoading: fearGreedLoading } = useFearAndGreed();
+  const { data: cmc20, isLoading: cmc20Loading } = useCMC20();
+  const { data: defiTvl, isLoading: defiTvlLoading } = useDeFiTVL();
 
   return (
     <Wrap page style={{ paddingTop: 'var(--s4)' }}>
-      <div className="asym">
+      <SectionHead title={t('macroTitle')} />
+      <MacroSnapshot
+        market={marketData}
+        marketLoading={marketLoading}
+        fearGreed={fearGreed}
+        fearGreedLoading={fearGreedLoading}
+        cmc20={cmc20}
+        cmc20Loading={cmc20Loading}
+        defiTvl={defiTvl}
+        defiTvlLoading={defiTvlLoading}
+      />
+
+      <div className="asym" style={{ marginTop: 'var(--s5)' }}>
         <div>
           <SectionHead title={t('positioningTitle')}>
             <Seg options={SYMBOLS} value={symbol} onChange={setSymbol} ariaLabel={t('instrumentAriaLabel')} />
           </SectionHead>
-          <Positioning data={sentimentData} isLoading={sentimentLoading} />
+          <Positioning
+            data={sentimentData}
+            isLoading={sentimentLoading}
+            volatility={volatility}
+            volatilityLoading={volatilityLoading}
+          />
 
           <SectionHead title={t('hourlyVolatilityTitle')} style={{ marginTop: 'var(--s5)' }}>
             <Seg options={HISTORY} value={historyDays} onChange={setHistoryDays} ariaLabel={t('historyDepthAriaLabel')} />
