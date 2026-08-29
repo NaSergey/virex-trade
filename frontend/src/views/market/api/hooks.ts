@@ -70,6 +70,23 @@ export const useDeFiTVL = () =>
     refetchInterval: 600_000,
   });
 
+export interface Cmc20Data {
+  index: number;
+  change24h: number;
+}
+
+export const useCMC20 = () =>
+  useQuery({
+    queryKey: ['analyticsCmc20'],
+    queryFn: async () => {
+      const response = await apiFetch('/api/analytics/cmc20', { method: 'GET' });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      return response.json() as Promise<Cmc20Data>;
+    },
+    staleTime: 600_000,
+    refetchInterval: 600_000,
+  });
+
 export const useMarketSentiment = (symbol = 'BTCUSDT') =>
   useQuery({
     queryKey: ['analyticsMarketSentiment', symbol],
