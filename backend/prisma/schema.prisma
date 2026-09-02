@@ -43,6 +43,8 @@ model User {
   telegramLinkCode   String?   @unique
   telegramLinkCodeAt DateTime?
 
+  activityMinutes    UserActivityMinute[]
+  sectionDays        UserSectionDay[]
   refreshTokens      RefreshToken[]
   trades             Trade[]
   executions         Execution[]
@@ -424,4 +426,60 @@ model RefreshToken {
   @@index([userId])
   @@index([expiresAt])
   @@map("refresh_tokens")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Владельческая аналитика: пользуются ли сервисом вообще.
+//
+// Одна строка на пользователя и минуту, в которую сервер видел от него хотя бы
+// один авторизованный запрос. Минута, а не отдельное событие на запрос: торговый
+// UI опрашивает позиции каждые несколько секунд, и таблица событий росла бы
+// сотнями тысяч строк в день, ничего не добавляя к ответу на вопрос «сколько
+// человек тут провёл».
+//
+// Из этих строк выводится всё остальное: активные минуты — это их количество,
+// сессии — цепочки минут с разрывом меньше SESSION_GAP_MIN, DAU — уникальные
+// пользователи за день. Ничего из этого не хранится агрегатом: агрегат нельзя
+// пересчитать задним числом, если поменяется определение сессии.
+//
+// `requests` — все запросы за минуту, `writes` — только изменяющие (не GET).
+// Разница важна: открытая вкладка сама по себе генерирует GET-и, а write
+// означает, что человек действительно что-то сделал.
+//
+// `foreground` — была ли в эту минуту вкладка на переднем плане. Ставится по
+// заголовку `X-Client-Active: 1`, который фронт пока не шлёт, поэтому поле
+// сейчас всегда false и метрика по нему честно отдаётся как «нет данных», а не
+// как ноль присутствия.
+model UserActivityMinute {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  minute     DateTime // UTC, обрезано до минуты
+  requests   Int      @default(0)
+  writes     Int      @default(0)
+  foreground Boolean  @default(false)
+
+  @@unique([userId, minute])
+  @@index([minute])
+  @@index([userId, minute])
+  @@map("user_activity_minutes")
+}
+
+// Какими разделами пользуются, по дням. `minutes` — число различных минут, в
+// которые раздел трогали; складывать его по разделам в «время на сайте» нельзя:
+// одна минута попадает в несколько разделов, если человек за неё успел
+// открыть журнал и настройки.
+model UserSectionDay {
+  id       String   @id @default(uuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  day      DateTime // UTC-сутки, 00:00
+  section  String // см. src/admin/usage/sections.ts
+  requests Int      @default(0)
+  writes   Int      @default(0)
+  minutes  Int      @default(0)
+
+  @@unique([userId, day, section])
+  @@index([day])
+  @@map("user_section_days")
 }
