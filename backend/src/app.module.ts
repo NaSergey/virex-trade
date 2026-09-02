@@ -13,6 +13,7 @@ import { SettingsModule } from './settings/settings.module';
 import { TagsModule } from './tags/tags.module';
 import { TelegramModule } from './telegram/telegram.module';
 import { MarketEventsModule } from './market-events/market-events.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { MarketEventsModule } from './market-events/market-events.module';
     TagsModule,
     TelegramModule,
     MarketEventsModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [AppService],

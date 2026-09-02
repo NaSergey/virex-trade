@@ -11,14 +11,20 @@ import { LocaleSwitch } from '@/shared/ui/LocaleSwitch';
 import { ThemeToggle } from '@/shared/ui/ThemeToggle';
 import { VirexLogo } from '@/shared/ui/VirexLogo';
 
-type Tab = 'overview' | 'tags' | 'lab' | 'analytics' | 'settings';
+type Tab = 'overview' | 'tags' | 'lab' | 'analytics' | 'settings' | 'admin';
 
-const NAV: { id: Tab; labelKey: 'overview' | 'tags' | 'lab' | 'analytics' | 'settings' }[] = [
+type NavItem = { id: Tab; labelKey: Tab; ownerOnly?: boolean };
+
+const NAV: NavItem[] = [
   { id: 'overview', labelKey: 'overview' },
   { id: 'tags', labelKey: 'tags' },
   { id: 'lab', labelKey: 'lab' },
   { id: 'analytics', labelKey: 'analytics' },
   { id: 'settings', labelKey: 'settings' },
+  // Аналитика по пользователям сервиса. Стоит последней и видна только
+  // владельцу: остальным ссылка вернула бы 403, а пункт в рейке обещал бы
+  // раздел, которого у них нет.
+  { id: 'admin', labelKey: 'admin', ownerOnly: true },
 ];
 
 /**
@@ -87,7 +93,7 @@ export function TopNav() {
             пункты меняют. Скринридер должен услышать навигацию по разделам
             сайта, а не переключатель панелей внутри одной страницы. */}
         <nav className="nav" aria-label={t('sections')} ref={navRef}>
-          {NAV.map((item) => (
+          {NAV.filter((item) => !item.ownerOnly || user?.isAdmin).map((item) => (
             <Link
               key={item.id}
               href={`/${item.id}`}

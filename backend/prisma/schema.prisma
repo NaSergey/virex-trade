@@ -43,6 +43,8 @@ model User {
   telegramLinkCode   String?   @unique
   telegramLinkCodeAt DateTime?
 
+  activityMinutes    UserActivityMinute[]
+  sectionDays        UserSectionDay[]
   refreshTokens      RefreshToken[]
   trades             Trade[]
   executions         Execution[]
@@ -424,4 +426,52 @@ model RefreshToken {
   @@index([userId])
   @@index([expiresAt])
   @@map("refresh_tokens")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Владельческая аналитика: пользуются ли сервисом вообще.
+//
+// Одна строка на пользователя и минуту, в которую сервер видел от него хотя бы
+// один авторизованный запрос. Минута, а не отдельное событие на запрос: торговый
+// UI опрашивает позиции каждые несколько секунд, и таблица событий росла бы
+// сотнями тысяч строк в день, ничего не добавляя к ответу на вопрос «заходил ли
+// человек и сколько раз».
+//
+// Минута здесь — единица засечки, а не единица отчёта: наружу отдаются ВИЗИТЫ
+// (цепочки минут с разрывом меньше VISIT_GAP_MIN) и число обращений, но не
+// время на сайте. Время с открытым приложением слишком легко прочитать как
+// время человека за экраном — фоновая вкладка опрашивает API сама, — поэтому
+// такого числа в отчёте нет вовсе.
+//
+// `requests` — все запросы за минуту, `writes` — только изменяющие (не GET).
+// Разница важна: открытая вкладка сама по себе генерирует GET-ы, а write
+// означает, что человек действительно что-то сделал.
+model UserActivityMinute {
+  id       String   @id @default(uuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  minute   DateTime // UTC, обрезано до минуты
+  requests Int      @default(0)
+  writes   Int      @default(0)
+
+  @@unique([userId, minute])
+  @@index([minute])
+  @@index([userId, minute])
+  @@map("user_activity_minutes")
+}
+
+// Какими разделами пользуются, по дням: сколько обращений и сколько из них
+// были действиями. Времени здесь нет по той же причине, что и выше.
+model UserSectionDay {
+  id       String   @id @default(uuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  day      DateTime // UTC-сутки, 00:00
+  section  String // см. src/admin/usage/sections.ts
+  requests Int      @default(0)
+  writes   Int      @default(0)
+
+  @@unique([userId, day, section])
+  @@index([day])
+  @@map("user_section_days")
 }
