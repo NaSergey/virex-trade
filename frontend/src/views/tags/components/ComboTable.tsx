@@ -166,20 +166,25 @@ export function ComboTable({
   }, [rows, sort]);
 
   return (
-    <LedgerTable
-      columns={columns}
-      rows={sorted}
-      rowKey={(r) => r.key}
-      minWidth={980}
-      isLoading={isLoading}
-      // Четыре строки — столько же, сколько обычно приходит комбинаций: лист
-      // не подпрыгивает ни вверх, ни вниз, когда заглушки сменяются данными.
-      skeletonRows={4}
-      sort={sort}
-      // Первый клик по колонке — по убыванию: вопрос к любой из них «где
-      // больше», а не «где меньше». Повторный переворачивает.
-      onSort={(key) => setSort((s) => (s.key === key ? { key, dir: s.dir === -1 ? 1 : -1 } : { key, dir: -1 }))}
-      empty={t('emptyCombos')}
-    />
+    // Обёртка — только чтобы обучению было за что зацепиться: у таблицы
+    // гроссбуха своего внешнего узла нет, а вешать метку внутрь общей
+    // LedgerTable значило бы протащить её во все таблицы продукта разом.
+    <div data-tour="tags-combos">
+      <LedgerTable
+        columns={columns}
+        rows={sorted}
+        rowKey={(r) => r.key}
+        minWidth={980}
+        isLoading={isLoading}
+        // Четыре строки — столько же, сколько обычно приходит комбинаций: лист
+        // не подпрыгивает ни вверх, ни вниз, когда заглушки сменяются данными.
+        skeletonRows={4}
+        sort={sort}
+        // Первый клик по колонке — по убыванию: вопрос к любой из них «где
+        // больше», а не «где меньше». Повторный переворачивает.
+        onSort={(key) => setSort((s) => (s.key === key ? { key, dir: s.dir === -1 ? 1 : -1 } : { key, dir: -1 }))}
+        empty={t('emptyCombos')}
+      />
+    </div>
   );
 }

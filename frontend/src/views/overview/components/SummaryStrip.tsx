@@ -71,14 +71,14 @@ export function SummaryStrip({ stats }: { stats: TradeStats }) {
       hint: t('edgeScoreHint'),
     },
     {
-      label: t('entryQualityMetric'),
-      value: stats.avgEntryQuality == null ? '—' : `${Math.round(stats.avgEntryQuality)} %`,
-      gauge: stats.avgEntryQuality == null ? undefined : { fill: stats.avgEntryQuality, threshold: 50 },
+      label: t('avgWinMetric'),
+      value: stats.wins ? formatMoney(stats.grossProfit / stats.wins) : '—',
+      tone: stats.wins ? 'pos' : undefined,
     },
     {
-      label: t('exitQualityMetric'),
-      value: stats.avgExitQuality == null ? '—' : `${Math.round(stats.avgExitQuality)} %`,
-      gauge: stats.avgExitQuality == null ? undefined : { fill: stats.avgExitQuality, threshold: 50 },
+      label: t('avgLossMetric'),
+      value: stats.losses ? formatMoney(stats.grossLoss / stats.losses) : '—',
+      tone: stats.losses ? 'neg' : undefined,
     },
     {
       label: 'Winrate',
@@ -107,7 +107,7 @@ export function SummaryStrip({ stats }: { stats: TradeStats }) {
   ];
 
   return (
-    <div className="metrics">
+    <div className="metrics" data-tour="summary">
       {metrics.map((m) => (
         <div className="mcell" key={m.label} title={m.title}>
           <span className="lbl">

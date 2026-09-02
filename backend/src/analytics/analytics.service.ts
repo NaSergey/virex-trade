@@ -1,4 +1,5 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 
 export interface VolatilitySnapshot {
   currentVolPct: number; // realized vol, last 24h, scaled to a daily-equivalent %
@@ -17,8 +18,25 @@ export interface VolatilitySnapshot {
   dominantSide: 'buy' | 'sell' | 'neutral';
 }
 
+export interface LiquidityPoint {
+  ts: number;
+  price: number;
+  bidCenter: number; // средневзвешенная по объёму цена бид-стороны книги
+  askCenter: number; // то же для аск-стороны
+}
+
+export interface LiquidityHistory {
+  points: LiquidityPoint[];
+}
+
 const VOLATILITY_BASELINE_DAYS = 7;
 const VOLATILITY_CACHE_TTL_MS = 5 * 60_000;
+
+// Верхняя граница строк на один символ — при снимке раз в 15 минут это
+// ~52 дня. Ограничение оберегает ответ и график от неограниченного роста
+// по мере накопления истории; поднять его, когда набежит больше, — вопрос
+// одной константы, не пересчёта.
+const LIQUIDITY_HISTORY_MAX_POINTS = 5_000;
 
 const stdev = (xs: number[]): number => {
   const mean = xs.reduce((s, x) => s + x, 0) / xs.length;
@@ -28,6 +46,8 @@ const stdev = (xs: number[]): number => {
 
 @Injectable()
 export class AnalyticsService {
+  constructor(private readonly prisma: PrismaService) {}
+
   private volatilityCache: { exp: number; data: VolatilitySnapshot } | null = null;
 
   async getMarketData(): Promise<{ marketCap: number; marketCapChange24h: number }> {
@@ -124,6 +144,26 @@ export class AnalyticsService {
     } catch (error) {
       throw new HttpException('External API error', HttpStatus.BAD_GATEWAY);
     }
+  }
+
+  /**
+   * Накопленная история центра ликвидности — то, что копит
+   * `LiquiditySnapshotService` раз в 15 минут в `liquidity_snapshots`, отдаём
+   * как есть. Раньше не возвращалась строкой за строкой: до сегодняшнего дня
+   * этого ряда не существовало вовсе — читать здесь нечего, кроме того, что
+   * накопилось после первого запуска сервиса.
+   */
+  async getLiquidityHistory(symbol = 'BTCUSDT'): Promise<LiquidityHistory> {
+    const rows = await this.prisma.liquiditySnapshot.findMany({
+      where: { symbol: symbol || 'BTCUSDT' },
+      orderBy: { ts: 'desc' },
+      take: LIQUIDITY_HISTORY_MAX_POINTS,
+    });
+    return {
+      points: rows
+        .reverse()
+        .map((r) => ({ ts: r.ts.getTime(), price: r.price, bidCenter: r.bidCenter, askCenter: r.askCenter })),
+    };
   }
 
   async getLongShortRatio(

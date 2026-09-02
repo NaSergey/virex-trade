@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { getClientLocale, parseLocaleCookie } from './locale-storage';
 
 describe('parseLocaleCookie', () => {
-  it('возвращает ru по умолчанию, если куки нет', () => {
-    expect(parseLocaleCookie(undefined)).toBe('ru');
-    expect(parseLocaleCookie(null)).toBe('ru');
+  it('возвращает en по умолчанию, если куки нет', () => {
+    expect(parseLocaleCookie(undefined)).toBe('en');
+    expect(parseLocaleCookie(null)).toBe('en');
   });
 
   it('возвращает сохранённый язык', () => {
@@ -12,7 +12,7 @@ describe('parseLocaleCookie', () => {
   });
 
   it('игнорирует неизвестное значение и возвращает дефолт', () => {
-    expect(parseLocaleCookie('fr')).toBe('ru');
+    expect(parseLocaleCookie('fr')).toBe('en');
   });
 });
 
@@ -25,8 +25,8 @@ describe('getClientLocale', () => {
     expect(getClientLocale('foo=bar; virex-locale=en; baz=qux')).toBe('en');
   });
 
-  it('дефолт ru, если куки нет вовсе', () => {
-    expect(getClientLocale('')).toBe('ru');
-    expect(getClientLocale('foo=bar')).toBe('ru');
+  it('дефолт en, если куки нет вовсе', () => {
+    expect(getClientLocale('')).toBe('en');
+    expect(getClientLocale('foo=bar')).toBe('en');
   });
 });

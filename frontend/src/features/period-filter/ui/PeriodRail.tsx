@@ -68,7 +68,7 @@ export function PeriodRail({
       : formatPeriodRange(days, intlLocale, t('allTimeLower'));
 
   return (
-    <div className="strip-rail">
+    <div className="strip-rail" data-tour="period">
       <span className="ctx">
         {title && (
           <>

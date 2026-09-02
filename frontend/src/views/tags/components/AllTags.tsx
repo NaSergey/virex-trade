@@ -171,7 +171,7 @@ export function AllTags({
   ];
 
   return (
-    <div style={{ marginTop: 'var(--s5)' }}>
+    <div style={{ marginTop: 'var(--s5)' }} data-tour="tags-all">
 
       {/* Отбор и добавление — одна строка на двух краях: слева сужают то, что
           уже есть, справа заводят новое. Оба действия относятся ко всему

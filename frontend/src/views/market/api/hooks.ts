@@ -102,6 +102,32 @@ export const useMarketSentiment = (symbol = 'BTCUSDT') =>
     refetchInterval: 600_000,
   });
 
+export interface LiquidityPoint {
+  ts: number;
+  price: number;
+  bidCenter: number; // средневзвешенная по объёму цена бид-стороны книги
+  askCenter: number; // то же для аск-стороны
+}
+
+export interface LiquidityHistory {
+  points: LiquidityPoint[];
+}
+
+export const useLiquidityHistory = (symbol = 'BTCUSDT') =>
+  useQuery({
+    queryKey: ['analyticsLiquidityHistory', symbol],
+    queryFn: async () => {
+      const response = await apiFetch(`/api/analytics/liquidity-history?symbol=${symbol}`, { method: 'GET' });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      return response.json() as Promise<LiquidityHistory>;
+    },
+    // Новая точка появляется не чаще, чем раз в 15 минут (тот же шаг, что у
+    // бэкендового снимка) — перечитывать чаще незачем, реже — и открытая
+    // вкладка не увидит свежую точку до перезахода.
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
+  });
+
 export interface VolatilityData {
   currentVolPct: number; // realized vol, последние 24ч, в дневном масштабе
   avgVolPct: number; // realized vol за 7-дневную базу, тот же масштаб

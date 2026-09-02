@@ -79,7 +79,7 @@ export function OverviewPage() {
         </div>
       ) : (
         equity.length > 1 && (
-          <div className="bleed">
+          <div className="bleed" data-tour="equity">
             <EquityChart data={equity} />
           </div>
         )
@@ -114,7 +114,7 @@ export function OverviewPage() {
         </div>
       </Wrap>
 
-      <Wrap page className="trades" style={{ marginTop: 'var(--s5)' }}>
+      <Wrap page className="trades" style={{ marginTop: 'var(--s5)' }} data-tour="trades">
         <h2>{t('closedTrades')}</h2>
         <TradesTable
           trades={tradesData?.trades ?? []}

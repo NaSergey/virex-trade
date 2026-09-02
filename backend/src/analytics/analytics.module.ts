@@ -3,10 +3,11 @@ import { TelegramModule } from '../telegram/telegram.module';
 import { AnalyticsController } from './analytics.controller';
 import { AnalyticsService } from './analytics.service';
 import { VolatilityAlertService } from './volatility-alert.service';
+import { LiquiditySnapshotService } from './liquidity-snapshot.service';
 
 @Module({
   imports: [TelegramModule],
   controllers: [AnalyticsController],
-  providers: [AnalyticsService, VolatilityAlertService],
+  providers: [AnalyticsService, VolatilityAlertService, LiquiditySnapshotService],
 })
 export class AnalyticsModule {}

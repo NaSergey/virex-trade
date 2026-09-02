@@ -426,6 +426,25 @@ model HourlyPrice {
   @@map("hourly_prices")
 }
 
+/// Периодический снимок «центра тяжести» книги заявок: средневзвешенная по
+/// объёму цена бид- и аск-стороны (топ-200 уровней), рядом с ценой в тот
+/// момент. Не сам стакан — тот занял бы сотни МБ в день на один символ, а его
+/// сжатие до двух чисел. LiquiditySnapshotService пишет строку раз в 15 минут
+/// для BTC/ETH/SOL; истории до первого запуска сервиса нет и не будет —
+/// биржи не архивируют прошлые состояния стакана, поэтому бэкфилл здесь
+/// невозможен в принципе, а не просто не сделан.
+model LiquiditySnapshot {
+  id        String   @id @default(uuid())
+  symbol    String
+  ts        DateTime
+  price     Float
+  bidCenter Float
+  askCenter Float
+
+  @@index([symbol, ts])
+  @@map("liquidity_snapshots")
+}
+
 // One row per active refresh token (supports multiple devices / sessions).
 // We never store the raw token — only its SHA-256 hash. On refresh the row is
 // rotated (deleted + recreated in one transaction) so a stolen token is

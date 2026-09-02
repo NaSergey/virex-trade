@@ -79,7 +79,10 @@ export const AnalyticsPage = () => {
 
   return (
     <Wrap page>
-      <PeriodStrip spaced period={period} title={t('periodTitle')} trades={data?.baseline.trades} />
+      {/* Без `title` — как на «Обзоре» и «Тегах»: полоса говорит только за
+          сколько сделок сейчас идёт речь. Раздел уже назван вкладкой в
+          верхней рейке, и повторять это над каждой страницей незачем. */}
+      <PeriodStrip spaced period={period} trades={data?.baseline.trades} />
 
       {/* Шапки страницы нет вовсе: раздел уже назван вкладкой в верхней рейке,
           а рейка периода над ней говорит, за что считаем. Название и абзац под
@@ -90,7 +93,7 @@ export const AnalyticsPage = () => {
         <div className="lab-r">
           <LabCompare filtered={filtered} baseline={data?.baseline} isLoading={isLoading} />
 
-          <div className="lab-sec">
+          <div className="lab-sec" data-tour="lab-equity">
             {/* Счёт и пустая выборка — разные состояния, и раньше их различало
                 одно слово в заголовке одной и той же плашки: «Считаю» на месте,
                 где через секунду встанет «Ни одна сделка не подошла». Теперь

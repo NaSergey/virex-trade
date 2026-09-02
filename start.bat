@@ -8,10 +8,10 @@ REM     - PostgreSQL -> Docker container (only the DB)
 REM     - backend    -> local (npm, NestJS)
 REM     - frontend   -> local (npm, Next.js)
 REM
-REM   No container rebuilds needed for code changes — the apps run locally
+REM   No container rebuilds needed for code changes - the apps run locally
 REM   with hot reload, only the database lives in Docker.
 REM
-REM   Change HOST / ports in ONE place — right here.
+REM   Change HOST / ports in ONE place - right here.
 REM ====================================================================
 set "HOST=localhost"
 set "WEB_PORT=8090"
@@ -55,8 +55,10 @@ set "PORT=%API_PORT%"
 set "FRONTEND_URL=%WEB_URL%"
 start "virex-backend" cmd /k "cd /d %~dp0backend && npm run start:dev"
 
-REM --- WEB window: port via -p, API url via environment ---
-set "NEXT_PUBLIC_API_URL=%API_URL%"
+REM --- WEB window: port via -p; API url is server-only (Next proxies /api,
+REM     /auth to it via rewrites - the browser never calls it directly, see
+REM     frontend/middleware.ts) ---
+set "API_INTERNAL_URL=%API_URL%"
 start "virex-frontend" cmd /k "cd /d %~dp0frontend && npm run dev -- -p %WEB_PORT% -H %HOST%"
 
 REM --- open the browser once the servers have warmed up ---

@@ -34,7 +34,13 @@ export default function LoginPage() {
   const nextParam = params.get('next');
   const next = nextParam && NEXT_PATH.test(nextParam) ? nextParam : '/overview';
 
-  const [mode, setMode] = useState<Mode>('login');
+  /*
+   * С какой стороны открыт вход. Кнопка «Начать» на главной ведёт сюда с
+   * `?mode=register`: человек, пришедший заводить аккаунт, не должен
+   * попадать на форму входа и искать переключатель. Всё, кроме явного
+   * `register`, — обычный вход.
+   */
+  const [mode, setMode] = useState<Mode>(params.get('mode') === 'register' ? 'register' : 'login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');

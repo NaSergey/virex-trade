@@ -120,11 +120,11 @@ export const SettingsPage = () => {
     <Wrap page>
       <PageHead title={t('pageTitle')} lede={t('pageLede')} />
 
-      <div className="set">
+      <div className="set" data-tour="set-form">
         {/* Переключатель нужен, только когда выбирать есть из чего: одна
             поддерживаемая биржа — это не выбор, а лишний орган управления. */}
         {exchanges.length > 1 && (
-          <Field label={t('exchangeLabel')} htmlFor="exchange-pick">
+          <Field label={t('exchangeLabel')} htmlFor="exchange-pick" data-tour="set-exchange">
             <Seg
               options={exchanges.map((e) => ({
                 value: e.id,

@@ -1,28 +1,50 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { SentimentChart, SentimentChartSkeleton, fmtUsdCompact } from './SentimentChart';
-import { Skeleton } from '@/shared/ui/Skeleton';
-import type { MarketSentimentData, VolatilityData } from '../api/hooks';
+import { fmtUsdCompact } from './SentimentChart';
+import { LiquidityCenterChart } from './LiquidityCenterChart';
+import { MetricCell } from '@/shared/ui/MetricCell';
+import type { MarketSentimentData, VolatilityData, LiquidityPoint } from '../api/hooks';
 import { useLocaleControl } from '@/shared/i18n';
 
 /**
- * Как стоят участники рынка: соотношение лонгов к шортам, открытый интерес и
- * их движение во времени.
+ * Как стоят участники рынка по выбранному инструменту: соотношение лонгов к
+ * шортам, открытый интерес, объём и волатильность — и график центра
+ * ликвидности книги заявок под ними: цена и средневзвешенная цена бид/аск
+ * стороны во времени.
  *
- * Три коэффициента и кривая под ними отвечают на один вопрос с двух сторон —
- * «где рынок сейчас» и «как он туда пришёл», — поэтому стоят вместе.
+ * Шесть величин и график отвечают на один вопрос с двух сторон — «в чью
+ * пользу перевес сейчас» и «как он менялся», — поэтому стоят вместе. Величины
+ * набраны той же `.metrics`/`.mcell`, что и свод периода на «Обзоре», двумя
+ * рядами по три (`.metrics-3`): колонка листа под них — семь двенадцатых, и
+ * шесть в ряд обрезали бы подписи.
+ *
+ * Три правых величины приходят из `/volatility` вместе с базой для сравнения
+ * (средняя волатильность, средний дневной объём), и сравнение показано второй
+ * строкой ячейки: «1.85 %» само по себе не говорит ничего, «1.85 % при средней
+ * 1.42 %» говорит всё. Раньше из этого ответа читались два поля из десяти.
+ *
+ * До графика центра ликвидности здесь успели постоять два неудачных
+ * захода — кривая доли лонг/шорт-аккаунтов и стакан-лесенка «прямо сейчас».
+ * Оба были техническими суррогатами того же вопроса, не самим ответом:
+ * `LiquiditySnapshotService` копит историю с сегодняшнего дня (у книги
+ * заявок нет архива, бэкфилл невозможен) — см. `LiquidityCenterChart` про
+ * состояние «данных пока одна точка».
  */
 export function Positioning({
   data,
   isLoading,
   volatility,
   volatilityLoading,
+  liquidity,
+  liquidityLoading,
 }: {
   data?: MarketSentimentData;
   isLoading?: boolean;
   volatility?: VolatilityData;
   volatilityLoading?: boolean;
+  liquidity?: LiquidityPoint[];
+  liquidityLoading?: boolean;
 }) {
   const t = useTranslations('market');
   const { locale } = useLocaleControl();
@@ -30,56 +52,99 @@ export function Positioning({
   const longShort = latest && latest.sellRatio > 0 ? latest.buyRatio / latest.sellRatio : null;
 
   /*
-   * Прочерк в коэффициенте значит «биржа этого не отдала», и во время загрузки
-   * он врёт: значение едет, а не отсутствует. Подписи при этом остаются на
-   * месте — они известны заранее, и прятать их не за чем.
+   * Доли, а не сами объёмы: доллары уже показаны соседней ячейкой, а вопрос к
+   * этой паре — перевес, и он читается только долями. Знаменатель считаем
+   * суммой сторон, а не берём `volume24hUsd`: сегодня это одно и то же число
+   * (бэкенд делит те же 24 свечи), но доля, посчитанная не от своего же
+   * знаменателя, разошлась бы молча, стоит выборкам разъехаться.
    */
-  const coef = (node: React.ReactNode) =>
-    isLoading ? <Skeleton as="span" flush height={16} width="58%" /> : node;
+  const flow = volatility ? volatility.buyVolumeUsd + volatility.sellVolumeUsd : 0;
+  const buyShare = flow > 0 && volatility ? (volatility.buyVolumeUsd / flow) * 100 : null;
+
+  const dominant = {
+    buy: t('dominantBuy'),
+    sell: t('dominantSell'),
+    neutral: t('dominantNeutral'),
+  };
 
   return (
     <>
-      <div className="coef coef-4" style={{ borderTop: 0 }}>
-        <div>
-          <div className="lbl">Long / Short</div>
-          <div className="coef-v">{coef(longShort ? longShort.toFixed(2) : '—')}</div>
-        </div>
-        <div>
-          <div className="lbl">{t('openInterest')}</div>
-          <div className="coef-v">
-            {coef(latest && latest.openInterestUsd > 0 ? fmtUsdCompact(latest.openInterestUsd, locale) : '—')}
-          </div>
-        </div>
-        <div>
-          <div className="lbl">{t('longShare')}</div>
-          <div className="coef-v">{coef(latest ? `${(latest.buyRatio * 100).toFixed(1)} %` : '—')}</div>
-        </div>
-        <div>
-          <div className="lbl">{t('currentVolatility')}</div>
-          <div className={`coef-v${volatility?.elevated ? ' neg' : ''}`}>
-            {volatilityLoading ? (
-              <Skeleton as="span" flush height={16} width="58%" />
-            ) : volatility ? (
-              `${volatility.currentVolPct.toFixed(2)} %`
+      {/* Верхний ряд — кто как стоит (/market-sentiment), нижний — что с ценой
+          и объёмом (/volatility). Ряды разъезжаются и по загрузке: ответы
+          приходят порознь, и заглушки в них гаснут порознь — ряд из шести
+          мигал бы вразнобой посередине. */}
+      <div className="metrics metrics-3" data-tour="market-positioning">
+        <MetricCell
+          label="Long / Short"
+          loading={isLoading}
+          value={longShort ? longShort.toFixed(2) : '—'}
+        />
+        <MetricCell
+          label={t('openInterest')}
+          loading={isLoading}
+          value={latest && latest.openInterestUsd > 0 ? fmtUsdCompact(latest.openInterestUsd, locale) : '—'}
+        />
+        <MetricCell
+          label={t('longShare')}
+          loading={isLoading}
+          value={latest ? `${(latest.buyRatio * 100).toFixed(1)} %` : '—'}
+        />
+      </div>
+      <div className="metrics metrics-3">
+        <MetricCell
+          label={t('currentVolatility')}
+          loading={volatilityLoading}
+          value={volatility ? `${volatility.currentVolPct.toFixed(2)} %` : '—'}
+          tone={volatility?.elevated ? 'neg' : undefined}
+          /* Слово «выше нормы» осталось при цвете, а не вместо него: красным
+             набраны и число, и подпись, но красный здесь — не единственный
+             носитель смысла, и рядом с ним стоит та самая норма, с которой
+             сравнили. */
+          sub={
+            volatility
+              ? `${volatility.elevated ? `${t('volatilityElevated')} · ` : ''}${t('volAvg', {
+                  value: volatility.avgVolPct.toFixed(2),
+                })}`
+              : ''
+          }
+          subTone={volatility?.elevated ? 'neg' : undefined}
+        />
+        <MetricCell
+          label={t('volume24h')}
+          loading={volatilityLoading}
+          value={volatility && volatility.volume24hUsd > 0 ? fmtUsdCompact(volatility.volume24hUsd, locale) : '—'}
+          sub={
+            volatility
+              ? t('volumeVsAvg', {
+                  value: `${volatility.volumeChangePct >= 0 ? '+' : '−'}${Math.abs(volatility.volumeChangePct).toFixed(0)} %`,
+                })
+              : ''
+          }
+          subTone={volatility ? (volatility.volumeRising ? 'pos' : 'neg') : undefined}
+        />
+        <MetricCell
+          label={t('buySellSplit')}
+          hint={t('buySellSplitHint')}
+          loading={volatilityLoading}
+          value={
+            buyShare != null ? (
+              <>
+                {buyShare.toFixed(0)}
+                <span className="sep"> / </span>
+                {(100 - buyShare).toFixed(0)}
+              </>
             ) : (
               '—'
-            )}
-          </div>
-          {volatility?.elevated && <div className="coef-sub neg">{t('volatilityElevated')}</div>}
-        </div>
+            )
+          }
+          /* Перевес назван словом, но не покрашен: в этой системе цвет означает
+             деньги — рост и падение, — а не сторону сделки. Зелёные «покупки»
+             читались бы как «хорошо». */
+          sub={volatility ? dominant[volatility.dominantSide] : ''}
+        />
       </div>
       <div style={{ marginTop: 'var(--s3)' }}>
-        {/* Слово «Загружаю» строкой в одну высоту стояло на месте холста в 180
-            единиц: ответ приходил — и вся правая половина страницы прыгала
-            вниз. Теперь ожидание держит холст, а строкой осталось только
-            настоящее «данных нет». */}
-        {isLoading ? (
-          <SentimentChartSkeleton />
-        ) : data && data.points.length > 1 ? (
-          <SentimentChart data={data.points} />
-        ) : (
-          <p className="muted">{t('noData')}</p>
-        )}
+        <LiquidityCenterChart points={liquidity} isLoading={liquidityLoading} />
       </div>
     </>
   );

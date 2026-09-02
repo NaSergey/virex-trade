@@ -2,7 +2,15 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useMarketSentiment, useMarketData, useFearAndGreed, useCMC20, useDeFiTVL, useVolatility } from './api/hooks';
+import {
+  useMarketSentiment,
+  useMarketData,
+  useFearAndGreed,
+  useCMC20,
+  useDeFiTVL,
+  useVolatility,
+  useLiquidityHistory,
+} from './api/hooks';
 import { useHourlyStats, useMarketCorrelation } from './api/market-events-hooks';
 import { Wrap } from '@/shared/ui/Wrap';
 import { Seg } from '@/shared/ui/Seg';
@@ -28,14 +36,27 @@ const SYMBOLS = [
  * приём, что и у «Аналитики» с её `lab` по проводу: видимое имя и адрес
  * поменялись, внутренние не обязаны следовать.
  *
- * Каждый переключатель стоит на линейке того раздела, которым управляет
- * (инструмент — у «Позиционирования», глубина истории — у «Волатильности по
- * часам»), а не общей парой над всей страницей: до того, к чему они относятся,
- * было два экрана вниз.
+ * Лист в две дорожки, и делит их время, а не источник данных:
  *
- * `MacroSnapshot` сверху — общий фон рынка, не привязанный к выбранному
- * инструменту (в отличие от всего, что ниже), поэтому стоит вне `.asym` и
- * вне переключателя инструмента.
+ * - **слева — «что сейчас»**: фон рынка и позиционирование по выбранному
+ *   инструменту — коэффициенты и график центра ликвидности;
+ *   `useLiquidityHistory` перечитывает раз в 5 минут не потому, что копия
+ *   на бэкенде живёт дольше остального на странице, а потому что новая точка
+ *   там физически не появляется чаще: `LiquiditySnapshotService` пишет её
+ *   раз в 15 минут — снимать книгу заявок глубиной 200 уровней чаще незачем;
+ * - **справа — «как обычно»**: дни недели и часы. Оба считаются по одной и той
+ *   же истории в год или два и меняются раз в полчаса.
+ *
+ * Отсюда и место тумблеров: инструмент управляет только «Позиционированием» и
+ * стоит на его линейке, глубина истории — обеими разбивками справа и стоит на
+ * линейке первой из них. Каждый по-прежнему в пределах видимости того, что
+ * меняет, — но теперь это видимость всей страницы, а не одного экрана из трёх:
+ * четыре раздела в столбик занимали два с половиной экрана, две дорожки
+ * укладываются в один.
+ *
+ * Пропорция 7 к 5 (`.asym.pair`), а не обычные 8 к 3: справа не маргиналия при
+ * тексте, а вторая полноценная дорожка — семь строк недели требуют ширины под
+ * полосу, иначе она схлопывается в огрызок.
  */
 export const MarketPage = () => {
   const t = useTranslations('market');
@@ -52,6 +73,7 @@ export const MarketPage = () => {
   // мигать страницей на каждом щелчке тумблера.
   const { data: sentimentData, isLoading: sentimentLoading } = useMarketSentiment(symbol);
   const { data: volatility, isLoading: volatilityLoading } = useVolatility(symbol);
+  const { data: liquidityHistory, isLoading: liquidityLoading } = useLiquidityHistory(symbol);
   const { data: hourly, isLoading: hourlyLoading } = useHourlyStats(historyDays);
   const { data: corr, isLoading: corrLoading } = useMarketCorrelation(historyDays);
   const { data: marketData, isLoading: marketLoading } = useMarketData();
@@ -61,21 +83,21 @@ export const MarketPage = () => {
 
   return (
     <Wrap page style={{ paddingTop: 'var(--s4)' }}>
-      <SectionHead title={t('macroTitle')} />
-      <MacroSnapshot
-        market={marketData}
-        marketLoading={marketLoading}
-        fearGreed={fearGreed}
-        fearGreedLoading={fearGreedLoading}
-        cmc20={cmc20}
-        cmc20Loading={cmc20Loading}
-        defiTvl={defiTvl}
-        defiTvlLoading={defiTvlLoading}
-      />
-
-      <div className="asym" style={{ marginTop: 'var(--s5)' }}>
+      <div className="asym pair">
         <div>
-          <SectionHead title={t('positioningTitle')}>
+          <SectionHead title={t('macroTitle')} />
+          <MacroSnapshot
+            market={marketData}
+            marketLoading={marketLoading}
+            fearGreed={fearGreed}
+            fearGreedLoading={fearGreedLoading}
+            cmc20={cmc20}
+            cmc20Loading={cmc20Loading}
+            defiTvl={defiTvl}
+            defiTvlLoading={defiTvlLoading}
+          />
+
+          <SectionHead title={t('positioningTitle')} style={{ marginTop: 'var(--s5)' }}>
             <Seg options={SYMBOLS} value={symbol} onChange={setSymbol} ariaLabel={t('instrumentAriaLabel')} />
           </SectionHead>
           <Positioning
@@ -83,17 +105,19 @@ export const MarketPage = () => {
             isLoading={sentimentLoading}
             volatility={volatility}
             volatilityLoading={volatilityLoading}
+            liquidity={liquidityHistory?.points}
+            liquidityLoading={liquidityLoading}
           />
-
-          <SectionHead title={t('hourlyVolatilityTitle')} style={{ marginTop: 'var(--s5)' }}>
-            <Seg options={HISTORY} value={historyDays} onChange={setHistoryDays} ariaLabel={t('historyDepthAriaLabel')} />
-          </SectionHead>
-          <HourlyVolatility hours={hourly?.hourly ?? []} isLoading={hourlyLoading} />
         </div>
 
         <aside className="marg">
-          <h2>{t('weekdayOddsTitle')}</h2>
+          <SectionHead title={t('weekdayOddsTitle')}>
+            <Seg options={HISTORY} value={historyDays} onChange={setHistoryDays} ariaLabel={t('historyDepthAriaLabel')} />
+          </SectionHead>
           <WeekdayOdds corr={corr} isLoading={corrLoading} />
+
+          <SectionHead title={t('hourlyVolatilityTitle')} style={{ marginTop: 'var(--s5)' }} />
+          <HourlyVolatility hours={hourly?.hourly ?? []} isLoading={hourlyLoading} />
         </aside>
       </div>
     </Wrap>

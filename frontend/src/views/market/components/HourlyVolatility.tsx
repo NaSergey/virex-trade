@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl';
 import type { HourlyBucket } from '../api/market-events-hooks';
 import { Skeleton } from '@/shared/ui/Skeleton';
+import { useLocaleControl } from '@/shared/i18n';
 
 const hh = (hour: number) => String(hour).padStart(2, '0');
 
@@ -28,9 +29,26 @@ const HOUR_SKELETON = [
  */
 export function HourlyVolatility({ hours, isLoading }: { hours: HourlyBucket[]; isLoading?: boolean }) {
   const t = useTranslations('market');
+  const { locale } = useLocaleControl();
   const maxVol = Math.max(0, ...hours.map((b) => b.avgVolatilityPct));
   const hottest =
     hours.length > 0 ? [...hours].sort((a, b) => b.avgVolatilityPct - a.avgVolatilityPct)[0] : null;
+
+  /*
+   * Самый спокойный час ищем только среди часов с замерами: ведро без единой
+   * свечи несёт нулевую волатильность и выиграло бы этот отбор у любого
+   * настоящего часа. Самому бурному фильтр не нужен — ноль не выигрывает
+   * максимум.
+   *
+   * Оба края и размер выборки стоят подписью, а не отдельным блоком: в полосе,
+   * где высота считается от самого горячего часа, самый спокойный визуально
+   * никак не выделен — его столбик просто самый низкий из двадцати четырёх.
+   */
+  const measured = hours.filter((b) => b.samples > 0);
+  const calmest = measured.length
+    ? measured.reduce((a, b) => (b.avgVolatilityPct < a.avgVolatilityPct ? b : a))
+    : null;
+  const samples = hours.reduce((sum, b) => sum + b.samples, 0);
 
   // Ожидание — не то же самое, что «за два года не набралось ни часа»: пустой
   // массив приходит и в том, и в другом случае, а строчка «данных нет» на месте
@@ -70,7 +88,13 @@ export function HourlyVolatility({ hours, isLoading }: { hours: HourlyBucket[]; 
         ))}
       </div>
       <p className="foot">
-        {t('hottestHourNote', { hour: hh(hottest.hour), vol: hottest.avgVolatilityPct.toFixed(2) })}
+        {t('hottestHourNote', {
+          hour: hh(hottest.hour),
+          vol: hottest.avgVolatilityPct.toFixed(2),
+          calmHour: calmest ? hh(calmest.hour) : '—',
+          calmVol: calmest ? calmest.avgVolatilityPct.toFixed(2) : '—',
+          samples: samples.toLocaleString(locale === 'en' ? 'en-US' : 'ru-RU'),
+        })}
       </p>
     </>
   );

@@ -53,7 +53,7 @@ export function LabCompare({
   ];
 
   return (
-    <div className="cmp">
+    <div className="cmp" data-tour="lab-compare">
       {cells.map((c) => (
         <div key={c.label}>
           {/* Подписи стоят и во время счёта: они известны заранее и не зависят

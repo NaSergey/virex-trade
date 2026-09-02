@@ -5,7 +5,16 @@ export const SUPPORTED_LOCALES: readonly Locale[] = ['ru', 'en'];
 export const LOCALE_COOKIE = 'virex-locale';
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 год
 
-const DEFAULT_LOCALE: Locale = 'ru';
+/**
+ * Язык, который видит человек, впервые открывший продукт без куки.
+ *
+ * `en`, а не `ru`: продукт открыт всем, и первым экраном для незнакомого
+ * посетителя должен быть язык, который он с большей вероятностью прочтёт.
+ * Русскоязычный переключит его один раз, и выбор запомнится на год (кука
+ * ниже), а англоязычному переключать нечего — он бы просто не понял, что
+ * перед ним.
+ */
+const DEFAULT_LOCALE: Locale = 'en';
 
 function isLocale(value: string | null | undefined): value is Locale {
   return value === 'ru' || value === 'en';
@@ -14,8 +23,8 @@ function isLocale(value: string | null | undefined): value is Locale {
 /**
  * Разбирает сырое значение куки `virex-locale` (что с сервера, что из
  * `document.cookie`) в валидную локаль. Неизвестное или отсутствующее
- * значение — дефолт `'ru'`, без исключений: это единая точка, которую читают
- * и сервер (layout.tsx), и клиент, поэтому первый рендер обеих сторон
+ * значение — `DEFAULT_LOCALE`, без исключений: это единая точка, которую
+ * читают и сервер (layout.tsx), и клиент, поэтому первый рендер обеих сторон
  * гарантированно совпадает.
  */
 export function parseLocaleCookie(raw: string | null | undefined): Locale {
