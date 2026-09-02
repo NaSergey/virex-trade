@@ -10,7 +10,7 @@ import { AuthUser } from '../../auth/strategies/jwt.strategy';
 import { UsageTrackerService } from './usage-tracker.service';
 
 /**
- * Глобальный интерсептор, отмечающий присутствие пользователя.
+ * Глобальный интерсептор, отмечающий, что пользователь был в сервисе.
  *
  * Регистрируется глобально, а не навешивается на каждый контроллер, ровно
  * потому, что забытый декоратор здесь не ломается заметно: раздел просто тихо
@@ -33,30 +33,15 @@ export class UsageTrackingInterceptor implements NestInterceptor {
       .switchToHttp()
       .getRequest<Request & { user?: AuthUser }>();
     const userId = req.user?.userId;
-    const path = req.originalUrl || req.url || '';
 
     if (userId) {
-      const foreground = readForegroundFlag(req);
-      // Учитываем сразу, не дожидаясь ответа: присутствие — это факт запроса,
-      // а не факт успешного ответа, и ошибка 500 не означает, что человека тут
-      // не было. Что именно считать использованием, решает сам трекер
+      // Учитываем сразу, не дожидаясь ответа: заход — это факт запроса, а не
+      // факт успешного ответа, и ошибка 500 не означает, что человека тут не
+      // было. Что именно считать использованием, решает сам трекер
       // (isTrackedPath) — правило одно и живёт в одном месте.
-      this.tracker.record(userId, path, req.method, foreground);
+      this.tracker.record(userId, req.originalUrl || req.url || '', req.method);
     }
 
     return next.handle();
   }
-}
-
-/**
- * `X-Client-Active: 1` фронт шлёт, когда вкладка на переднем плане.
- *
- * Пока не шлёт — и это не оговорка, а состояние: без такого сигнала открытая
- * фоном вкладка со своими опросами неотличима от человека за экраном. Метрика
- * foreground до появления заголовка отдаётся как «нет данных», а не как ноль.
- */
-function readForegroundFlag(req: Request): boolean {
-  const raw = req.headers['x-client-active'];
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  return value === '1' || value === 'true';
 }

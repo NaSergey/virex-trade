@@ -16,7 +16,7 @@ describe('UsageTrackerService', () => {
     const tracker = new UsageTrackerService(prisma as unknown as PrismaService);
 
     for (let i = 0; i < 20; i++) {
-      tracker.record('u1', '/api/trades', 'GET', false, earlier);
+      tracker.record('u1', '/api/trades', 'GET', earlier);
     }
     await tracker.flush(true);
 
@@ -30,9 +30,9 @@ describe('UsageTrackerService', () => {
     const prisma = prismaStub();
     const tracker = new UsageTrackerService(prisma as unknown as PrismaService);
 
-    tracker.record('u1', '/api/trades', 'GET', false, earlier);
-    tracker.record('u1', '/api/tags', 'POST', false, earlier);
-    tracker.record('u1', '/api/tags/1', 'DELETE', false, earlier);
+    tracker.record('u1', '/api/trades', 'GET', earlier);
+    tracker.record('u1', '/api/tags', 'POST', earlier);
+    tracker.record('u1', '/api/tags/1', 'DELETE', earlier);
     await tracker.flush(true);
 
     const call = prisma.userActivityMinute.upsert.mock.calls[0][0];
@@ -40,26 +40,13 @@ describe('UsageTrackerService', () => {
     expect(call.create.writes).toBe(2);
   });
 
-  it('минута считается проведённой на переднем плане, если хоть один запрос это сказал', async () => {
-    const prisma = prismaStub();
-    const tracker = new UsageTrackerService(prisma as unknown as PrismaService);
-
-    tracker.record('u1', '/api/trades', 'GET', false, earlier);
-    tracker.record('u1', '/api/trades', 'GET', true, earlier);
-    await tracker.flush(true);
-
-    expect(
-      prisma.userActivityMinute.upsert.mock.calls[0][0].create.foreground,
-    ).toBe(true);
-  });
-
   it('не пишет незавершённую минуту', async () => {
     const prisma = prismaStub();
     const tracker = new UsageTrackerService(prisma as unknown as PrismaService);
 
-    // Текущая минута ещё набирает запросы: записать её сейчас значит посчитать
-    // её дважды — второй раз при следующем сбросе.
-    tracker.record('u1', '/api/trades', 'GET', false, new Date());
+    // Текущая минута ещё набирает запросы: записать её сейчас значит вернуться
+    // к ней вторым сбросом.
+    tracker.record('u1', '/api/trades', 'GET', new Date());
     expect(await tracker.flush()).toEqual({ written: 0 });
     expect(prisma.userActivityMinute.upsert).not.toHaveBeenCalled();
 
@@ -67,13 +54,13 @@ describe('UsageTrackerService', () => {
     expect((await tracker.flush(true)).written).toBe(1);
   });
 
-  it('раскладывает запросы по разделам и считает минуту разделу один раз', async () => {
+  it('раскладывает обращения по разделам', async () => {
     const prisma = prismaStub();
     const tracker = new UsageTrackerService(prisma as unknown as PrismaService);
 
-    tracker.record('u1', '/api/trades', 'GET', false, earlier);
-    tracker.record('u1', '/api/trades?limit=50', 'GET', false, earlier);
-    tracker.record('u1', '/api/tags', 'POST', false, earlier);
+    tracker.record('u1', '/api/trades', 'GET', earlier);
+    tracker.record('u1', '/api/trades?limit=50', 'GET', earlier);
+    tracker.record('u1', '/api/tags', 'POST', earlier);
     await tracker.flush(true);
 
     const bySection = Object.fromEntries(
@@ -83,7 +70,6 @@ describe('UsageTrackerService', () => {
       ]),
     );
     expect(bySection.journal.requests).toBe(2);
-    expect(bySection.journal.minutes).toBe(1);
     expect(bySection.tags.writes).toBe(1);
   });
 
@@ -91,13 +77,7 @@ describe('UsageTrackerService', () => {
     const prisma = prismaStub();
     const tracker = new UsageTrackerService(prisma as unknown as PrismaService);
 
-    tracker.record(
-      'owner',
-      '/api/admin/analytics/overview',
-      'GET',
-      false,
-      earlier,
-    );
+    tracker.record('owner', '/api/admin/analytics/overview', 'GET', earlier);
     await tracker.flush(true);
 
     expect(prisma.userActivityMinute.upsert).not.toHaveBeenCalled();
@@ -110,8 +90,8 @@ describe('UsageTrackerService', () => {
       .mockResolvedValue({});
     const tracker = new UsageTrackerService(prisma as unknown as PrismaService);
 
-    tracker.record('u1', '/api/trades', 'GET', false, earlier);
-    tracker.record('u2', '/api/trades', 'GET', false, earlier);
+    tracker.record('u1', '/api/trades', 'GET', earlier);
+    tracker.record('u2', '/api/trades', 'GET', earlier);
 
     // Аналитика не стоит того, чтобы ронять процесс: потерянная минута
     // логируется, а сброс продолжается.

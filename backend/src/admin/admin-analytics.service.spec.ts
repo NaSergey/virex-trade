@@ -1,5 +1,5 @@
 import { resolvePeriod } from './admin-analytics.service';
-import { parseAdminEmails } from './guards/admin.guard';
+import { OWNER_EMAIL, isOwnerEmail } from './owner';
 
 describe('resolvePeriod', () => {
   it('по умолчанию — последние 30 суток, считая с начала первых суток', () => {
@@ -31,17 +31,16 @@ describe('resolvePeriod', () => {
   });
 });
 
-describe('parseAdminEmails', () => {
-  it('терпит пробелы и регистр', () => {
-    const admins = parseAdminEmails(' Owner@Example.com , second@example.com ');
-    expect(admins.has('owner@example.com')).toBe(true);
-    expect(admins.has('second@example.com')).toBe(true);
+describe('isOwnerEmail', () => {
+  it('терпит регистр и краевые пробелы', () => {
+    expect(isOwnerEmail(` ${OWNER_EMAIL.toUpperCase()} `)).toBe(true);
   });
 
-  it('пустое значение не даёт доступа никому', () => {
-    // Обратное поведение — «списка нет, значит пускаем всех» — ошибается один
-    // раз и навсегда.
-    expect(parseAdminEmails(undefined).size).toBe(0);
-    expect(parseAdminEmails(' , ').size).toBe(0);
+  it('никого другого не пускает', () => {
+    // Раздел показывает почты и поведение всех пользователей: право сюда
+    // не выводится ни из чего, кроме точного совпадения с одной почтой.
+    expect(isOwnerEmail('someone@example.com')).toBe(false);
+    expect(isOwnerEmail(null)).toBe(false);
+    expect(isOwnerEmail('')).toBe(false);
   });
 });

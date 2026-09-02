@@ -3,9 +3,8 @@ import {
   floorToDay,
   floorToMinute,
   floorToWeek,
-  median,
   round,
-} from './sessions';
+} from './visits';
 
 describe('floorToMinute', () => {
   it('обрезает секунды', () => {
@@ -58,18 +57,6 @@ describe('floorToWeek', () => {
     const a = floorToWeek(new Date('2026-09-01T12:00:00Z'), 180);
     const b = floorToWeek(new Date('2026-09-08T12:00:00Z'), 180);
     expect(b.getTime() - a.getTime()).toBe(7 * DAY_MS);
-  });
-});
-
-describe('median', () => {
-  it('не даёт одной забытой вкладке определять типичную сессию', () => {
-    // Среднее здесь 63, медиана 3 — и вторая честнее описывает эту выборку.
-    expect(median([2, 3, 4, 5, 300])).toBe(4);
-    expect(median([2, 4])).toBe(3);
-  });
-
-  it('пустая выборка — ноль, а не NaN', () => {
-    expect(median([])).toBe(0);
   });
 });
 

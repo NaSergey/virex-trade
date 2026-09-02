@@ -1,36 +1,31 @@
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { SESSION_GAP_MIN } from './sessions';
+import { VISIT_GAP_MIN } from './visits';
 
 /**
  * Тяжёлые выборки по минутам активности — сырым SQL.
  *
- * Сессия — это цепочка соседних минут, то есть оконная функция; тянуть ради
- * неё все минуты в Node значит грузить сотни тысяч строк на каждый показ
- * отчёта. Постгрес сшивает их сам и отдаёт уже сессии — десятки строк на
- * пользователя за месяц, с которыми можно спокойно считать медианы в JS.
+ * Визит — это цепочка соседних минут, то есть оконная функция; тянуть ради неё
+ * все минуты в Node значит грузить сотни тысяч строк на каждый показ отчёта.
+ * Постгрес сшивает их сам и отдаёт уже визиты — единицы строк на пользователя
+ * за месяц.
  *
- * Числа приводятся к ::int / ::float8 прямо в запросе: COUNT() и SUM() иначе
- * приезжают через Prisma как BigInt и ломают арифметику молча (BigInt + Number
- * бросает TypeError уже в рантайме).
+ * Числа приводятся к ::int прямо в запросе: COUNT() и SUM() иначе приезжают
+ * через Prisma как BigInt и ломают арифметику молча (BigInt + Number бросает
+ * TypeError уже в рантайме).
  */
 
-export interface SessionRow {
+export interface VisitRow {
   userId: string;
+  /** Когда человек пришёл. Когда ушёл — не отдаётся: это было бы время на сайте. */
   startedAt: Date;
-  endedAt: Date;
-  activeMinutes: number;
-  foregroundMinutes: number;
   requests: number;
   writes: number;
-  durationMin: number;
 }
 
 export interface DayRow {
   day: Date;
   activeUsers: number;
-  activeMinutes: number;
-  foregroundMinutes: number;
   requests: number;
   writes: number;
 }
@@ -38,7 +33,6 @@ export interface DayRow {
 export interface UserDayRow {
   userId: string;
   day: Date;
-  activeMinutes: number;
   requests: number;
   writes: number;
 }
@@ -58,25 +52,24 @@ function dayExpr(tzOffsetMinutes: number): Prisma.Sql {
 }
 
 /**
- * Сессии за окно: минуты, разделённые паузой длиннее SESSION_GAP_MIN, считаются
- * разными визитами. Конец сессии — последняя активная минута плюс одна: запрос
- * в 12:00 и тишина после него это минута присутствия, а не ноль.
+ * Визиты за окно: минуты, разделённые паузой длиннее VISIT_GAP_MIN, считаются
+ * разными заходами.
  */
-export async function querySessions(
+export async function queryVisits(
   prisma: PrismaService,
   from: Date,
   to: Date,
   userId?: string,
-): Promise<SessionRow[]> {
-  const gap = int(SESSION_GAP_MIN);
+): Promise<VisitRow[]> {
+  const gap = int(VISIT_GAP_MIN);
   const userFilter = userId
     ? Prisma.sql`AND "userId" = ${userId}`
     : Prisma.empty;
 
-  return prisma.$queryRaw<SessionRow[]>`
+  return prisma.$queryRaw<VisitRow[]>`
     WITH marked AS (
       SELECT
-        "userId", "minute", "requests", "writes", "foreground",
+        "userId", "minute", "requests", "writes",
         CASE
           WHEN "minute" - LAG("minute") OVER w > make_interval(mins => ${gap}) THEN 1
           WHEN LAG("minute") OVER w IS NULL THEN 1
@@ -90,25 +83,21 @@ export async function querySessions(
       SELECT *,
         SUM(is_start) OVER (
           PARTITION BY "userId" ORDER BY "minute" ROWS UNBOUNDED PRECEDING
-        ) AS session_no
+        ) AS visit_no
       FROM marked
     )
     SELECT
       "userId",
-      MIN("minute")                                   AS "startedAt",
-      MAX("minute") + interval '1 minute'             AS "endedAt",
-      COUNT(*)::int                                   AS "activeMinutes",
-      SUM(CASE WHEN "foreground" THEN 1 ELSE 0 END)::int AS "foregroundMinutes",
-      SUM("requests")::int                            AS "requests",
-      SUM("writes")::int                              AS "writes",
-      (EXTRACT(EPOCH FROM (MAX("minute") - MIN("minute"))) / 60 + 1)::int AS "durationMin"
+      MIN("minute")        AS "startedAt",
+      SUM("requests")::int AS "requests",
+      SUM("writes")::int   AS "writes"
     FROM grouped
-    GROUP BY "userId", session_no
+    GROUP BY "userId", visit_no
     ORDER BY "startedAt"
   `;
 }
 
-/** Разбивка по суткам: сколько людей заходило и сколько минут они провели. */
+/** Разбивка по суткам: сколько разных людей заходило и сколько было обращений. */
 export async function queryDaily(
   prisma: PrismaService,
   from: Date,
@@ -117,12 +106,10 @@ export async function queryDaily(
 ): Promise<DayRow[]> {
   return prisma.$queryRaw<DayRow[]>`
     SELECT
-      ${dayExpr(tzOffsetMinutes)}                        AS "day",
-      COUNT(DISTINCT "userId")::int                      AS "activeUsers",
-      COUNT(*)::int                                      AS "activeMinutes",
-      SUM(CASE WHEN "foreground" THEN 1 ELSE 0 END)::int AS "foregroundMinutes",
-      SUM("requests")::int                               AS "requests",
-      SUM("writes")::int                                 AS "writes"
+      ${dayExpr(tzOffsetMinutes)}   AS "day",
+      COUNT(DISTINCT "userId")::int AS "activeUsers",
+      SUM("requests")::int          AS "requests",
+      SUM("writes")::int            AS "writes"
     FROM "user_activity_minutes"
     WHERE "minute" >= ${from} AND "minute" < ${to}
     GROUP BY 1
@@ -146,7 +133,6 @@ export async function queryUserDays(
     SELECT
       "userId",
       ${dayExpr(tzOffsetMinutes)} AS "day",
-      COUNT(*)::int               AS "activeMinutes",
       SUM("requests")::int        AS "requests",
       SUM("writes")::int          AS "writes"
     FROM "user_activity_minutes"
@@ -171,6 +157,27 @@ export async function countActiveUsers(
 }
 
 /**
+ * Сколько людей заходило больше чем в один день.
+ *
+ * Главный вопрос владельца («пользуются или нет») в одном числе:
+ * зарегистрироваться и посмотреть один раз может кто угодно, вернуться на
+ * другой день — только тот, кому сервис зачем-то нужен.
+ */
+export async function countReturningUsers(
+  prisma: PrismaService,
+): Promise<number> {
+  const rows = await prisma.$queryRaw<{ users: number }[]>`
+    SELECT COUNT(*)::int AS "users" FROM (
+      SELECT "userId"
+      FROM "user_activity_minutes"
+      GROUP BY "userId"
+      HAVING COUNT(DISTINCT date_trunc('day', "minute")) >= 2
+    ) t
+  `;
+  return rows[0]?.users ?? 0;
+}
+
+/**
  * Пары «пользователь — номер недели от точки отсчёта» для когортного удержания.
  *
  * Возвращаются только недели, в которые человек заходил, поэтому строк тут
@@ -189,25 +196,4 @@ export async function queryActiveWeeks(
     FROM "user_activity_minutes"
     WHERE "minute" >= ${from}
   `;
-}
-
-/**
- * Сколько людей заходило больше чем в один день.
- *
- * Главный вопрос владельца («пользуются или нет») в одном числе: зарегистрироваться
- * и посмотреть один раз может кто угодно, вернуться на другой день — только тот,
- * кому сервис зачем-то нужен.
- */
-export async function countReturningUsers(
-  prisma: PrismaService,
-): Promise<number> {
-  const rows = await prisma.$queryRaw<{ users: number }[]>`
-    SELECT COUNT(*)::int AS "users" FROM (
-      SELECT "userId"
-      FROM "user_activity_minutes"
-      GROUP BY "userId"
-      HAVING COUNT(DISTINCT date_trunc('day', "minute")) >= 2
-    ) t
-  `;
-  return rows[0]?.users ?? 0;
 }

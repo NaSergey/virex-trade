@@ -8,20 +8,19 @@ import {
 } from './dto/analytics-query.dto';
 import {
   DAY_MS,
-  SESSION_GAP_MIN,
+  VISIT_GAP_MIN,
   floorToDay,
   floorToWeek,
-  median,
   round,
-} from './usage/sessions';
+} from './usage/visits';
 import {
-  SessionRow,
+  VisitRow,
   countActiveUsers,
   countReturningUsers,
   queryActiveWeeks,
   queryDaily,
-  querySessions,
   queryUserDays,
+  queryVisits,
 } from './usage/usage-queries';
 
 const DEFAULT_PERIOD_DAYS = 30;
@@ -38,30 +37,29 @@ interface ResolvedPeriod {
 /**
  * Владельческая аналитика: пользуются сервисом или нет.
  *
- * Отвечает на три вопроса и старается не делать вид, что отвечает на большее:
- * сколько людей заходит, сколько времени они здесь проводят и доходят ли они до
- * той точки, ради которой продукт написан (свои сделки, размеченные тегами).
+ * Меряется ПОСЕЩЕНИЕ, а не время на сайте. Времени здесь нет сознательно:
+ * фронтенд опрашивает API и с фоновой вкладки, поэтому «минуты на сайте» — это
+ * время с открытым приложением, а не время человека за экраном, и прочитать
+ * такое число правильно почти невозможно. Вопрос «пользуются или нет» отвечают
+ * другие величины: сколько раз заходили, в скольких днях, что при этом делали
+ * и доходят ли до размеченных тегами сделок.
  *
- * Все временные метрики выводятся из минут активности (UserActivityMinute), а
- * не хранятся готовыми — определение сессии можно поменять, и вся история
- * пересчитается. Отсюда же главное ограничение, которое стоит помнить, читая
- * числа: «время на сайте» это время с ОТКРЫТЫМ приложением, потому что
- * фронтенд опрашивает API и с фоновой вкладки. Отделить присутствие человека
- * от открытой вкладки можно только заголовком `X-Client-Active` (поле
- * foreground), который фронт пока не шлёт.
+ * Визиты выводятся из минут активности (UserActivityMinute), а не хранятся
+ * готовыми — правило «пауза больше 30 минут = новый заход» можно поменять, и
+ * вся история пересчитается.
  */
 @Injectable()
 export class AdminAnalyticsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Сводка по сервису: аудитория, время, воронка пути и график по дням. */
+  /** Сводка по сервису: аудитория, посещения, воронка пути и график по дням. */
   async overview(dto: PeriodQueryDto) {
     const period = resolvePeriod(dto);
     const now = new Date();
 
-    const [sessions, daily, userDays, users, dau, wau, mau, funnel, sections] =
+    const [visits, daily, userDays, users, dau, wau, mau, funnel, sections] =
       await Promise.all([
-        querySessions(this.prisma, period.from, period.to),
+        queryVisits(this.prisma, period.from, period.to),
         queryDaily(this.prisma, period.from, period.to, period.tzOffsetMinutes),
         queryUserDays(
           this.prisma,
@@ -85,13 +83,7 @@ export class AdminAnalyticsService {
         this.sectionUsage(period),
       ]);
 
-    const activeUserIds = new Set(sessions.map((s) => s.userId));
-    const durations = sessions.map((s) => s.durationMin);
-    const minutesOnSite = sum(durations);
-    const activeMinutes = sum(sessions.map((s) => s.activeMinutes));
-    const foregroundMinutes = sum(sessions.map((s) => s.foregroundMinutes));
-    const actions = sum(sessions.map((s) => s.writes));
-
+    const activeUserIds = new Set(visits.map((v) => v.userId));
     const newUsers = users.filter(
       (u) => u.createdAt >= period.from && u.createdAt < period.to,
     ).length;
@@ -110,26 +102,17 @@ export class AdminAnalyticsService {
         to: period.to,
         days: period.days,
         tzOffsetMinutes: period.tzOffsetMinutes,
-        sessionGapMin: SESSION_GAP_MIN,
+        visitGapMin: VISIT_GAP_MIN,
       },
       totals: {
         users: users.length,
         newUsers,
         activeUsers: activeUserIds.size,
-        sessions: sessions.length,
-        minutesOnSite,
-        activeMinutes,
-        // null, а не 0: ноль здесь значит «никто не был на переднем плане», а
-        // правда — «фронт ещё не сообщает об этом».
-        foregroundMinutes: foregroundMinutes > 0 ? foregroundMinutes : null,
-        actions,
-        avgSessionMin: round(avg(durations)),
-        medianSessionMin: round(median(durations)),
-        avgMinutesPerActiveUser: round(
-          divide(minutesOnSite, activeUserIds.size),
-        ),
-        avgSessionsPerActiveUser: round(
-          divide(sessions.length, activeUserIds.size),
+        visits: visits.length,
+        requests: sum(visits.map((v) => v.requests)),
+        actions: sum(visits.map((v) => v.writes)),
+        avgVisitsPerActiveUser: round(
+          divide(visits.length, activeUserIds.size),
         ),
         avgDaysActivePerUser: round(avg([...daysActiveByUser.values()])),
       },
@@ -138,19 +121,19 @@ export class AdminAnalyticsService {
         wau,
         mau,
         // Насколько «ежедневный» продукт: 1.0 — заходят каждый день, 0.03 —
-        // раз в месяц. Считать по-настоящему осмысленным можно от десятков
-        // пользователей, ниже это шум.
+        // раз в месяц. По-настоящему осмысленно от десятков пользователей,
+        // ниже это шум.
         stickiness: round(divide(dau, mau), 2),
         avgDailyActiveUsers: round(avg(daily.map((d) => d.activeUsers))),
       },
       funnel,
-      daily: this.buildDailySeries(period, daily, sessions, users),
+      daily: this.buildDailySeries(period, daily, visits, users),
       sections,
       caveats: CAVEATS,
     };
   }
 
-  /** Таблица пользователей с их активностью за окно. */
+  /** Таблица пользователей с их посещениями за окно. */
   async users(dto: UsersQueryDto) {
     const period = resolvePeriod(dto);
     const limit = dto.limit ?? DEFAULT_USER_LIMIT;
@@ -168,7 +151,7 @@ export class AdminAnalyticsService {
         }
       : {};
 
-    const [users, sessions, userDays, lastSeen, trades, tags, connections] =
+    const [users, visits, userDays, lastSeen, trades, tags, connections] =
       await Promise.all([
         this.prisma.user.findMany({
           where,
@@ -181,7 +164,7 @@ export class AdminAnalyticsService {
             telegramChatId: true,
           },
         }),
-        querySessions(this.prisma, period.from, period.to),
+        queryVisits(this.prisma, period.from, period.to),
         queryUserDays(
           this.prisma,
           period.from,
@@ -199,7 +182,7 @@ export class AdminAnalyticsService {
         }),
       ]);
 
-    const sessionsByUser = groupBy(sessions, (s) => s.userId);
+    const visitsByUser = groupBy(visits, (v) => v.userId);
     const daysByUser = new Map<string, number>();
     for (const row of userDays)
       daysByUser.set(row.userId, (daysByUser.get(row.userId) ?? 0) + 1);
@@ -211,8 +194,7 @@ export class AdminAnalyticsService {
     const exchangesByUser = groupBy(connections, (c) => c.userId);
 
     const rows = users.map((user) => {
-      const own = sessionsByUser.get(user.id) ?? [];
-      const durations = own.map((s) => s.durationMin);
+      const own = visitsByUser.get(user.id) ?? [];
       return {
         id: user.id,
         email: user.email,
@@ -220,13 +202,10 @@ export class AdminAnalyticsService {
         registeredAt: user.createdAt,
         lastSeenAt: lastSeenByUser.get(user.id) ?? null,
         // Всё, что ниже, — за окно отчёта, а не за всё время.
-        sessions: own.length,
-        minutesOnSite: sum(durations),
-        activeMinutes: sum(own.map((s) => s.activeMinutes)),
-        actions: sum(own.map((s) => s.writes)),
+        visits: own.length,
         daysActive: daysByUser.get(user.id) ?? 0,
-        avgSessionMin: round(avg(durations)),
-        longestSessionMin: durations.length ? Math.max(...durations) : 0,
+        requests: sum(own.map((v) => v.requests)),
+        actions: sum(own.map((v) => v.writes)),
         // Это — за всё время: столько накопил аккаунт, а не столько сделал за месяц.
         trades: tradesByUser.get(user.id) ?? 0,
         tags: tagsByUser.get(user.id) ?? 0,
@@ -248,7 +227,7 @@ export class AdminAnalyticsService {
     };
   }
 
-  /** Один пользователь: чем и когда он тут занимался. */
+  /** Один пользователь: когда заходил и чем тут занимался. */
   async userDetail(userId: string, dto: PeriodQueryDto) {
     const period = resolvePeriod(dto);
 
@@ -267,7 +246,7 @@ export class AdminAnalyticsService {
     if (!user) throw new NotFoundException('User not found');
 
     const [
-      sessions,
+      visits,
       days,
       sectionRows,
       bounds,
@@ -276,7 +255,7 @@ export class AdminAnalyticsService {
       taggedTrades,
       positionTags,
     ] = await Promise.all([
-      querySessions(this.prisma, period.from, period.to, userId),
+      queryVisits(this.prisma, period.from, period.to, userId),
       queryUserDays(
         this.prisma,
         period.from,
@@ -287,21 +266,18 @@ export class AdminAnalyticsService {
       this.prisma.userSectionDay.groupBy({
         by: ['section'],
         where: { userId, day: { gte: floorToDay(period.from), lt: period.to } },
-        _sum: { requests: true, writes: true, minutes: true },
+        _sum: { requests: true, writes: true },
       }),
       this.prisma.userActivityMinute.aggregate({
         where: { userId },
         _min: { minute: true },
         _max: { minute: true },
-        _count: { _all: true },
       }),
       this.prisma.trade.count({ where: { userId } }),
       this.prisma.tag.count({ where: { userId } }),
       this.prisma.trade.count({ where: { userId, tags: { some: {} } } }),
       this.prisma.positionTag.count({ where: { userId } }),
     ]);
-
-    const durations = sessions.map((s) => s.durationMin);
 
     return {
       user: {
@@ -311,7 +287,6 @@ export class AdminAnalyticsService {
         registeredAt: user.createdAt,
         firstSeenAt: bounds._min.minute,
         lastSeenAt: bounds._max.minute,
-        lifetimeActiveMinutes: bounds._count._all,
         activeExchange: user.activeExchange,
         exchanges: user.exchangeConnections,
         telegramLinked: !!user.telegramChatId,
@@ -327,38 +302,29 @@ export class AdminAnalyticsService {
         tzOffsetMinutes: period.tzOffsetMinutes,
       },
       totals: {
-        sessions: sessions.length,
-        minutesOnSite: sum(durations),
-        activeMinutes: sum(sessions.map((s) => s.activeMinutes)),
-        actions: sum(sessions.map((s) => s.writes)),
+        visits: visits.length,
         daysActive: days.length,
-        avgSessionMin: round(avg(durations)),
-        medianSessionMin: round(median(durations)),
-        longestSessionMin: durations.length ? Math.max(...durations) : 0,
+        requests: sum(visits.map((v) => v.requests)),
+        actions: sum(visits.map((v) => v.writes)),
       },
       daily: days.map((d) => ({
         date: d.day,
-        activeMinutes: d.activeMinutes,
         requests: d.requests,
         actions: d.writes,
       })),
-      // Свежие сессии сверху: смотрят обычно «что человек делал в последний раз».
-      sessions: [...sessions].reverse().map((s) => ({
-        startedAt: s.startedAt,
-        endedAt: s.endedAt,
-        durationMin: s.durationMin,
-        activeMinutes: s.activeMinutes,
-        requests: s.requests,
-        actions: s.writes,
+      // Свежие заходы сверху: смотрят обычно «когда он был в последний раз».
+      visits: [...visits].reverse().map((v) => ({
+        startedAt: v.startedAt,
+        requests: v.requests,
+        actions: v.writes,
       })),
       sections: sectionRows
         .map((r) => ({
           section: r.section,
-          minutes: r._sum.minutes ?? 0,
           requests: r._sum.requests ?? 0,
           actions: r._sum.writes ?? 0,
         }))
-        .sort((a, b) => b.minutes - a.minutes),
+        .sort((a, b) => b.requests - a.requests),
       caveats: CAVEATS,
     };
   }
@@ -489,62 +455,52 @@ export class AdminAnalyticsService {
     };
   }
 
-  /** Чем пользуются: минуты и действия по разделам за окно. */
+  /** Чем пользуются: обращения и действия по разделам за окно. */
   private async sectionUsage(period: ResolvedPeriod) {
     const rows = await this.prisma.userSectionDay.groupBy({
       by: ['section', 'userId'],
       where: { day: { gte: floorToDay(period.from), lt: period.to } },
-      _sum: { requests: true, writes: true, minutes: true },
+      _sum: { requests: true, writes: true },
     });
 
     const bySection = new Map<
       string,
-      {
-        section: string;
-        users: number;
-        minutes: number;
-        requests: number;
-        actions: number;
-      }
+      { section: string; users: number; requests: number; actions: number }
     >();
     for (const row of rows) {
       const entry = bySection.get(row.section) ?? {
         section: row.section,
         users: 0,
-        minutes: 0,
         requests: 0,
         actions: 0,
       };
       entry.users++;
-      entry.minutes += row._sum.minutes ?? 0;
       entry.requests += row._sum.requests ?? 0;
       entry.actions += row._sum.writes ?? 0;
       bySection.set(row.section, entry);
     }
 
-    return [...bySection.values()].sort((a, b) => b.minutes - a.minutes);
+    return [...bySection.values()].sort((a, b) => b.requests - a.requests);
   }
 
-  /** График по дням: аудитория, сессии и время. */
+  /** График по дням: аудитория, посещения, действия. */
   private buildDailySeries(
     period: ResolvedPeriod,
     daily: {
       day: Date;
       activeUsers: number;
-      activeMinutes: number;
+      requests: number;
       writes: number;
     }[],
-    sessions: SessionRow[],
+    visits: VisitRow[],
     users: { createdAt: Date }[],
   ) {
     const byDay = new Map(daily.map((d) => [d.day.getTime(), d]));
 
-    // Сессия относится к суткам, в которые НАЧАЛАСЬ. Пересекающая полночь
-    // засчитывается целиком первому дню — иначе одна сессия превращается в две.
-    const sessionsByDay = new Map<number, SessionRow[]>();
-    for (const s of sessions) {
-      const key = floorToDay(s.startedAt, period.tzOffsetMinutes).getTime();
-      sessionsByDay.set(key, [...(sessionsByDay.get(key) ?? []), s]);
+    const visitsByDay = new Map<number, number>();
+    for (const v of visits) {
+      const key = floorToDay(v.startedAt, period.tzOffsetMinutes).getTime();
+      visitsByDay.set(key, (visitsByDay.get(key) ?? 0) + 1);
     }
 
     const newByDay = new Map<number, number>();
@@ -558,14 +514,12 @@ export class AdminAnalyticsService {
     const firstDay = floorToDay(period.from, period.tzOffsetMinutes).getTime();
     for (let t = firstDay; t < period.to.getTime(); t += DAY_MS) {
       const day = byDay.get(t);
-      const daySessions = sessionsByDay.get(t) ?? [];
       out.push({
         date: new Date(t),
         activeUsers: day?.activeUsers ?? 0,
         newUsers: newByDay.get(t) ?? 0,
-        sessions: daySessions.length,
-        minutesOnSite: sum(daySessions.map((s) => s.durationMin)),
-        activeMinutes: day?.activeMinutes ?? 0,
+        visits: visitsByDay.get(t) ?? 0,
+        requests: day?.requests ?? 0,
         actions: day?.writes ?? 0,
       });
     }
@@ -574,16 +528,16 @@ export class AdminAnalyticsService {
 }
 
 /**
- * Оговорки едут вместе с числами, а не лежат в документации: метрику
- * присутствия слишком легко прочитать как «человек сидел и работал», и один
- * раз так прочитанная, она потом обосновывает решения.
+ * Оговорки едут вместе с числами, а не лежат в документации: цифру посещений
+ * тоже легко прочитать шире, чем она есть, и один раз так прочитанная, она
+ * потом обосновывает решения.
  */
 const CAVEATS = [
-  'Время на сайте — это время с открытым приложением: фронтенд опрашивает API и с фоновой вкладки. Отделить присутствие человека можно будет по foreground, когда фронт начнёт слать заголовок X-Client-Active.',
-  'Минуты по разделам не складываются во время на сайте: одна минута попадает в несколько разделов, если за неё открыли и журнал, и настройки.',
-  'Сессия — это цепочка минут с паузой меньше ' +
-    SESSION_GAP_MIN +
+  'Визит — это цепочка обращений с паузой меньше ' +
+    VISIT_GAP_MIN +
     ' минут, а не факт из базы; при другой паузе числа будут другими.',
+  'Времени на сайте здесь нет намеренно: приложение опрашивает API и с фоновой вкладки, поэтому «минуты на сайте» означали бы время с открытой вкладкой, а не время человека за экраном.',
+  'Обращения — это запросы интерфейса к API, а не клики: одна открытая страница делает их несколько. Сравнивать их осмысленно между разделами и людьми, а не читать как число действий — для этого есть отдельный счётчик действий.',
 ];
 
 export function resolvePeriod(dto: PeriodQueryDto): ResolvedPeriod {
@@ -616,8 +570,9 @@ function compareBy(
   order: 'asc' | 'desc',
 ): number {
   const dir = order === 'asc' ? 1 : -1;
-  const av = a[field === 'createdAt' ? 'registeredAt' : field];
-  const bv = b[field === 'createdAt' ? 'registeredAt' : field];
+  const key = field === 'createdAt' ? 'registeredAt' : field;
+  const av = a[key];
+  const bv = b[key];
   // Никогда не заходившие уезжают вниз при любой сортировке: они не «самые
   // старые», о них просто нет данных.
   if (av == null && bv == null) return 0;

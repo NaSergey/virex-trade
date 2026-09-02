@@ -11,11 +11,22 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { resolveJwtAccessSecret } from './jwt-secret';
+import { isOwnerEmail } from '../admin/owner';
 
 export interface PublicUser {
   id: string;
   email: string;
   name: string | null;
+  /**
+   * Открыт ли этому аккаунту раздел аналитики по пользователям.
+   *
+   * Флагом в ответе, а не сравнением почты на фронте: право решает бэкенд
+   * (см. admin/owner.ts), и второе место, где написано, кто владелец, — это
+   * место, где однажды окажется другая почта. Пункт меню при этом ничего не
+   * охраняет: доступ проверяет AdminGuard на каждом запросе, а флаг только
+   * убирает из шапки ссылку, которая всё равно вернула бы 403.
+   */
+  isAdmin: boolean;
 }
 
 export interface AuthResult {
@@ -171,7 +182,9 @@ export class AuthService {
     if (opts?.consumeTokenId) {
       try {
         await this.prisma.$transaction([
-          this.prisma.refreshToken.delete({ where: { id: opts.consumeTokenId } }),
+          this.prisma.refreshToken.delete({
+            where: { id: opts.consumeTokenId },
+          }),
           create,
         ]);
       } catch {
@@ -203,6 +216,11 @@ export class AuthService {
     email: string;
     name: string | null;
   }): PublicUser {
-    return { id: user.id, email: user.email, name: user.name };
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      isAdmin: isOwnerEmail(user.email),
+    };
   }
 }

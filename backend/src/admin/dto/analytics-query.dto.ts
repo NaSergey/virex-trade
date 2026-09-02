@@ -41,12 +41,12 @@ export class PeriodQueryDto {
 
 export const USER_SORT_FIELDS = [
   'lastSeenAt',
-  'minutesOnSite',
-  'activeMinutes',
-  'sessions',
-  'actions',
+  'visits',
   'daysActive',
+  'requests',
+  'actions',
   'trades',
+  'tags',
   'createdAt',
 ] as const;
 

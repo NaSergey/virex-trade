@@ -1,8 +1,8 @@
 /**
  * Единицы времени и вспомогательная арифметика для владельческой аналитики.
  *
- * Сама сшивка минут в сессии живёт в SQL (usage-queries.ts) и только там:
- * второй реализации «что такое сессия» здесь нет намеренно. Две копии одного
+ * Само разбиение минут на визиты живёт в SQL (usage-queries.ts) и только там:
+ * второй реализации «что такое визит» здесь нет намеренно. Две копии одного
  * правила расходятся молча, и расхождение видно не по ошибке, а по числам,
  * которые уже кому-то показали.
  */
@@ -14,10 +14,10 @@ export const DAY_MS = 24 * 60 * MINUTE_MS;
  * Разрыв, после которого активность считается новым визитом.
  *
  * 30 минут — не истина, а компромисс: меньше — и человек, отошедший посмотреть
- * график на бирже, получает две сессии вместо одной; больше — и вкладка,
- * открытая утром и закрытая вечером, читается как «сидел восемь часов».
+ * график на бирже, вернётся уже «вторым визитом»; больше — и два захода за
+ * утро сольются в один.
  */
-export const SESSION_GAP_MIN = 30;
+export const VISIT_GAP_MIN = 30;
 
 /** Начало UTC-минуты, к которой относится момент времени. */
 export function floorToMinute(at: Date): Date {
@@ -43,19 +43,6 @@ export function floorToWeek(at: Date, tzOffsetMinutes = 0): Date {
   const shifted = new Date(day.getTime() + tzOffsetMinutes * MINUTE_MS);
   const weekday = (shifted.getUTCDay() + 6) % 7; // 0 = понедельник
   return new Date(day.getTime() - weekday * DAY_MS);
-}
-
-/**
- * Медиана. Для времени сессий она честнее среднего: одна забытая на весь день
- * вкладка поднимает среднее так, что оно перестаёт описывать кого-либо.
- */
-export function median(values: number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[mid - 1] + sorted[mid]) / 2
-    : sorted[mid];
 }
 
 export function round(value: number, digits = 1): number {

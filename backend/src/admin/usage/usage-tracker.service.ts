@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { isTrackedPath, sectionOf } from './sections';
-import { floorToDay, floorToMinute } from './sessions';
+import { floorToDay, floorToMinute } from './visits';
 
 const FLUSH_INTERVAL_MS = 30_000;
 
@@ -22,22 +22,20 @@ interface MinuteBucket {
   minuteMs: number;
   requests: number;
   writes: number;
-  foreground: boolean;
   sections: Map<string, { requests: number; writes: number }>;
 }
 
 /**
- * Считает присутствие пользователей в сервисе.
+ * Засекает, что пользователь был в сервисе.
  *
  * Пишет не каждый запрос, а агрегат по минуте: интерфейс опрашивает позиции
  * каждые несколько секунд, и запись на запрос дала бы десятки тысяч строк в
  * день на человека ради данных, из которых всё равно берётся только «была ли
- * минута активной».
+ * минута активной». Минуты потом сшиваются в визиты (usage-queries.ts).
  *
  * Копится в памяти и сбрасывается пачкой раз в {@link FLUSH_INTERVAL_MS}.
- * Сбрасываются только ЗАВЕРШЁННЫЕ минуты (строго раньше текущей) — благодаря
- * этому каждая минута уходит в БД ровно один раз, и счётчик различных минут по
- * разделу можно наращивать на единицу, не боясь посчитать одну минуту дважды.
+ * Сбрасываются только ЗАВЕРШЁННЫЕ минуты (строго раньше текущей) — так минута
+ * уходит в БД ровно один раз, а не догружается вторым сбросом.
  *
  * Данные аналитические, поэтому надёжность здесь сознательно ниже, чем у
  * сделок: незаписанная из-за падения БД минута логируется и теряется, но не
@@ -63,7 +61,7 @@ export class UsageTrackerService
   async onModuleDestroy() {
     if (this.timer) clearInterval(this.timer);
     // На остановке текущая (незавершённая) минута тоже уходит в БД: иначе
-    // каждый рестарт съедал бы до минуты присутствия у всех, кто был онлайн.
+    // рестарт посреди визита мог бы стереть его последнюю засечку.
     await this.flush(true).catch((e) =>
       this.logger.error('final usage flush failed', e),
     );
@@ -74,13 +72,7 @@ export class UsageTrackerService
    * вызывается из интерсептора на каждом запросе и не должен добавлять
    * задержки к ответу.
    */
-  record(
-    userId: string,
-    path: string,
-    method: string,
-    foreground: boolean,
-    at = new Date(),
-  ) {
+  record(userId: string, path: string, method: string, at = new Date()) {
     if (!isTrackedPath(path)) return;
 
     const minuteMs = floorToMinute(at).getTime();
@@ -102,7 +94,6 @@ export class UsageTrackerService
         minuteMs,
         requests: 0,
         writes: 0,
-        foreground: false,
         sections: new Map(),
       };
       this.buffer.set(key, bucket);
@@ -112,7 +103,6 @@ export class UsageTrackerService
       method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS';
     bucket.requests++;
     if (isWrite) bucket.writes++;
-    if (foreground) bucket.foreground = true;
 
     const section = sectionOf(path);
     const sec = bucket.sections.get(section) ?? { requests: 0, writes: 0 };
@@ -124,7 +114,7 @@ export class UsageTrackerService
   /**
    * @param force записать в том числе текущую, ещё не закрытую минуту.
    *   Только для остановки процесса: при обычном сбросе такая минута ещё
-   *   набирает запросы, и запись её сейчас удвоила бы счётчик минут по разделам.
+   *   набирает запросы, и записывать её рано.
    */
   async flush(force = false): Promise<{ written: number }> {
     const cutoff = floorToMinute(new Date()).getTime();
@@ -151,10 +141,11 @@ export class UsageTrackerService
           this.logger.warn(`usage minute dropped: ${(e as Error).message}`);
       }
     }
-    if (failed > 0)
+    if (failed > 0) {
       this.logger.warn(
         `usage flush lost ${failed} minute(s) of ${ready.length}`,
       );
+    }
 
     return { written };
   }
@@ -173,14 +164,10 @@ export class UsageTrackerService
         minute,
         requests: bucket.requests,
         writes: bucket.writes,
-        foreground: bucket.foreground,
       },
       update: {
         requests: { increment: bucket.requests },
         writes: { increment: bucket.writes },
-        // OR по факту: если хоть один инстанс видел активную вкладку, минута
-        // считается проведённой на переднем плане.
-        ...(bucket.foreground ? { foreground: true } : {}),
       },
     });
 
@@ -193,14 +180,10 @@ export class UsageTrackerService
           section,
           requests: counts.requests,
           writes: counts.writes,
-          minutes: 1,
         },
         update: {
           requests: { increment: counts.requests },
           writes: { increment: counts.writes },
-          // Ровно +1: одна сброшенная запись — это одна различная минута, в
-          // которую раздел трогали (см. правило «только завершённые минуты»).
-          minutes: { increment: 1 },
         },
       });
     }
