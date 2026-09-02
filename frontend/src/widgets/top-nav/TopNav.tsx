@@ -1,25 +1,27 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/features/auth';
+import { useOnboarding } from '@/features/onboarding';
 import { Button } from '@/shared/ui/Button';
 import { KeyValue } from '@/shared/ui/Lookup';
 import { LocaleSwitch } from '@/shared/ui/LocaleSwitch';
 import { ThemeToggle } from '@/shared/ui/ThemeToggle';
 import { VirexLogo } from '@/shared/ui/VirexLogo';
+import { useLocaleControl } from '@/shared/i18n';
 
-type Tab = 'overview' | 'tags' | 'lab' | 'analytics' | 'settings' | 'admin';
+type Tab = 'overview' | 'tags' | 'analytics' | 'market' | 'settings' | 'admin';
 
 type NavItem = { id: Tab; labelKey: Tab; ownerOnly?: boolean };
 
 const NAV: NavItem[] = [
   { id: 'overview', labelKey: 'overview' },
   { id: 'tags', labelKey: 'tags' },
-  { id: 'lab', labelKey: 'lab' },
   { id: 'analytics', labelKey: 'analytics' },
+  { id: 'market', labelKey: 'market' },
   { id: 'settings', labelKey: 'settings' },
   // Аналитика по пользователям сервиса. Стоит последней и видна только
   // владельцу: остальным ссылка вернула бы 403, а пункт в рейке обещал бы
@@ -56,10 +58,17 @@ const isActive = (pathname: string, id: Tab) => pathname === `/${id}` || pathnam
  */
 export function TopNav() {
   const { user, logout } = useAuth();
+  const { restart } = useOnboarding();
   const t = useTranslations('nav');
   const tc = useTranslations('common');
+  const to = useTranslations('onboarding');
+  const { locale } = useLocaleControl();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
+  // Ехать или встать молча: см. эффект ниже — подгонка под догрузившийся
+  // шрифт не должна выглядеть переездом.
+  const [moving, setMoving] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLElement>(null);
 
@@ -71,6 +80,38 @@ export function TopNav() {
     const active = navRef.current?.querySelector('[aria-current="page"]');
     active?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
   }, [pathname]);
+
+  /*
+   * Плашка активного раздела едет по рейке, а не перескакивает: её left/width
+   * снимаются с самого активного пункта, а не считаются заранее, — тогда она
+   * не может разойтись с тем, что реально на экране, даже когда подпись
+   * меняет длину при смене языка. useLayoutEffect, а не useEffect: позиция
+   * готова до отрисовки кадра, и при заходе на страницу плашка не дёргается
+   * из нуля в исходную точку на глазах.
+   *
+   * Переезд анимируется, ПОДГОНКА — нет, и это разные события.
+   *
+   * Шрифт рейки — веб-шрифт с `display: swap`: первые кадры подписи набраны
+   * запасным, и ширины у них другие. Первое измерение снимает ширину с
+   * запасного, а `document.fonts.ready`後 — с настоящего. Пока оба меняли
+   * плашку одинаково, при каждой перезагрузке страницы она на глазах
+   * доезжала до чуть большей ширины: человек видел два состояния подряд без
+   * единой на то причины. Подгонка теперь ставит размер молча, а ехать
+   * плашке есть куда только при смене раздела.
+   */
+  useLayoutEffect(() => {
+    const place = (animated: boolean) => {
+      const active = navRef.current?.querySelector<HTMLElement>('[aria-current="page"]');
+      if (!active) return;
+      setMoving(animated);
+      setIndicator({ left: active.offsetLeft, width: active.offsetWidth });
+    };
+    const settle = () => place(false);
+    place(true);
+    document.fonts?.ready?.then(settle);
+    window.addEventListener('resize', settle);
+    return () => window.removeEventListener('resize', settle);
+  }, [pathname, locale]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -92,7 +133,24 @@ export function TopNav() {
         {/* role="tablist" здесь больше нет: вкладки не меняют адрес, а эти
             пункты меняют. Скринридер должен услышать навигацию по разделам
             сайта, а не переключатель панелей внутри одной страницы. */}
-        <nav className="nav" aria-label={t('sections')} ref={navRef}>
+        <nav className="nav" aria-label={t('sections')} ref={navRef} data-tour="nav">
+          {/* Сама плашка активного раздела — общий слой под текстом ссылок, а
+              не фон отдельной ссылки: так у неё есть что ехать, а не только
+              где появляться. Первый кадр без indicator её не рисует вовсе —
+              нечем дёрнуть из нуля, пока useLayoutEffect не снял реальные
+              left/width с уже отрисованной активной ссылки. */}
+          {indicator && (
+            <span
+              className={`nav-indicator${moving ? ' is-moving' : ''}`}
+              // Место и размер — одним transform по единичной ширине, а не
+              // left/width: те пересчитывают раскладку на каждом кадре
+              // перехода, и рейка от этого заметно подтормаживала при смене
+              // раздела. Плашка — сплошная заливка без содержимого, растянуть
+              // её масштабом нечему повредить.
+              style={{ transform: `translateX(${indicator.left}px) scaleX(${indicator.width})` }}
+              aria-hidden
+            />
+          )}
           {NAV.filter((item) => !item.ownerOnly || user?.isAdmin).map((item) => (
             <Link
               key={item.id}
@@ -126,6 +184,20 @@ export function TopNav() {
                   освобождает узкую шапку на телефоне. */}
               <KeyValue label={tc('language')} control valueClassName="">
                 <LocaleSwitch />
+              </KeyValue>
+              {/* Обучение здесь, а не в Настройках: туры идут по всем пяти
+                  разделам, и вернуть их надо уметь с того раздела, где
+                  застрял, а не сходив за этим на страницу ключей. */}
+              <KeyValue label={to('menuLabel')} control valueClassName="">
+                <Button
+                  variant="bare"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    restart();
+                  }}
+                >
+                  {to('menuAction')}
+                </Button>
               </KeyValue>
               <Button
                 variant="risk"

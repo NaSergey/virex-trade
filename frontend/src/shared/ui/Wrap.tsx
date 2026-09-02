@@ -14,14 +14,21 @@ export function Wrap({
   page,
   className,
   style,
+  'data-tour': dataTour,
 }: {
   children: ReactNode;
   page?: boolean;
   className?: string;
   style?: CSSProperties;
+  /**
+   * Метка для обучения (features/onboarding): за неё цепляется подсветка шага.
+   * Отдельным пропом, а не `...rest`: полоса — про ширину и поля, и открывать
+   * ей произвольные атрибуты значило бы разрешить складывать сюда что угодно.
+   */
+  'data-tour'?: string;
 }) {
   return (
-    <div className={cn('wrap', page && 'page', className)} style={style}>
+    <div className={cn('wrap', page && 'page', className)} style={style} data-tour={dataTour}>
       {children}
     </div>
   );

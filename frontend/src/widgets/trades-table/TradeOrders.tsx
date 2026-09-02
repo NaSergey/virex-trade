@@ -160,6 +160,12 @@ export function TradeOrders({ trade }: { trade: Trade }) {
               </KeyValue>
               <KeyValue label={t('colRange', { tf: '1H' })}>{formatRangePos(ctx.rangePos1h, locale)}</KeyValue>
               <KeyValue label={t('colRange', { tf: '4H' })}>{formatRangePos(ctx.rangePos4h, locale)}</KeyValue>
+              <KeyValue label={t('entryQualityLabel')}>
+                {ctx.entryQuality != null ? `${Math.round(ctx.entryQuality)} %` : '—'}
+              </KeyValue>
+              <KeyValue label={t('exitQualityLabel')}>
+                {ctx.exitQuality != null ? `${Math.round(ctx.exitQuality)} %` : '—'}
+              </KeyValue>
               {ctx.basis === 'closed' && (
                 <p className="foot">
                   <b>†</b> {t('entryTimeUnknownNote')}

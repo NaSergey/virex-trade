@@ -54,6 +54,7 @@ model User {
   openPositionsSeen  OpenPositionSeen[]
   savedTagCombos     SavedTagCombo[]
   dismissedTagCombos DismissedTagCombo[]
+  balanceSnapshots   BalanceSnapshot[]
 
   @@map("users")
 }
@@ -98,6 +99,10 @@ model Trade {
   openFee       Float    @default(0)
   closeFee      Float    @default(0)
   leverage      Float?
+  /// Стоп, объявленный на входе: копируется из OpenPositionSeen при закрытии,
+  /// ровно как openedAt. Null у сделки, чья позиция открылась при лежащем
+  /// сервере, и у тех, кто держит стоп в голове, а не на бирже.
+  stopLoss      Float?
   orderId       String
   closedAt      DateTime // Bybit updatedTime
   // Approximate position open time, copied from OpenPositionSeen when the
@@ -120,6 +125,7 @@ model Trade {
 
   tags    TradeTag[]
   context TradeContext?
+  risk    TradeRisk?
 
   @@unique([userId, exchange, orderId, closedAt])
   @@index([userId, symbol])
@@ -262,6 +268,16 @@ model TradeContext {
   rangePos4h  Float?
   rangePos1d  Float?
 
+  /// Качество входа/выхода относительно диапазона самой сделки (вход→выход),
+  /// не относительно истории до входа, как rangePos. 0..100, клампится.
+  /// null — меньше QUALITY_MIN_CANDLES свечей в окне сделки.
+  entryQuality Float?
+  exitQuality  Float?
+  /// true — попытка расчёта уже была (успешная или нет). Отличает «посчитан
+  /// null, потому что данных мало» от «ещё не пытались» — без этого пустые
+  /// пересчитывались бы на каждом тике синка.
+  qualityComputed Boolean @default(false)
+
   // Field-set version of the snapshot. Snapshots are only ever computed for
   // trades that have none (context == null), so without this a newly added
   // indicator would stay null forever on every already-computed trade —
@@ -352,6 +368,10 @@ model OpenPositionSeen {
   // it's still running. Null until the snapshot succeeds; ctxOk=false marks a
   // symbol whose kline history was too short, so we stop retrying it.
   entryPrice    Float?
+  /// Стоп на первом тике жизни позиции. Снимается там же и тогда же, где
+  /// entryPrice: передвинутый позже трал не должен подменять намерение,
+  /// объявленное на входе.
+  stopLoss      Float?
   ctxOk         Boolean?
   ctxComputedAt DateTime?
   price         Float?
@@ -406,6 +426,25 @@ model HourlyPrice {
   @@unique([symbol, date])
   @@index([date])
   @@map("hourly_prices")
+}
+
+/// Периодический снимок «центра тяжести» книги заявок: средневзвешенная по
+/// объёму цена бид- и аск-стороны (топ-200 уровней), рядом с ценой в тот
+/// момент. Не сам стакан — тот занял бы сотни МБ в день на один символ, а его
+/// сжатие до двух чисел. LiquiditySnapshotService пишет строку раз в 15 минут
+/// для BTC/ETH/SOL; истории до первого запуска сервиса нет и не будет —
+/// биржи не архивируют прошлые состояния стакана, поэтому бэкфилл здесь
+/// невозможен в принципе, а не просто не сделан.
+model LiquiditySnapshot {
+  id        String   @id @default(uuid())
+  symbol    String
+  ts        DateTime
+  price     Float
+  bidCenter Float
+  askCenter Float
+
+  @@index([symbol, ts])
+  @@map("liquidity_snapshots")
 }
 
 // One row per active refresh token (supports multiple devices / sessions).
@@ -474,4 +513,52 @@ model UserSectionDay {
   @@unique([userId, day, section])
   @@index([day])
   @@map("user_section_days")
+}
+
+/// Якорь ряда баланса. Снимки не образуют сам ряд — баланс в произвольный
+/// момент выводится из цепочки сделок относительно ближайшего якоря. Якоря
+/// нужны, чтобы ловить снос вывода и обнаруживать ввод и вывод средств.
+model BalanceSnapshot {
+  id       String   @id @default(uuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exchange String
+  at       DateTime
+  balance  Float
+  /// 'snapshot' — спросили биржу, 'derived' — вывели из цепочки PnL.
+  source   String
+  /// Неторговое изменение баланса: положительное — ввод, отрицательное —
+  /// вывод. Null, пока расхождения нет. Цепочка вывода через разрыв не
+  /// продолжается, поэтому одно пополнение не искажает весь ряд назад.
+  gap      Float?
+
+  @@unique([userId, exchange, at])
+  @@index([userId, exchange, at])
+  @@map("balance_snapshots")
+}
+
+/// Метрики риска одной сделки, посчитанные один раз. Материализуется дорогая
+/// и стабильная часть — сопоставить сделке баланс на момент входа; сравнение
+/// с порогом правила остаётся на чтение, чтобы правило можно было править без
+/// пересчёта истории. Образец — TradeContext: та же версия набора полей и то
+/// же правило «считаем только тем, у кого ещё нет».
+model TradeRisk {
+  id             String   @id @default(uuid())
+  tradeId        String   @unique
+  trade          Trade    @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  balanceAtEntry Float?
+  /// 'snapshot' | 'derived' — доезжает до интерфейса: расчётные числа
+  /// подписываются как оценка, а не выдаются за факт.
+  balanceSource  String?
+  exposurePct    Float?
+  /// Null у сделки без стопа. Отдельно от ok=false: баланс известен,
+  /// exposurePct посчитан, не хватает только стопа.
+  plannedRiskPct Float?
+  /// false — баланс на тот момент неизвестен. Такая сделка выпадает и из
+  /// числителя, и из знаменателя доли соблюдения.
+  ok             Boolean  @default(true)
+  riskVersion    Int      @default(1)
+  computedAt     DateTime @default(now())
+
+  @@map("trade_risks")
 }

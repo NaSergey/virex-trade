@@ -4,6 +4,7 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { apiJson, qs } from '@/shared/api/http';
 import type {
   EquityPoint,
+  HabitsResponse,
   TimeStatsResponse,
   TradeStats,
   TradesPage,
@@ -92,6 +93,19 @@ export const useTimeStats = (params?: { days?: number; tagId?: string }) =>
           days: params?.days || undefined,
           tagId: params?.tagId,
           // Bucket by the user's local clock, not the server's.
+          tz: new Date().getTimezoneOffset(),
+        })}`,
+      ),
+    ...LIVE,
+  });
+
+export const useHabits = (params?: { days?: number }) =>
+  useQuery({
+    queryKey: ['habits', params?.days ?? 0],
+    queryFn: () =>
+      apiJson<HabitsResponse>(
+        `/api/trades/habits${qs({
+          days: params?.days || undefined,
           tz: new Date().getTimezoneOffset(),
         })}`,
       ),

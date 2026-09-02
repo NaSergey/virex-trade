@@ -50,8 +50,12 @@ services:
     depends_on:
       - api
     environment:
-      # Browser-facing URL → must be the host-published API port.
-      NEXT_PUBLIC_API_URL: http://localhost:8091
+      # Server-only: the browser never calls this directly. Next proxies
+      # /api/* and /auth/* to it via rewrites (next.config.ts), so the
+      # browser and the app share one origin and the session cookie reaches
+      # middleware.ts. Docker service name, not localhost — this runs
+      # inside the web container's own network.
+      API_INTERNAL_URL: http://api:8091
     ports:
       - "8090:8090"
     volumes:

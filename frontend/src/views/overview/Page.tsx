@@ -9,6 +9,8 @@ import { usePeriodFilter, PeriodStrip } from '@/features/period-filter';
 import { buildEquityGeometry, EquityChart, EquityChartSkeleton } from '@/widgets/equity-chart';
 import { SummaryStrip, SummaryStripSkeleton } from './components/SummaryStrip';
 import { OpenPositions } from './components/OpenPositions';
+// «Цена привычек» временно снята с показа — закомментировано, не удалено.
+// import { HabitsBlock } from './components/HabitsBlock';
 import {
   HourBars,
   HourBarsSkeleton,
@@ -40,6 +42,7 @@ export function OverviewPage() {
   const { effectiveDays } = period;
   const { data: statsData } = useTradeStats({ days: effectiveDays });
   const { data: timeData } = useTimeStats({ days: effectiveDays });
+  // const { data: habitsData, isLoading: habitsLoading } = useHabits({ days: effectiveDays });
   const { data: tradesData, isLoading: tradesLoading } = useTrades({
     days: effectiveDays,
     page,
@@ -76,13 +79,19 @@ export function OverviewPage() {
         </div>
       ) : (
         equity.length > 1 && (
-          <div className="bleed">
+          <div className="bleed" data-tour="equity">
             <EquityChart data={equity} />
           </div>
         )
       )}
 
       <OpenPositions />
+
+      {/* «Цена привычек» временно снята с показа — закомментировано, не удалено.
+      <Wrap style={{ marginTop: 'var(--s5)' }}>
+        <HabitsBlock data={habitsData} isLoading={habitsLoading && !habitsData} />
+      </Wrap>
+      */}
 
       <Wrap style={{ marginTop: 'var(--s5)' }}>
         <div className="asym">
@@ -105,7 +114,7 @@ export function OverviewPage() {
         </div>
       </Wrap>
 
-      <Wrap page className="trades" style={{ marginTop: 'var(--s5)' }}>
+      <Wrap page className="trades" style={{ marginTop: 'var(--s5)' }} data-tour="trades">
         <h2>{t('closedTrades')}</h2>
         <TradesTable
           trades={tradesData?.trades ?? []}

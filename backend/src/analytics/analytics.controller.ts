@@ -28,6 +28,11 @@ export class AnalyticsController {
     return this.analyticsService.getDeFiTVL();
   }
 
+  @Get('liquidity-history')
+  async getLiquidityHistory(@Query('symbol') symbol?: string) {
+    return this.analyticsService.getLiquidityHistory(symbol ?? 'BTCUSDT');
+  }
+
   @Get('market-sentiment')
   async getMarketSentiment(@Query('symbol') symbol?: string) {
     return this.analyticsService.getLongShortRatio(symbol ?? 'BTCUSDT');

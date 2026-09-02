@@ -62,6 +62,7 @@ export function Field({
   children,
   className,
   style,
+  'data-tour': dataTour,
 }: {
   label: ReactNode;
   /** Явный id контрола; без него берётся сгенерированный — см. render-проп. */
@@ -70,12 +71,14 @@ export function Field({
   children: ReactNode | ((id: string) => ReactNode);
   className?: string;
   style?: CSSProperties;
+  /** Метка для обучения (features/onboarding) — см. тот же проп у `Wrap`. */
+  'data-tour'?: string;
 }) {
   const autoId = useId();
   const id = htmlFor ?? autoId;
 
   return (
-    <div className={cn('field', className)} style={style}>
+    <div className={cn('field', className)} style={style} data-tour={dataTour}>
       <label className="lbl" htmlFor={id}>
         {label}
       </label>

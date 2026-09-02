@@ -8,6 +8,7 @@ import { ExchangesModule } from './exchanges/exchanges.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { TradesModule } from './trades/trades.module';
+import { BalanceModule } from './balance/balance.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { SettingsModule } from './settings/settings.module';
 import { TagsModule } from './tags/tags.module';
@@ -31,6 +32,7 @@ import { AdminModule } from './admin/admin.module';
     BybitModule,
     ExchangesModule,
     TradesModule,
+    BalanceModule,
     AnalyticsModule,
     SettingsModule,
     TagsModule,

@@ -4,7 +4,9 @@ import type { ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import type { TradeStats } from '@/entities/trade';
 import { Skeleton } from '@/shared/ui/Skeleton';
+import { Tooltip } from '@/shared/ui/Tooltip';
 import { formatMoney, formatProfitFactor, moneyClass } from '@/shared/lib/utils/format';
+import { sqnToScore, sqnTier, type SqnTier } from '@/shared/lib/utils/edgeScore';
 
 interface Gauge {
   /** Заполнение шкалы, 0..100. */
@@ -18,6 +20,10 @@ interface Metric {
   value: ReactNode;
   tone?: 'pos' | 'neg';
   gauge?: Gauge;
+  /** Всплывающая подсказка на ячейке — сейчас только у Edge Score (уровень по SQN). */
+  title?: string;
+  /** Пояснение метрики — маленький «!» рядом с подписью, для непривычных чисел. */
+  hint?: string;
 }
 
 /**
@@ -46,9 +52,34 @@ function GaugeBar({ fill, threshold }: Gauge) {
 export function SummaryStrip({ stats }: { stats: TradeStats }) {
   const t = useTranslations('overview');
   const profitFactor = formatProfitFactor(stats.profitFactor, stats.wins, stats.losses);
+  const tierLabels: Record<SqnTier, string> = {
+    poor: t('edgeScoreTierPoor'),
+    belowAverage: t('edgeScoreTierBelowAverage'),
+    average: t('edgeScoreTierAverage'),
+    good: t('edgeScoreTierGood'),
+    excellent: t('edgeScoreTierExcellent'),
+    superb: t('edgeScoreTierSuperb'),
+    holyGrail: t('edgeScoreTierHolyGrail'),
+  };
   const metrics: Metric[] = [
     { label: 'Net P&L · USDT', value: formatMoney(stats.totalPnl), tone: moneyClass(stats.totalPnl) },
-    { label: t('trades'), value: String(stats.totalTrades) },
+    {
+      label: 'Edge Score',
+      value: stats.sqn == null ? '—' : String(sqnToScore(stats.sqn)),
+      gauge: stats.sqn == null ? undefined : { fill: sqnToScore(stats.sqn), threshold: 40 },
+      title: stats.sqn == null ? undefined : tierLabels[sqnTier(stats.sqn)],
+      hint: t('edgeScoreHint'),
+    },
+    {
+      label: t('avgWinMetric'),
+      value: stats.wins ? formatMoney(stats.grossProfit / stats.wins) : '—',
+      tone: stats.wins ? 'pos' : undefined,
+    },
+    {
+      label: t('avgLossMetric'),
+      value: stats.losses ? formatMoney(stats.grossLoss / stats.losses) : '—',
+      tone: stats.losses ? 'neg' : undefined,
+    },
     {
       label: 'Winrate',
       value: `${stats.winRate.toFixed(1)} %`,
@@ -73,15 +104,22 @@ export function SummaryStrip({ stats }: { stats: TradeStats }) {
     },
     { label: 'Avg trade · USDT', value: formatMoney(stats.avgPnl), tone: moneyClass(stats.avgPnl) },
     { label: 'Fees · USDT', value: formatMoney(-Math.abs(stats.totalFees)) },
-    { label: t('best'), value: formatMoney(stats.bestPnl), tone: moneyClass(stats.bestPnl) },
-    { label: t('worst'), value: formatMoney(stats.worstPnl), tone: moneyClass(stats.worstPnl) },
   ];
 
   return (
-    <div className="metrics">
+    <div className="metrics" data-tour="summary">
       {metrics.map((m) => (
-        <div className="mcell" key={m.label}>
-          <span className="lbl">{m.label}</span>
+        <div className="mcell" key={m.label} title={m.title}>
+          <span className="lbl">
+            {m.label}
+            {m.hint && (
+              <Tooltip text={m.hint}>
+                <span className="hint" tabIndex={0}>
+                  !
+                </span>
+              </Tooltip>
+            )}
+          </span>
           <span className={`mval${m.tone ? ` ${m.tone}` : ''}`}>{m.value}</span>
           {m.gauge ? <GaugeBar {...m.gauge} /> : <span />}
         </div>

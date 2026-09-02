@@ -182,24 +182,31 @@ export function OpenPositions() {
   ];
 
   return (
-    <div className="now">
-      <Wrap>
-        <SectionHead title={t('openPositionsTitle')}>
-          <Seg
-            options={rangeTfOptions}
-            value={rangeTf}
-            onChange={setRangeTf}
-            className="seg-tight"
-            ariaLabel={t('rangeScaleAriaLabel')}
+    <div className="now" data-tour="positions">
+      {/* Полоса рисуется рывком, стоило позициям открыться, — тот же приём
+          «раскрытия», что и у строк заказа в LedgerTable (row-reveal):
+          content-обёртка растёт из малой высоты в свою нужную, а не
+          вскакивает сразу. Играет один раз, на первое появление — React не
+          пересоздаёт узел при обновлении данных внутри. */}
+      <div className="row-reveal">
+        <Wrap>
+          <SectionHead title={t('openPositionsTitle')}>
+            <Seg
+              options={rangeTfOptions}
+              value={rangeTf}
+              onChange={setRangeTf}
+              className="seg-tight"
+              ariaLabel={t('rangeScaleAriaLabel')}
+            />
+            <Money value={totalPnl} unit="USDT" className="n" />
+          </SectionHead>
+          <LedgerTable
+            columns={columns}
+            rows={positions}
+            rowKey={(p) => `${p.symbol}-${p.direction}`}
           />
-          <Money value={totalPnl} unit="USDT" className="n" />
-        </SectionHead>
-        <LedgerTable
-          columns={columns}
-          rows={positions}
-          rowKey={(p) => `${p.symbol}-${p.direction}`}
-        />
-      </Wrap>
+        </Wrap>
+      </div>
 
       {tagging && (
         <PositionTagsModal

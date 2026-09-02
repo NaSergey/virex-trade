@@ -18,7 +18,10 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 
 const REFRESH_COOKIE = 'refresh_token';
-const REFRESH_COOKIE_PATH = '/auth';
+// '/', не '/auth': кука должна доехать и до страниц продукта — её на входе
+// проверяет middleware фронтенда (единственный гейт неавторизованного
+// доступа), а не только сами /auth/* эндпоинты.
+const REFRESH_COOKIE_PATH = '/';
 
 // Credential-guessing budget per IP. Well clear of anything a real person does
 // (login is once per refresh-token lifetime) while making an online password
