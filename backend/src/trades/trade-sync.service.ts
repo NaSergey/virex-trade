@@ -12,6 +12,13 @@ import { PositionBuilderService } from './position-builder.service';
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const BACKFILL_WEEKS = 26; // first run: import ~6 months of history
 const SYNC_INTERVAL_MS = 60_000; // periodic incremental sync
+// Сколько пользователей обходить одновременно. Обход был последовательным, и
+// это упиралось не в CPU, а в ожидание биржи: на 1000 подключённых по ~1-2 с
+// на человека круг занимал полчаса вместо минуты, причём молча — тик, попавший
+// на незакрытый обход, просто отбрасывался. Лимиты бирж считаются по ключу, а
+// ключи у пользователей разные, поэтому параллелить их безопасно; общий на всех
+// потолок по IP (у Bybit — сотни запросов в секунду) при таком числе далеко.
+const SYNC_CONCURRENCY = Math.max(1, Number(process.env.TRADE_SYNC_CONCURRENCY) || 24);
 
 /**
  * Стоп с биржи — десятичная строка. Ноль и пустая строка у нескольких бирж
@@ -79,21 +86,54 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
         where: { activeExchange: { not: null } },
         select: { id: true },
       });
-      let inserted = 0;
-      for (const u of users) {
-        if (this.inFlight.has(u.id)) continue; // manual re-sync already running
-        // One user's failure (revoked keys, an undecryptable credential blob,
-        // an exchange outage) must not abort the sweep for everyone behind them.
-        try {
-          inserted += await this.runLocked(u.id, opts);
-        } catch (e) {
-          this.logger.warn(`sync failed for user ${u.id}: ${e}`);
-        }
+      const startedAt = Date.now();
+      const inserted = await this.sweep(users, opts);
+      const elapsed = Date.now() - startedAt;
+      // Обход, не укладывающийся в интервал, снаружи выглядит как работающий
+      // синк с необъяснимо старыми сделками. Оставляем след, чтобы это было
+      // видно до жалоб пользователей.
+      if (elapsed > SYNC_INTERVAL_MS) {
+        this.logger.warn(
+          `sweep of ${users.length} users took ${Math.round(elapsed / 1000)}s ` +
+            `(> ${SYNC_INTERVAL_MS / 1000}s interval); raise TRADE_SYNC_CONCURRENCY`,
+        );
       }
       return { inserted };
     } finally {
       this.sweeping = false;
     }
+  }
+
+  /**
+   * Обходит список пулом из {@link SYNC_CONCURRENCY} воркеров, разбирающих
+   * общую очередь. Пул, а не разбиение на равные пачки: пользователи стоят
+   * по-разному — у кого-то первый бэкфилл на полгода, у кого-то пустой
+   * инкремент, — и на фиксированных пачках все ждали бы самую тяжёлую.
+   */
+  private async sweep(users: { id: string }[], opts?: { full?: boolean }): Promise<number> {
+    let next = 0;
+    let inserted = 0;
+    const worker = async () => {
+      for (let i = next++; i < users.length; i = next++) {
+        const u = users[i];
+        if (this.inFlight.has(u.id)) continue; // manual re-sync already running
+        // One user's failure (revoked keys, an undecryptable credential blob,
+        // an exchange outage) must not abort the sweep for everyone behind them.
+        try {
+          // Отдельной строкой, не `inserted += await ...`: составное присваивание
+          // читает левый операнд ДО ожидания, и параллельные воркеры затирали бы
+          // друг другу инкремент.
+          const n = await this.runLocked(u.id, opts);
+          inserted += n;
+        } catch (e) {
+          this.logger.warn(`sync failed for user ${u.id}: ${e}`);
+        }
+      }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(SYNC_CONCURRENCY, users.length) }, worker),
+    );
+    return inserted;
   }
 
   /**
