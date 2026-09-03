@@ -5,10 +5,20 @@ import path from "node:path";
 // docker-compose это имя сервиса ("api"), при локальном запуске без
 // Docker (start.bat) — тот же localhost. Браузер сюда никогда не
 // обращается напрямую — только через rewrites ниже.
+//
+// Читается на сборке, а не на старте: Next записывает готовые destination в
+// .next/routes-manifest.json, и переменная, выставленная только у запущенного
+// контейнера, уже ни на что не влияет. Поэтому в Dockerfile.prod это ARG.
 const BACKEND_INTERNAL_URL =
   process.env.API_INTERNAL_URL || "http://localhost:8091";
 
 const nextConfig: NextConfig = {
+  // Самодостаточный сервер в .next/standalone: только он и прослеженные им
+  // зависимости, без node_modules и без чтения этого файла на старте. Для
+  // прод-образа (frontend/Dockerfile.prod) это ещё и обязательное условие —
+  // иначе `next start` пришлось бы тащить typescript, чтобы прочитать
+  // next.config.ts. На `next dev` не влияет.
+  output: 'standalone',
   // Pin the Turbopack workspace root to THIS project, using the real
   // on-disk path (correct drive-letter casing + separators) so the pin
   // actually matches. Otherwise Turbopack sees two sibling lockfiles

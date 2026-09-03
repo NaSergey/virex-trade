@@ -1,0 +1,107 @@
+# Production stack: Caddy (TLS) → Next → NestJS → PostgreSQL.
+#
+# Отдельный файл, а не профиль в docker-compose.yml: тот собран для разработки —
+# hot reload, исходники примонтированы поверх образа, пароль БД в открытую и порт
+# наружу. Здесь всё наоборот.
+#
+#   cp .env.prod.example .env.prod && $EDITOR .env.prod
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+#
+# Схема БД накатывается одноразовым сервисом `migrate` до старта api.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    # Порта наружу нет намеренно: до БД достаточно дотянуться сервисам этой сети.
+    # В базе лежат зашифрованные ключи бирж и вся история сделок.
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Одноразовый прогон схемы. Отдельным сервисом, а не командой перед запуском
+  # api: так это видно в логах отдельной строкой и не повторяется на каждом
+  # рестарте контейнера.
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
+    command: npx prisma db push --skip-generate
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      PORT: "8091"
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
+      FRONTEND_URL: ${SITE_URL}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-7}
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      # Сколько пользователей синхронизировать одновременно. Обход
+      # последовательный по умолчанию не был бы: см. TradeSyncService.
+      TRADE_SYNC_CONCURRENCY: ${TRADE_SYNC_CONCURRENCY:-24}
+      # Ровно один доверенный хоп: Caddy впереди дописывает адрес клиента в
+      # X-Forwarded-For, Next пробрасывает заголовок как есть. Больше единицы
+      # ставить нельзя — заголовок, присланный браузером, тоже доезжает,
+      # и лимит на подбор пароля перестал бы работать.
+      TRUST_PROXY_HOPS: "1"
+    # Порта наружу нет: до API ходит только web, через внутреннюю сеть.
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        # Именно аргумент сборки, а не переменная окружения контейнера: Next
+        # вшивает адрес назначения своих rewrites в манифест на этапе build.
+        API_INTERNAL_URL: http://api:8091
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: production
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - web
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,26 @@
+# traders-api (NestJS) — production image: собранный dist без dev-зависимостей.
+# Отдельно от Dockerfile: тот запускает `nest start --watch` поверх примонтированных
+# исходников, что для прода означает компилятор в памяти и перезапуск на каждый чих.
+
+FROM node:20-alpine AS build
+WORKDIR /app
+# Prisma needs OpenSSL present on Alpine.
+RUN apk add --no-cache openssl
+COPY package*.json ./
+COPY prisma ./prisma
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM node:20-alpine AS runtime
+WORKDIR /app
+RUN apk add --no-cache openssl
+ENV NODE_ENV=production
+COPY package*.json ./
+COPY prisma ./prisma
+# postinstall прогоняет prisma generate — клиент попадает в образ вместе с зависимостями.
+RUN npm ci --omit=dev && npm cache clean --force
+COPY --from=build /app/dist ./dist
+USER node
+EXPOSE 8091
+CMD ["node", "dist/main"]

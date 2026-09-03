@@ -1,0 +1,30 @@
+# traders-diary (Next.js) — production image: standalone-сборка, `node server.js`.
+# Отдельно от Dockerfile, который поднимает dev-сервер с hot reload.
+
+FROM node:20-alpine AS build
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+# Адрес API нужен именно на сборке: Next записывает готовые destination своих
+# rewrites в .next/routes-manifest.json, и переменная, выставленная только у
+# запущенного контейнера, уже ни на что не влияет — фронт продолжил бы стучаться
+# в localhost. Значение по умолчанию — имя сервиса из docker-compose.prod.yml.
+ARG API_INTERNAL_URL=http://api:8091
+ENV API_INTERNAL_URL=$API_INTERNAL_URL
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM node:20-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=8090
+ENV HOSTNAME=0.0.0.0
+# standalone уже несёт сервер и только те зависимости, которые он действительно
+# требует, — npm install на этом слое не нужен.
+COPY --from=build /app/.next/standalone ./
+COPY --from=build /app/.next/static ./.next/static
+USER node
+EXPOSE 8090
+CMD ["node", "server.js"]

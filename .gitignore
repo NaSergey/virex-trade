@@ -12,6 +12,8 @@ out/
 .env
 .env.local
 .env.*.local
+# заполненные значения для docker-compose.prod.yml (пример — .env.prod.example)
+.env.prod
 
 # testing
 coverage/
