@@ -61,7 +61,7 @@ function SignalRow({
   const title = useNotifTitle();
 
   return (
-    <>
+    <div className="nt-row">
       <label className="opt" data-on={item.enabled} style={{ '--i': index } as React.CSSProperties}>
         <input
           type="checkbox"
@@ -73,19 +73,19 @@ function SignalRow({
             из типографики — и часть из них система подменяет чем попало. */}
         <span className="opt-n">{title(item.key, item.title)}</span>
       </label>
-      {/* Порог показывается только у включённого сигнала: у выключенного он
-          ничего не значит и только удлиняет список. */}
+      {/* Порог — справа в той же строке, и только у включённого сигнала: у
+          выключенного он ничего не значит. Seg стоит вне <label>, иначе клик
+          по делению попадал бы в чекбокс и заодно выключал сам сигнал. */}
       {item.enabled && item.presets.length > 0 && (
-        <div className="nt-th">
-          <Seg
-            options={item.presets.map((p, i) => ({ value: i, label: p.label }))}
-            value={item.preset}
-            onChange={onPreset}
-            ariaLabel={t('notifThreshold')}
-          />
-        </div>
+        <Seg
+          className="seg-tight"
+          options={item.presets.map((p, i) => ({ value: i, label: p.label }))}
+          value={item.preset}
+          onChange={onPreset}
+          ariaLabel={t('notifThreshold')}
+        />
       )}
-    </>
+    </div>
   );
 }
 
