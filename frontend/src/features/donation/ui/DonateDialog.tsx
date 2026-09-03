@@ -108,15 +108,11 @@ export function DonateDialog({ open, onClose }: { open: boolean; onClose: () => 
                 ))}
               </div>
 
-              <p id="donation-amount-note" className="muted">
-                {t('amountRange', { min: config.minAmount, max: config.maxAmount })}
-              </p>
-              {/* Честная строка про надбавку: она и есть цена решения «один
-                  кошелёк на всех» и должна стоять там, где вводят сумму. */}
-              <p className="muted">{t('surchargeNote', { max: config.maxSurcharge })}</p>
-              <p className="muted">
-                {t('windowNote', { minutes: Math.round(config.ttlSeconds / 60) })}
-              </p>
+              {/* На что уходят деньги — единственное, что человеку интересно
+                  на этом шаге. Границы суммы проверяет поле, про уникальный
+                  хвост сказано на шаге оплаты, где эта сумма и появляется
+                  (`amountExact`), а таймер окна виден там же счётчиком. */}
+              <p id="donation-amount-note" className="muted">{t('purpose')}</p>
               <ErrorNote error={create.error} fallback={t('createFailed')} />
             </>
           )}
