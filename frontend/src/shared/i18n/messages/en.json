@@ -423,7 +423,8 @@
   "support": {
     "title": "Support the developer",
     "lede": "Donate in USDT on TRON (TRC20). The money goes straight to the project wallet.",
-    "purpose": "Your donation goes toward buying the domain, paying for subscriptions that make market analysis better, and growing the project. The first year is completely free. A subscription comes after that — and anyone who supported the project with a donation will have it counted.",
+    "purpose": "Your donation goes toward buying the domain, paying for subscriptions that make market analysis better, and growing the project.",
+    "purposeFree": "The first year is completely free. A subscription comes after that — every donation will be counted.",
     "disabled": "Donations are not configured right now.",
     "amountLabel": "Amount",
     "startButton": "Support the project",

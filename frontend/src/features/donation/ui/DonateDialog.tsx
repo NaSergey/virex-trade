@@ -124,6 +124,9 @@ export function DonateDialog({ open, onClose }: { open: boolean; onClose: () => 
                   хвост сказано на шаге оплаты, где эта сумма и появляется
                   (`amountExact`), а таймер окна виден там же счётчиком. */}
               <p id="donation-amount-note" className="muted">{t('purpose')}</p>
+              {/* Отдельным абзацем: про бесплатный год и зачёт доната читают
+                  не вместе с назначением денег, а как обещание на будущее. */}
+              <p className="muted">{t('purposeFree')}</p>
               <ErrorNote error={create.error} fallback={t('createFailed')} />
             </>
           )}
