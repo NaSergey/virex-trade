@@ -3,19 +3,22 @@
 # слушает 127.0.0.1:8090, а этот конфиг кладётся на хост:
 #
 #   sudo cp deploy/nginx-virex.conf.example /etc/nginx/conf.d/virex.conf
-#   sudo sed -i 's/example\.com/ВАШ.ДОМЕН/g' /etc/nginx/conf.d/virex.conf
-#   sudo certbot --nginx -d ВАШ.ДОМЕН        # сертификат и правка listen 443
+#   sudo sed -i 's/app\.example\.com/ВАШ.ПОДДОМЕН/g' /etc/nginx/conf.d/virex.conf
+#   sudo certbot --nginx -d ВАШ.ПОДДОМЕН      # сертификат и правка listen 443
 #   sudo nginx -t && sudo systemctl reload nginx
 #
 # Файл лежит в conf.d, а не в панельном каталоге сайтов, — поэтому на вкладке
-# «Сайты» в ISPmanager домен не появится. Обратная сторона: панель про этот
+# «Сайты» в ISPmanager поддомен не появится. Обратная сторона: панель про этот
 # конфиг не знает и может перетереть свой nginx.conf при обновлении — после
 # обновлений панели стоит проверять `nginx -t` и наличие файла.
 
 server {
     listen 80;
     listen [::]:80;
-    server_name example.com www.example.com;
+    # Только имя продукта. Корень домена сюда не вписывать: он обслуживается
+    # отдельно (у вас — на другом хостинге), и перехват его здесь сломал бы
+    # тот сайт.
+    server_name app.example.com;
 
     # certbot --nginx сам добавит сюда редирект на https и блок listen 443.
     location / {
