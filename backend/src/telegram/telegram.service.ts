@@ -1,6 +1,9 @@
 import { BadRequestException, Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { PrefsService } from '../notifications/prefs.service';
+import { notifDef } from '../notifications/registry';
+import { categoryPanel, parsePanelCallback, rootPanel } from './settings-panel';
 
 const TG_API = 'https://api.telegram.org';
 // Telegram hard limit for callback_data is 64 bytes: "pt|SYMBOL|long|<uuid36>".
@@ -53,7 +56,10 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
   private abortPoll?: AbortController;
   private botUsername: string | null = null;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly prefs: PrefsService,
+  ) {}
 
   get enabled(): boolean {
     return this.token.length > 0;
@@ -163,6 +169,26 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
     const chatId = String(msg.chat?.id ?? '');
     const text: string = msg.text ?? '';
     if (!chatId) return;
+
+    if (/^\/settings\b/.test(text)) {
+      const user = await this.prisma.user.findUnique({ where: { telegramChatId: chatId } });
+      if (!user) {
+        await this.api('sendMessage', {
+          chat_id: chatId,
+          text: 'Сначала привяжи аккаунт: открой настройки в приложении и нажми «Подключить Telegram».',
+        });
+        return;
+      }
+      const panel = rootPanel(await this.prefs.get(user.id));
+      await this.api('sendMessage', {
+        chat_id: chatId,
+        text: panel.text,
+        parse_mode: 'HTML',
+        reply_markup: panel.reply_markup,
+      });
+      return;
+    }
+
     const m = text.match(/^\/start(?:\s+(\S+))?/);
     if (!m) return;
 
@@ -170,7 +196,7 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
     if (!code) {
       await this.api('sendMessage', {
         chat_id: chatId,
-        text: 'Привет! Чтобы привязать аккаунт, нажми «Подключить Telegram» на странице статистики в приложении и открой ссылку оттуда.',
+        text: 'Привет! Чтобы привязать аккаунт, нажми «Подключить Telegram» на странице настроек в приложении и открой ссылку оттуда.',
       });
       return;
     }
@@ -209,7 +235,13 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
     ]);
     await this.api('sendMessage', {
       chat_id: chatId,
-      text: '✅ Готово! Когда откроется новая позиция, пришлю уведомление с кнопками тегов.',
+      text: [
+        '✅ Готово!',
+        '',
+        'Сразу включены: карточка открытой позиции с кнопками тегов, итог закрытой сделки, отчёт за неделю и сообщение о сбое синхронизации. Из рыночных — резкое движение цены BTC за час.',
+        '',
+        'Всё остальное и пороги — в /settings.',
+      ].join('\n'),
     });
   }
 
@@ -228,6 +260,36 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
       await answer('Аккаунт не привязан');
       return;
     }
+
+    const panelAction = parsePanelCallback(String(cb.data ?? ''));
+    if (panelAction) {
+      let prefs = await this.prefs.get(user.id);
+      if (panelAction.kind === 'toggle') prefs = await this.prefs.toggle(user.id, panelAction.key);
+      if (panelAction.kind === 'preset') prefs = await this.prefs.cycle(user.id, panelAction.key);
+      if (panelAction.kind === 'quiet') prefs = await this.prefs.toggleQuietHours(user.id);
+
+      // Экран остаётся тот же, на котором нажали: тумблер не должен выкидывать
+      // человека из категории обратно в корень.
+      const panel =
+        panelAction.kind === 'category'
+          ? categoryPanel(prefs, panelAction.category)
+          : panelAction.kind === 'toggle' || panelAction.kind === 'preset'
+            ? categoryPanel(prefs, notifDef(panelAction.key)!.category)
+            : rootPanel(prefs);
+
+      if (messageId != null) {
+        await this.api('editMessageText', {
+          chat_id: chatId,
+          message_id: messageId,
+          text: panel.text,
+          parse_mode: 'HTML',
+          reply_markup: panel.reply_markup,
+        });
+      }
+      await answer();
+      return;
+    }
+
     const [kind, symbol, direction, tagId] = String(cb.data ?? '').split('|');
 
     // "Сохранить" — tags are already persisted on every toggle below, this
