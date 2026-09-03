@@ -9,15 +9,17 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
 import { Request, Response } from 'express';
 import { AuthService, AuthResult } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
+import { ThrottleBySession } from './decorators/throttle-by-session.decorator';
+import { ClientThrottlerGuard } from './guards/client-throttler.guard';
+import { REFRESH_COOKIE } from './refresh-cookie';
 
-const REFRESH_COOKIE = 'refresh_token';
 // '/', не '/auth': кука должна доехать и до страниц продукта — её на входе
 // проверяет middleware фронтенда (единственный гейт неавторизованного
 // доступа), а не только сами /auth/* эндпоинты.
@@ -37,7 +39,7 @@ const LEGACY_REFRESH_COOKIE_PATH = '/auth';
 // search useless.
 const CREDENTIAL_ATTEMPTS = { default: { limit: 10, ttl: 60_000 } };
 
-@UseGuards(ThrottlerGuard)
+@UseGuards(ClientThrottlerGuard)
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -64,6 +66,9 @@ export class AuthController {
   }
 
   @Post('refresh')
+  // По сессии, а не по IP: обновление токена делает каждый живой клиент раз в
+  // 15 минут, и общий на всех бюджет разлогинивал бы людей пачками.
+  @ThrottleBySession()
   @HttpCode(HttpStatus.OK)
   async refresh(
     @Req() req: Request,
