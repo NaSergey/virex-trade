@@ -7,8 +7,7 @@ import { LocaleProvider } from "@/shared/i18n";
 import { getServerLocale } from "@/shared/i18n/server-locale";
 import { ThemeProvider } from "@/shared/theme";
 import { getServerTheme } from "@/shared/theme/server-theme";
-import ruMessages from "@/shared/i18n/messages/ru.json";
-import enMessages from "@/shared/i18n/messages/en.json";
+import { loadMessages } from "@/shared/i18n/load-messages";
 
 /**
  * Два голоса, и только два: серифы — речь (заголовки, пояснения, названия
@@ -32,8 +31,8 @@ const jetbrainsMono = JetBrains_Mono({
 // (getServerLocale).
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getServerLocale();
-  const meta = locale === "en" ? enMessages.meta : ruMessages.meta;
-  return { title: meta.title, description: meta.description };
+  const messages = await loadMessages(locale);
+  return { title: messages.meta.title, description: messages.meta.description };
 }
 
 export default async function RootLayout({
@@ -53,6 +52,9 @@ export default async function RootLayout({
   // загрузке. Дефолт (тёмная) не пишет ничего лишнего — палитра :root и есть
   // тёмная, атрибут нужен только светлой.
   const initialTheme = await getServerTheme();
+  // Словарь только выбранной локали: второй язык клиенту не отправляется и
+  // подгружается провайдером в момент переключения.
+  const initialMessages = await loadMessages(initialLocale);
 
   return (
     <html
@@ -63,7 +65,7 @@ export default async function RootLayout({
       <body>
         <QueryProvider>
           <ThemeProvider initialTheme={initialTheme}>
-            <LocaleProvider initialLocale={initialLocale}>
+            <LocaleProvider initialLocale={initialLocale} initialMessages={initialMessages}>
               <AuthProvider>
                 {children}
               </AuthProvider>
