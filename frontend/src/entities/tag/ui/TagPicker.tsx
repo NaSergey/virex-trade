@@ -51,14 +51,17 @@ function TagPickerGroup({
 
   return (
     <FieldGroup label={typeLabels[type]}>
-      <div>
+      <div className="pick-row">
         {group.map((t) => (
           <Button
             key={t.id}
             variant="none"
             className="pick"
             aria-pressed={selected.has(t.id)}
-            style={{ borderColor: t.color }}
+            /* Краска — только у выбранного: у молчащего тега подчёркивание
+               нейтральное, из CSS. Иначе два десятка цветных линий горят
+               одинаково и по ним не прочитать, что именно отмечено. */
+            style={selected.has(t.id) ? { borderBottomColor: t.color } : undefined}
             onClick={() => onToggle(t.id)}
           >
             {t.name}

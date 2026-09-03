@@ -1980,19 +1980,37 @@
   /* Слово набрано верно — поле отвечает само, не заставляя переводить взгляд
      на кнопку в подвале и проверять, ожила ли она. */
   .in[data-ok="true"] { border-bottom-color: var(--ink); }
+  /* Ряд тегов: равные промежутки задаёт gap, а не поля каждого слова —
+     с margin'ами последний тег в строке уносил вправо лишний отступ, и
+     правый край ряда гулял. */
+  .pick-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2) var(--s3);
+  }
+  /*
+   * Выбранное горит краской, невыбранное молчит.
+   *
+   * Цвет тега лежит на подчёркивании ТОЛЬКО у выбранного (инлайном из
+   * TagPicker). Пока он стоял у всех, два десятка разноцветных линий читались
+   * пёстрым забором, в котором выбор — единственное, что здесь вообще нужно
+   * увидеть, — держался на одной лишь яркости текста и терялся. У молчащего
+   * тега линия нейтральная: ряд остаётся ровным, но не кричит.
+   */
   .pick {
     appearance: none;
     cursor: pointer;
     background: none;
     border: 0;
-    border-bottom: 2px solid currentColor;
+    border-bottom: 2px solid var(--hair);
     font-family: var(--font-mono);
     font-size: var(--t-xs);
     letter-spacing: 0.06em;
     color: var(--ink-3);
-    padding: 0 0 1px;
-    margin: 0 var(--s3) var(--s2) 0;
+    padding: 0 0 2px;
+    transition: color 120ms ease, border-color 120ms ease;
   }
+  .pick:hover { color: var(--ink-2); border-bottom-color: var(--rule); }
   .pick[aria-pressed="true"] { color: var(--ink); }
   .warn {
     border-left: 2px solid var(--loss);
