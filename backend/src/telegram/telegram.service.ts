@@ -361,6 +361,44 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
     await this.api('sendMessage', { chat_id: user.telegramChatId, text, parse_mode: 'HTML' });
   }
 
+  // ── Outgoing: donation thank-you (called by DonationsService) ──
+
+  /**
+   * Благодарность за донат. Отправляется после того, как платёж уже записан —
+   * молчащий бот не должен мешать зачислению денег, поэтому ошибка здесь
+   * гасится вызывающим, а не откатывает оплату.
+   *
+   * `late` — платёж доехал после истечения окна: человек заплатил вовремя, а
+   * блок финализировался позже. Деньги засчитаны, и сказать об этом честнее,
+   * чем сделать вид, что окно не истекало.
+   */
+  async notifyDonationReceived(
+    userId: string,
+    donation: { amount: string; txId: string; late: boolean },
+  ): Promise<void> {
+    if (!this.enabled) return;
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user?.telegramChatId) return;
+
+    const text = [
+      'Большое спасибо за поддержку проекта! ❤️',
+      `Ваш донат на <b>${esc(donation.amount)} USDT</b> успешно получен.`,
+      ...(donation.late
+        ? ['Платёж подтвердился уже после истечения окна оплаты — он засчитан.']
+        : []),
+      ...(donation.txId
+        ? [`<a href="https://tronscan.org/#/transaction/${esc(donation.txId)}">Транзакция</a>`]
+        : []),
+    ].join('\n');
+
+    await this.api('sendMessage', {
+      chat_id: user.telegramChatId,
+      text,
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+    });
+  }
+
   // ── Linking API (used by the controller) ──
 
   async status(userId: string) {

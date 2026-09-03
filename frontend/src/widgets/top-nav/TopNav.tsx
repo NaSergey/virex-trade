@@ -199,6 +199,15 @@ export function TopNav() {
                   {to('menuAction')}
                 </Button>
               </KeyValue>
+              {/* Донат стоит здесь, а не в рейке разделов: рейка — это работа
+                  с журналом, и просьба о деньгах в одном ряду со «Сделками»
+                  торговалась бы за внимание с продуктом. В меню профиля она
+                  находится тогда, когда человек её ищет. */}
+              <KeyValue label={t('support')} control valueClassName="">
+                <Link href="/support" onClick={() => setMenuOpen(false)}>
+                  {tc('open')}
+                </Link>
+              </KeyValue>
               <Button
                 variant="risk"
                 style={{ marginTop: 'var(--s3)', width: '100%' }}

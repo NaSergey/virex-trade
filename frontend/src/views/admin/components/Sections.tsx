@@ -71,6 +71,7 @@ export function sectionLabel(t: (key: string) => string, section: string): strin
     'market',
     'settings',
     'telegram',
+    'support',
     'terminal',
     'auth',
     'other',

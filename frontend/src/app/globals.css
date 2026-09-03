@@ -1832,6 +1832,54 @@
     margin-top: var(--s5);
   }
 
+  /* ═══════════════ ДОНАТЫ ═══════════════ */
+  /* Полоса уже страницы: форма и реквизиты — короткие строки, и на всю ширину
+     листа они читались бы как таблица, которой здесь нет. */
+  .don-form,
+  .don-pay,
+  .don-done { max-width: 620px; }
+  .don-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+    margin: var(--s3) 0;
+  }
+  /* QR слева, реквизиты справа; на узком экране — в столбик (см. АДАПТИВ). */
+  .don-pay-in {
+    display: flex;
+    gap: var(--s5);
+    align-items: flex-start;
+    margin-top: var(--s3);
+  }
+  .don-qr img {
+    display: block;
+    /* Белое поле кода — часть самого кода: сканеру нужен контраст, и на
+       чёрном фоне продукта QR без подложки не читается. */
+    background: #fff;
+    padding: var(--s2);
+  }
+  .don-qr p { max-width: 220px; margin-top: var(--s2); }
+  .don-req { flex: 1; min-width: 0; }
+  /* Значение и «скопировать» стоят одной строкой, значение — моноширинным:
+     адрес и сумму человек сверяет посимвольно, и пропорциональный шрифт
+     здесь мешает. Перенос по любому символу — адрес в 34 знака иначе
+     распирает колонку. */
+  .don-copy {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--s2);
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+  .don-copy-v {
+    font-family: var(--font-mono);
+    word-break: break-all;
+  }
+  /* Сумма — единственное, что нельзя ввести приблизительно; строка о ней
+     набирается цветом сомнения (общая утилита .dbt), а здесь только отбивка. */
+  .don-exact { margin: var(--s2) 0 var(--s4); }
+  .don-done p { margin-bottom: var(--s3); }
+
   /* ═══════════════ ДИАЛОГИ ═══════════════ */
   .dlg {
     border: 1px solid var(--major);
@@ -2307,6 +2355,10 @@
 
 /* ═══════════════ АДАПТИВ ═══════════════ */
 @media (max-width: 1100px) {
+  /* QR и реквизиты — в столбик: рядом они помещаются только на листе шире
+     планшета, а сжатая колонка реквизитов рвёт адрес на пять строк. */
+  .don-pay-in { flex-direction: column; }
+  .don-qr p { max-width: none; }
   .asym,
   .lab { grid-template-columns: 1fr; }
   /* В одну колонку условия стоят НАД результатом, а не рядом: залипнув, они
