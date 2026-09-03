@@ -16,6 +16,7 @@ import { TelegramModule } from './telegram/telegram.module';
 import { MarketEventsModule } from './market-events/market-events.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
+import { DonationsModule } from './donations/donations.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { AdminModule } from './admin/admin.module';
     MarketEventsModule,
     NotificationsModule,
     AdminModule,
+    DonationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

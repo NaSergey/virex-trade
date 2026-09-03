@@ -16,7 +16,8 @@
     "save": "Save",
     "typeWordPrefix": "Type",
     "confirm": "Confirm",
-    "close": "Close"
+    "close": "Close",
+    "open": "Open"
   },
   "period": {
     "days7": "7 days",
@@ -42,7 +43,8 @@
     "email": "email",
     "noName": "unnamed",
     "admin": "Users",
-    "market": "Market"
+    "market": "Market",
+    "support": "Support the developer"
   },
   "auth": {
     "brand": "Virex",
@@ -418,6 +420,37 @@
     "needsReconnectNotice": "The keys are saved, but the server can't read them — they were encrypted with a different master key. Enter them again.",
     "exchangeKeysUnreadableTitle": "{label} — keys unreadable"
   },
+  "support": {
+    "title": "Support the developer",
+    "lede": "Donate in USDT on TRON (TRC20). The money goes straight to the project wallet.",
+    "disabled": "Donations are not configured right now.",
+    "amountLabel": "Amount",
+    "amountRange": "From {min} to {max} USDT.",
+    "surchargeNote": "A unique tail is added to the lowest digits — no more than {max} USDT. That is how the server recognises your transfer: one wallet serves everyone, and nothing else tells two identical payments apart.",
+    "windowNote": "Payment window: {minutes} min.",
+    "startButton": "Continue to payment",
+    "creating": "Preparing details…",
+    "createFailed": "Could not open the payment window",
+    "qrAlt": "QR code with the wallet address",
+    "qrNote": "The QR carries the address only: wallets read amounts inconsistently, so enter it by hand.",
+    "amountExact": "Send exactly this amount — its last digits are what identifies the payment.",
+    "addressLabel": "Address",
+    "networkLabel": "Network",
+    "networkWarning": "TRC20 (TRON) only. A transfer on another network cannot be recovered.",
+    "waiting": "Waiting for the transfer — this window updates itself once the network confirms it (usually about a minute). You can close it: the payment will still be credited.",
+    "copy": "copy",
+    "copied": "copied",
+    "copyFailed": "failed",
+    "thanksBody": "Thank you so much for supporting the project! ❤️ Your donation of {amount} USDT has been received.",
+    "thanksLate": "The payment confirmed after the window expired — it has been credited.",
+    "viewTransaction": "View transaction",
+    "again": "Again",
+    "expiredBody": "No transfer arrived within the window. Nothing was charged.",
+    "canceledBody": "These details are no longer valid.",
+    "lateStillCounts": "If you did send the transfer, it will still be credited once the network confirms it — for about twenty more minutes.",
+    "timeLeftLabel": "Time left",
+    "cancelPayment": "Cancel the payment"
+  },
   "admin": {
     "title": "Users",
     "lede": "Who comes back to the service and how far they get. No time-on-site here: the app polls the API from background tabs too.",
@@ -518,7 +551,8 @@
       "telegram": "Telegram",
       "terminal": "Terminal",
       "auth": "Sign-in",
-      "other": "Other"
+      "other": "Other",
+      "support": "Donations"
     },
     "dAccount": "Account",
     "dPeriod": "In this period"
@@ -549,7 +583,12 @@
     "EXCHANGE_VERIFY_FAILED": "Couldn't connect to {label} with these keys. Check them and their permissions.",
     "EXCHANGE_KEY_EXCESS_PERMISSIONS": "This key grants more permissions than needed. Virex only reads trade history, so it only accepts read-only keys. Create a new key on {label} without trading or withdrawal permissions and connect that instead.",
     "EXCHANGE_KEYS_UNREADABLE": "The saved keys for “{exchange}” can't be read: they were encrypted with a different server key. Reconnect the exchange on the Settings page.",
-    "generic": "Authorization error"
+    "generic": "Authorization error",
+    "DONATIONS_DISABLED": "Donations are not configured",
+    "DONATION_AMOUNT_INVALID": "The amount must be a number with at most two decimals",
+    "DONATION_AMOUNT_RANGE": "The amount is outside the allowed range",
+    "DONATION_TOO_MANY_PENDING": "Several unpaid donations are already open — finish or cancel them",
+    "DONATION_AMOUNT_POOL_EXHAUSTED": "Too many simultaneous payments of this amount — try again in a minute"
   },
   "landing": {
     "signIn": "Sign in",

@@ -1914,6 +1914,51 @@
     gap: var(--s2);
     margin-top: var(--s4);
   }
+  /* ═══════════════ ДОНАТЫ ═══════════════ */
+  /* Живут внутри диалога (520px), поэтому ничего не тянется в ширину листа:
+     QR и реквизиты идут столбиком — рядом колонка реквизитов рвала бы адрес
+     на пять строк. */
+  .don-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+    margin: var(--s3) 0;
+  }
+  .don-qr {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--s2);
+    margin-bottom: var(--s4);
+  }
+  .don-qr img {
+    display: block;
+    /* Белое поле кода — часть самого кода: сканеру нужен контраст, и на
+       чёрном фоне продукта QR без подложки не читается. */
+    background: #fff;
+    padding: var(--s2);
+  }
+  .don-qr p { text-align: center; margin: 0; }
+  /* Значение и «скопировать» стоят одной строкой, значение — моноширинным:
+     адрес и сумму человек сверяет посимвольно, и пропорциональный шрифт
+     здесь мешает. Перенос по любому символу — адрес в 34 знака иначе
+     распирает колонку. */
+  .don-copy {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--s2);
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+  .don-copy-v {
+    font-family: var(--font-mono);
+    word-break: break-all;
+  }
+  /* Сумма — единственное, что нельзя ввести приблизительно; строка о ней
+     набирается цветом сомнения (общая утилита .dbt), а здесь только отбивка. */
+  .don-exact { margin: var(--s2) 0 var(--s4); }
+  .don-pay p { font-size: var(--t-s); }
+  .don-done p { margin-bottom: var(--s3); }
 
   /* ═══════════════ ДИАЛОГИ ═══════════════ */
   .dlg {

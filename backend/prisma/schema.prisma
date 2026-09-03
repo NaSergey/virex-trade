@@ -63,6 +63,7 @@ model User {
   savedTagCombos     SavedTagCombo[]
   dismissedTagCombos DismissedTagCombo[]
   balanceSnapshots   BalanceSnapshot[]
+  donations          Donation[]
 
   @@map("users")
 }
@@ -94,9 +95,9 @@ model ExchangeConnection {
 // full raw record for forward-compat. Deduped on (orderId, closedAt) so re-syncs
 // are idempotent. `direction` is the position side (closing Sell => was long).
 model Trade {
-  id            String   @id @default(uuid())
+  id            String    @id @default(uuid())
   userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   symbol        String
   side          String // closing order side from Bybit: "Buy" | "Sell"
   direction     String // derived position side: "long" | "short"
@@ -104,8 +105,8 @@ model Trade {
   avgEntryPrice Float
   avgExitPrice  Float
   closedPnl     Float
-  openFee       Float    @default(0)
-  closeFee      Float    @default(0)
+  openFee       Float     @default(0)
+  closeFee      Float     @default(0)
   leverage      Float?
   /// Стоп, объявленный на входе: копируется из OpenPositionSeen при закрытии,
   /// ровно как openedAt. Null у сделки, чья позиция открылась при лежащем
@@ -128,8 +129,8 @@ model Trade {
   raw           Json?
   // Which exchange this trade came from. Defaults to bybit so rows imported
   // before multi-exchange support keep their (only possible) origin.
-  exchange      String   @default("bybit")
-  createdAt     DateTime @default(now())
+  exchange      String    @default("bybit")
+  createdAt     DateTime  @default(now())
 
   tags    TradeTag[]
   context TradeContext?
@@ -279,8 +280,8 @@ model TradeContext {
   /// Качество входа/выхода относительно диапазона самой сделки (вход→выход),
   /// не относительно истории до входа, как rangePos. 0..100, клампится.
   /// null — меньше QUALITY_MIN_CANDLES свечей в окне сделки.
-  entryQuality Float?
-  exitQuality  Float?
+  entryQuality    Float?
+  exitQuality     Float?
   /// true — попытка расчёта уже была (успешная или нет). Отличает «посчитан
   /// null, потому что данных мало» от «ещё не пытались» — без этого пустые
   /// пересчитывались бы на каждом тике синка.
@@ -588,4 +589,143 @@ model NotificationState {
 
   @@unique([userId, key])
   @@map("notification_states")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Донаты разработчику: USDT в сети TRON (TRC20) на ОДИН общий кошелёк проекта.
+//
+// Отдельного кошелька на пользователя здесь нет намеренно: перевод USDT-TRC20
+// стоит энергии/TRX, и деньги, собранные на сотне временных адресов, пришлось
+// бы сводить на основной за собственный счёт. Все переводы идут прямо на один
+// адрес, а платёж узнаётся не по адресу и не по порядку прихода, а по СУММЕ:
+// каждому интенту выдаётся собственный «хвост» в младших знаках
+// (5.00 → 5.0043), и пока интент жив, эта сумма занята только им.
+// Уникальность хвоста держит не проверка в коде, а строка в
+// `donation_amount_locks` с первичным ключом по сумме: два одновременных
+// запроса на 5 USDT не могут получить одинаковый хвост даже в гонке — второй
+// упрётся в нарушение уникальности и возьмёт другой.
+//
+// Деньги хранятся в МИНИМАЛЬНЫХ ЕДИНИЦАХ (BigInt, 6 знаков — decimals USDT в
+// TRON), а не во Float, как остальные суммы в этой схеме. Сопоставление здесь
+// строится на точном равенстве сумм, а Float даёт 5.0137 != 5.0137 на ровном
+// месте — единственное место продукта, где это критично.
+model Donation {
+  id     String  @id @default(uuid())
+  // Аноним допустим: кнопка «Поддержать» может стоять и на публичной странице.
+  // При удалении аккаунта запись остаётся, но теряет владельца — деньги
+  // пришли, и строка о них не должна исчезать вместе с профилем.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // PENDING | PAID | EXPIRED | CANCELED (см. donations/donation-status.ts)
+  status           String @default("PENDING")
+  currency         String @default("USDT")
+  network          String @default("TRC20")
+  receivingAddress String
+
+  /// Сколько человек попросил заплатить (5 USDT → 5_000_000).
+  requestedUnits BigInt
+  /// Сколько он должен перевести с уникальным хвостом (5_004_300).
+  expectedUnits  BigInt
+  /// Сколько реально пришло. Совпадает с expectedUnits: частичные и избыточные
+  /// платежи автоматически не засчитываются (см. TronIncomingTransfer).
+  paidUnits      BigInt?
+
+  /// Хеш транзакции TRON. Unique — вторая половина защиты от двойного зачёта:
+  /// даже если одну и ту же транзакцию обработают два процесса, засчитается
+  /// она ровно одному интенту.
+  transactionHash String?   @unique
+  fromAddress     String?
+  /// block_timestamp транзакции — когда деньги ушли по мнению сети.
+  transferredAt   DateTime?
+  /// Когда её увидел наш опрашивающий сервис. Отличается от transferredAt на
+  /// время финализации блока плюс период опроса.
+  detectedAt      DateTime?
+  /// Платёж доехал после истечения окна: человек заплатил в срок, но блок
+  /// финализировался позже. Деньги засчитаны, благодарность — с оговоркой.
+  paidAfterExpiry Boolean   @default(false)
+  notifiedAt      DateTime?
+
+  /// Необязательная подпись доната. В сети её нет и быть не может (memo в
+  /// TRC20-переводе не доезжает) — это то, что человек написал в форме.
+  note String?
+
+  /// 10 минут — окно, которое видит пользователь.
+  expiresAt  DateTime
+  /// До какого момента сумма остаётся закреплённой за интентом. Больше
+  /// expiresAt: транзакция, отправленная на последней минуте, становится
+  /// необратимой уже после неё, и без запаса такие деньги повисли бы ничьими.
+  matchUntil DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  amountLock DonationAmountLock?
+  transfer   TronIncomingTransfer?
+
+  @@index([status, expiresAt])
+  @@index([status, matchUntil])
+  @@index([userId, createdAt])
+  @@map("donations")
+}
+
+/// Занятая сумма. Первичный ключ — сама сумма в минимальных единицах: пока
+/// строка жива, ни один другой интент не может получить тот же хвост, и
+/// сопоставление перевода с интентом остаётся однозначным. Строка снимается
+/// при оплате, отмене и по истечении matchUntil.
+model DonationAmountLock {
+  expectedUnits BigInt   @id
+  donationId    String   @unique
+  donation      Donation @relation(fields: [donationId], references: [id], onDelete: Cascade)
+  heldUntil     DateTime
+  createdAt     DateTime @default(now())
+
+  @@index([heldUntil])
+  @@map("donation_amount_locks")
+}
+
+/// Журнал ВСЕХ входящих USDT-переводов на кошелёк проекта — и опознанных, и
+/// нет. Существует ради двух вещей: идемпотентности (уникальный ключ не даёт
+/// обработать один перевод дважды, сколько бы раз опрос его ни увидел) и
+/// сверки — деньги, не подошедшие ни одному интенту, должны быть видны, а не
+/// молча потеряны в логах.
+///
+/// Ключ дедупа — (txId, from, valueUnits), а не один txId: одна транзакция
+/// теоретически может нести несколько Transfer-логов. Обратная сторона — два
+/// одинаковых перевода от одного отправителя внутри ОДНОЙ транзакции сочтутся
+/// за один; случай экзотический (батч-контракт), деньги при этом никуда не
+/// деваются и зачисляются вручную по этому же журналу.
+model TronIncomingTransfer {
+  id              String    @id @default(uuid())
+  txId            String
+  fromAddress     String
+  toAddress       String
+  contractAddress String
+  valueUnits      BigInt
+  blockTimestamp  DateTime
+  /// NEW — принят, ещё не разобран (упадём после вставки — вернёмся к нему);
+  /// MATCHED — засчитан интенту; UNMATCHED — сумма не соответствует ни одному
+  /// живому интенту (ручная сверка); DUPLICATE_TX — этот хеш уже засчитан.
+  status          String    @default("NEW")
+  donationId      String?   @unique
+  donation        Donation? @relation(fields: [donationId], references: [id], onDelete: SetNull)
+  raw             Json?
+  seenAt          DateTime  @default(now())
+  processedAt     DateTime?
+
+  @@unique([txId, fromAddress, valueUnits])
+  @@index([status, blockTimestamp])
+  @@map("tron_incoming_transfers")
+}
+
+/// Водяной знак опроса блокчейна: с какого block_timestamp спрашивать TronGrid
+/// в следующий раз. Одна строка (id = 'usdt-trc20'). Хранится в БД, а не в
+/// памяти: после перезапуска сервис обязан продолжить с того же места, иначе
+/// платежи, пришедшие в минуту простоя, не увидит никто.
+model TronScanCursor {
+  id            String   @id
+  lastScannedAt DateTime
+  updatedAt     DateTime @updatedAt
+
+  @@map("tron_scan_cursors")
 }

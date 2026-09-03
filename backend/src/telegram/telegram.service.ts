@@ -363,6 +363,41 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
     return { inline_keyboard: rows };
   }
 
+  // ── Outgoing: спасибо за донат (вызывает TronWatcherService) ──
+
+  /**
+   * Единственное уведомление, которое собирается здесь, а не в
+   * NotificationsModule: у доната нет настройки в реестре сигналов — его не
+   * выключают, потому что это ответ на действие человека, а не наблюдение за
+   * рынком.
+   */
+  async notifyDonationReceived(
+    userId: string,
+    donation: { amount: string; txId: string; late: boolean },
+  ): Promise<void> {
+    if (!this.enabled) return;
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user?.telegramChatId) return;
+
+    const text = [
+      'Большое спасибо за поддержку проекта! ❤️',
+      `Ваш донат на <b>${esc(donation.amount)} USDT</b> успешно получен.`,
+      ...(donation.late
+        ? ['Платёж подтвердился уже после истечения окна оплаты — он засчитан.']
+        : []),
+      ...(donation.txId
+        ? [`<a href="https://tronscan.org/#/transaction/${esc(donation.txId)}">Транзакция</a>`]
+        : []),
+    ].join('\n');
+
+    await this.api('sendMessage', {
+      chat_id: user.telegramChatId,
+      text,
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+    });
+  }
+
   // ── Linking API (used by the controller) ──
 
   async status(userId: string) {

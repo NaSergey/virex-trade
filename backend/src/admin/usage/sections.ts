@@ -21,6 +21,7 @@ const RULES: ReadonlyArray<readonly [prefix: string, section: string]> = [
   ['/api/settings', 'settings'],
   ['/api/exchange', 'settings'],
   ['/api/telegram', 'telegram'],
+  ['/api/donations', 'support'],
   ['/api/bybit', 'terminal'],
   ['/auth', 'auth'],
 ];
