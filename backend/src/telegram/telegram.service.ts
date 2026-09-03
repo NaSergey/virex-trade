@@ -104,6 +104,30 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
     return this.botUsername;
   }
 
+  /**
+   * Отправка готового текста в чат. Публичная точка входа для всех чекеров:
+   * `api` остаётся приватной, чтобы никто не слал мимо NotifierService и его
+   * проверок включённости.
+   */
+  async sendText(chatId: string, text: string, replyMarkup?: object): Promise<boolean> {
+    if (!this.enabled) return false;
+    const res = await this.api('sendMessage', {
+      chat_id: chatId,
+      text,
+      parse_mode: 'HTML',
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+    });
+    return res != null;
+  }
+
+  async chatIdOf(userId: string): Promise<string | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { telegramChatId: true },
+    });
+    return user?.telegramChatId ?? null;
+  }
+
   // ── Long polling ──
 
   private async pollLoop(): Promise<void> {
