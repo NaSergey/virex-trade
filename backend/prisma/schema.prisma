@@ -43,6 +43,14 @@ model User {
   telegramLinkCode   String?   @unique
   telegramLinkCodeAt DateTime?
 
+  /// Отклонения от дефолтов реестра уведомлений (см. notifications/registry.ts).
+  /// JSON, а не таблица: настроек дюжина, читаются всегда целиком и никогда не
+  /// участвуют в выборках, а строки на пользователя стоили бы миграции на
+  /// каждый новый сигнал.
+  notifyPrefs Json?
+
+  notificationStates NotificationState[]
+
   activityMinutes    UserActivityMinute[]
   sectionDays        UserSectionDay[]
   refreshTokens      RefreshToken[]
@@ -561,4 +569,23 @@ model TradeRisk {
   computedAt     DateTime @default(now())
 
   @@map("trade_risks")
+}
+
+/// Состояние одного сигнала у одного пользователя. Сигналы шлются по фронту
+/// нарастания, и держать этот фронт в памяти процесса нельзя: перезапуск api
+/// означал бы повторную рассылку всем сразу — ровно то, что делал
+/// VolatilityAlertService своими двумя булевыми полями на всех пользователей.
+model NotificationState {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// NotifKey из реестра.
+  key    String
+  /// Не null, пока условие держится. Обнуляется, когда метрика вернулась под
+  /// порог, — тогда следующий всплеск снова считается событием.
+  activeSince DateTime?
+  lastSentAt  DateTime?
+
+  @@unique([userId, key])
+  @@map("notification_states")
 }
