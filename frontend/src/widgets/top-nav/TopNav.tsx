@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/features/auth';
+import { DonateDialog } from '@/features/donation';
 import { useOnboarding } from '@/features/onboarding';
 import { Button } from '@/shared/ui/Button';
 import { KeyValue } from '@/shared/ui/Lookup';
@@ -65,6 +66,7 @@ export function TopNav() {
   const { locale } = useLocaleControl();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [donateOpen, setDonateOpen] = useState(false);
   const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
   // Ехать или встать молча: см. эффект ниже — подгонка под догрузившийся
   // шрифт не должна выглядеть переездом.
@@ -199,6 +201,26 @@ export function TopNav() {
                   {to('menuAction')}
                 </Button>
               </KeyValue>
+              {/* Донат стоит здесь, а не в рейке разделов: рейка — это работа
+                  с журналом, и просьба о деньгах в одном ряду со «Сделками»
+                  торговалась бы за внимание с продуктом. В меню профиля она
+                  находится тогда, когда человек её ищет.
+
+                  Кнопка, а не ссылка, и это тот редкий случай, когда так и
+                  надо: за ней нет раздела с адресом — за ней окно на два шага,
+                  которое открывается поверх той страницы, где человек сейчас
+                  работает, и закрывается обратно в неё. */}
+              <KeyValue label={t('support')} control valueClassName="">
+                <Button
+                  variant="bare"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setDonateOpen(true);
+                  }}
+                >
+                  {tc('open')}
+                </Button>
+              </KeyValue>
               <Button
                 variant="risk"
                 style={{ marginTop: 'var(--s3)', width: '100%' }}
@@ -213,6 +235,10 @@ export function TopNav() {
           )}
         </div>
       </div>
+
+      {/* Окно живёт в шапке, а не в разделе: шапка есть на каждой странице
+          продукта, и донат должен открываться поверх любой из них. */}
+      <DonateDialog open={donateOpen} onClose={() => setDonateOpen(false)} />
     </header>
   );
 }
