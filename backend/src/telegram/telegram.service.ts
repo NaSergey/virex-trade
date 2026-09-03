@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PrefsService } from '../notifications/prefs.service';
 import { notifDef } from '../notifications/registry';
 import { categoryPanel, parsePanelCallback, rootPanel } from './settings-panel';
+import { unpackId } from './ids';
 
 const TG_API = 'https://api.telegram.org';
 // Telegram hard limit for callback_data is 64 bytes: "pt|SYMBOL|long|<uuid36>".
@@ -31,11 +32,14 @@ export interface OpenedPositionInfo {
  *
  * - Account linking: the app hands out a one-time /start <code> deep link;
  *   the bot resolves the code to a user and stores the chat id.
- * - On every newly opened position TradeSyncService calls
- *   notifyPositionOpened(): the linked user gets a message with an inline
- *   keyboard of their tags and toggles entry reasons right from the chat —
- *   buttons write the same PositionTag rows the web UI does, so the trade
- *   sync later copies them onto the closed trades exactly as usual.
+ * - Inbound buttons: tag toggles on an open position write the same PositionTag
+ *   rows the web UI does (so the trade sync copies them onto closed trades as
+ *   usual); `ct|` buttons tag a closed trade directly; `n*|` buttons drive the
+ *   /settings panel.
+ *
+ * Тексты уведомлений собирает NotificationsModule, а не этот сервис: здесь
+ * остался транспорт (`sendText`) и разбор входящих. На двенадцати типах
+ * сигналов метод notifyXxx на каждый перестал бы помещаться в голове.
  *
  * Disabled entirely (no polling, no sends) when TELEGRAM_BOT_TOKEN is unset,
  * so environments without the bot behave as before. Run the poller in ONE
@@ -285,6 +289,36 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
       return;
     }
 
+    // Тег закрытой сделки: пишет TradeTag напрямую, поэтому оба uuid едут
+    // упакованными — в сыром виде пара не влезает в 64 байта callback_data.
+    const [ctKind, shortTrade, shortTag] = String(cb.data ?? '').split('|');
+    if (ctKind === 'ct') {
+      const tradeId = unpackId(shortTrade ?? '');
+      const tagId = unpackId(shortTag ?? '');
+      const trade = tradeId
+        ? await this.prisma.trade.findFirst({ where: { id: tradeId, userId: user.id } })
+        : null;
+      const tag = tagId
+        ? await this.prisma.tag.findFirst({ where: { id: tagId, userId: user.id } })
+        : null;
+      if (!trade || !tag) {
+        await answer('Сделка или тег не найдены');
+        return;
+      }
+      const existing = await this.prisma.tradeTag.findUnique({
+        where: { tradeId_tagId: { tradeId: trade.id, tagId: tag.id } },
+      });
+      if (existing) {
+        await this.prisma.tradeTag.delete({
+          where: { tradeId_tagId: { tradeId: trade.id, tagId: tag.id } },
+        });
+      } else {
+        await this.prisma.tradeTag.create({ data: { tradeId: trade.id, tagId: tag.id } });
+      }
+      await answer(existing ? `− ${tag.name}` : `✓ ${tag.name}`);
+      return;
+    }
+
     const [kind, symbol, direction, tagId] = String(cb.data ?? '').split('|');
 
     // "Сохранить" — tags are already persisted on every toggle below, this
@@ -344,7 +378,7 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
     await answer(existing ? `− ${tag.name}` : `✓ ${tag.name}`);
   }
 
-  private async buildTagKeyboard(userId: string, symbol: string, direction: string) {
+  async buildTagKeyboard(userId: string, symbol: string, direction: string) {
     const [tags, selected] = await Promise.all([
       this.prisma.tag.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
       this.prisma.positionTag.findMany({ where: { userId, symbol, direction }, select: { tagId: true } }),
@@ -362,38 +396,6 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
       rows.push([{ text: '✅ Сохранить', callback_data: `pd|${symbol}|${direction}` }]);
     }
     return { inline_keyboard: rows };
-  }
-
-  // ── Outgoing: new-position notification (called by TradeSyncService) ──
-
-  async notifyPositionOpened(userId: string, pos: OpenedPositionInfo): Promise<void> {
-    if (!this.enabled) return;
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user?.telegramChatId) return;
-
-    const dir = pos.direction === 'long' ? '🟢 LONG' : '🔴 SHORT';
-    const lev = pos.leverage ? ` · ${esc(pos.leverage)}x` : '';
-    const vol =
-      pos.size ? `Объём: ${esc(pos.size)}${pos.avgPrice ? ` @ ${esc(pos.avgPrice)}` : ''}` : null;
-    const keyboard = await this.buildTagKeyboard(userId, pos.symbol, pos.direction);
-    const hasTags = keyboard.inline_keyboard.length > 0;
-
-    const text = [
-      '🆕 Открыта позиция',
-      `<b>${esc(pos.symbol)}</b> ${dir}${lev}`,
-      ...(vol ? [vol] : []),
-      '',
-      hasTags
-        ? 'Отметь причины входа — кнопки переключают теги:'
-        : 'Тегов пока нет — создай их на странице статистики, следующая позиция придёт с кнопками.',
-    ].join('\n');
-
-    await this.api('sendMessage', {
-      chat_id: user.telegramChatId,
-      text,
-      parse_mode: 'HTML',
-      ...(hasTags ? { reply_markup: keyboard } : {}),
-    });
   }
 
   // ── Linking API (used by the controller) ──

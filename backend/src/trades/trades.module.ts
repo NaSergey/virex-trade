@@ -3,6 +3,7 @@ import { BybitModule } from '../bybit/bybit.module';
 import { CredentialsModule } from '../credentials/credentials.module';
 import { ExchangesModule } from '../exchanges/exchanges.module';
 import { TagsModule } from '../tags/tags.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { TelegramModule } from '../telegram/telegram.module';
 import { TradesController } from './trades.controller';
 import { TradesService } from './trades.service';
@@ -15,7 +16,7 @@ import { IndicatorsService } from './indicators.service';
 
 // PrismaModule is @Global, so PrismaService is available without importing it.
 @Module({
-  imports: [BybitModule, CredentialsModule, ExchangesModule, TagsModule, TelegramModule],
+  imports: [BybitModule, CredentialsModule, ExchangesModule, TagsModule, TelegramModule, NotificationsModule],
   controllers: [TradesController],
   providers: [
     TradesService,

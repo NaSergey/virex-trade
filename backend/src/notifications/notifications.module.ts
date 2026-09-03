@@ -5,10 +5,11 @@ import { TelegramModule } from '../telegram/telegram.module';
 import { PrefsModule } from './prefs.module';
 import { NotifierService } from './notifier.service';
 import { MarketAlertsService } from './market-alerts.service';
+import { TradeAlertsService } from './trade-alerts.service';
 
 @Module({
   imports: [PrefsModule, TelegramModule, AnalyticsModule, MarketEventsModule],
-  providers: [NotifierService, MarketAlertsService],
-  exports: [NotifierService],
+  providers: [NotifierService, MarketAlertsService, TradeAlertsService],
+  exports: [NotifierService, TradeAlertsService],
 })
 export class NotificationsModule {}

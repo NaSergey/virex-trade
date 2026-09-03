@@ -5,7 +5,8 @@ import { CredentialsService } from '../credentials/credentials.service';
 import { ExchangeRegistry } from '../exchanges/exchange-registry.service';
 import { ClosedTrade, ExchangeId } from '../exchanges/exchange.types';
 import { TagsService } from '../tags/tags.service';
-import { TelegramService, OpenedPositionInfo } from '../telegram/telegram.service';
+import { OpenedPositionInfo } from '../telegram/telegram.service';
+import { TradeAlertsService } from '../notifications/trade-alerts.service';
 import { TradeContextService } from './trade-context.service';
 import { PositionBuilderService } from './position-builder.service';
 
@@ -53,7 +54,7 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     private readonly exchanges: ExchangeRegistry,
     private readonly credentials: CredentialsService,
     private readonly tags: TagsService,
-    private readonly telegram: TelegramService,
+    private readonly tradeAlerts: TradeAlertsService,
     private readonly tradeContext: TradeContextService,
     private readonly positions: PositionBuilderService,
   ) {}
@@ -129,14 +130,26 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     const existing = await this.prisma.trade.count({ where: { userId, exchange } });
     const weeks = opts?.full || existing === 0 ? BACKFILL_WEEKS : 1;
     const now = Date.now();
-    const closed = await adapter.fetchClosedTrades(creds, {
-      startMs: now - weeks * WEEK_MS,
-      endMs: now,
-    });
+    // Всё, что вставит этот прогон, отбирается по createdAt позже этой метки —
+    // так уведомление о закрытии уходит ровно по новым строкам.
+    const runStartedAt = new Date();
+    let closed: Awaited<ReturnType<typeof adapter.fetchClosedTrades>>;
+    try {
+      closed = await adapter.fetchClosedTrades(creds, {
+        startMs: now - weeks * WEEK_MS,
+        endMs: now,
+      });
+    } catch (e) {
+      // Упавший запрос — тоже неудачный прогон: без этого счётчик сбоев видел
+      // бы только «частично» и молчал бы, когда биржа не отвечает вовсе.
+      await this.tradeAlerts.syncOutcome(userId, false);
+      throw e;
+    }
     if (closed.partial) {
       this.logger.warn(`closed-trade fetch incomplete for ${exchange}: ${closed.error}`);
     }
     const inserted = await this.persist(userId, exchange, closed.items);
+    await this.tradeAlerts.syncOutcome(userId, !closed.partial);
     if (inserted > 0) {
       this.logger.log(`synced ${inserted} new trade(s) for user ${userId}`);
       // New closed trades inherit the entry-reason tags of their position.
@@ -207,6 +220,15 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     } catch (e) {
       this.logger.warn(`position tag prune failed: ${e}`);
     }
+    // После linkTagsToNewTrades и fillEntryStamps: иначе карточка закрытия
+    // ушла бы с кнопками тегов для сделки, которая на самом деле размечена,
+    // и без времени в позиции.
+    try {
+      await this.tradeAlerts.tradesClosed(userId, runStartedAt);
+      await this.tradeAlerts.overtradeCheck(userId);
+    } catch (e) {
+      this.logger.warn(`trade alerts failed: ${e}`);
+    }
     return inserted;
   }
 
@@ -235,7 +257,7 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
       });
       // A failed telegram send must never break the sync loop.
       try {
-        await this.telegram.notifyPositionOpened(userId, p);
+        await this.tradeAlerts.positionOpened(userId, p);
       } catch (e) {
         this.logger.warn(`telegram notify failed: ${e}`);
       }
