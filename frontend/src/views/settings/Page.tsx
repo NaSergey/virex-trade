@@ -138,6 +138,9 @@ export const SettingsPage = () => {
             value={selected.id}
             onChange={setSelectedId}
             ariaLabel={t('exchangeLabel')}
+            /* Ряд из семи делений не встаёт в строку на узком экране, а вне
+               карточки правило переноса к нему не применяется. */
+            className="wrap"
           />
         </Field>
       )}
@@ -164,6 +167,20 @@ export const SettingsPage = () => {
               notice={selected.needsReconnect ? t('needsReconnectNotice') : undefined}
             />
           )}
+
+          {/* Отключение стоит здесь же, под ключами, к которым относится, —
+              а не отдельным ярусом под всей страницей: там его приходилось
+              искать после пустого низа левой дорожки.
+              Битое подключение всё равно числится подключением, и снять его
+              надо уметь, не вводя ключи заново, — поэтому условие только
+              `connected`. */}
+          {selected.connected && (
+            <DisconnectZone
+              exchange={selected}
+              onDisconnect={askDisconnect}
+              disconnecting={disconnect.isPending}
+            />
+          )}
         </div>
 
         {/* Отдельным блоком, а не внутри карточки биржи: Telegram не относится
@@ -173,22 +190,6 @@ export const SettingsPage = () => {
           <TelegramCard />
         </div>
       </div>
-
-      {/* Опасная зона — под обеими дорожками, а не в середине левой: красная
-          линейка напротив списка уведомлений оказывалась самым тяжёлым пятном
-          листа рядом с самым мелким. Ширину держит обычная колонка: на весь
-          лист эта линейка кричала бы.
-          Битое подключение всё равно числится подключением, и снять его надо
-          уметь, не вводя ключи заново, — поэтому условие только `connected`. */}
-      {selected.connected && (
-        <div className="set">
-          <DisconnectZone
-            exchange={selected}
-            onDisconnect={askDisconnect}
-            disconnecting={disconnect.isPending}
-          />
-        </div>
-      )}
 
       {confirm && <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />}
     </Wrap>
