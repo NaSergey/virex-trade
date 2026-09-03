@@ -1980,6 +1980,18 @@
   /* Слово набрано верно — поле отвечает само, не заставляя переводить взгляд
      на кнопку в подвале и проверять, ожила ли она. */
   .in[data-ok="true"] { border-bottom-color: var(--ink); }
+  /*
+   * Тег в диалоге разметки: подчёркнутое слово, линия — в цвет тега.
+   *
+   * Невыбранный набран --ink-2, а не --ink-3: два десятка имён, набранных
+   * почти в цвет фона, приходилось разбирать по буквам, а выбирают из них
+   * все двадцать, а не только отмеченные.
+   *
+   * Выбранный, помимо светлого текста, поднимает от своей линии подсветку в
+   * цвет тега — снизу вверх, до прозрачного. Краска в подчёркивании горит у
+   * всех одинаково, поэтому одной яркости текста не хватало, чтобы отмеченное
+   * читалось с одного взгляда.
+   */
   .pick {
     appearance: none;
     cursor: pointer;
@@ -1989,11 +2001,23 @@
     font-family: var(--font-mono);
     font-size: var(--t-xs);
     letter-spacing: 0.06em;
-    color: var(--ink-3);
-    padding: 0 0 1px;
-    margin: 0 var(--s3) var(--s2) 0;
+    color: var(--ink-2);
+    padding: 3px 6px 2px;
+    margin: 0 var(--s2) var(--s2) 0;
+    transition: color 120ms ease, background-image 120ms ease;
   }
-  .pick[aria-pressed="true"] { color: var(--ink); }
+  .pick:hover { color: var(--ink); }
+  .pick[aria-pressed="true"] {
+    color: var(--ink);
+    /* --tag-rgb приходит из TagPicker; без него подсветка встаёт нейтральной,
+       а не пропадает — тег с нечитаемым цветом всё равно должен гореть. */
+    background-image: linear-gradient(
+      to top,
+      rgb(var(--tag-rgb, var(--ink-rgb)) / 0.3),
+      rgb(var(--tag-rgb, var(--ink-rgb)) / 0.06) 55%,
+      transparent 85%
+    );
+  }
   .warn {
     border-left: 2px solid var(--loss);
     padding-left: var(--s3);
@@ -2517,7 +2541,9 @@
   .pin { padding: 9px 6px; }
   .opt { padding: 9px 0; }
   .fg summary { padding: 11px 0 11px 16px; }
-  .pick { padding: 5px 0 3px; }
+  /* Крупнее под палец, но горизонтальные поля держим — на них лежит подсветка
+     выбранного тега. */
+  .pick { padding: 6px 8px 4px; }
 
   /* Поля ввода — не мельче 16px: Safari на iOS приближает страницу, как
      только фокус попадает в контрол с мелким кеглем, и обратно её потом

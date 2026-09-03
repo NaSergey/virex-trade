@@ -34,6 +34,22 @@ export function TagPicker({
   );
 }
 
+/**
+ * '#6366f1' → '99 102 241' — форма, которую ждёт `rgb(… / α)` в globals.css
+ * (там же так устроен `--ink-rgb`). Нужна, чтобы подсветка выбранного тега
+ * шла его собственным цветом с прозрачностью: сам hex для этого не годится.
+ *
+ * Цвет в базе выдаёт сервер из своей палитры, но формат здесь всё равно
+ * проверяется: строка из БД может быть какой угодно, а невалидное значение в
+ * CSS-переменной гасит всё правило целиком, а не только подсветку.
+ */
+function rgbTriplet(hex: string | null | undefined): string | null {
+  const m = /^#?([0-9a-f]{6})$/i.exec((hex ?? '').trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`;
+}
+
 function TagPickerGroup({
   type,
   tags,
@@ -52,18 +68,27 @@ function TagPickerGroup({
   return (
     <FieldGroup label={typeLabels[type]}>
       <div>
-        {group.map((t) => (
-          <Button
-            key={t.id}
-            variant="none"
-            className="pick"
-            aria-pressed={selected.has(t.id)}
-            style={{ borderColor: t.color }}
-            onClick={() => onToggle(t.id)}
-          >
-            {t.name}
-          </Button>
-        ))}
+        {group.map((t) => {
+          const rgb = rgbTriplet(t.color);
+          return (
+            <Button
+              key={t.id}
+              variant="none"
+              className="pick"
+              aria-pressed={selected.has(t.id)}
+              style={
+                {
+                  borderColor: t.color,
+                  // Тем же цветом светится выбранный тег — см. `.pick` в globals.css.
+                  ...(rgb ? { '--tag-rgb': rgb } : {}),
+                } as React.CSSProperties
+              }
+              onClick={() => onToggle(t.id)}
+            >
+              {t.name}
+            </Button>
+          );
+        })}
       </div>
     </FieldGroup>
   );
