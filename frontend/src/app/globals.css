@@ -1997,25 +1997,37 @@
     cursor: pointer;
     background: none;
     border: 0;
-    border-bottom: 2px solid currentColor;
+    /* Слово набрано СВОИМ цветом, а не общим серым: два десятка имён одной
+       краской сливались в однотонную простыню, в которой теги различались
+       только буквами. Цвет тега — единственное, что делает этот список
+       списком, а не абзацем. Приглушён, чтобы пестрота не кричала.
+       --tag-rgb приходит из TagPicker; без него тег встаёт нейтральным, а не
+       пропадает — у тега с нечитаемым цветом тоже есть имя. */
+    color: rgb(var(--tag-rgb, var(--ink-rgb)) / 0.72);
+    border-bottom: 2px solid rgb(var(--tag-rgb, var(--ink-rgb)) / 0.4);
     font-family: var(--font-mono);
     font-size: var(--t-xs);
     letter-spacing: 0.06em;
-    color: var(--ink-2);
     padding: 3px 6px 2px;
     margin: 0 var(--s2) var(--s2) 0;
-    transition: color 120ms ease, background-image 120ms ease;
+    transition: color 120ms ease, border-color 120ms ease, background-image 120ms ease;
   }
-  .pick:hover { color: var(--ink); }
+  .pick:hover {
+    color: rgb(var(--tag-rgb, var(--ink-rgb)) / 1);
+    border-bottom-color: rgb(var(--tag-rgb, var(--ink-rgb)) / 0.7);
+  }
+  /* Выбранный уходит в белое на подсветке своего цвета: пока он отличался от
+     соседей только насыщенностью той же краски, отмеченное терялось среди
+     семнадцати цветных слов. Белый текст в этом списке есть только у
+     отмеченного — он и читается первым. */
   .pick[aria-pressed="true"] {
     color: var(--ink);
-    /* --tag-rgb приходит из TagPicker; без него подсветка встаёт нейтральной,
-       а не пропадает — тег с нечитаемым цветом всё равно должен гореть. */
+    border-bottom-color: rgb(var(--tag-rgb, var(--ink-rgb)) / 1);
     background-image: linear-gradient(
       to top,
-      rgb(var(--tag-rgb, var(--ink-rgb)) / 0.3),
-      rgb(var(--tag-rgb, var(--ink-rgb)) / 0.06) 55%,
-      transparent 85%
+      rgb(var(--tag-rgb, var(--ink-rgb)) / 0.55),
+      rgb(var(--tag-rgb, var(--ink-rgb)) / 0.16) 60%,
+      transparent 92%
     );
   }
   .warn {

@@ -76,13 +76,10 @@ function TagPickerGroup({
               variant="none"
               className="pick"
               aria-pressed={selected.has(t.id)}
-              style={
-                {
-                  borderColor: t.color,
-                  // Тем же цветом светится выбранный тег — см. `.pick` в globals.css.
-                  ...(rgb ? { '--tag-rgb': rgb } : {}),
-                } as React.CSSProperties
-              }
+              /* Только триплет: из него `.pick` берёт и текст, и линию, и
+                 подсветку — с разной прозрачностью для каждого состояния.
+                 Готовый hex в borderColor перебивал бы приглушение линии. */
+              style={rgb ? ({ '--tag-rgb': rgb } as React.CSSProperties) : undefined}
               onClick={() => onToggle(t.id)}
             >
               {t.name}
