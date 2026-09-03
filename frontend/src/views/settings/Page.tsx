@@ -121,31 +121,32 @@ export const SettingsPage = () => {
     <Wrap page>
       <PageHead title={t('pageTitle')} lede={t('pageLede')} />
 
-      {/* Две дорожки: ключи слева, Telegram справа. Пропорция `pair`, а не
-          маргинальная 8/3, — справа стоит форма с переключателями порогов,
-          и в трёх одиннадцатых листа она бы слиплась. На узком экране сетка
-          сама складывается в одну колонку, а линейка переезжает наверх. */}
-      <div className="asym pair">
-        <div className="set" data-tour="set-form">
-          {/* Переключатель нужен, только когда выбирать есть из чего: одна
-              поддерживаемая биржа — это не выбор, а лишний орган управления. */}
-          {exchanges.length > 1 && (
-            <Field label={t('exchangeLabel')} htmlFor="exchange-pick" data-tour="set-exchange">
-              <Seg
-                options={exchanges.map((e) => ({
-                  value: e.id,
-                  label: e.connected ? `${e.label} ✓` : e.label,
-                  title: e.connected
-                    ? t('exchangeConnectedTitle', { label: e.label })
-                    : t('exchangeNotConnectedTitle', { label: e.label }),
-                }))}
-                value={selected.id}
-                onChange={setSelectedId}
-                ariaLabel={t('exchangeLabel')}
-              />
-            </Field>
-          )}
+      {/* Выбор биржи стоит над обеими дорожками: он относится ко всей
+          странице, а зажатый в левую колонку ряд из семи делений ломался на
+          две строки. Переключатель нужен, только когда выбирать есть из чего:
+          одна поддерживаемая биржа — это не выбор, а лишний орган управления. */}
+      {exchanges.length > 1 && (
+        <Field label={t('exchangeLabel')} htmlFor="exchange-pick" data-tour="set-exchange">
+          <Seg
+            options={exchanges.map((e) => ({
+              value: e.id,
+              label: e.connected ? `${e.label} ✓` : e.label,
+              title: e.connected
+                ? t('exchangeConnectedTitle', { label: e.label })
+                : t('exchangeNotConnectedTitle', { label: e.label }),
+            }))}
+            value={selected.id}
+            onChange={setSelectedId}
+            ariaLabel={t('exchangeLabel')}
+          />
+        </Field>
+      )}
 
+      {/* Две равные дорожки: ключи слева, уведомления справа. Ни одна не
+          главнее другой, поэтому `even`, а не асимметрия. На узком экране
+          сетка складывается в одну колонку, а линейка переезжает наверх. */}
+      <div className="asym even">
+        <div className="set" data-tour="set-form">
           {selected.connected && !selected.needsReconnect ? (
             <ConnectedExchange
               exchange={selected}
@@ -153,28 +154,15 @@ export const SettingsPage = () => {
               canActivate={connectedCount > 1}
               activating={setActive.isPending}
               onActivate={() => setActive.mutate(selected.id)}
-              onDisconnect={askDisconnect}
-              disconnecting={disconnect.isPending}
             />
           ) : (
-            <>
-              <ConnectForm
-                exchange={selected}
-                pending={connect.isPending}
-                error={connect.error}
-                onSubmit={(vars) => connect.mutateAsync({ exchange: selected.id, ...vars })}
-                notice={selected.needsReconnect ? t('needsReconnectNotice') : undefined}
-              />
-              {/* Битое подключение всё равно числится подключением, и убрать его
-                  надо уметь, не вводя ключи заново. */}
-              {selected.connected && (
-                <DisconnectZone
-                  exchange={selected}
-                  onDisconnect={askDisconnect}
-                  disconnecting={disconnect.isPending}
-                />
-              )}
-            </>
+            <ConnectForm
+              exchange={selected}
+              pending={connect.isPending}
+              error={connect.error}
+              onSubmit={(vars) => connect.mutateAsync({ exchange: selected.id, ...vars })}
+              notice={selected.needsReconnect ? t('needsReconnectNotice') : undefined}
+            />
           )}
         </div>
 
@@ -185,6 +173,22 @@ export const SettingsPage = () => {
           <TelegramCard />
         </div>
       </div>
+
+      {/* Опасная зона — под обеими дорожками, а не в середине левой: красная
+          линейка напротив списка уведомлений оказывалась самым тяжёлым пятном
+          листа рядом с самым мелким. Ширину держит обычная колонка: на весь
+          лист эта линейка кричала бы.
+          Битое подключение всё равно числится подключением, и снять его надо
+          уметь, не вводя ключи заново, — поэтому условие только `connected`. */}
+      {selected.connected && (
+        <div className="set">
+          <DisconnectZone
+            exchange={selected}
+            onDisconnect={askDisconnect}
+            disconnecting={disconnect.isPending}
+          />
+        </div>
+      )}
 
       {confirm && <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />}
     </Wrap>
@@ -197,16 +201,12 @@ function ConnectedExchange({
   canActivate,
   activating,
   onActivate,
-  onDisconnect,
-  disconnecting,
 }: {
   exchange: ExchangeInfo;
   isActive: boolean;
   canActivate: boolean;
   activating: boolean;
   onActivate: () => void;
-  onDisconnect: () => void;
-  disconnecting: boolean;
 }) {
   const t = useTranslations('settings');
   return (
@@ -235,8 +235,6 @@ function ConnectedExchange({
           {activating ? t('switching') : t('workWith', { label: exchange.label })}
         </Button>
       )}
-
-      <DisconnectZone exchange={exchange} onDisconnect={onDisconnect} disconnecting={disconnecting} />
     </>
   );
 }

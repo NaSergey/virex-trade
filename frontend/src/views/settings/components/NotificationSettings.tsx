@@ -68,14 +68,15 @@ function SignalRow({
           checked={item.enabled}
           onChange={(e) => onToggle(e.target.checked)}
         />
-        <span className="opt-n">
-          {item.emoji} {title(item.key, item.title)}
-        </span>
+        {/* Эмодзи с бэкенда здесь не рисуются: в чате они несут строку, а на
+            листе, набранном моноширинным капсом, цветная картинка выбивается
+            из типографики — и часть из них система подменяет чем попало. */}
+        <span className="opt-n">{title(item.key, item.title)}</span>
       </label>
       {/* Порог показывается только у включённого сигнала: у выключенного он
           ничего не значит и только удлиняет список. */}
       {item.enabled && item.presets.length > 0 && (
-        <div style={{ paddingLeft: 'var(--s4)', paddingBottom: 'var(--s2)' }}>
+        <div className="nt-th">
           <Seg
             options={item.presets.map((p, i) => ({ value: i, label: p.label }))}
             value={item.preset}
@@ -107,9 +108,12 @@ export function NotificationSettings() {
         const on = cat.items.filter((i) => i.enabled).length;
         return (
           <div key={cat.key}>
-            <p className="foot">
-              {cat.emoji} {categoryTitle(cat.key, cat.title)} · {on}/{cat.items.length}
-            </p>
+            <div className="nt-cat">
+              <span className="lbl">{categoryTitle(cat.key, cat.title)}</span>
+              <b>
+                {on}/{cat.items.length}
+              </b>
+            </div>
             {cat.items.map((item, i) => (
               <SignalRow
                 key={item.key}
@@ -123,17 +127,19 @@ export function NotificationSettings() {
         );
       })}
 
-      {/* Тихие часы — общий выключатель, поэтому стоит под всеми категориями,
-          а не внутри одной из них. */}
-      <label className="opt" data-on={data.quietHours}>
-        <input
-          type="checkbox"
-          checked={data.quietHours}
-          onChange={(e) => patch.mutate({ quietHours: e.target.checked })}
-        />
-        <span className="opt-n">{t('notifQuietHours')}</span>
-      </label>
-      <p className="foot">{t('notifQuietHoursHint')}</p>
+      {/* Тихие часы — правило поверх всех сигналов, а не тринадцатый сигнал,
+          поэтому стоят под списком и отбиты от него линейкой. */}
+      <div className="nt-quiet">
+        <label className="opt" data-on={data.quietHours}>
+          <input
+            type="checkbox"
+            checked={data.quietHours}
+            onChange={(e) => patch.mutate({ quietHours: e.target.checked })}
+          />
+          <span className="opt-n">{t('notifQuietHours')}</span>
+        </label>
+        <p className="foot">{t('notifQuietHoursHint')}</p>
+      </div>
       {patch.error && <ErrorNote error={patch.error} fallback={t('loadFailed')} />}
     </>
   );

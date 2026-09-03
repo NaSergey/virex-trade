@@ -65,7 +65,7 @@ export function TelegramCard() {
 
       <NotificationSettings />
 
-      <div style={{ marginTop: 'var(--s3)' }}>
+      <div className="nt-acts">
         <Button disabled={test.isPending} onClick={() => test.mutate()}>
           {test.isSuccess ? t('telegramTestSent') : t('telegramTest')}
         </Button>
