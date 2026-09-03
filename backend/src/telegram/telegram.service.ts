@@ -2,9 +2,6 @@ import { BadRequestException, Injectable, Logger, OnApplicationBootstrap, OnModu
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { PrefsService } from '../notifications/prefs.service';
-import { NOTIF_DEFS, notifDef } from '../notifications/registry';
-import { isEnabled } from '../notifications/prefs';
-import { categoryPanel, parsePanelCallback, rootPanel } from './settings-panel';
 import { unpackId } from './ids';
 
 const TG_API = 'https://api.telegram.org';
@@ -35,12 +32,16 @@ export interface OpenedPositionInfo {
  *   the bot resolves the code to a user and stores the chat id.
  * - Inbound buttons: tag toggles on an open position write the same PositionTag
  *   rows the web UI does (so the trade sync copies them onto closed trades as
- *   usual); `ct|` buttons tag a closed trade directly; `n*|` buttons drive the
- *   /settings panel.
+ *   usual); `ct|` buttons tag a closed trade directly.
  *
  * Тексты уведомлений собирает NotificationsModule, а не этот сервис: здесь
  * остался транспорт (`sendText`) и разбор входящих. На двенадцати типах
  * сигналов метод notifyXxx на каждый перестал бы помещаться в голове.
+ *
+ * Настройки уведомлений правятся только на странице настроек в приложении.
+ * Панель `/settings` в чате была и снята: два места, редактирующих одно
+ * состояние, — это два набора багов, а веб-форма ещё и не зависит от того,
+ * какой инстанс держит polling.
  *
  * Disabled entirely (no polling, no sends) when TELEGRAM_BOT_TOKEN is unset,
  * so environments without the bot behave as before. Run the poller in ONE
@@ -170,21 +171,14 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
     const text: string = msg.text ?? '';
     if (!chatId) return;
 
+    // Указатель, а не редактор: настройки живут на странице настроек в
+    // приложении, и второго места, где то же состояние правится, быть не
+    // должно. Но человек, набравший команду в чате, не должен упереться в
+    // тишину — поэтому ответ есть.
     if (/^\/settings\b/.test(text)) {
-      const user = await this.prisma.user.findUnique({ where: { telegramChatId: chatId } });
-      if (!user) {
-        await this.api('sendMessage', {
-          chat_id: chatId,
-          text: 'Сначала привяжи аккаунт: открой настройки в приложении и нажми «Подключить Telegram».',
-        });
-        return;
-      }
-      const panel = rootPanel(await this.prefs.get(user.id));
       await this.api('sendMessage', {
         chat_id: chatId,
-        text: panel.text,
-        parse_mode: 'HTML',
-        reply_markup: panel.reply_markup,
+        text: 'Уведомления настраиваются на странице «Настройки» в приложении — там можно включить нужные сигналы и задать пороги.',
       });
       return;
     }
@@ -260,36 +254,6 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
       await answer('Аккаунт не привязан');
       return;
     }
-
-    const panelAction = parsePanelCallback(String(cb.data ?? ''));
-    if (panelAction) {
-      let prefs = await this.prefs.get(user.id);
-      if (panelAction.kind === 'toggle') prefs = await this.prefs.toggle(user.id, panelAction.key);
-      if (panelAction.kind === 'preset') prefs = await this.prefs.cycle(user.id, panelAction.key);
-      if (panelAction.kind === 'quiet') prefs = await this.prefs.toggleQuietHours(user.id);
-
-      // Экран остаётся тот же, на котором нажали: тумблер не должен выкидывать
-      // человека из категории обратно в корень.
-      const panel =
-        panelAction.kind === 'category'
-          ? categoryPanel(prefs, panelAction.category)
-          : panelAction.kind === 'toggle' || panelAction.kind === 'preset'
-            ? categoryPanel(prefs, notifDef(panelAction.key)!.category)
-            : rootPanel(prefs);
-
-      if (messageId != null) {
-        await this.api('editMessageText', {
-          chat_id: chatId,
-          message_id: messageId,
-          text: panel.text,
-          parse_mode: 'HTML',
-          reply_markup: panel.reply_markup,
-        });
-      }
-      await answer();
-      return;
-    }
-
     // Тег закрытой сделки: пишет TradeTag напрямую, поэтому оба uuid едут
     // упакованными — в сыром виде пара не влезает в 64 байта callback_data.
     const [ctKind, shortTrade, shortTag] = String(cb.data ?? '').split('|');
@@ -403,18 +367,11 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
 
   async status(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    const prefs = await this.prefs.get(userId);
     return {
       success: true,
       enabled: this.enabled,
       linked: !!user?.telegramChatId,
       botUsername: this.enabled ? await this.getBotUsername() : null,
-      // Список только для чтения: редактируется он в боте, и второй копии
-      // переключателей на фронте нет намеренно.
-      notifications: NOTIF_DEFS.filter((d) => isEnabled(prefs, d.key)).map((d) => ({
-        key: d.key,
-        title: `${d.emoji} ${d.title}`,
-      })),
     };
   }
 

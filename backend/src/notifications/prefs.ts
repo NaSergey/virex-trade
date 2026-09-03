@@ -99,6 +99,35 @@ export const togglePref = (prefs: Prefs, key: NotifKey | string): Prefs => {
   return { ...prefs, items: { ...prefs.items, [key]: { ...item, enabled: !item.enabled } } };
 };
 
+export interface PrefsPatch {
+  items?: Record<string, { enabled?: boolean; preset?: number }>;
+  quietHours?: boolean;
+}
+
+/**
+ * Частичная правка с сайта: приходит только то, что человек тронул.
+ * Проверка та же, что и при чтении из базы, — неизвестный ключ отбрасывается,
+ * несуществующий индекс пресета откатывается на дефолтный. Валидировать это
+ * ещё и декораторами DTO значило бы держать два набора правил, которые
+ * однажды разойдутся.
+ */
+export const applyPatch = (prefs: Prefs, patch: PrefsPatch): Prefs => {
+  const items = { ...prefs.items };
+  for (const [key, change] of Object.entries(patch.items ?? {})) {
+    const def = notifDef(key);
+    const current = items[key];
+    if (!def || !current || !isObject(change)) continue;
+    items[key] = {
+      enabled: typeof change.enabled === 'boolean' ? change.enabled : current.enabled,
+      preset: change.preset === undefined ? current.preset : safePreset(def, change.preset),
+    };
+  }
+  return {
+    items,
+    quietHours: typeof patch.quietHours === 'boolean' ? patch.quietHours : prefs.quietHours,
+  };
+};
+
 export const cyclePreset = (prefs: Prefs, key: NotifKey | string): Prefs => {
   const def = notifDef(key);
   const item = prefs.items[key];

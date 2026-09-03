@@ -7,9 +7,11 @@ import { NotifierService } from './notifier.service';
 import { MarketAlertsService } from './market-alerts.service';
 import { TradeAlertsService } from './trade-alerts.service';
 import { WeeklyReportService } from './weekly-report.service';
+import { NotificationsController } from './notifications.controller';
 
 @Module({
   imports: [PrefsModule, TelegramModule, AnalyticsModule, MarketEventsModule],
+  controllers: [NotificationsController],
   providers: [NotifierService, MarketAlertsService, TradeAlertsService, WeeklyReportService],
   exports: [NotifierService, TradeAlertsService],
 })

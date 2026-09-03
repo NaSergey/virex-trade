@@ -1,5 +1,6 @@
 import { NOTIF_DEFS } from './registry';
 import {
+  applyPatch,
   cyclePreset,
   defaultPrefs,
   isEnabled,
@@ -95,5 +96,51 @@ describe('prefs', () => {
   it('mergePrefs(toStored(p)) возвращает то же самое', () => {
     const p = cyclePreset(togglePref(defaultPrefs(), 'mkt.book'), 'mkt.ls');
     expect(mergePrefs(toStored(p))).toEqual(p);
+  });
+});
+
+describe('applyPatch', () => {
+  it('меняет только присланное', () => {
+    const p = applyPatch(defaultPrefs(), { items: { 'mkt.vol1h': { enabled: true } } });
+    expect(isEnabled(p, 'mkt.vol1h')).toBe(true);
+    // Порог не присылали — остался дефолтным.
+    expect(thresholdOf(p, 'mkt.vol1h')).toBe(2);
+    expect(isEnabled(p, 'trade.opened')).toBe(true);
+    expect(p.quietHours).toBe(true);
+  });
+
+  it('меняет порог, не трогая тумблер', () => {
+    const p = applyPatch(defaultPrefs(), { items: { 'mkt.price1h': { preset: 0 } } });
+    expect(thresholdOf(p, 'mkt.price1h')).toBe(1);
+    expect(isEnabled(p, 'mkt.price1h')).toBe(true);
+  });
+
+  it('переключает тихие часы', () => {
+    expect(applyPatch(defaultPrefs(), { quietHours: false }).quietHours).toBe(false);
+  });
+
+  // Запрос приходит из браузера, и доверять его содержимому нельзя: правила
+  // те же, что при чтении из базы, и живут в одном месте.
+  it('игнорирует неизвестный сигнал', () => {
+    const p = applyPatch(defaultPrefs(), { items: { 'mkt.gone': { enabled: true } } });
+    expect(Object.keys(p.items)).toHaveLength(NOTIF_DEFS.length);
+    expect((p.items as Record<string, unknown>)['mkt.gone']).toBeUndefined();
+  });
+
+  it('несуществующий индекс пресета откатывает на дефолтный', () => {
+    const p = applyPatch(defaultPrefs(), { items: { 'mkt.price1h': { preset: 99 } } });
+    expect(thresholdOf(p, 'mkt.price1h')).toBe(3.5);
+  });
+
+  it('пустой патч ничего не меняет', () => {
+    const base = defaultPrefs();
+    expect(applyPatch(base, {})).toEqual(base);
+  });
+
+  it('не мутирует исходные настройки', () => {
+    const base = defaultPrefs();
+    applyPatch(base, { items: { 'mkt.vol1h': { enabled: true } }, quietHours: false });
+    expect(isEnabled(base, 'mkt.vol1h')).toBe(false);
+    expect(base.quietHours).toBe(true);
   });
 });

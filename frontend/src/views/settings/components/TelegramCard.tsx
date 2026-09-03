@@ -9,6 +9,7 @@ import {
   useTelegramTest,
   useTelegramUnlink,
 } from '../api/telegram-hooks';
+import { NotificationSettings } from './NotificationSettings';
 
 /**
  * Привязка чата и список включённых уведомлений. Переключателей здесь нет
@@ -61,25 +62,17 @@ export function TelegramCard() {
     <>
       <h2>{t('telegramTitle')}</h2>
       <p className="muted">{t('telegramLinked')}</p>
-      {data.notifications.length > 0 ? (
-        <>
-          <p className="muted">{t('telegramEnabledList')}</p>
-          <ul>
-            {data.notifications.map((n) => (
-              <li key={n.key}>{n.title}</li>
-            ))}
-          </ul>
-        </>
-      ) : (
-        <p className="muted">{t('telegramNothingEnabled')}</p>
-      )}
-      <p className="foot">{t('telegramSettingsHint')}</p>
-      <Button disabled={test.isPending} onClick={() => test.mutate()}>
-        {test.isSuccess ? t('telegramTestSent') : t('telegramTest')}
-      </Button>
-      <Button disabled={unlink.isPending} onClick={() => unlink.mutate()}>
-        {t('telegramUnlink')}
-      </Button>
+
+      <NotificationSettings />
+
+      <div style={{ marginTop: 'var(--s3)' }}>
+        <Button disabled={test.isPending} onClick={() => test.mutate()}>
+          {test.isSuccess ? t('telegramTestSent') : t('telegramTest')}
+        </Button>
+        <Button disabled={unlink.isPending} onClick={() => unlink.mutate()}>
+          {t('telegramUnlink')}
+        </Button>
+      </div>
     </>
   );
 }
