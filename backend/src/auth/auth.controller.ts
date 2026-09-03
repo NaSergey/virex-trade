@@ -16,6 +16,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
+import { useSecureCookie } from './cookie-security';
 
 const REFRESH_COOKIE = 'refresh_token';
 // '/', не '/auth': кука должна доехать и до страниц продукта — её на входе
@@ -100,7 +101,7 @@ export class AuthController {
     res.cookie(REFRESH_COOKIE, result.refreshToken, {
       httpOnly: true,
       sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      secure: useSecureCookie(),
       path: REFRESH_COOKIE_PATH,
       maxAge: this.authService.refreshCookieMaxAgeMs,
     });
