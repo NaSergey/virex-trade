@@ -18,6 +18,7 @@ import {
   useSetActiveExchange,
   type ExchangeInfo,
 } from './api/hooks';
+import { TelegramCard } from './components/TelegramCard';
 
 /**
  * Подсказка о правах ключа — переводится на фронте по id биржи, а не приходит
@@ -170,6 +171,13 @@ export const SettingsPage = () => {
             )}
           </>
         )}
+      </div>
+
+      {/* Отдельным блоком, а не внутри карточки биржи: Telegram не относится
+          к ключам и живёт своей жизнью — привязан он или нет, биржа работает
+          одинаково. */}
+      <div className="set">
+        <TelegramCard />
       </div>
 
       {confirm && <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />}

@@ -8,6 +8,8 @@ interface TelegramStatus {
   enabled: boolean; // bot token configured server-side
   linked: boolean; // this user's chat is linked
   botUsername: string | null;
+  /** Включённые сигналы — только для показа; правятся они в боте. */
+  notifications: Array<{ key: string; title: string }>;
 }
 
 // Linking completes out-of-band (user taps Start in Telegram), so while the

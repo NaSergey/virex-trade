@@ -2,7 +2,8 @@ import { BadRequestException, Injectable, Logger, OnApplicationBootstrap, OnModu
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { PrefsService } from '../notifications/prefs.service';
-import { notifDef } from '../notifications/registry';
+import { NOTIF_DEFS, notifDef } from '../notifications/registry';
+import { isEnabled } from '../notifications/prefs';
 import { categoryPanel, parsePanelCallback, rootPanel } from './settings-panel';
 import { unpackId } from './ids';
 
@@ -402,11 +403,18 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
 
   async status(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const prefs = await this.prefs.get(userId);
     return {
       success: true,
       enabled: this.enabled,
       linked: !!user?.telegramChatId,
       botUsername: this.enabled ? await this.getBotUsername() : null,
+      // Список только для чтения: редактируется он в боте, и второй копии
+      // переключателей на фронте нет намеренно.
+      notifications: NOTIF_DEFS.filter((d) => isEnabled(prefs, d.key)).map((d) => ({
+        key: d.key,
+        title: `${d.emoji} ${d.title}`,
+      })),
     };
   }
 
