@@ -9,5 +9,6 @@ import { HourlyPriceSyncService } from './hourly-price-sync.service';
   imports: [BybitModule],
   controllers: [MarketEventsController],
   providers: [MarketEventsService, DailyPriceSyncService, HourlyPriceSyncService],
+  exports: [MarketEventsService],
 })
 export class MarketEventsModule {}

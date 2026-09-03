@@ -14,6 +14,7 @@ import { SettingsModule } from './settings/settings.module';
 import { TagsModule } from './tags/tags.module';
 import { TelegramModule } from './telegram/telegram.module';
 import { MarketEventsModule } from './market-events/market-events.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
 
 @Module({
@@ -38,6 +39,7 @@ import { AdminModule } from './admin/admin.module';
     TagsModule,
     TelegramModule,
     MarketEventsModule,
+    NotificationsModule,
     AdminModule,
   ],
   controllers: [AppController],

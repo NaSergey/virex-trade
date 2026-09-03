@@ -1,13 +1,11 @@
 import { Module } from '@nestjs/common';
-import { TelegramModule } from '../telegram/telegram.module';
 import { AnalyticsController } from './analytics.controller';
 import { AnalyticsService } from './analytics.service';
-import { VolatilityAlertService } from './volatility-alert.service';
 import { LiquiditySnapshotService } from './liquidity-snapshot.service';
 
 @Module({
-  imports: [TelegramModule],
   controllers: [AnalyticsController],
-  providers: [AnalyticsService, VolatilityAlertService, LiquiditySnapshotService],
+  providers: [AnalyticsService, LiquiditySnapshotService],
+  exports: [AnalyticsService],
 })
 export class AnalyticsModule {}

@@ -15,11 +15,6 @@ const LINK_CODE_TTL_MS = 15 * 60_000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const fmtUsdCompact = (v: number): string => {
-  if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
-  if (v >= 1e6) return `$${(v / 1e6).toFixed(1)}M`;
-  return `$${v.toFixed(0)}`;
-};
 
 export interface OpenedPositionInfo {
   symbol: string;
@@ -399,52 +394,6 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
       parse_mode: 'HTML',
       ...(hasTags ? { reply_markup: keyboard } : {}),
     });
-  }
-
-  // ── Outgoing: volatility alert (called by VolatilityAlertService) ──
-
-  async notifyVolatilitySpike(
-    userId: string,
-    snapshot: { currentVolPct: number; avgVolPct: number },
-  ): Promise<void> {
-    if (!this.enabled) return;
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user?.telegramChatId) return;
-
-    const text = [
-      '⚡ Волатильность BTC выше средней за 7 дней',
-      `Сейчас: <b>${snapshot.currentVolPct.toFixed(2)}%</b> · среднее: ${snapshot.avgVolPct.toFixed(2)}%`,
-    ].join('\n');
-
-    await this.api('sendMessage', { chat_id: user.telegramChatId, text, parse_mode: 'HTML' });
-  }
-
-  async notifyVolumeSpike(
-    userId: string,
-    snapshot: {
-      volume24hUsd: number;
-      volumeChangePct: number;
-      dominantSide: 'buy' | 'sell' | 'neutral';
-    },
-  ): Promise<void> {
-    if (!this.enabled) return;
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user?.telegramChatId) return;
-
-    const side =
-      snapshot.dominantSide === 'buy'
-        ? '🟢 перевес в покупку'
-        : snapshot.dominantSide === 'sell'
-          ? '🔴 перевес в продажу'
-          : '⚪ без явного перевеса';
-
-    const text = [
-      '📊 Объём BTC растёт выше среднего за 7 дней',
-      `Сейчас: <b>${fmtUsdCompact(snapshot.volume24hUsd)}</b> (+${snapshot.volumeChangePct.toFixed(1)}% к среднему)`,
-      side,
-    ].join('\n');
-
-    await this.api('sendMessage', { chat_id: user.telegramChatId, text, parse_mode: 'HTML' });
   }
 
   // ── Linking API (used by the controller) ──
