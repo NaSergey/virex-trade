@@ -121,63 +121,69 @@ export const SettingsPage = () => {
     <Wrap page>
       <PageHead title={t('pageTitle')} lede={t('pageLede')} />
 
-      <div className="set" data-tour="set-form">
-        {/* Переключатель нужен, только когда выбирать есть из чего: одна
-            поддерживаемая биржа — это не выбор, а лишний орган управления. */}
-        {exchanges.length > 1 && (
-          <Field label={t('exchangeLabel')} htmlFor="exchange-pick" data-tour="set-exchange">
-            <Seg
-              options={exchanges.map((e) => ({
-                value: e.id,
-                label: e.connected ? `${e.label} ✓` : e.label,
-                title: e.connected
-                  ? t('exchangeConnectedTitle', { label: e.label })
-                  : t('exchangeNotConnectedTitle', { label: e.label }),
-              }))}
-              value={selected.id}
-              onChange={setSelectedId}
-              ariaLabel={t('exchangeLabel')}
-            />
-          </Field>
-        )}
-
-        {selected.connected && !selected.needsReconnect ? (
-          <ConnectedExchange
-            exchange={selected}
-            isActive={data?.activeExchange === selected.id}
-            canActivate={connectedCount > 1}
-            activating={setActive.isPending}
-            onActivate={() => setActive.mutate(selected.id)}
-            onDisconnect={askDisconnect}
-            disconnecting={disconnect.isPending}
-          />
-        ) : (
-          <>
-            <ConnectForm
-              exchange={selected}
-              pending={connect.isPending}
-              error={connect.error}
-              onSubmit={(vars) => connect.mutateAsync({ exchange: selected.id, ...vars })}
-              notice={selected.needsReconnect ? t('needsReconnectNotice') : undefined}
-            />
-            {/* Битое подключение всё равно числится подключением, и убрать его
-                надо уметь, не вводя ключи заново. */}
-            {selected.connected && (
-              <DisconnectZone
-                exchange={selected}
-                onDisconnect={askDisconnect}
-                disconnecting={disconnect.isPending}
+      {/* Две дорожки: ключи слева, Telegram справа. Пропорция `pair`, а не
+          маргинальная 8/3, — справа стоит форма с переключателями порогов,
+          и в трёх одиннадцатых листа она бы слиплась. На узком экране сетка
+          сама складывается в одну колонку, а линейка переезжает наверх. */}
+      <div className="asym pair">
+        <div className="set" data-tour="set-form">
+          {/* Переключатель нужен, только когда выбирать есть из чего: одна
+              поддерживаемая биржа — это не выбор, а лишний орган управления. */}
+          {exchanges.length > 1 && (
+            <Field label={t('exchangeLabel')} htmlFor="exchange-pick" data-tour="set-exchange">
+              <Seg
+                options={exchanges.map((e) => ({
+                  value: e.id,
+                  label: e.connected ? `${e.label} ✓` : e.label,
+                  title: e.connected
+                    ? t('exchangeConnectedTitle', { label: e.label })
+                    : t('exchangeNotConnectedTitle', { label: e.label }),
+                }))}
+                value={selected.id}
+                onChange={setSelectedId}
+                ariaLabel={t('exchangeLabel')}
               />
-            )}
-          </>
-        )}
-      </div>
+            </Field>
+          )}
 
-      {/* Отдельным блоком, а не внутри карточки биржи: Telegram не относится
-          к ключам и живёт своей жизнью — привязан он или нет, биржа работает
-          одинаково. */}
-      <div className="set">
-        <TelegramCard />
+          {selected.connected && !selected.needsReconnect ? (
+            <ConnectedExchange
+              exchange={selected}
+              isActive={data?.activeExchange === selected.id}
+              canActivate={connectedCount > 1}
+              activating={setActive.isPending}
+              onActivate={() => setActive.mutate(selected.id)}
+              onDisconnect={askDisconnect}
+              disconnecting={disconnect.isPending}
+            />
+          ) : (
+            <>
+              <ConnectForm
+                exchange={selected}
+                pending={connect.isPending}
+                error={connect.error}
+                onSubmit={(vars) => connect.mutateAsync({ exchange: selected.id, ...vars })}
+                notice={selected.needsReconnect ? t('needsReconnectNotice') : undefined}
+              />
+              {/* Битое подключение всё равно числится подключением, и убрать его
+                  надо уметь, не вводя ключи заново. */}
+              {selected.connected && (
+                <DisconnectZone
+                  exchange={selected}
+                  onDisconnect={askDisconnect}
+                  disconnecting={disconnect.isPending}
+                />
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Отдельным блоком, а не внутри карточки биржи: Telegram не относится
+            к ключам и живёт своей жизнью — привязан он или нет, биржа работает
+            одинаково. */}
+        <div className="set marg">
+          <TelegramCard />
+        </div>
       </div>
 
       {confirm && <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />}
