@@ -85,7 +85,7 @@ export function AdminPage() {
       {overview ? <Funnel funnel={overview.funnel} /> : null}
 
       <SectionHead title={t('people')} style={{ marginTop: 'var(--s5)' }} />
-      <UsersTable days={days} />
+      <UsersTable days={days} enabled={isAdmin} />
 
       <SectionHead title={t('bySections')} style={{ marginTop: 'var(--s5)' }} />
       <Sections rows={overview?.sections ?? []} isLoading={isLoading} />

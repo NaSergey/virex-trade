@@ -24,7 +24,7 @@ const PAGE_SIZE = 25;
  * отдельная страница на человека здесь не нужна — смотрят обычно «а этот
  * вообще заходил», не уходя из списка.
  */
-export function UsersTable({ days }: { days: number }) {
+export function UsersTable({ days, enabled }: { days: number; enabled: boolean }) {
   const t = useTranslations('admin');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<{ key: UserSort; dir: 1 | -1 }>({ key: 'lastSeenAt', dir: -1 });
@@ -39,7 +39,10 @@ export function UsersTable({ days }: { days: number }) {
       offset: (page - 1) * PAGE_SIZE,
       q: search.trim() || undefined,
     },
-    true,
+    // Как и остальные запросы раздела — только после того, как сессия
+    // восстановлена и право известно. Безусловный запрос уходил ещё до токена,
+    // получал 401 и тянул за собой лишний обмен refresh-токена.
+    enabled,
   );
 
   const columns: LedgerColumn<AdminUserRow>[] = [
