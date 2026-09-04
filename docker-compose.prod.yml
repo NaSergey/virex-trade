@@ -94,7 +94,13 @@ services:
       - web
     environment:
       APP_DOMAIN: ${APP_DOMAIN}
-      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env.prod}
+      # Без `:?`: compose подставляет переменные во ВЕСЬ файл до того, как
+      # отфильтрует сервисы по профилям, и обязательная переменная роняла
+      # запуск даже там, где Caddy не поднимается вовсе (80/443 заняты nginx
+      # хоста — вариант B в docs/deploy/vps-domain.md). Пустое значение Caddy
+      # переживает: Let's Encrypt зарегистрирует аккаунт без контакта, только
+      # писем об истечении сертификата не будет.
+      ACME_EMAIL: ${ACME_EMAIL:-}
     ports:
       - "80:80"
       - "443:443"
