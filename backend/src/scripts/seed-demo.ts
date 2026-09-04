@@ -53,7 +53,7 @@ const POSITIONS = 170;
  * покажет ли «Цена привычек» хоть что-нибудь (её порог — 12 сделок в срезе),
  * и то, останется ли счёт в плюсе. Такое не отдают жребию.
  */
-const TILT_TRADES = 13;
+const TILT_TRADES = 12;
 const START_BALANCE = 5000;
 /** Комиссия тейкера Bybit, обе стороны. */
 const TAKER_FEE = 0.00055;
@@ -75,7 +75,28 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-const rnd = mulberry32(20260904);
+/**
+ * Seed подобран перебором, а не выбран красивым числом (режим `--search`).
+ *
+ * Продукт показывает на обзоре Edge Score и профит-фактор, и для витрины они
+ * заданы: 53 и 2.3. Подгонять под них параметры генератора — значит ломать
+ * заложенную в них историю: чтобы поднять SQN, пришлось бы убрать разброс
+ * размеров и хвосты убытков, то есть ровно то, из чего состоят диагностируемые
+ * ошибки. Параметры поэтому отвечают за поведение трейдера, а нужные числа
+ * добираются выбором зерна: их даёт разброс между прогонами, а не искажение
+ * модели.
+ */
+const SEED = 20273969;
+
+let rnd = mulberry32(SEED);
+/** Накопитель квоты выигрышей по профилям — сбрасывается вместе с зерном. */
+const winQuota = new Map<string, number>();
+
+/** Начать генерацию заново с другого зерна (перебор и повторные прогоны). */
+function reseed(seed: number): void {
+  rnd = mulberry32(seed);
+  winQuota.clear();
+}
 
 const rand = (lo: number, hi: number) => lo + rnd() * (hi - lo);
 const randInt = (lo: number, hi: number) => Math.floor(rand(lo, hi + 1));
@@ -147,7 +168,6 @@ const TAGS: Array<{ name: string; type: string; color: string }> = [
   { name: 'Контртренд', type: 'setup', color: '#06b6d4' },
   { name: 'FOMO', type: 'emotion', color: '#ec4899' },
   { name: 'Тильт', type: 'emotion', color: '#a855f7' },
-  { name: 'Вход без стопа', type: 'mistake', color: '#84cc16' },
   { name: 'Передержал', type: 'mistake', color: '#14b8a6' },
   { name: 'Объёмный уровень', type: 'setup', color: '#f97316' },
   { name: 'Дивергенция', type: 'setup', color: '#0ea5e9' },
@@ -184,16 +204,16 @@ interface Profile {
 
 const PROFILES: Profile[] = [
   // Рабочее ядро: то, на чём этот счёт держится.
-  { id: 'trend-retest', weight: 32, tags: ['По тренду'], sometimes: [['Ретест', 0.7]], winRate: 0.57, win: 1.9, loss: 1.0 },
-  { id: 'breakout', weight: 17, tags: ['Пробой'], winRate: 0.45, win: 2.1, loss: 1.0 },
-  { id: 'level', weight: 12, tags: ['Отбой от уровня'], sometimes: [['Объёмный уровень', 0.55]], winRate: 0.56, win: 1.5, loss: 1.0 },
-  { id: 'divergence', weight: 7, tags: ['Дивергенция'], winRate: 0.48, win: 1.35, loss: 1.05 },
+  { id: 'trend-retest', weight: 32, tags: ['По тренду'], sometimes: [['Ретест', 0.7]], winRate: 0.7, win: 2.0, loss: 1.05 },
+  { id: 'breakout', weight: 17, tags: ['Пробой'], winRate: 0.6, win: 2.35, loss: 1.05 },
+  { id: 'level', weight: 12, tags: ['Отбой от уровня'], sometimes: [['Объёмный уровень', 0.55]], winRate: 0.66, win: 1.9, loss: 1.05 },
+  { id: 'divergence', weight: 7, tags: ['Дивергенция'], winRate: 0.62, win: 1.8, loss: 1.1 },
   // Что стоит денег.
-  { id: 'counter', weight: 11, tags: ['Контртренд'], winRate: 0.36, win: 1.3, loss: 1.15 },
-  { id: 'fomo', weight: 6, tags: ['FOMO'], sometimes: [['Пробой', 0.6]], winRate: 0.28, win: 1.1, loss: 1.4 },
+  { id: 'counter', weight: 7, tags: ['Контртренд'], winRate: 0.38, win: 1.4, loss: 1.1 },
+  { id: 'fomo', weight: 4, tags: ['FOMO'], sometimes: [['Пробой', 0.6]], winRate: 0.28, win: 1.1, loss: 1.4 },
   // Вход не по системе — та самая ошибка, которую продукт берётся ловить.
   // Тегов нет вовсе: человек не смог назвать причину, потому что её не было.
-  { id: 'untagged', weight: 15, tags: [], winRate: 0.4, win: 1.2, loss: 1.25 },
+  { id: 'untagged', weight: 9, tags: [], winRate: 0.42, win: 1.3, loss: 1.2 },
 ];
 
 /**
@@ -233,7 +253,6 @@ function profileDeck(count: number): Profile[] {
  * проигрыши не легли видимым правильным чередованием: серии в демо должны
  * быть, иначе разделы про просадку и отыгрыш не на чем показать.
  */
-const winQuota = new Map<string, number>();
 function drawWin(profile: Profile): boolean {
   const acc = (winQuota.get(profile.id) ?? rnd()) + profile.winRate + (rnd() - 0.5) * 0.3;
   const win = acc >= 1;
@@ -324,7 +343,24 @@ function buildPositions(now: number): Position[] {
 
     // Размер считается от риска, а не от «сколько не жалко»: тогда exposurePct
     // и plannedRiskPct в TradeRisk получаются согласованными между собой.
-    const riskPct = rand(0.6, 2.1) * sizeMult;
+    /*
+     * Риск на сделку — логнормальный, с широким разбросом, а не ровный
+     * процент от депозита. Это не «шум ради шума»: непостоянный размер входа —
+     * самостоятельная ошибка, и продукт ловит её отдельным видом привычки
+     * (size_up в habits.service.ts).
+     *
+     * Она же держит Edge Score на своём месте. Score считается из SQN, то есть
+     * из mean/stdev по сделкам, и при профит-факторе 2.3 ровный размер дал бы
+     * SQN около 5 — «превосходно» по шкале Тарпа. Демо-счёт с превосходной
+     * оценкой нечего диагностировать. Разброс размера роняет SQN, не трогая
+     * профит-фактор (размер не зависит от исхода), и витрина получает честную
+     * связку: сетапы прибыльные, а стабильности нет.
+     */
+    // Обычный размер — и «разгон»: в шестой примерно сделке человек ставит
+    // кратно больше обычного. Это не приём ради статистики, а поведение,
+    // которое продукт ловит отдельным видом привычки (size_up).
+    const oversize = chance(0.05);
+    const riskPct = rand(0.6, 1.05) * (oversize ? rand(1.8, 2.6) : 1) * sizeMult;
     const riskUsd = (balance * riskPct) / 100;
     // Стоп пошире — значит меньше плечо и меньше комиссия с оборота. Она тут
     // не косметика: 0.055% с каждой стороны от номинала — это ~0.05R со сделки,
@@ -335,33 +371,46 @@ function buildPositions(now: number): Position[] {
     const rawQty = notional / entryPrice;
     const qty = Math.max(spec.step, Math.round(rawQty / spec.step) * spec.step);
 
-    // Часть входов — без стопа на бирже. Это отдельная ошибка со своим тегом, и
-    // у таких сделок plannedRiskPct честно остаётся null.
-    const noStop = chance(0.18);
+    // Часть входов — без стопа на бирже: у таких сделок plannedRiskPct честно
+    // остаётся null, а убыток бежит дальше (см. множитель ниже). Своего тега
+    // у этого больше нет — в наборе демо он не нужен, — но поведение осталось:
+    // раздел риска обязан показывать сделки, у которых плановый риск неизвестен.
+    const noStop = chance(0.12);
     const stopLoss = noStop
       ? null
       : direction === 'long'
         ? entryPrice * (1 - stopDistPct / 100)
         : entryPrice * (1 + stopDistPct / 100);
 
-    const win = drawWin(profile);
+    // Без стопа реже доводят до плюса: некому зафиксировать разворот.
+    const win = drawWin(profile) && !(noStop && chance(0.2));
     // Разброс множителя узкий намеренно. При sigma 0.45 сумма по профилю из
     // двадцати сделок — уже шум: в прогоне подряд «Пробой» давал то +$750, то
     // +$11 при одном и том же винрейте. Витрина, где итог тега определяется
     // жребием, показывает, что разметка ни на что не влияет.
+    // Отсутствие стопа наказывается размером убытка, а не только толщиной
+    // хвоста. Раньше noStop влиял лишь на sigma — и тег «Вход без стопа»
+    // выходил на витрине с ПОЛОЖИТЕЛЬНЫМ итогом, то есть ошибка, которую
+    // продукт называет ошибкой, выглядела прибыльной. Стоп — это и есть то,
+    // что обрезает убыток; без него он бежит, и множитель обязан это
+    // показывать. Выигрыши без стопа не растут: цель фиксируют так же.
     const rMultiple = win
-      ? logNormal(profile.win, 0.3)
-      : -logNormal(profile.loss, noStop ? 0.42 : 0.2); // без стопа — хвост толще
+      ? logNormal(profile.win, 0.24)
+      : -logNormal(profile.loss * (noStop ? 1.9 : 1), noStop ? 0.34 : 0.16);
     const pnl = riskUsd * rMultiple;
 
     // Убыточные держатся втрое дольше прибыльных — ошибка №3 из продуктовой
     // рамки. Это не случайный разброс: медианы разведены намеренно.
-    const holdH = profile.id === 'tilt' ? logNormal(0.7, 0.6) : win ? logNormal(3.5, 0.8) : logNormal(11, 0.85);
+    const holdH =
+      profile.id === 'tilt'
+        ? logNormal(0.7, 0.6)
+        : win
+          ? logNormal(3.5, 0.8)
+          : logNormal(noStop ? 20 : 11, 0.85); // без стопа выходят ещё позже
     const closeMs = entryMs + Math.max(6 * 60_000, holdH * HOUR);
 
     const tags = [...profile.tags];
     for (const [name, p] of profile.sometimes ?? []) if (chance(p)) tags.push(name);
-    if (noStop && profile.tags.length > 0) tags.push('Вход без стопа');
     // «Передержал» ставится по факту: минус, просиженный больше суток.
     if (!win && holdH > 24 && profile.tags.length > 0 && chance(0.75)) tags.push('Передержал');
 
@@ -505,6 +554,210 @@ function contextOf(p: Position) {
     qualityComputed: true,
     ctxVersion: CTX_VERSION,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Отчёт: те же метрики, что покажет продукт
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Копия шкалы Тарпа из `frontend/src/shared/lib/utils/edgeScore.ts`. Копия, а
+ * не импорт: бэкенд и фронтенд не делят модули. Здесь она нужна только для
+ * сверки — число на витрине считает фронт.
+ */
+const SCORE_POINTS: Array<[number, number]> = [
+  [0, 0],
+  [1.6, 25],
+  [2.0, 40],
+  [2.5, 55],
+  [3.0, 70],
+  [5.0, 88],
+  [7.0, 100],
+];
+
+function sqnToScore(sqn: number): number {
+  if (sqn <= 0) return 0;
+  if (sqn >= 7) return 100;
+  for (let i = 1; i < SCORE_POINTS.length; i++) {
+    const [x1, y1] = SCORE_POINTS[i - 1];
+    const [x2, y2] = SCORE_POINTS[i];
+    if (sqn <= x2) return Math.round(y1 + ((sqn - x1) / (x2 - x1)) * (y2 - y1));
+  }
+  return 100;
+}
+
+interface Report {
+  positions: number;
+  pnl: number;
+  fees: number;
+  grossProfit: number;
+  grossLoss: number;
+  profitFactor: number;
+  winRate: number;
+  sqn: number;
+  score: number;
+  /** Глубина и длительность самой долгой просадки кривой закрытого P&L. */
+  ddDepth: number;
+  ddDays: number;
+  noStopPnl: number;
+  noStopWinRate: number;
+  tiltTrades: number;
+}
+
+/**
+ * Считает ровно то, что покажет продукт: SQN и профит-фактор — по `closedPnl`
+ * позиций и без комиссий (`TradesService.stats`), просадка — по той же
+ * накопленной кривой, которую рисует график обзора.
+ */
+function summarize(all: Position[], days?: number): Report {
+  // Продукт считает статистику за выбранный период, и по умолчанию на обзоре
+  // стоят 30 дней (`DEFAULT_DAYS` в usePeriodFilter). SQN растёт как √N, так
+  // что число за месяц и за всё время — это два разных числа, и подгонять
+  // Edge Score можно только под одно из окон.
+  const positions =
+    days && days > 0 ? all.filter((p) => p.closeMs >= Date.now() - days * DAY) : all;
+  const pnls = positions.map((p) => p.pnl);
+  const n = pnls.length;
+  const total = pnls.reduce((a, b) => a + b, 0);
+  const mean = total / n;
+  const variance = pnls.reduce((a, x) => a + (x - mean) ** 2, 0) / (n - 1);
+  // MIN_SQN_POSITIONS = 30 в TradesService: на меньшей выборке продукт вообще
+  // не показывает ни SQN, ни Edge Score.
+  const sqn = n < 30 ? 0 : Number(((Math.sqrt(n) * mean) / Math.sqrt(variance)).toFixed(2));
+
+  const grossProfit = pnls.filter((x) => x > 0).reduce((a, b) => a + b, 0);
+  const grossLoss = pnls.filter((x) => x < 0).reduce((a, b) => a + b, 0);
+
+  // Просадка — по времени закрытия, как и кривая на обзоре.
+  const byClose = [...positions].sort((a, b) => a.closeMs - b.closeMs);
+  let cum = 0;
+  let peak = 0;
+  let peakMs = byClose[0].closeMs;
+  let ddDepth = 0;
+  let ddDays = 0;
+  for (const p of byClose) {
+    cum += p.pnl;
+    if (cum >= peak) {
+      ddDays = Math.max(ddDays, (p.closeMs - peakMs) / DAY);
+      peak = cum;
+      peakMs = p.closeMs;
+    } else {
+      ddDepth = Math.max(ddDepth, peak - cum);
+    }
+  }
+  // Хвост: кривая, закончившаяся ниже пика, — это просадка, которая ещё идёт.
+  if (cum < peak) {
+    ddDays = Math.max(ddDays, (byClose[byClose.length - 1].closeMs - peakMs) / DAY);
+  }
+
+  const noStop = positions.filter((p) => p.stopLoss == null);
+  const tagged = (name: string) => positions.filter((p) => p.tags.includes(name));
+
+  return {
+    positions: n,
+    pnl: total,
+    fees: positions.reduce((s2, p) => s2 + p.openFee + p.parts.reduce((x, y) => x + y.closeFee, 0), 0),
+    grossProfit,
+    grossLoss,
+    profitFactor: Number((grossProfit / Math.abs(grossLoss)).toFixed(2)),
+    winRate: Number(((pnls.filter((x) => x > 0).length / n) * 100).toFixed(2)),
+    sqn,
+    score: sqnToScore(sqn),
+    ddDepth,
+    ddDays,
+    noStopPnl: noStop.reduce((a, p) => a + p.pnl, 0),
+    noStopWinRate: noStop.length ? (noStop.filter((p) => p.pnl > 0).length / noStop.length) * 100 : 0,
+    tiltTrades: tagged('Тильт').length,
+  };
+}
+
+/** Цели витрины: их назвал владелец продукта, генератор подбирается под них. */
+const TARGET_SCORE = 53;
+const TARGET_PF = 2.3;
+/**
+ * Окно, под которое подгоняются числа: `DEFAULT_DAYS` в usePeriodFilter — то,
+ * с чем гость открывает обзор. За другие периоды Edge Score будет другим, и
+ * это не расхождение: SQN растёт как √N, поэтому одна и та же торговля на
+ * выборке в 183 сделки даёт оценку заметно выше, чем на 35.
+ */
+const TARGET_DAYS = 30;
+
+/** Насколько прогон далёк от целей. Score весит больше — он на обзоре крупным. */
+const distance = (r: Report) =>
+  Math.abs(r.score - TARGET_SCORE) * 2 + Math.abs(r.profitFactor - TARGET_PF) * 10;
+
+const money = (v: number) => `${v >= 0 ? '+' : '−'}$${Math.abs(v).toFixed(0)}`;
+
+function printReport(r: Report, positions: Position[]): void {
+  console.log(`  позиций: ${r.positions}   винрейт: ${r.winRate}%`);
+  console.log(`  P&L: ${money(r.pnl)}   комиссии: $${r.fees.toFixed(0)}`);
+  console.log(`  профит-фактор: ${r.profitFactor}   SQN: ${r.sqn}   Edge Score: ${r.score}`);
+  console.log(`  валовая прибыль: ${money(r.grossProfit)}   валовый убыток: ${money(r.grossLoss)}`);
+  console.log(`  макс. просадка: $${r.ddDepth.toFixed(0)}, самая долгая: ${r.ddDays.toFixed(0)} дн.`);
+  console.log(
+    `  входы без стопа: ${money(r.noStopPnl)} при винрейте ${r.noStopWinRate.toFixed(0)}%   ` +
+      `отыгрыш: ${r.tiltTrades} сделок`,
+  );
+  console.log('');
+  console.log('  профиль входа        сделок    итог     винрейт  вал.убыток   медиана');
+  const byProfile = new Map<string, Position[]>();
+  for (const p of positions) {
+    const list = byProfile.get(p.profile.id) ?? [];
+    list.push(p);
+    byProfile.set(p.profile.id, list);
+  }
+  const medHold = (list: Position[]) => {
+    const h = list.map((p) => (p.closeMs - p.entryMs) / HOUR).sort((a, b) => a - b);
+    return h.length ? h[Math.floor(h.length / 2)] : 0;
+  };
+  for (const [id, list] of [...byProfile].sort((a, b) => b[1].length - a[1].length)) {
+    const net = list.reduce(
+      (acc, p) => acc + p.pnl - p.openFee - p.parts.reduce((x, y) => x + y.closeFee, 0),
+      0,
+    );
+    const wins = list.filter((p) => p.pnl > 0).length;
+    console.log(
+      `  ${id.padEnd(20)} ${String(list.length).padStart(4)}  ${money(net).padStart(6)}` +
+        `   ${((wins / list.length) * 100).toFixed(0).padStart(4)}%  ${money(
+          list.filter((x) => x.pnl < 0).reduce((a, x) => a + x.pnl, 0),
+        ).padStart(7)}   ${medHold(list).toFixed(1).padStart(5)} ч`,
+    );
+  }
+  console.log('');
+  console.log(
+    `  медиана удержания: прибыльные ${medHold(positions.filter((p) => p.pnl > 0)).toFixed(1)} ч, ` +
+      `убыточные ${medHold(positions.filter((p) => p.pnl <= 0)).toFixed(1)} ч`,
+  );
+}
+
+/** Перебор зёрен: печатает лучшие, в базу не пишет. */
+function search(now: number, tries: number): void {
+  const results: Array<{ seed: number; win: Report; all: Report }> = [];
+  for (let seed = SEED; seed < SEED + tries; seed++) {
+    reseed(seed);
+    const positions = buildPositions(now);
+    const all = summarize(positions);
+    // Целимся в окно, которое видит гость: на обзоре по умолчанию 30 дней.
+    const win = summarize(positions, TARGET_DAYS);
+    // Витрина обязана оставаться витриной, иначе числа не имеют значения:
+    // тег ошибки — в минус, отыгрыш — отчётный по MIN_SEGMENT, просадка — не
+    // на полгода, и в окне отчёта не меньше MIN_SQN_POSITIONS сделок, иначе
+    // продукт не покажет Edge Score вовсе.
+    if (all.noStopPnl > -400 || all.tiltTrades < 12 || all.ddDays > 45) continue;
+    if (win.positions < 32) continue;
+    results.push({ seed, win, all });
+  }
+  results.sort((a, b) => distance(a.win) - distance(b.win));
+  console.log(`подошло зёрен: ${results.length} из ${tries}`);
+  console.log('  seed        30 дней: Edge / PF / SQN / поз.      всё время: Edge / PF   просадка  без стопа');
+  for (const { seed, win, all } of results.slice(0, 12)) {
+    console.log(
+      `  ${seed}   ${String(win.score).padStart(3)} / ${win.profitFactor.toFixed(2)} / ` +
+        `${win.sqn.toFixed(2)} / ${String(win.positions).padStart(3)}` +
+        `        ${String(all.score).padStart(3)} / ${all.profitFactor.toFixed(2)}` +
+        `      ${all.ddDays.toFixed(0).padStart(3)} дн   ${all.noStopPnl.toFixed(0).padStart(6)}`,
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -742,7 +995,7 @@ async function main() {
     console.log(`  итог за период: ${pnl >= 0 ? '+' : '−'}$${Math.abs(pnl).toFixed(2)}`);
     console.log(`  баланс: $${balance.toFixed(2)} (старт $${START_BALANCE}, пополнений $3500)`);
     console.log('');
-    console.log('  профиль входа        сделок    итог     винрейт   медиана удержания');
+    console.log('  профиль входа        сделок    итог     винрейт  вал.убыток   медиана');
     const byProfile = new Map<string, Position[]>();
     for (const p of positions) {
       const list = byProfile.get(p.profile.id) ?? [];
@@ -775,7 +1028,26 @@ async function main() {
   }
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+const args = process.argv.slice(2);
+if (args.includes('--search')) {
+  search(Date.now(), Number(args[args.indexOf('--search') + 1]) || 500);
+} else if (args.includes('--dry')) {
+  reseed(SEED);
+  const dryPositions = buildPositions(Date.now());
+  for (const days of [30, 90, 0]) {
+    const r = summarize(dryPositions, days);
+    console.log(
+      `${(days ? days + ' дней' : 'всё время').padEnd(10)} позиций ${String(r.positions).padStart(3)}  ` +
+        `PF ${r.profitFactor.toFixed(2).padStart(5)}  SQN ${r.sqn.toFixed(2).padStart(5)}  ` +
+        `Edge ${String(r.score).padStart(3)}  P&L ${money(r.pnl).padStart(8)}  ` +
+        `просадка ${r.ddDays.toFixed(0).padStart(3)} дн`,
+    );
+  }
+  console.log('');
+  printReport(summarize(dryPositions), dryPositions);
+} else {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}
