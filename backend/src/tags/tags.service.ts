@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import type { TagType } from './dto/tags.dto';
 import { PrismaService } from '../prisma/prisma.service';
 
 // Curated palette (matches the chip colors used across the tag UI). Color is
@@ -45,6 +46,52 @@ export class TagsService {
         tradesCount: t._count.tradeTags,
       })),
     };
+  }
+
+  /**
+   * Набор, который получает новый аккаунт.
+   *
+   * Это НЕ таксономия и не рекомендация: продукт стоит на том, что человек
+   * придумывает теги сам (см. CLAUDE.md). Но пустой список на старте ломает
+   * ровно тот шаг пути, ради которого продукт и существует, — «поставить
+   * первый тег»: размечать нечем, и непонятно, что вообще писать в это поле.
+   * Поэтому здесь примеры, а не система: их видно, по ним понятно, что теги
+   * бывают трёх родов, и все они удаляются одним нажатием.
+   *
+   * Держим коротким намеренно. Двадцать готовых тегов человек начнёт разбирать
+   * вместо того, чтобы завести свои, — а свои и есть смысл этой разметки.
+   */
+  private static readonly DEFAULT_TAGS: Array<{ name: string; type: TagType }> = [
+    { name: 'Пробой', type: 'setup' },
+    { name: 'Ретест', type: 'setup' },
+    { name: 'Отбой от уровня', type: 'setup' },
+    { name: 'По тренду', type: 'setup' },
+    { name: 'Контртренд', type: 'setup' },
+    { name: 'FOMO', type: 'emotion' },
+    { name: 'Тильт', type: 'emotion' },
+    { name: 'Вход без стопа', type: 'mistake' },
+    { name: 'Передержал', type: 'mistake' },
+  ];
+
+  /**
+   * Создаёт стартовые теги для только что зарегистрированного пользователя.
+   *
+   * `skipDuplicates` и отсутствие ошибки наружу — потому что вызов не должен
+   * ронять регистрацию: аккаунт без примеров тегов рабочий, аккаунт, который
+   * не создался, — нет.
+   */
+  async createDefaults(userId: string): Promise<number> {
+    // Цвета раздаём по кругу палитры, а не через pickColor: тот ходит в базу
+    // на каждый тег и выбирает случайно — девять запросов ради набора, который
+    // и так должен получиться разноцветным.
+    const rows = TagsService.DEFAULT_TAGS.map((t, i) => ({
+      userId,
+      name: t.name,
+      type: t.type,
+      color: PALETTE[i % PALETTE.length],
+    }));
+    const res = await this.prisma.tag.createMany({ data: rows, skipDuplicates: true });
+    return res.count;
   }
 
   async create(userId: string, name: string, type?: string) {

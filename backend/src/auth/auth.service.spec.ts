@@ -8,7 +8,8 @@ import { AuthService } from './auth.service';
 describe('AuthService.login', () => {
   it('кидает UnauthorizedException с code INVALID_CREDENTIALS, если пользователя нет', async () => {
     const prisma = { user: { findUnique: async () => null } } as any;
-    const service = new AuthService(prisma, {} as any);
+    // Третий аргумент — TagsService: login до него не доходит, как и до bcrypt.
+    const service = new AuthService(prisma, {} as any, {} as any);
 
     let caught: unknown;
     try {

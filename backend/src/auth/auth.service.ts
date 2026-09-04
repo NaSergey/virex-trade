@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
@@ -12,6 +13,7 @@ import { LoginDto } from './dto/login.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { resolveJwtAccessSecret } from './jwt-secret';
 import { isOwnerEmail } from '../admin/owner';
+import { TagsService } from '../tags/tags.service';
 
 export interface PublicUser {
   id: string;
@@ -37,6 +39,7 @@ export interface AuthResult {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly accessSecret = resolveJwtAccessSecret();
   private readonly accessTtl = process.env.JWT_ACCESS_TTL || '15m';
   private readonly refreshTtlDays = Number(
@@ -46,6 +49,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly tags: TagsService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthResult> {
@@ -70,6 +74,14 @@ export class AuthService {
         name: dto.name,
       },
     });
+
+    // Примеры тегов, чтобы первую сделку было чем разметить. Провал не
+    // отменяет регистрацию: аккаунт без примеров рабочий, а несозданный — нет.
+    try {
+      await this.tags.createDefaults(user.id);
+    } catch (e) {
+      this.logger.warn(`не удалось создать стартовые теги для ${user.id}: ${e}`);
+    }
 
     return this.issueTokens(user);
   }
