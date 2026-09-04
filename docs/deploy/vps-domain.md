@@ -138,6 +138,18 @@ sudo nginx -t && sudo systemctl reload nginx
 curl -sI http://ВАШ.ПОДДОМЕН | grep -i x-powered-by   # ждём Next.js
 ```
 
+То же повторяется после certbot: он добавляет `listen 443 ssl;` — снова без
+адреса, — и по HTTPS отдаётся сертификат соседнего сайта. Лечится тем же:
+
+```bash
+sudo sed -i 's/^\(\s*\)listen 443 ssl;/listen ВАШ.IP:443 ssl;/' /etc/nginx/conf.d/virex.conf
+sudo nginx -t && sudo systemctl reload nginx
+curl -sI https://ВАШ.ПОДДОМЕН | grep -iE "^HTTP|x-powered-by"
+```
+
+Сертификат при этом перевыпускать не нужно — меняется только адрес
+прослушивания.
+
 Первая сборка занимает несколько минут (два multi-stage образа).
 
 Проверка:
