@@ -1,10 +1,13 @@
+import { WeekdayHourBucket } from '../market-events/market-events.service';
 import {
   HourCandle,
   bookSpreadPct,
   fngHolds,
+  hourAverages,
   hourMovePct,
   lsHolds,
   parseKline,
+  peakHourOfWeekday,
   rangePct,
   rangeRatio,
   spreadRatio,
@@ -161,5 +164,88 @@ describe('weakWeekdays', () => {
       avgChangePct: 0,
     }));
     expect(weakWeekdays(weekday)).not.toContain(3);
+  });
+});
+
+describe('hourAverages', () => {
+  it('усредняет день недели по часу с весом выборки', () => {
+    const cells = [
+      { weekday: 0, hour: 5, samples: 100, avgVolatilityPct: 1 },
+      { weekday: 1, hour: 5, samples: 300, avgVolatilityPct: 2 },
+    ];
+    const [h5] = hourAverages(cells);
+    expect(h5.hour).toBe(5);
+    expect(h5.samples).toBe(400);
+    // Не 1.5: у второго дня втрое больше свечей.
+    expect(h5.avgVolatilityPct).toBeCloseTo(1.75, 6);
+  });
+});
+
+/**
+ * Ровная неделя: волатильность зависит только от часа, дни между собой не
+ * различаются. Тесты подкручивают в ней отдельные клетки.
+ */
+const flatCells = (): WeekdayHourBucket[] => {
+  const cells: WeekdayHourBucket[] = [];
+  for (let weekday = 0; weekday < 7; weekday++) {
+    for (let hour = 0; hour < 24; hour++) {
+      cells.push({ weekday, hour, samples: 100, avgVolatilityPct: 0.2 + hour * 0.05 });
+    }
+  }
+  return cells;
+};
+
+const cellAt = (cells: WeekdayHourBucket[], weekday: number, hour: number): WeekdayHourBucket =>
+  cells.find((c) => c.weekday === weekday && c.hour === hour)!;
+
+describe('peakHourOfWeekday', () => {
+  it('на ровной неделе не зовёт никуда: дня-победителя нет', () => {
+    expect(peakHourOfWeekday(flatCells(), 3, 1.1)).toBeNull();
+  });
+
+  it('находит день, в который час заметно живее остальных', () => {
+    const cells = flatCells();
+    cellAt(cells, 5, 20).avgVolatilityPct = 2;
+
+    const pick = peakHourOfWeekday(cells, 5, 1.1);
+    expect(pick?.hour).toBe(20);
+    expect(pick?.weekday).toBe(5);
+    expect(pick?.ratio).toBeGreaterThan(1.5);
+    // Тот же час в другие дни — не повод: победитель ровно один.
+    expect(peakHourOfWeekday(cells, 4, 1.1)).toBeNull();
+  });
+
+  it('в сутках отдаёт один час, самый волатильный из прошедших отбор', () => {
+    const cells = flatCells();
+    cellAt(cells, 2, 19).avgVolatilityPct = 1.5;
+    cellAt(cells, 2, 23).avgVolatilityPct = 2;
+
+    expect(peakHourOfWeekday(cells, 2, 1.1)?.hour).toBe(23);
+  });
+
+  it('не зовёт в тихий час, даже если день в нём лучший из семи', () => {
+    const cells = flatCells();
+    // Час 0 — самый спокойный в сутках; удвоение оставляет его таким же.
+    cellAt(cells, 1, 0).avgVolatilityPct = 0.4;
+
+    expect(peakHourOfWeekday(cells, 1, 1.1)).toBeNull();
+  });
+
+  it('порог отсекает превышение, которое ничего не значит', () => {
+    const cells = flatCells();
+    cellAt(cells, 6, 22).avgVolatilityPct = 1.4; // ≈×1.07 к среднему по неделе
+
+    expect(peakHourOfWeekday(cells, 6, 1.05)?.hour).toBe(22);
+    expect(peakHourOfWeekday(cells, 6, 1.2)).toBeNull();
+  });
+
+  it('час с неполной неделей данных не рассматривается', () => {
+    const cells = flatCells();
+    cellAt(cells, 6, 22).avgVolatilityPct = 2;
+    // У четверга в этом часе выборки почти нет — значит, назвать субботу
+    // самым волатильным днём этого часа нечем.
+    cellAt(cells, 4, 22).samples = 3;
+
+    expect(peakHourOfWeekday(cells, 6, 1.1)).toBeNull();
   });
 });

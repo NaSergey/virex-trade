@@ -12,10 +12,10 @@ import {
   hourMovePct,
   lsHolds,
   parseKline,
+  peakHourOfWeekday,
   rangePct,
   rangeRatio,
   spreadRatio,
-  topQuartileHours,
   weakWeekdays,
 } from './market-metrics';
 
@@ -26,6 +26,16 @@ const BASELINE_HOURS = 7 * 24;
 const BOOK_BASELINE_POINTS = 7 * 24 * 4;
 /** За сколько минут до начала часа предупреждаем о нём. */
 const HOUR_LEAD_MIN = 10;
+
+const WEEKDAY_NAMES = [
+  'Воскресенье',
+  'Понедельник',
+  'Вторник',
+  'Среда',
+  'Четверг',
+  'Пятница',
+  'Суббота',
+];
 
 const fmtUsdCompact = (v: number): string => {
   if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
@@ -225,32 +235,65 @@ export class MarketAlertsService implements OnApplicationBootstrap, OnModuleDest
     }
   }
 
+  /**
+   * Предупреждение о волатильном часе — но только в тот день недели, в
+   * который этот час действительно живее обычного.
+   *
+   * Раньше час сравнивался со средним сразу по всем дням: верхняя четверть
+   * суток — это шесть часов, и они одни и те же каждый день, поэтому в чат
+   * уходило до шести одинаковых сообщений в сутки. Теперь час сравнивается
+   * сам с собой в другие дни недели, и кандидат в сутках остаётся ровно один
+   * или ни одного (см. peakHourOfWeekday).
+   */
   private async volatileHour(userIds: string[]): Promise<void> {
     const now = new Date();
-    const minutes = now.getUTCMinutes();
     // Сигнал предупреждающий, поэтому он живёт последние десять минут часа.
-    const holds = minutes >= 60 - HOUR_LEAD_MIN;
-    const nextHour = (now.getUTCHours() + 1) % 24;
+    const holds = now.getUTCMinutes() >= 60 - HOUR_LEAD_MIN;
 
-    const [{ hourly }, { weekday }] = await Promise.all([
-      this.marketEvents.getHourlyStats(),
+    if (!holds) {
+      // Вне окна условие заведомо ложно, но maybeSend всё равно нужен — он
+      // снимает фронт нарастания. А вот запросов на историю свечей ради
+      // заведомого «нет» не нужно: тик идёт каждые пять минут.
+      for (const userId of userIds) {
+        await this.notifier.maybeSend(userId, 'mkt.hour', false, () => ({ text: '' }));
+      }
+      return;
+    }
+
+    // День берём по часу, о котором предупреждаем, а не по текущему: в 23:50
+    // UTC речь уже о первом часе следующего дня недели.
+    const next = new Date(now.getTime() + HOUR_LEAD_MIN * 60_000);
+    const nextHour = next.getUTCHours();
+    const nextWeekday = next.getUTCDay();
+
+    const [{ cells }, { weekday }] = await Promise.all([
+      this.marketEvents.getWeekdayHourStats(),
       this.marketEvents.getCorrelation(),
     ]);
-    const top = topQuartileHours(hourly);
     const weak = weakWeekdays(weekday);
-    const hourIsTop = top.includes(nextHour);
+    // Порог у пользователей свой, а таблица одна: разбор считается на каждое
+    // встреченное значение порога, а не на каждого пользователя.
+    const picks = new Map<number, ReturnType<typeof peakHourOfWeekday>>();
 
     for (const userId of userIds) {
-      const mode = await this.notifier.thresholdFor(userId, 'mkt.hour');
-      if (mode == null) continue;
-      await this.notifier.maybeSend(userId, 'mkt.hour', holds && hourIsTop, () => {
+      const minRatio = await this.notifier.thresholdFor(userId, 'mkt.hour');
+      if (minRatio == null) continue;
+      if (!picks.has(minRatio)) {
+        picks.set(minRatio, peakHourOfWeekday(cells, nextWeekday, minRatio));
+      }
+      const pick = picks.get(minRatio) ?? null;
+      if (!pick || pick.hour !== nextHour) {
+        await this.notifier.maybeSend(userId, 'mkt.hour', false, () => ({ text: '' }));
+        continue;
+      }
+
+      await this.notifier.maybeSend(userId, 'mkt.hour', true, () => {
         const lines = [
           `⏰ Через ${HOUR_LEAD_MIN} минут начинается ${String(nextHour).padStart(2, '0')}:00 UTC`,
-          'Исторически один из самых волатильных часов суток.',
+          `${WEEKDAY_NAMES[nextWeekday]} — самый волатильный день недели в этот час:`,
+          `размах <b>${pick.avgVolatilityPct.toFixed(2)}%</b> против ${pick.weekAvgPct.toFixed(2)}% в среднем по неделе.`,
         ];
-        // mode = 1 — «час + слабый день»: строка про день добавляется к тому
-        // же сообщению, отдельным сигналом день не ходит.
-        if (mode === 1 && weak.includes(now.getUTCDay())) {
+        if (weak.includes(nextWeekday)) {
           lines.push('Сегодня лонг закрывается в плюс реже, чем в половине случаев.');
         }
         return { text: lines.join('\n') };
