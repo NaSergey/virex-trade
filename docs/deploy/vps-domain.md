@@ -118,8 +118,24 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml --profile edge up
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 sudo cp deploy/nginx-virex.conf.example /etc/nginx/conf.d/virex.conf
 sudo sed -i 's/app\.example\.com/ВАШ.ПОДДОМЕН/g' /etc/nginx/conf.d/virex.conf
-sudo certbot --nginx -d ВАШ.ПОДДОМЕН
 sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d ВАШ.ПОДДОМЕН
+```
+
+Порядок важен: сначала конфиг на 80-м порту и reload, потом certbot — ему нужно
+достучаться до нашего блока по имени.
+
+**Если сайты панели объявлены на конкретном адресе**, наш блок до них не
+доберётся: nginx выбирает server сначала по паре «адрес:порт» и только потом по
+`server_name`, а `listen 80` — это `0.0.0.0:80`, менее специфично, чем
+`listen 1.2.3.4:80`. Признак: по домену открывается чужой сайт, а certbot
+получает 404 на acme-challenge. Проверить и починить:
+
+```bash
+nginx -T | grep -E "^\s*(listen|server_name)"     # как объявлены соседи
+sudo sed -i 's/^\(\s*\)listen 80;/listen ВАШ.IP:80;/' /etc/nginx/conf.d/virex.conf
+sudo nginx -t && sudo systemctl reload nginx
+curl -sI http://ВАШ.ПОДДОМЕН | grep -i x-powered-by   # ждём Next.js
 ```
 
 Первая сборка занимает несколько минут (два multi-stage образа).
