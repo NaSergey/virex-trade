@@ -69,6 +69,10 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.prod
+      args:
+        # Тот же адрес, что и в environment ниже, но нужен ещё и здесь:
+        # rewrites запекаются в образ на сборке (см. Dockerfile.prod).
+        API_INTERNAL_URL: http://api:8091
     restart: unless-stopped
     depends_on:
       - api

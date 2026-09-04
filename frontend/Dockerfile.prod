@@ -16,6 +16,16 @@ RUN npm ci
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# Адрес API нужен именно НА СБОРКЕ, а не в рантайме: `output: "standalone"`
+# вычисляет rewrites из next.config.ts во время `next build` и запекает их в
+# routes-manifest. Переменная, заданная только через `environment:` в compose,
+# до них не доходит — в образ уезжает дефолт `http://localhost:8091`, и
+# контейнер web начинает проксировать сам в себя: любой запрос к /api/* и
+# /auth/* отвечает 500, хотя api при этом полностью здоров.
+ARG API_INTERNAL_URL=http://api:8091
+ENV API_INTERNAL_URL=$API_INTERNAL_URL
+
 RUN npm run build
 
 # --- runtime -----------------------------------------------------------
