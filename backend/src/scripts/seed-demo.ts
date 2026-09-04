@@ -730,6 +730,19 @@ function printReport(r: Report, positions: Position[]): void {
   );
 }
 
+/** Периоды, за которые печатается сводка: те же, что даёт фильтр на обзоре. */
+const REPORT_WINDOWS = [30, 90, 0];
+
+function printWindow(positions: Position[], days: number): void {
+  const r = summarize(positions, days);
+  console.log(
+    `${(days ? days + ' дней' : 'всё время').padEnd(10)} позиций ${String(r.positions).padStart(3)}  ` +
+      `PF ${r.profitFactor.toFixed(2).padStart(5)}  SQN ${r.sqn.toFixed(2).padStart(5)}  ` +
+      `Edge ${String(r.score).padStart(3)}  P&L ${money(r.pnl).padStart(8)}  ` +
+      `просадка ${r.ddDays.toFixed(0).padStart(3)} дн`,
+  );
+}
+
 /** Перебор зёрен: печатает лучшие, в базу не пишет. */
 function search(now: number, tries: number): void {
   const results: Array<{ seed: number; win: Report; all: Report }> = [];
@@ -995,34 +1008,11 @@ async function main() {
     console.log(`  итог за период: ${pnl >= 0 ? '+' : '−'}$${Math.abs(pnl).toFixed(2)}`);
     console.log(`  баланс: $${balance.toFixed(2)} (старт $${START_BALANCE}, пополнений $3500)`);
     console.log('');
-    console.log('  профиль входа        сделок    итог     винрейт  вал.убыток   медиана');
-    const byProfile = new Map<string, Position[]>();
-    for (const p of positions) {
-      const list = byProfile.get(p.profile.id) ?? [];
-      list.push(p);
-      byProfile.set(p.profile.id, list);
-    }
-    const medHold = (list: Position[]) => {
-      const h = list.map((p) => (p.closeMs - p.entryMs) / HOUR).sort((a, b) => a - b);
-      return h.length ? h[Math.floor(h.length / 2)] : 0;
-    };
-    for (const [id, list] of [...byProfile].sort((a, b) => b[1].length - a[1].length)) {
-      const net = list.reduce(
-        (s, p) => s + p.pnl - p.openFee - p.parts.reduce((x, y) => x + y.closeFee, 0),
-        0,
-      );
-      const wins = list.filter((p) => p.pnl > 0).length;
-      const med = medHold(list);
-      console.log(
-        `  ${id.padEnd(20)} ${String(list.length).padStart(4)}  ${(net >= 0 ? '+' : '−') + '$' + Math.abs(net).toFixed(0).padStart(4)}` +
-          `   ${((wins / list.length) * 100).toFixed(0).padStart(4)}%   ${med.toFixed(1).padStart(6)} ч`,
-      );
-    }
+    // Та же сводка, что у --dry: два расходящихся её варианта уже разъехались
+    // однажды — в шапке появилась колонка, которой в строках не было.
+    for (const days of REPORT_WINDOWS) printWindow(positions, days);
     console.log('');
-    console.log(
-      `  медиана удержания: прибыльные ${medHold(positions.filter((p) => p.pnl > 0)).toFixed(1)} ч, ` +
-        `убыточные ${medHold(positions.filter((p) => p.pnl <= 0)).toFixed(1)} ч`,
-    );
+    printReport(summarize(positions), positions);
   } finally {
     await prisma.$disconnect();
   }
@@ -1034,15 +1024,7 @@ if (args.includes('--search')) {
 } else if (args.includes('--dry')) {
   reseed(SEED);
   const dryPositions = buildPositions(Date.now());
-  for (const days of [30, 90, 0]) {
-    const r = summarize(dryPositions, days);
-    console.log(
-      `${(days ? days + ' дней' : 'всё время').padEnd(10)} позиций ${String(r.positions).padStart(3)}  ` +
-        `PF ${r.profitFactor.toFixed(2).padStart(5)}  SQN ${r.sqn.toFixed(2).padStart(5)}  ` +
-        `Edge ${String(r.score).padStart(3)}  P&L ${money(r.pnl).padStart(8)}  ` +
-        `просадка ${r.ddDays.toFixed(0).padStart(3)} дн`,
-    );
-  }
+  for (const days of REPORT_WINDOWS) printWindow(dryPositions, days);
   console.log('');
   printReport(summarize(dryPositions), dryPositions);
 } else {
