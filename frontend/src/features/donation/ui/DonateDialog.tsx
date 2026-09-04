@@ -83,7 +83,22 @@ export function DonateDialog({ open, onClose }: { open: boolean; onClose: () => 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && close()}>
       <DialogContent>
-        <DialogHeader title={t('title')} subtitle={t('lede')} />
+        <DialogHeader
+          title={t('title')}
+          subtitle={t('lede')}
+          /* Сколько уже собрано — на всех шагах окна: это про проект, а не
+             про текущий платёж, и после «спасибо» оно тоже уместно. */
+          aside={
+            config?.enabled ? (
+              <div className="don-total">
+                <span className="lbl">{t('totalLabel')}</span>
+                <b>
+                  {config.totalRaised} {config.currency}
+                </b>
+              </div>
+            ) : null
+          }
+        />
 
         <DialogBody>
           {isLoading && <Skeleton height={96} />}
@@ -138,7 +153,7 @@ export function DonateDialog({ open, onClose }: { open: boolean; onClose: () => 
 
           {/* Шаг 2 — оплата. */}
           {intent && current && !paid && !dead && (
-            <PaymentStep intent={intent} live={current} />
+            <PaymentStep intent={intent} live={current} onDone={close} />
           )}
 
           {paid && current && (
@@ -175,8 +190,10 @@ export function DonateDialog({ open, onClose }: { open: boolean; onClose: () => 
           />
         )}
 
-        {/* Шаг 2: отмена платежа слева, закрытие окна справа — закрытие ничего
-            не отменяет, поэтому оно и стоит на месте главного действия. */}
+        {/* Шаг 2: в подвале осталась только отмена платежа. Закрытие окна
+            переехало в тело кнопкой «Готово» — оно стоит сразу под реквизитами,
+            где человек и заканчивает, а держать внизу вторую кнопку про то же
+            самое значило бы спрашивать одно и то же дважды. */}
         {intent && !paid && !dead && (
           <DialogFooter>
             <Button
@@ -185,9 +202,6 @@ export function DonateDialog({ open, onClose }: { open: boolean; onClose: () => 
               onClick={() => cancel.mutate(intent.id, { onSuccess: close })}
             >
               {t('cancelPayment')}
-            </Button>
-            <Button variant="solid" onClick={close}>
-              {tc('close')}
             </Button>
           </DialogFooter>
         )}

@@ -17,7 +17,8 @@
     "typeWordPrefix": "Type",
     "confirm": "Confirm",
     "close": "Close",
-    "open": "Open"
+    "open": "Open",
+    "done": "Done"
   },
   "period": {
     "days7": "7 days",
@@ -436,7 +437,6 @@
     "addressLabel": "Address",
     "networkLabel": "Network",
     "networkWarning": "TRC20 (TRON) only. A transfer on another network cannot be recovered.",
-    "waiting": "Waiting for the transfer — this window updates itself once the network confirms it (usually about a minute). You can close it: the payment will still be credited.",
     "copy": "copy",
     "copied": "copied",
     "copyFailed": "failed",
@@ -448,7 +448,8 @@
     "canceledBody": "These details are no longer valid.",
     "lateStillCounts": "If you did send the transfer, it will still be credited once the network confirms it — for about twenty more minutes.",
     "timeLeftLabel": "Time left",
-    "cancelPayment": "Cancel the payment"
+    "cancelPayment": "Cancel the payment",
+    "totalLabel": "Raised"
   },
   "admin": {
     "title": "Users",

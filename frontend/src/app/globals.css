@@ -1942,6 +1942,18 @@
     font-size: var(--t-s);
   }
   .don-purpose p { margin: 0; }
+  /* Сколько собрано — итог всего окна, поэтому стоит в шапке, а не в теле.
+     Подпись капителью, число моноширинным: тот же приём, что у любой пары
+     «что это» → «сколько» в продукте. */
+  .don-total .lbl { display: block; margin-bottom: 2px; }
+  .don-total b {
+    font-family: var(--font-mono);
+    font-size: var(--t-s);
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+    white-space: nowrap;
+  }
   .don-qr {
     display: flex;
     flex-direction: column;
@@ -1975,6 +1987,15 @@
   /* Сумма — единственное, что нельзя ввести приблизительно; строка о ней
      набирается цветом сомнения (общая утилита .dbt), а здесь только отбивка. */
   .don-exact { margin: var(--s2) 0 var(--s4); }
+  /* «Готово» стоит по центру и отбито сверху: на этом шаге оно одно, и пара
+     «отмена / действие» из подвала диалога здесь не собирается. */
+  .don-done-row {
+    display: flex;
+    justify-content: center;
+    margin-top: var(--s4);
+    padding-top: var(--s3);
+    border-top: 1px solid var(--hair);
+  }
   .don-pay p { font-size: var(--t-s); }
   .don-done p { margin-bottom: var(--s3); }
 
@@ -1990,7 +2011,21 @@
     overflow-y: auto;
   }
   .dlg-backdrop { background: var(--scrim); }
-  .dh { padding: var(--s4) var(--s4) 0; }
+  /* Заголовок и итог справа — по верхней линии, а не по центру: у заголовка с
+     подзаголовком высота вдвое больше, и центрирование опустило бы число к
+     середине второй строки. */
+  .dh {
+    padding: var(--s4) var(--s4) 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--s3);
+  }
+  .dh-main { min-width: 0; }
+  .dh-aside {
+    flex: none;
+    text-align: right;
+  }
   .dh h3 {
     margin: 0 0 var(--s1);
     font-size: var(--t-m);

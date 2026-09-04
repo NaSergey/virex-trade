@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { Button } from '@/shared/ui/Button';
 import { KeyValue } from '@/shared/ui/Lookup';
 import { CopyValue } from './CopyValue';
 import type { Donation, DonationCreated } from '../api/hooks';
@@ -53,13 +54,17 @@ function useCountdown(expiresAt: string, active: boolean): number {
 export function PaymentStep({
   intent,
   live,
+  onDone,
 }: {
   /** Ответ создания: только в нём приезжает картинка QR. */
   intent: DonationCreated;
   /** Свежее состояние с сервера; до первого ответа опроса — сам интент. */
   live: Donation;
+  /** Закрыть окно: платёж отслеживается и без него. */
+  onDone: () => void;
 }) {
   const t = useTranslations('support');
+  const tc = useTranslations('common');
   const secondsLeft = useCountdown(live.expiresAt, live.status === 'PENDING');
 
   return (
@@ -68,7 +73,6 @@ export function PaymentStep({
         <div className="don-qr">
           {/* eslint-disable-next-line @next/next/no-img-element -- data:URL от бэкенда, оптимизировать нечего */}
           <img src={intent.qrDataUrl} alt={t('qrAlt')} width={200} height={200} />
-          <p className="muted">{t('qrNote')}</p>
         </div>
       )}
 
@@ -86,7 +90,16 @@ export function PaymentStep({
       <KeyValue label={t('timeLeftLabel')}>{mmss(secondsLeft)}</KeyValue>
 
       <p className="muted">{t('networkWarning')}</p>
-      <p className="muted">{t('waiting')}</p>
+
+      {/* «Готово» закрывает окно, а не подтверждает платёж: подтверждает его
+          сеть, и опрос доведёт донат до конца даже с закрытым окном. Кнопка
+          по центру, потому что она здесь одна — пары «отмена / действие», под
+          которую сделан подвал диалога, на этом шаге нет. */}
+      <div className="don-done-row">
+        <Button variant="solid" onClick={onDone}>
+          {tc('done')}
+        </Button>
+      </div>
     </div>
   );
 }

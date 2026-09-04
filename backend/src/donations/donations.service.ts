@@ -71,6 +71,30 @@ export class DonationsService {
   ) {}
 
   /** Что нужно интерфейсу до нажатия кнопки. */
+  /**
+   * Сколько собрано за всё время — сумма подтверждённых донатов.
+   *
+   * Считается по `paidUnits`, а не по `expectedUnits`: засчитывается ровно то,
+   * что пришло на кошелёк. Складывается в BigInt на стороне приложения, а не
+   * через `aggregate`: Prisma отдаёт сумму BigInt-колонки как Decimal, и
+   * точность, ради которой единицы и хранятся целыми, там теряется.
+   */
+  private async totalRaisedUnits(): Promise<bigint> {
+    const rows = await this.prisma.donation.findMany({
+      where: { status: 'PAID' satisfies DonationStatus, paidUnits: { not: null } },
+      select: { paidUnits: true },
+    });
+    return rows.reduce((sum, r) => sum + (r.paidUnits ?? 0n), 0n);
+  }
+
+  async publicConfigWithTotal() {
+    const [config, totalUnits] = await Promise.all([
+      Promise.resolve(this.publicConfig()),
+      this.totalRaisedUnits(),
+    ]);
+    return { ...config, totalRaised: formatUsdt(totalUnits) };
+  }
+
   publicConfig() {
     return {
       enabled: this.config.enabled,

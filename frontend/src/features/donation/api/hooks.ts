@@ -15,6 +15,8 @@ export interface DonationConfig {
   ttlSeconds: number;
   /** Максимум, на который сервер поднимет сумму ради уникального хвоста. */
   maxSurcharge: string;
+  /** Сколько собрано за всё время — сумма подтверждённых донатов. */
+  totalRaised: string;
 }
 
 export interface Donation {

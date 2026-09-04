@@ -55,17 +55,29 @@ DialogContent.displayName = DialogPrimitive.Content.displayName;
  * 28 июл»). Строка обязательна по смыслу — она отвечает на «чего именно это
  * касается», без неё диалог теряет привязку к строке журнала.
  */
-function DialogHeader({ title, subtitle }: { title: React.ReactNode; subtitle?: React.ReactNode }) {
+function DialogHeader({
+  title,
+  subtitle,
+  aside,
+}: {
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
+  /** Одно число справа от заголовка — итог, который относится ко всему окну. */
+  aside?: React.ReactNode;
+}) {
   return (
     <div className="dh">
-      <DialogPrimitive.Title asChild>
-        <h3>{title}</h3>
-      </DialogPrimitive.Title>
-      {subtitle != null && (
-        <DialogPrimitive.Description asChild>
-          <p>{subtitle}</p>
-        </DialogPrimitive.Description>
-      )}
+      <div className="dh-main">
+        <DialogPrimitive.Title asChild>
+          <h3>{title}</h3>
+        </DialogPrimitive.Title>
+        {subtitle != null && (
+          <DialogPrimitive.Description asChild>
+            <p>{subtitle}</p>
+          </DialogPrimitive.Description>
+        )}
+      </div>
+      {aside != null && <div className="dh-aside">{aside}</div>}
     </div>
   );
 }

@@ -29,7 +29,7 @@ export class DonationsController {
   /** Реквизиты и границы сумм — нужно до нажатия кнопки, в том числе гостю. */
   @Get('config')
   config() {
-    return this.donations.publicConfig();
+    return this.donations.publicConfigWithTotal();
   }
 
   /**
