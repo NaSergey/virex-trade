@@ -34,6 +34,12 @@
   `bybit`, `credentials`, `exchanges`, `market-events`, `settings`, `tags`, `telegram`, `trades`.
 - **frontend** — Next.js App Router + FSD.
 - **Docker Compose**, `start.bat` / `stop.bat` для локального запуска.
+- **Продакшен на VPS** — отдельный стек `docker-compose.prod.yml` (собранные
+  образы, никакого hot reload) + Caddy с автоматическим HTTPS. Порядок
+  подключения домена и разбор граблей — `docs/deploy/vps-domain.md`.
+  Наружу открыт только Caddy: `web` слушает loopback, `api` и база портов на
+  хосте не занимают. Домен ведёт на Next, а не отдельно на API: кука сессии
+  ставится backend'ом и читается `proxy.ts`, поэтому origin обязан быть один.
 
 ### Фронтенд: правила, которые ломались на практике
 

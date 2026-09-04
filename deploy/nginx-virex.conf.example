@@ -1,0 +1,42 @@
+# Запасной вариант: 80/443 на VPS уже занят nginx'ом панели (ISPmanager), и
+# отдать их Caddy нельзя. Тогда стек поднимается БЕЗ профиля edge, web
+# слушает 127.0.0.1:8090, а этот конфиг кладётся на хост:
+#
+#   sudo cp deploy/nginx-virex.conf.example /etc/nginx/conf.d/virex.conf
+#   sudo sed -i 's/app\.example\.com/ВАШ.ПОДДОМЕН/g' /etc/nginx/conf.d/virex.conf
+#   sudo certbot --nginx -d ВАШ.ПОДДОМЕН      # сертификат и правка listen 443
+#   sudo nginx -t && sudo systemctl reload nginx
+#
+# Файл лежит в conf.d, а не в панельном каталоге сайтов, — поэтому на вкладке
+# «Сайты» в ISPmanager поддомен не появится. Обратная сторона: панель про этот
+# конфиг не знает и может перетереть свой nginx.conf при обновлении — после
+# обновлений панели стоит проверять `nginx -t` и наличие файла.
+
+server {
+    listen 80;
+    listen [::]:80;
+    # Только имя продукта. Корень домена сюда не вписывать: он обслуживается
+    # отдельно (у вас — на другом хостинге), и перехват его здесь сломал бы
+    # тот сайт.
+    server_name app.example.com;
+
+    # certbot --nginx сам добавит сюда редирект на https и блок listen 443.
+    location / {
+        proxy_pass http://127.0.0.1:8090;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        # Без этого заголовка Next считает, что пришли по http, а кука сессии
+        # в production ставится с secure — и в браузере не сохранится.
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Апгрейд соединения — для HMR не нужен (в проде его нет), но
+        # оставлен, чтобы конфиг работал и при проксировании dev-стека.
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        proxy_read_timeout 120s;
+    }
+}

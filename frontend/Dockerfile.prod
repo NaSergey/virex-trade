@@ -1,0 +1,40 @@
+# virex-trader frontend (Next.js) — продакшен-образ.
+#
+# Отличие от dev-образа рядом (`Dockerfile`): код собирается на этапе build
+# (`next build` → `.next/standalone`) и запускается уже собранным, без
+# исходников, dev-зависимостей и hot reload.
+#
+# node:24, а не node:20 как в dev-образе: `npm ci` принимает нынешний
+# frontend/package-lock.json только начиная с npm 11 (в 10.x он падает на
+# peer-зависимости @swc/helpers у next 16). node:20-alpine несёт npm 10.
+FROM node:24-alpine AS build
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN npm run build
+
+# --- runtime -----------------------------------------------------------
+# `output: "standalone"` (next.config.ts) кладёт в .next/standalone готовый
+# сервер вместе с нужными кусками node_modules, поэтому в финальный образ
+# не едет ни npm install, ни исходники.
+FROM node:24-alpine AS runtime
+WORKDIR /app
+
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=8090 \
+    HOSTNAME=0.0.0.0
+
+COPY --from=build /app/.next/standalone ./
+COPY --from=build /app/.next/static ./.next/static
+
+EXPOSE 8090
+
+USER node
+
+CMD ["node", "server.js"]

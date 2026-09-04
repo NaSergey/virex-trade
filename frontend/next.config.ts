@@ -9,6 +9,11 @@ const BACKEND_INTERNAL_URL =
   process.env.API_INTERNAL_URL || "http://localhost:8091";
 
 const nextConfig: NextConfig = {
+  // Сборка в самодостаточный `.next/standalone` (свой server.js + только
+  // реально используемые зависимости). Нужна продакшен-образу
+  // (`Dockerfile.prod`): без неё в контейнер пришлось бы тащить весь
+  // node_modules. На `next dev` и на локальный `next start` не влияет.
+  output: "standalone",
   // Pin the Turbopack workspace root to THIS project, using the real
   // on-disk path (correct drive-letter casing + separators) so the pin
   // actually matches. Otherwise Turbopack sees two sibling lockfiles

@@ -1,0 +1,41 @@
+# virex-trader backend (NestJS) — продакшен-образ.
+#
+# Отличие от dev-образа рядом (`Dockerfile`): код компилируется на этапе
+# build (`nest build` → dist), а в рантайме остаются только продакшен-
+# зависимости и сгенерированный Prisma-клиент.
+
+FROM node:20-alpine AS build
+WORKDIR /app
+
+# Prisma требует OpenSSL на Alpine.
+RUN apk add --no-cache openssl
+
+COPY package*.json ./
+COPY prisma ./prisma
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+# --- runtime -----------------------------------------------------------
+FROM node:20-alpine AS runtime
+WORKDIR /app
+
+RUN apk add --no-cache openssl
+
+ENV NODE_ENV=production
+
+COPY package*.json ./
+COPY prisma ./prisma
+# prisma generate вызывается явно, а не только через postinstall: свежие
+# версии npm умеют не запускать install-скрипты, и тогда образ уехал бы без
+# сгенерированного клиента — падение уже в рантайме, при первом запросе.
+# Сам prisma CLI лежит в dependencies, поэтому доступен и здесь, и при
+# старте контейнера (`prisma db push`, см. docker-compose.prod.yml).
+RUN npm ci --omit=dev && npx prisma generate
+
+COPY --from=build /app/dist ./dist
+
+EXPOSE 8091
+
+CMD ["node", "dist/main"]
