@@ -52,7 +52,7 @@
     "registerTitle": "Sign up",
     "loginLede": "Crypto futures journal: trades, tagging, and the stats built on it.",
     "registerLede": "Create an account — connect exchange keys in settings next.",
-    "nameLabel": "Name (optional)",
+    "nameLabel": "Name",
     "emailLabel": "Email",
     "passwordLabel": "Password",
     "submitLogin": "Log in",

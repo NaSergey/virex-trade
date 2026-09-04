@@ -96,6 +96,9 @@ export default function LoginPage() {
               <Input
                 id="name"
                 full
+                required
+                minLength={2}
+                maxLength={40}
                 autoComplete="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}

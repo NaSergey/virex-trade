@@ -64,7 +64,10 @@ export class AuthService {
       data: {
         email: dto.email,
         password: passwordHash,
-        name: dto.name ?? null,
+        // DTO уже обрезал пробелы и потребовал непустое значение. Колонка
+        // остаётся nullable ради тех, кто регистрировался, когда имя было
+        // необязательным, — их записи трогать незачем.
+        name: dto.name,
       },
     });
 
