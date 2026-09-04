@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL } from '@/shared/config/api';
 import { refreshSession, resolveApiError, setUnauthenticatedHandler } from '@/shared/api/http';
 import { tokenStore } from '@/shared/lib/tokenStore';
@@ -47,6 +48,7 @@ async function readError(res: Response): Promise<string> {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -75,9 +77,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUnauthenticatedHandler(() => {
       tokenStore.set(null);
       setUser(null);
+      // Тот же случай, что и в logout ниже: сессия кончилась, и в кэше не
+      // должно остаться данных того, чья она была. Оставить чистку только в
+      // logout значило бы закрыть одну дверь из двух — сюда попадают, когда
+      // refresh-токен истёк или отозван, а вкладка осталась открытой.
+      queryClient.clear();
     });
     return () => setUnauthenticatedHandler(null);
-  }, []);
+  }, [queryClient]);
 
   const applyAuthResponse = async (res: Response) => {
     if (!res.ok) throw new Error(await readError(res));
@@ -120,7 +127,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     tokenStore.set(null);
     setUser(null);
-  }, []);
+    /*
+     * Кэш react-query — данные ушедшего пользователя: сделки, теги, срезы,
+     * статистика. Он переживает выход, потому что QueryClient создан выше
+     * AuthProvider и живёт столько же, сколько вкладка. Без очистки следующий
+     * вошедший в этой же вкладке видит на первом кадре чужой журнал — свои
+     * запросы ещё в полёте, а на экране уже отрисован предыдущий ответ из
+     * кэша. Заметнее всего на демо: посмотрел витрину, вышел, вошёл к себе —
+     * и открыл чужую историю сделок как свою.
+     *
+     * Отменяем перед очисткой: запросы, оставшиеся в полёте, иначе положат
+     * свои ответы обратно в уже очищенный кэш.
+     */
+    await queryClient.cancelQueries();
+    queryClient.clear();
+  }, [queryClient]);
 
   return (
     <AuthContext.Provider value={{ user, loading, login, register, logout }}>
