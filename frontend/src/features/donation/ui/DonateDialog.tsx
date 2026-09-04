@@ -92,7 +92,10 @@ export function DonateDialog({ open, onClose }: { open: boolean; onClose: () => 
           {/* Шаг 1 — сумма. */}
           {!isLoading && config?.enabled && !intent && (
             <>
-              <Field label={t('amountLabel')} htmlFor="donation-amount">
+              <Field
+                label={`${t('amountLabel')}, ${config.currency}`}
+                htmlFor="donation-amount"
+              >
                 <Input
                   id="donation-amount"
                   full
@@ -122,11 +125,13 @@ export function DonateDialog({ open, onClose }: { open: boolean; onClose: () => 
               {/* На что уходят деньги — единственное, что человеку интересно
                   на этом шаге. Границы суммы проверяет поле, про уникальный
                   хвост сказано на шаге оплаты, где эта сумма и появляется
-                  (`amountExact`), а таймер окна виден там же счётчиком. */}
-              <p id="donation-amount-note" className="muted">{t('purpose')}</p>
-              {/* Отдельным абзацем: про бесплатный год и зачёт доната читают
-                  не вместе с назначением денег, а как обещание на будущее. */}
-              <p className="muted">{t('purposeFree')}</p>
+                  (`amountExact`), а таймер окна виден там же счётчиком.
+                  Блок отбит линейкой: это не подпись к полю, а отдельная
+                  мысль — куда пойдут деньги и что будет дальше. */}
+              <div className="don-purpose" id="donation-amount-note">
+                <p>{t('purpose')}</p>
+                <p>{t('purposeFree')}</p>
+              </div>
               <ErrorNote error={create.error} fallback={t('createFailed')} />
             </>
           )}

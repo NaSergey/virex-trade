@@ -1928,6 +1928,20 @@
      коротких кнопок, прижатых влево, читался обрывком строки, а не набором
      равных вариантов. */
   .don-presets .btn { flex: 1; }
+  /* Рассказ о проекте отбит от органов управления линейкой и своим ритмом:
+     без неё два абзаца шли встык под кнопками и читались как продолжение
+     подписи к полю, а не как отдельная мысль. */
+  .don-purpose {
+    margin-top: var(--s4);
+    padding-top: var(--s3);
+    border-top: 1px solid var(--hair);
+    display: flex;
+    flex-direction: column;
+    gap: var(--s2);
+    color: var(--ink-2);
+    font-size: var(--t-s);
+  }
+  .don-purpose p { margin: 0; }
   .don-qr {
     display: flex;
     flex-direction: column;
