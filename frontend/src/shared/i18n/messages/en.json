@@ -59,6 +59,8 @@
     "submitLogin": "Log in",
     "submitRegister": "Sign up",
     "submitting": "Please wait…",
+    "demoButton": "Try the demo",
+    "demoNote": "An account with a sample trade history — shared by everyone, and everything in it can be changed.",
     "switchToRegister": "No account? Sign up",
     "switchToLogin": "Already have an account? Log in",
     "genericError": "Error"
