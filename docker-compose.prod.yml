@@ -1,0 +1,104 @@
+# Продакшен-стек для VPS: PostgreSQL + NestJS API + Next.js web (+ Caddy).
+#
+# Запуск:
+#   docker compose --env-file .env.prod -f docker-compose.prod.yml --profile edge up -d --build
+# Остановка:
+#   docker compose --env-file .env.prod -f docker-compose.prod.yml --profile edge down
+#
+# Подробности и порядок действий с доменом — docs/deploy/vps-domain.md.
+#
+# Отличия от docker-compose.yml (он локальный, dev): собранные образы вместо
+# hot reload, никаких bind-mount'ов с исходниками, наружу торчит только Caddy
+# (80/443), а web слушает 127.0.0.1 — снаружи VPS его нет.
+
+# Своё имя проекта: иначе dev- и prod-стеки в одной папке делили бы имена
+# контейнеров и томов, и `down` одного гасил бы другой.
+name: virex-prod
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-virex}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.prod}
+      POSTGRES_DB: ${POSTGRES_DB:-virex}
+    # Портов наружу нет намеренно: до базы дотягивается только api по
+    # внутренней сети compose. Опубликованный 5432 на VPS — это открытая
+    # всему интернету база с историей сделок пользователей.
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-virex} -d ${POSTGRES_DB:-virex}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "8091"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-virex}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-virex}?schema=public
+      # Origin продукта. Отсюда же берётся CORS-origin (main.ts). Схема
+      # обязана быть https: кука сессии в production ставится с secure.
+      FRONTEND_URL: https://${APP_DOMAIN:?set APP_DOMAIN in .env.prod}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env.prod}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-7}
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:?set CREDENTIALS_ENCRYPTION_KEY in .env.prod}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    # Миграций в проекте нет — схема синхронизируется `db push`, как и
+    # локально. Без --accept-data-loss: команда должна упасть, а не молча
+    # удалить колонку с данными живых пользователей.
+    command: sh -c "npx prisma db push --skip-generate && node dist/main"
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      # Server-only: браузер сюда не ходит. Next проксирует /api/* и /auth/*
+      # на этот адрес (rewrites в next.config.ts), поэтому браузер и API
+      # живут на одном origin и кука сессии доезжает до proxy.ts.
+      API_INTERNAL_URL: http://api:8091
+    # Только loopback: снаружи VPS порт не виден, но остаётся вариант
+    # завернуть сюда уже стоящий на хосте nginx (см. deploy/nginx-virex.conf.example),
+    # если 80/443 занят панелью и отдавать их Caddy нельзя.
+    ports:
+      - "127.0.0.1:8090:8090"
+
+  # HTTPS-терминатор: сам получает и продлевает сертификат Let's Encrypt.
+  # В отдельном профиле — поднимается только с `--profile edge`. Если 80/443
+  # на VPS уже заняты (ISPmanager), этот сервис не запускать.
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["edge"]
+    restart: unless-stopped
+    depends_on:
+      - web
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env.prod}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

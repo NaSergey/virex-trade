@@ -1,4 +1,8 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["node_modules", "test", "dist", "**/*spec.ts"]
+  // `scripts` — здесь намеренно: скрипт habits-report.ts запускается через
+  // ts-node и в сборку не нужен, а пока он в неё попадал, tsc поднимал
+  // общий корень до папки backend и клал выход в dist/src/main.js — то есть
+  // `npm run start:prod` (`node dist/main`) не находил приложения.
+  "exclude": ["node_modules", "test", "dist", "scripts", "**/*spec.ts"]
 }

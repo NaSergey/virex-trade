@@ -1,0 +1,41 @@
+# HTTPS-вход в продукт. Caddy сам получает сертификат Let's Encrypt по
+# имени из APP_DOMAIN и сам его продлевает — отдельного certbot и cron не
+# нужно. Условие ровно одно: A-запись этого имени уже указывает на VPS, а
+# порты 80 и 443 свободны (проверка ACME ходит на 80).
+#
+# APP_DOMAIN — полное имя сайта, обычно поддомен: app.example.com. Корень
+# домена при этом живёт где угодно (хоть на Vercel) и сюда не относится.
+#
+# Монтируется в контейнер caddy из docker-compose.prod.yml.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+
+	# Весь трафик уходит в Next: он же отдаёт страницы и он же проксирует
+	# /api/* и /auth/* в backend (rewrites в next.config.ts). Отдельного
+	# правила для API здесь нет намеренно — браузер и backend обязаны жить
+	# на одном origin, иначе кука сессии не доедет до proxy.ts.
+	reverse_proxy web:8090
+
+	log {
+		output file /data/access.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}
+
+# Если продукт стоит на КОРНЕ домена (APP_DOMAIN=example.com), а не на
+# поддомене, — добавить сюда редирект с www, чтобы адрес был один: кука
+# сессии, поставленная на голом домене, на www не работает.
+#
+#	www.{$APP_DOMAIN} {
+#		redir https://{$APP_DOMAIN}{uri} permanent
+#	}
+#
+# Для поддомена этого блока быть не должно: имени www.app.example.com в DNS
+# нет, и Caddy будет впустую ходить за сертификатом на него.
