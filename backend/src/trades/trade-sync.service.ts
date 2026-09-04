@@ -220,9 +220,8 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     } catch (e) {
       this.logger.warn(`position tag prune failed: ${e}`);
     }
-    // После linkTagsToNewTrades и fillEntryStamps: иначе карточка закрытия
-    // ушла бы с кнопками тегов для сделки, которая на самом деле размечена,
-    // и без времени в позиции.
+    // После fillEntryStamps: иначе карточка закрытия ушла бы без времени
+    // в позиции.
     try {
       await this.tradeAlerts.tradesClosed(userId, runStartedAt);
       await this.tradeAlerts.overtradeCheck(userId);

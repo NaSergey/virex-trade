@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { OpenedPositionInfo, TelegramService } from '../telegram/telegram.service';
-import { packId } from '../telegram/ids';
 import { NotifierService } from './notifier.service';
 
 /** Сколько подряд неудачных прогонов синхронизации считаем поломкой. */
@@ -77,7 +76,6 @@ export class TradeAlertsService {
         closedAt: { gte: new Date(Date.now() - CLOSED_TRADE_MAX_AGE_MS) },
       },
       orderBy: { closedAt: 'asc' },
-      include: { tags: true },
     });
     if (trades.length === 0) return;
 
@@ -100,37 +98,20 @@ export class TradeAlertsService {
       const held = trade.openedAt
         ? humanDuration(trade.openedAt.getTime(), trade.closedAt.getTime())
         : null;
-      // Клавиатура нужна только неразмеченной сделке: теги позиции уже
-      // перенесены на неё синхронизацией, и переспрашивать про них незачем.
-      const keyboard =
-        trade.tags.length === 0 ? await this.closedTagKeyboard(userId, trade.id) : null;
 
+      // Карточка закрытия — только факт, без кнопок тегов: про причину входа
+      // спрашивает карточка открытия, пока человек её помнит. Повторный вопрос
+      // через несколько дней удержания собирал бы ответ задним числом, а разметить
+      // пропущенное есть где — в журнале приложения.
       await this.notifier.sendEvent(userId, 'trade.closed', {
         text: [
           `🏁 Закрыта позиция ${trade.closedPnl >= 0 ? '✅' : '❌'}`,
           `<b>${esc(trade.symbol)}</b> ${dir}`,
           `Итог: <b>${money(trade.closedPnl)}</b> · комиссии: $${fees.toFixed(2)}`,
           ...(held ? [`В позиции: ${held}`] : []),
-          ...(keyboard ? ['', 'Сделка без тегов — отметь причину входа:'] : []),
         ].join('\n'),
-        ...(keyboard ? { replyMarkup: keyboard } : {}),
       });
     }
-  }
-
-  private async closedTagKeyboard(userId: string, tradeId: string) {
-    const tags = await this.prisma.tag.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'asc' },
-    });
-    if (tags.length === 0) return null;
-    const buttons = tags.map((t) => ({
-      text: t.name,
-      callback_data: `ct|${packId(tradeId)}|${packId(t.id)}`,
-    }));
-    const rows: Array<typeof buttons> = [];
-    for (let i = 0; i < buttons.length; i += 2) rows.push(buttons.slice(i, i + 2));
-    return { inline_keyboard: rows };
   }
 
   /** Переторговка: считаем закрытые за последние сутки. */

@@ -256,6 +256,9 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
     }
     // Тег закрытой сделки: пишет TradeTag напрямую, поэтому оба uuid едут
     // упакованными — в сыром виде пара не влезает в 64 байта callback_data.
+    // Новые карточки закрытия таких кнопок больше не несут (см.
+    // TradeAlertsService.tradesClosed); обработчик оставлен ради сообщений,
+    // уже лежащих в чатах, — иначе их кнопки молча перестали бы работать.
     const [ctKind, shortTrade, shortTag] = String(cb.data ?? '').split('|');
     if (ctKind === 'ct') {
       const tradeId = unpackId(shortTrade ?? '');
