@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useState, type ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 /** Описание одной колонки журнала. */
@@ -78,6 +79,19 @@ interface LedgerTableProps<T> {
    * иначе каждая строка сразу дёрнет свой запрос за данными раскрытия.
    */
   renderExpanded?: (row: T) => ReactNode;
+  /**
+   * Адрес, куда ведёт строка. Есть — вся строка становится переходом: курсор,
+   * та же подсветка по наведению, что у раскрывающихся строк, и Enter с
+   * клавиатуры.
+   *
+   * Клики по ссылкам и кнопкам внутри строки переходом НЕ считаются: в строке
+   * живут свои действия (закреп, «скрыть», удаление), и промах по кнопке не
+   * должен уводить со страницы.
+   *
+   * С `renderExpanded` не сочетается — клик по строке может значить либо
+   * раскрытие, либо переход, но не оба сразу.
+   */
+  rowHref?: (row: T) => string | undefined;
 }
 
 /**
@@ -105,7 +119,9 @@ export function LedgerTable<T>({
   sort,
   onSort,
   renderExpanded,
+  rowHref,
 }: LedgerTableProps<T>) {
+  const router = useRouter();
   const [openKey, setOpenKey] = useState<string | null>(null);
   // Строка, которая доигрывает анимацию закрытия. React убирал бы её из DOM
   // мгновенно вместе с сеткой ордеров — раскрытие проигрывалось, а закрытие
@@ -209,22 +225,45 @@ export function LedgerTable<T>({
               const key = rowKey(row);
               const open = openKey === key;
               const closing = !open && closingKey === key;
+              const href = rowHref?.(row);
+              // Собственные действия строки остаются собственными: клик,
+              // пришедший из ссылки или кнопки внутри неё, переходом не считаем.
+              const fromControl = (e: React.MouseEvent) =>
+                (e.target as HTMLElement).closest('a,button,input,select,textarea') != null;
+              const go = () => router.push(href!);
+              const toggle = () => {
+                if (open) {
+                  // закрываем — прежняя строка доигрывает анимацию, а не пропадает
+                  setClosingKey(key);
+                  setOpenKey(null);
+                } else {
+                  // переключение на другую строку тоже должно увести прежнюю с анимацией
+                  if (openKey) setClosingKey(openKey);
+                  setOpenKey(key);
+                }
+              };
               return (
                 <Fragment key={key}>
                   <tr
-                    className={renderExpanded ? `row${open ? ' open' : ''}` : undefined}
+                    className={renderExpanded || href ? `row${open ? ' open' : ''}` : undefined}
                     style={{ '--i': index } as React.CSSProperties}
+                    tabIndex={href ? 0 : undefined}
                     onClick={
-                      renderExpanded
-                        ? () => {
-                            if (open) {
-                              // закрываем — прежняя строка доигрывает анимацию, а не пропадает
-                              setClosingKey(key);
-                              setOpenKey(null);
-                            } else {
-                              // переключение на другую строку тоже должно увести прежнюю с анимацией
-                              if (openKey) setClosingKey(openKey);
-                              setOpenKey(key);
+                      href
+                        ? (e) => {
+                            if (!fromControl(e)) go();
+                          }
+                        : renderExpanded
+                          ? toggle
+                          : undefined
+                    }
+                    onKeyDown={
+                      href
+                        ? (e) => {
+                            if (e.target !== e.currentTarget) return;
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              go();
                             }
                           }
                         : undefined

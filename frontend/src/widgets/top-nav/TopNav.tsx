@@ -11,7 +11,7 @@ import { Button } from '@/shared/ui/Button';
 import { KeyValue } from '@/shared/ui/Lookup';
 import { LocaleSwitch } from '@/shared/ui/LocaleSwitch';
 import { ThemeToggle } from '@/shared/ui/ThemeToggle';
-import { VirexLogo } from '@/shared/ui/VirexLogo';
+// import { VirexLogo } from '@/shared/ui/VirexLogo';
 import { useLocaleControl } from '@/shared/i18n';
 
 type Tab = 'overview' | 'tags' | 'analytics' | 'market' | 'settings' | 'admin';
@@ -128,7 +128,7 @@ export function TopNav() {
     <header className="top">
       <div className="top-in">
         <div className="mark">
-          <VirexLogo width={30} height={30} />
+          {/* <VirexLogo width={42} height={42} /> */}
           Virex
         </div>
 

@@ -186,7 +186,7 @@ export const SettingsPage = () => {
         {/* Отдельным блоком, а не внутри карточки биржи: Telegram не относится
             к ключам и живёт своей жизнью — привязан он или нет, биржа работает
             одинаково. */}
-        <div className="set marg">
+        <div className="set marg" data-tour="set-telegram">
           <TelegramCard />
         </div>
       </div>

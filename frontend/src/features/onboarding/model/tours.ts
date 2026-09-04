@@ -111,6 +111,7 @@ export const TOURS: Tour[] = [
     steps: [
       { anchor: '[data-tour="set-form"]', key: 'keys' },
       { anchor: '[data-tour="set-exchange"]', key: 'exchange' },
+      { anchor: '[data-tour="set-telegram"]', key: 'telegram' },
     ],
   },
 ];

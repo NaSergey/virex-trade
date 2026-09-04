@@ -208,7 +208,7 @@
     "colWins": "Wins",
     "colWinrateFull": "Winrate and lower bound",
     "colAvg": "Average",
-    "addCombo": "+ Add",
+    "addCombo": "+ Create",
     "hideCombo": "hide",
     "deleteComboTitle": "delete",
     "emptyCombos": "No combination of two or more tags yet.",
@@ -683,7 +683,7 @@
       "welcomeTitle": "Virex Trader",
       "welcomeBody": "The point of Virex is to help you find your trading system and make it stable — to get your trading to where the result repeats instead of depending on luck. Three steps to get there:",
       "welcomeP1Title": "Find what actually works for you",
-      "welcomeP1Body": "You tag why you entered a trade. Virex counts how each of those reasons ended and shows which setups actually make money, and which only look like they work.",
+      "welcomeP1Body": "You tag why you entered a trade. Virex analyzes your trades and shows which setups actually make money, and which only look like they work.",
       "welcomeP2Title": "Test it on your own data",
       "welcomeP2Body": "Analytics compares a selection matching your conditions against all your other trades. The question it answers is “what if I only traded like this?” — and the answer arrives before you put money behind it.",
       "welcomeP3Title": "Make the result stable",
@@ -697,17 +697,17 @@
       "equityTitle": "Equity curve",
       "equityBody": "How the result accumulated over time. What matters is the shape of the path, not the final point: a steady climb and the same sum earned in one lucky day after a long drawdown are different systems.",
       "positionsTitle": "Open positions",
-      "positionsBody": "The only filled block on the page — what is happening right now. You can tag a position without waiting for it to close: the reason for entering is remembered at entry, not a week later.",
+      "positionsBody": "Open positions and the numbers behind them: how long a trade has been running and where in the move the entry was. Tag it straight away, without waiting for the close: with the button in the row, or from the Telegram notification.",
       "tradesTitle": "Trade journal",
       "tradesBody": "This is where the value starts. The tag button in a row is the action everything else is counted for: until trades are tagged, the product knows nothing about them beyond the exchange's numbers. Rows expand — orders, fees and funding are inside.",
       "nextTitle": "What next",
-      "nextBody": "If your exchange keys are not connected yet, start with Settings. Keys are read-only; they cannot trade. Then tag a dozen trades and come back here: before tagging, half the conclusions simply cannot be computed."
+      "nextBody": "If your exchange keys are not connected yet, start with Settings. Keys are read-only. Then start tagging your trades — and in time you will see the patterns in them."
     },
     "tags": {
       "introTitle": "Tags",
-      "introBody": "A tag is your answer to \"why did I enter\". You invent the list yourself: there is no imposed taxonomy here and there will not be, because someone else's setup names get abandoned within a week. Tagging is manual work — and it is half the value of the product.",
+      "introBody": "A tag is a short label for why you entered: a setup, an emotion or a mistake. Create tags and mark up both your trades and your own strategies with them. The more trades you tag, the clearer it gets which trades make money and which only look like they work.",
       "combosTitle": "Combinations",
-      "combosBody": "What occurred together with what, and how it ended. The \"create\" row is the last one in the table: a combination can be pinned to watch it continuously. This is usually where you find out that the losing thing is not a tag but its pairing with another one.",
+      "combosBody": "Tag combinations and their results. The \"Create\" row adds a combination to the table.",
       "allTitle": "Tags one by one",
       "allBody": "How to read this column matters: a trade counts toward each of its tags IN FULL, it is not split between them. Rows overlap, and the column does not add up to your total PnL — that is not a bug, it is the only way to keep the number meaningful."
     },
@@ -735,7 +735,9 @@
       "keysTitle": "Exchange keys",
       "keysBody": "The key must be read-only. Permissions are checked programmatically on connection, and a key with trading or withdrawal rights is rejected — that is a refusal, not a recommendation. The reasoning is simple: even a leaked database then means an exposed trade history, not a drained account.",
       "exchangeTitle": "Choosing an exchange",
-      "exchangeBody": "Several can be connected, but only one — the active one — is read and synced. An honest warning: live trades have so far only gone through Bybit; how the other adapters behave is unknown."
+      "exchangeBody": "Several can be connected, but only one — the active one — is read and synced. An honest warning: live trades have so far only gone through Bybit; how the other adapters behave is unknown.",
+      "telegramTitle": "Telegram",
+      "telegramBody": "Link the bot and trade notifications arrive in your chat — you can tag a trade right from there. Which signals are sent is set up here as well."
     }
   }
 }

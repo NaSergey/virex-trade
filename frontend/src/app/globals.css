@@ -303,6 +303,11 @@
     gap: var(--s5);
     height: var(--top-h);
   }
+  /* Знак крупнее строки, в которой стоит: в 30 пикселях фитили свечей уже
+     тоньше пикселя и знак читается кривым. Но высоты шапке он добавлять не
+     должен — прирост съеден отрицательными полями, поэтому по вертикали он
+     по-прежнему занимает свои 30px, а рисуется на 42. Отсюда же overflow не
+     нужен: шапка ничего не режет. */
   .mark {
     display: flex;
     align-items: center;
@@ -312,6 +317,10 @@
     letter-spacing: 0.32em;
     text-transform: uppercase;
     flex: none;
+  }
+  .mark .virex-logo {
+    flex: none;
+    margin-block: -6px;
   }
   .nav {
     display: flex;
@@ -786,6 +795,11 @@
   .ledger td.r { text-align: right; }
   .ledger th:last-child,
   .ledger td:last-child { padding-right: 0; }
+  /* Знак — белый рисунок в файле. На бумаге светлой темы он исчез бы, и
+     переворачиваем его целиком: перекрасить нечего — заливка, свечение и
+     блики живут внутри файла, а не в переменных темы. */
+  :root[data-theme="light"] .virex-logo { filter: invert(1) brightness(0.28); }
+
   .ledger tbody tr.row { cursor: pointer; }
   .ledger tbody tr.row:hover > td { background: var(--band); }
   .ledger .sortable {
@@ -2179,6 +2193,47 @@
     border-color: var(--ink);
   }
 
+  /* ── первый экран главной ──────────────────────────────────────
+     Знак во весь экран: страницу открывает тот, кто ещё не знает продукта, и
+     первое, что он получает, — имя, а не абзац текста.
+     svh, а не vh: на телефоне динамическая панель браузера съедает часть
+     экрана, и 100vh уводили бы стрелку под неё. */
+  .lp-splash {
+    min-height: calc(100svh - 76px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s3);
+    border-bottom: 1px solid var(--rule);
+  }
+  /* Мерка от высоты экрана, а не от ширины листа: знак должен целиком
+     помещаться в первый экран на любом мониторе, а на узком — не упираться
+     в поля. */
+  .lp-splash-logo {
+    display: block;
+    width: min(46svh, 74vw);
+    height: auto;
+  }
+  .lp-splash-word {
+    font-family: var(--font-mono);
+    font-size: var(--t-m);
+    letter-spacing: 0.42em;
+    /* Разрядка добавляет пробел справа от последней буквы — слово уезжает
+       влево от оси знака, если его не вернуть. */
+    text-indent: 0.42em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+  }
+  /* Знак на весь экран без указателя читается как заглушка: человек не видит,
+     что страница продолжается. Стрелка приглушена до линейки — это подсказка,
+     а не элемент управления. */
+  .lp-splash-more {
+    margin-top: var(--s4);
+    font-size: var(--t-m);
+    color: var(--ink-3);
+  }
+
   .lp-hero {
     padding: var(--s6) 0 var(--s5);
     border-bottom: 1px solid var(--rule);
@@ -2416,8 +2471,8 @@
   }
   .tc-logo {
     flex: none;
-    width: 30px;
-    height: 30px;
+    width: 42px;
+    height: 42px;
     color: var(--major);
   }
 
@@ -2438,8 +2493,8 @@
   }
   .tour-cover .tc-h h3 { font-size: var(--t-l); }
   .tour-cover .tc-logo {
-    width: 40px;
-    height: 40px;
+    width: 52px;
+    height: 52px;
   }
   /* Кегль обложки на ступень выше, чем у подсказок: подсказку читают краем
      глаза рядом с подсвеченным элементом, а это — единственный текст в
@@ -2565,6 +2620,9 @@
      в полтора слова. Отбивки секций тоже ужимаются — на телефоне --s5/--s6
      между блоками читаются как пустой экран. */
   .lp-grid { grid-template-columns: 1fr; }
+  /* На телефоне знак крупнее по доле экрана: поля здесь уже, и мерка от
+     высоты оставляла бы его пятном посреди пустоты. */
+  .lp-splash-logo { width: min(38svh, 80vw); }
   .lp-hero { padding: var(--s5) 0 var(--s4); }
   .lp-sec { padding: var(--s4) 0; }
   .lp-end { padding: var(--s4) 0 var(--s5); }
