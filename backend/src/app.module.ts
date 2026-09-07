@@ -17,6 +17,7 @@ import { MarketEventsModule } from './market-events/market-events.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
 import { DonationsModule } from './donations/donations.module';
+import { ReferralsModule } from './referrals/referrals.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { DonationsModule } from './donations/donations.module';
     NotificationsModule,
     AdminModule,
     DonationsModule,
+    ReferralsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
