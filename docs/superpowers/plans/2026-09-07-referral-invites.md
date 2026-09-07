@@ -530,209 +530,12 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 
 ---
 
-## Task 4: Промоушен `CopyValue` в `shared/ui`
+## Task 4: (снято) Промоушен `CopyValue` в `shared/ui`
 
-Компонент «значение + кнопка скопировать» существует только внутри `features/donation`
-(`CopyValue.tsx`, классы `.don-copy`/`.don-copy-v`, тексты из namespace `support`). Task 6
-использует тот же приём для ссылки. Фичи в этом проекте не импортируют друг у друга
-внутренности (см. CLAUDE.md: `widgets/` — только для реально переиспользуемых блоков,
-проверено грепом) — значит компонент, нужный двум фичам, переезжает в `shared/ui`, а не
-дублируется и не импортируется напрямую из `donation`.
-
-**Files:**
-- Create: `frontend/src/shared/ui/CopyValue.tsx`
-- Delete: `frontend/src/features/donation/ui/CopyValue.tsx`
-- Modify: `frontend/src/features/donation/ui/PaymentStep.tsx`
-- Modify: `frontend/src/app/globals.css`
-
-**Interfaces:**
-- Produces: `CopyValue({ value: string; ariaLabel?: string; labels: { copy: string;
-  copied: string; copyFailed: string } })` из `@/shared/ui/CopyValue` — использует Task 6
-  (`ReferralDialog`).
-
-- [ ] **Step 1: Создать обобщённый компонент**
-
-Создать `frontend/src/shared/ui/CopyValue.tsx`:
-
-```tsx
-'use client';
-
-import { useEffect, useState } from 'react';
-import { Button } from '@/shared/ui/Button';
-
-/**
- * Значение с кнопкой «скопировать» рядом, а не только через буфер обмена:
- * `navigator.clipboard` есть не везде (старый браузер, страница не по HTTPS),
- * и тогда кнопка честно говорит, что не вышло, а значение всё равно можно
- * выделить мышью — оно тут же, текстом.
- *
- * Тексты кнопки приходят пропсом, а не берутся из фиксированного namespace:
- * компонент общий для доната (сумма, адрес) и приглашений (ссылка), а тексты
- * у каждой фичи свои.
- */
-export function CopyValue({
-  value,
-  /** Что именно копируется — на кнопку, для скринридера. */
-  ariaLabel,
-  labels,
-}: {
-  value: string;
-  ariaLabel?: string;
-  labels: { copy: string; copied: string; copyFailed: string };
-}) {
-  const [state, setState] = useState<'idle' | 'done' | 'failed'>('idle');
-
-  useEffect(() => {
-    if (state === 'idle') return;
-    const timer = setTimeout(() => setState('idle'), 2000);
-    return () => clearTimeout(timer);
-  }, [state]);
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setState('done');
-    } catch {
-      setState('failed');
-    }
-  };
-
-  return (
-    <span className="copy-row">
-      <span className="copy-row-v">{value}</span>
-      <Button variant="bare" onClick={copy} aria-label={ariaLabel}>
-        {state === 'done' ? labels.copied : state === 'failed' ? labels.copyFailed : labels.copy}
-      </Button>
-    </span>
-  );
-}
-```
-
-- [ ] **Step 2: Удалить старый файл фичи**
-
-```bash
-cd frontend && git rm src/features/donation/ui/CopyValue.tsx
-```
-
-- [ ] **Step 3: Переключить `PaymentStep` на общий компонент**
-
-В `frontend/src/features/donation/ui/PaymentStep.tsx` заменить импорт:
-
-```ts
-import { CopyValue } from './CopyValue';
-```
-
-на:
-
-```ts
-import { CopyValue } from '@/shared/ui/CopyValue';
-```
-
-И оба использования:
-
-```tsx
-      <KeyValue label={t('amountLabel')}>
-        <CopyValue value={live.expectedAmount} label={t('amountLabel')} />
-      </KeyValue>
-      <p className="dbt don-exact">{t('amountExact')}</p>
-
-      <KeyValue label={t('addressLabel')}>
-        <CopyValue value={live.receivingAddress} label={t('addressLabel')} />
-      </KeyValue>
-```
-
-на:
-
-```tsx
-      <KeyValue label={t('amountLabel')}>
-        <CopyValue
-          value={live.expectedAmount}
-          ariaLabel={t('amountLabel')}
-          labels={{ copy: t('copy'), copied: t('copied'), copyFailed: t('copyFailed') }}
-        />
-      </KeyValue>
-      <p className="dbt don-exact">{t('amountExact')}</p>
-
-      <KeyValue label={t('addressLabel')}>
-        <CopyValue
-          value={live.receivingAddress}
-          ariaLabel={t('addressLabel')}
-          labels={{ copy: t('copy'), copied: t('copied'), copyFailed: t('copyFailed') }}
-        />
-      </KeyValue>
-```
-
-- [ ] **Step 4: Переименовать CSS-классы и перенести их в общую секцию**
-
-В `frontend/src/app/globals.css` найти блок в секции `ДОНАТЫ`:
-
-```css
-  /* Значение и «скопировать» стоят одной строкой, значение — моноширинным:
-     адрес и сумму человек сверяет посимвольно, и пропорциональный шрифт
-     здесь мешает. Перенос по любому символу — адрес в 34 знака иначе
-     распирает колонку. */
-  .don-copy {
-    display: inline-flex;
-    align-items: baseline;
-    gap: var(--s2);
-    justify-content: flex-end;
-    flex-wrap: wrap;
-  }
-  .don-copy-v {
-    font-family: var(--font-mono);
-    word-break: break-all;
-  }
-```
-
-Удалить его из секции `ДОНАТЫ` и добавить в конец секции `ОБЩЕЕ` (после блока `.asym >
-.set { max-width: none; }`, перед следующим `/* ═══ ... ═══ */`), с переименованными
-классами:
-
-```css
-  /* Значение и «скопировать» стоят одной строкой, значение — моноширинным:
-     строку вроде адреса или ссылки человек сверяет посимвольно, и
-     пропорциональный шрифт здесь мешает. Перенос по любому символу — длинная
-     строка иначе распирает колонку. Используется в донате и приглашениях. */
-  .copy-row {
-    display: inline-flex;
-    align-items: baseline;
-    gap: var(--s2);
-    justify-content: flex-end;
-    flex-wrap: wrap;
-  }
-  .copy-row-v {
-    font-family: var(--font-mono);
-    word-break: break-all;
-  }
-```
-
-- [ ] **Step 5: Обновить тексты доната под новую форму пропсов**
-
-В `frontend/src/shared/i18n/messages/ru.json` и `en.json` в namespace `support` ключи
-`copy`/`copied`/`copyFailed` уже есть (используются в `PaymentStep` через `t('copy')` и
-т.п.) — их менять не нужно, они просто теперь передаются явно, а не читаются компонентом
-самостоятельно.
-
-- [ ] **Step 6: Проверить типы**
-
-```bash
-npx tsc --noEmit -p tsconfig.json
-```
-
-Ожидаемо: без ошибок.
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add frontend/src/shared/ui/CopyValue.tsx frontend/src/features/donation/ui/PaymentStep.tsx frontend/src/app/globals.css
-git commit -m "refactor(donation): CopyValue переезжает в shared/ui
-
-Приглашениям (Task 6) нужен тот же приём «значение + скопировать». Фичи
-не импортируют друг у друга внутренности — общий компонент едет в
-shared/ui, тексты кнопки теперь пропсом, а не фиксированным namespace.
-
-Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
-```
+**Решение при исполнении плана (чекпоинт с пользователем):** не трогать `donation` —
+вместо переноса `CopyValue` в `shared/ui` у `features/referrals` будет свой маленький
+компонент со своими CSS-классами. Быстрее и безопаснее для `donation` ценой небольшого
+дублирования кода между двумя фичами. Реализация — внутри Task 6 (`CopyLink.tsx`).
 
 ---
 
@@ -857,16 +660,18 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 
 **Files:**
 - Create: `frontend/src/features/referrals/api/hooks.ts`
+- Create: `frontend/src/features/referrals/ui/CopyLink.tsx`
 - Create: `frontend/src/features/referrals/ui/ReferralDialog.tsx`
 - Create: `frontend/src/features/referrals/index.ts`
 - Modify: `frontend/src/shared/i18n/messages/ru.json`
 - Modify: `frontend/src/shared/i18n/messages/en.json`
 
 **Interfaces:**
-- Consumes: `CopyValue` из `@/shared/ui/CopyValue` (Task 4), `Dialog`/`DialogBody`/
-  `DialogContent`/`DialogFooter`/`DialogHeader` из `@/shared/ui/dialog`, `KeyValue` из
-  `@/shared/ui/Lookup`, `Button` из `@/shared/ui/Button`, `apiJson` из
-  `@/shared/api/http`.
+- Consumes: `Dialog`/`DialogBody`/`DialogContent`/`DialogFooter`/`DialogHeader` из
+  `@/shared/ui/dialog`, `KeyValue` из `@/shared/ui/Lookup`, `Button` из
+  `@/shared/ui/Button`, `apiJson` из `@/shared/api/http`. `CopyLink` — свой компонент
+  фичи (Task 4 снят: `donation` не трогаем, дублируем небольшой кусок вместо переноса
+  в `shared/ui`).
 - Produces: `ReferralDialog({ userId: string; open: boolean; onClose: () => void })` из
   `@/features/referrals` — использует Task 7 (`TopNav`).
 
@@ -945,7 +750,64 @@ export const useReferralStats = () =>
   },
 ```
 
-- [ ] **Step 3: Диалог**
+- [ ] **Step 3: Ссылка с кнопкой «скопировать»**
+
+Создать `frontend/src/features/referrals/ui/CopyLink.tsx`:
+
+```tsx
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
+import { Button } from '@/shared/ui/Button';
+
+/**
+ * Ссылка с кнопкой «скопировать» рядом, а не только через буфер обмена:
+ * `navigator.clipboard` есть не везде (старый браузер, страница не по HTTPS),
+ * и тогда кнопка честно говорит, что не вышло, а ссылку всё равно можно
+ * выделить мышью — она тут же, текстом. Тот же приём, что у реквизитов
+ * доната (`features/donation/ui/CopyValue.tsx`), но свой маленький компонент:
+ * фичи в проекте не тянут друг у друга внутренности ради одного места.
+ */
+export function CopyLink({ value }: { value: string }) {
+  const t = useTranslations('referrals');
+  const [state, setState] = useState<'idle' | 'done' | 'failed'>('idle');
+
+  useEffect(() => {
+    if (state === 'idle') return;
+    const timer = setTimeout(() => setState('idle'), 2000);
+    return () => clearTimeout(timer);
+  }, [state]);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setState('done');
+    } catch {
+      setState('failed');
+    }
+  };
+
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'baseline',
+        gap: 'var(--s2)',
+        justifyContent: 'flex-end',
+        flexWrap: 'wrap',
+      }}
+    >
+      <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>{value}</span>
+      <Button variant="bare" onClick={copy} aria-label={t('linkLabel')}>
+        {state === 'done' ? t('copied') : state === 'failed' ? t('copyFailed') : t('copy')}
+      </Button>
+    </span>
+  );
+}
+```
+
+- [ ] **Step 4: Диалог**
 
 Создать `frontend/src/features/referrals/ui/ReferralDialog.tsx`:
 
@@ -954,10 +816,10 @@ export const useReferralStats = () =>
 
 import { useTranslations } from 'next-intl';
 import { Button } from '@/shared/ui/Button';
-import { CopyValue } from '@/shared/ui/CopyValue';
 import { KeyValue } from '@/shared/ui/Lookup';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@/shared/ui/dialog';
 import { useReferralStats } from '../api/hooks';
+import { CopyLink } from './CopyLink';
 
 /**
  * «Пригласить друга» — постоянная персональная ссылка, без второго шага, в
@@ -989,11 +851,7 @@ export function ReferralDialog({
         <DialogHeader title={t('title')} subtitle={t('lede')} />
         <DialogBody>
           <KeyValue label={t('linkLabel')}>
-            <CopyValue
-              value={link}
-              ariaLabel={t('linkLabel')}
-              labels={{ copy: t('copy'), copied: t('copied'), copyFailed: t('copyFailed') }}
-            />
+            <CopyLink value={link} />
           </KeyValue>
           <KeyValue label={t('totalLabel')}>{stats?.total ?? '—'}</KeyValue>
           <KeyValue label={t('withKeyLabel')}>{stats?.withKey ?? '—'}</KeyValue>
@@ -1009,7 +867,7 @@ export function ReferralDialog({
 }
 ```
 
-- [ ] **Step 4: Публичный экспорт фичи**
+- [ ] **Step 5: Публичный экспорт фичи**
 
 Создать `frontend/src/features/referrals/index.ts`:
 
@@ -1017,7 +875,7 @@ export function ReferralDialog({
 export { ReferralDialog } from './ui/ReferralDialog';
 ```
 
-- [ ] **Step 5: Проверить типы**
+- [ ] **Step 6: Проверить типы**
 
 ```bash
 cd frontend && npx tsc --noEmit -p tsconfig.json
@@ -1025,14 +883,15 @@ cd frontend && npx tsc --noEmit -p tsconfig.json
 
 Ожидаемо: без ошибок.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add frontend/src/features/referrals frontend/src/shared/i18n/messages/ru.json frontend/src/shared/i18n/messages/en.json
 git commit -m "feat(referrals): диалог «Пригласить друга»
 
-Постоянная ссылка (CopyValue) + счётчик «зарегистрировалось / подключили
-ключ» из GET /api/referrals/me. Без второго шага — тут нечего ждать.
+Постоянная ссылка (свой CopyLink, без переиспользования donation) +
+счётчик «зарегистрировалось / подключили ключ» из GET /api/referrals/me.
+Без второго шага — тут нечего ждать.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 ```
