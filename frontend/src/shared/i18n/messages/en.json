@@ -45,7 +45,8 @@
     "noName": "unnamed",
     "admin": "Users",
     "market": "Market",
-    "support": "Support the developer"
+    "support": "Support the developer",
+    "referrals": "Invite a friend"
   },
   "auth": {
     "brand": "Virex",
@@ -452,6 +453,16 @@
     "timeLeftLabel": "Time left",
     "cancelPayment": "Cancel the payment",
     "totalLabel": "Raised"
+  },
+  "referrals": {
+    "title": "Invite a friend",
+    "lede": "A permanent link — share it, and the new account will be linked to you.",
+    "linkLabel": "Link",
+    "totalLabel": "Registered",
+    "withKeyLabel": "Connected a key",
+    "copy": "copy",
+    "copied": "copied",
+    "copyFailed": "failed"
   },
   "admin": {
     "title": "Users",
