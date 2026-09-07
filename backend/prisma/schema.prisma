@@ -18,6 +18,13 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Кто привёл этого пользователя — id из ссылки `/login?mode=register&ref=<id>`.
+  // SetNull, а не Cascade: удаление аккаунта пригласившего не должно каскадом
+  // утаскивать тех, кого он привёл, — они просто теряют ссылку на источник.
+  invitedById  String?
+  invitedBy    User?   @relation("Referrals", fields: [invitedById], references: [id], onDelete: SetNull)
+  invitedUsers User[]  @relation("Referrals")
+
   // DEPRECATED — superseded by ExchangeConnection, kept only so
   // LegacyCredentialsMigrationService can move existing keys into the new table
   // on boot. Dropping them in the same change would have `prisma db push`
