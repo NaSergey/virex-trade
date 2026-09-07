@@ -4,13 +4,14 @@ import { useTranslations } from 'next-intl';
 import type { RangeTf, Trade } from '@/entities/trade';
 import { Tags } from '@/entities/tag';
 import { Button } from '@/shared/ui/Button';
-import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
+import { LedgerTable, type LedgerColumn, type LedgerSort } from '@/shared/ui/LedgerTable';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { Money } from '@/shared/ui/Money';
 import { TradeOrders } from './TradeOrders';
 import { formatPriceGrouped, formatQty, durationUnitLabels } from '@/shared/lib/utils/format';
 import { formatRangePos } from '@/shared/lib/utils/range';
 import { useLocaleControl } from '@/shared/i18n';
+import { holdMinutes, rangeOf } from './tradeMetrics';
 
 /** «28 июл 11:42» — день с месяцем словом, как в записи журнала. */
 function fmtClosed(iso: string, locale: string): string {
@@ -21,29 +22,13 @@ function fmtClosed(iso: string, locale: string): string {
 
 /** Сколько сделка держалась — от входа до закрытия. */
 function fmtHold(openedAt: string | null, closedAt: string, units: { d: string; h: string; m: string }): string {
-  if (!openedAt) return '—';
-  const min = Math.round((new Date(closedAt).getTime() - new Date(openedAt).getTime()) / 60_000);
-  if (!Number.isFinite(min) || min < 0) return '—';
+  const min = holdMinutes(openedAt, closedAt);
+  if (min == null) return '—';
   const d = Math.floor(min / 1440);
   const h = Math.floor((min % 1440) / 60);
   const m = String(min % 60).padStart(2, '0');
   if (d > 0) return `${d} ${units.d} ${h} ${units.h} ${m} ${units.m}`;
   return h > 0 ? `${h} ${units.h} ${m} ${units.m}` : `${min} ${units.m}`;
-}
-
-/** Колонка снимка, в которой лежит диапазон входа этого ТФ. */
-const RANGE_FIELD: Record<RangeTf, keyof NonNullable<Trade['context']>> = {
-  '15m': 'rangePos15m',
-  '30m': 'rangePos30m',
-  '1h': 'rangePos1h',
-  '4h': 'rangePos4h',
-  '1d': 'rangePos1d',
-};
-
-/** Диапазон входа того ТФ, по которому сейчас смотрят. */
-function rangeOf(trade: Trade, tf: RangeTf): number | null {
-  const v = trade.context?.[RANGE_FIELD[tf]];
-  return typeof v === 'number' ? v : null;
 }
 
 /** Колонка диапазона: нужна там, где по нему же и фильтруют. */
@@ -83,6 +68,8 @@ export function TradesTable({
   range,
   compact,
   empty,
+  sort,
+  onSort,
 }: {
   trades: Trade[];
   isLoading?: boolean;
@@ -96,17 +83,31 @@ export function TradesTable({
   compact?: boolean;
   /** Чем заменить таблицу, когда сделок нет. */
   empty?: React.ReactNode;
+  /**
+   * Текущая сортировка и обработчик клика по заголовку. Оба необязательны и
+   * приходят парой: без `onSort` таблица не сортирует сама (список режут на
+   * листы снаружи — см. AnalyticsPage, — и сортировать надо ДО этого), а
+   * заголовки без `onSort` остаются некликабельными, как на Обзоре.
+   */
+  sort?: LedgerSort;
+  onSort?: (key: string) => void;
 }) {
   const t = useTranslations('tradesTable');
   const { locale } = useLocaleControl();
   const intlLocale = locale === 'en' ? 'en-US' : 'ru-RU';
   const units = durationUnitLabels(locale);
+  // sortKey ставится только когда есть onSort: сам по себе sortKey красит
+  // заголовок LedgerTable курсором-указателем (см. LedgerTable.tsx), и без
+  // этого условия заголовки на Обзоре выглядели бы кликабельными, ничего не
+  // делая по клику.
+  const colSortKey = (key: string) => (onSort ? key : undefined);
 
   const columns: LedgerColumn<Trade>[] = [
     {
       key: 'closedAt',
       header: t('colClosed'),
       cellClassName: 'n',
+      sortKey: colSortKey('closedAt'),
       render: (tr) => <span className="muted">{fmtClosed(tr.closedAt, intlLocale)}</span>,
     },
     { key: 'symbol', header: t('colSymbol'), render: (tr) => <span className="sym">{tr.symbol}</span> },
@@ -121,6 +122,7 @@ export function TradesTable({
       header: t('colEntry'),
       align: 'right',
       cellClassName: 'n',
+      sortKey: colSortKey('entry'),
       render: (tr) => formatPriceGrouped(tr.avgEntryPrice),
     },
     {
@@ -128,6 +130,7 @@ export function TradesTable({
       header: t('colExit'),
       align: 'right',
       cellClassName: 'n',
+      sortKey: colSortKey('exit'),
       render: (tr) => formatPriceGrouped(tr.avgExitPrice),
     },
     ...(range
@@ -138,6 +141,7 @@ export function TradesTable({
             label: t('colRangeLabel'),
             align: 'right',
             cellClassName: 'n',
+            sortKey: colSortKey('range'),
             render: (tr: Trade) => (
               <span className="muted">{formatRangePos(rangeOf(tr, range.tf), locale)}</span>
             ),
@@ -149,6 +153,7 @@ export function TradesTable({
       header: t('colSize'),
       align: 'right',
       cellClassName: 'n',
+      sortKey: colSortKey('qty'),
       // Размер деньгами, а не в монете: 47 UNI и 47 SOL между собой не
       // сравнить, а USDT сравнимы со всем остальным в журнале — P&L в соседней
       // колонке меряется той же мерой. Считается по входу: это объём, которым
@@ -167,6 +172,7 @@ export function TradesTable({
       header: t('colInPosition'),
       align: 'right',
       cellClassName: 'n',
+      sortKey: colSortKey('hold'),
       render: (tr) => <span className="muted">{fmtHold(tr.openedAt, tr.closedAt, units)}</span>,
     },
     {
@@ -174,6 +180,7 @@ export function TradesTable({
       header: 'P&L',
       align: 'right',
       cellClassName: 'n',
+      sortKey: colSortKey('pnl'),
       // Крупный кегль P&L — привилегия широкой раскладки: в тесной он ломает
       // строку, а ведущей величиной там всё равно стоит диапазон.
       render: (tr) => <Money value={tr.closedPnl} large={!compact} />,
@@ -209,6 +216,8 @@ export function TradesTable({
       isLoading={isLoading}
       skeletonRows={skeletonRows}
       renderExpanded={(tr) => <TradeOrders trade={tr} />}
+      sort={sort}
+      onSort={onSort}
       empty={
         empty ?? (
           <EmptyState title={t('emptyTitle')}>{t('emptyBody')}</EmptyState>
