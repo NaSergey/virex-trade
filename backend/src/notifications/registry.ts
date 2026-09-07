@@ -221,7 +221,10 @@ export const NOTIF_DEFS: NotifDef[] = [
     presets: [],
     defaultPreset: 0,
     defaultEnabled: true,
-    cooldownMs: 0,
+    // Отчёт шлётся не по cron, а таймером с шагом в десять минут, и условие у него —
+    // «понедельник, 09:00 UTC», то есть целый час. Именно cooldown делает из
+    // шести тиков одно сообщение: с нулём здесь отчёт приходил шесть раз подряд.
+    cooldownMs: DAY,
     ignoresQuietHours: true,
   },
   {
