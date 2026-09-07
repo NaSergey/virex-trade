@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import { useAuth } from '@/features/auth';
 import { DonateDialog } from '@/features/donation';
 import { useOnboarding } from '@/features/onboarding';
+import { ReferralDialog } from '@/features/referrals';
 import { Button } from '@/shared/ui/Button';
 import { KeyValue } from '@/shared/ui/Lookup';
 import { LocaleSwitch } from '@/shared/ui/LocaleSwitch';
@@ -67,6 +68,7 @@ export function TopNav() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [donateOpen, setDonateOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
   const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
   // Ехать или встать молча: см. эффект ниже — подгонка под догрузившийся
   // шрифт не должна выглядеть переездом.
@@ -221,6 +223,19 @@ export function TopNav() {
                   {tc('open')}
                 </Button>
               </KeyValue>
+              {/* Тот же приём, что у доната: пункт открывает окно поверх
+                  текущей страницы, а не уводит на отдельный адрес. */}
+              <KeyValue label={t('referrals')} control valueClassName="">
+                <Button
+                  variant="bare"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setInviteOpen(true);
+                  }}
+                >
+                  {tc('open')}
+                </Button>
+              </KeyValue>
               <Button
                 variant="risk"
                 style={{ marginTop: 'var(--s3)', width: '100%' }}
@@ -239,6 +254,9 @@ export function TopNav() {
       {/* Окно живёт в шапке, а не в разделе: шапка есть на каждой странице
           продукта, и донат должен открываться поверх любой из них. */}
       <DonateDialog open={donateOpen} onClose={() => setDonateOpen(false)} />
+      {user && (
+        <ReferralDialog userId={user.id} open={inviteOpen} onClose={() => setInviteOpen(false)} />
+      )}
     </header>
   );
 }
