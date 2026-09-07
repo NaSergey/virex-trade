@@ -63,6 +63,11 @@ export class AuthService {
       });
     }
 
+    // Ссылка вида /login?mode=register&ref=<userId>: ref — id пригласившего.
+    // Неизвестный или мусорный ref — то же самое, что его отсутствие, а не
+    // повод отклонить регистрацию (см. RegisterDto.ref).
+    const invitedById = dto.ref ? await this.resolveInviter(dto.ref) : null;
+
     const passwordHash = await bcrypt.hash(dto.password, 10);
     const user = await this.prisma.user.create({
       data: {
@@ -72,6 +77,7 @@ export class AuthService {
         // остаётся nullable ради тех, кто регистрировался, когда имя было
         // необязательным, — их записи трогать незачем.
         name: dto.name,
+        invitedById,
       },
     });
 
@@ -224,6 +230,12 @@ export class AuthService {
 
   private hashToken(raw: string): string {
     return createHash('sha256').update(raw).digest('hex');
+  }
+
+  /** id пригласившего, если такой пользователь существует, иначе null. */
+  private async resolveInviter(ref: string): Promise<string | null> {
+    const inviter = await this.prisma.user.findUnique({ where: { id: ref } });
+    return inviter?.id ?? null;
   }
 
   private toPublicUser(user: {

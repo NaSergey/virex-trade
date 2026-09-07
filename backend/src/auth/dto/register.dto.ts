@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class RegisterDto {
@@ -24,4 +24,14 @@ export class RegisterDto {
   @MinLength(2, { message: 'Имя должно быть не короче 2 символов' })
   @MaxLength(40, { message: 'Имя должно быть не длиннее 40 символов' })
   name: string;
+
+  /**
+   * Id пригласившего — из ссылки `/login?mode=register&ref=<userId>`.
+   * Необязателен и не проверяется на формат: неизвестный или мусорный ref — то
+   * же самое, что его отсутствие (см. AuthService.register), а не повод
+   * отклонить регистрацию.
+   */
+  @IsOptional()
+  @IsString()
+  ref?: string;
 }
