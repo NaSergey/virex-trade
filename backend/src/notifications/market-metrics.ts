@@ -45,6 +45,32 @@ export const hourMovePct = (c: HourCandle): number =>
 export const rangePct = (c: HourCandle): number =>
   c.open > 0 ? ((c.high - c.low) / c.open) * 100 : 0;
 
+export type HourDirection = 'up' | 'down' | 'chop';
+
+/** Изменение свечи со знаком, в процентах. `hourMovePct` — модуль того же. */
+export const hourChangePct = (c: HourCandle): number =>
+  c.open > 0 ? ((c.close - c.open) / c.open) * 100 : 0;
+
+/**
+ * Доля тела свечи в её размахе, ниже которой час считается пилой, а не
+ * движением. Треть — соглашение: час, который сводило в обе стороны и вернуло
+ * почти в открытие, направления не имеет, и подписать его «вниз −0.05%»
+ * значит соврать трейдеру ровно там, где он смотрит, куда встать.
+ */
+const DIRECTED_BODY_SHARE = 1 / 3;
+
+/**
+ * Куда ушла цена за час — и ушла ли вообще. Считается не знаком `close − open`,
+ * а долей этого движения в размахе: сигнал волатильности по определению ловит
+ * часы с большим размахом, среди которых пила — обычное дело, а не край.
+ */
+export const hourDirection = (c: HourCandle): HourDirection => {
+  const range = c.high - c.low;
+  if (range <= 0) return 'chop';
+  const body = c.close - c.open;
+  return Math.abs(body) / range < DIRECTED_BODY_SHARE ? 'chop' : body > 0 ? 'up' : 'down';
+};
+
 const mean = (xs: number[]): number => xs.reduce((s, x) => s + x, 0) / xs.length;
 
 /** Во сколько раз размах последней свечи выше среднего по базе. */

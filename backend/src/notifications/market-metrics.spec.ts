@@ -4,6 +4,8 @@ import {
   bookSpreadPct,
   fngHolds,
   hourAverages,
+  hourChangePct,
+  hourDirection,
   hourMovePct,
   lsHolds,
   parseKline,
@@ -247,5 +249,33 @@ describe('peakHourOfWeekday', () => {
     cellAt(cells, 4, 22).samples = 3;
 
     expect(peakHourOfWeekday(cells, 6, 1.1)).toBeNull();
+  });
+});
+
+describe('hourDirection', () => {
+  it('берёт знак тела, когда тело занимает больше трети размаха', () => {
+    expect(hourDirection(candle(100, 110, 99, 108))).toBe('up');
+    expect(hourDirection(candle(100, 101, 90, 92))).toBe('down');
+  });
+
+  it('час с большим размахом и возвратом к открытию — пила, а не направление', () => {
+    // Сводило на ±5%, закрылось на 0.2% ниже открытия: знак есть, смысла нет.
+    expect(hourDirection(candle(100, 105, 95, 99.8))).toBe('chop');
+  });
+
+  it('плоская свеча без размаха не делится на ноль', () => {
+    expect(hourDirection(candle(100, 100, 100, 100))).toBe('chop');
+  });
+});
+
+describe('hourChangePct', () => {
+  it('возвращает изменение со знаком, в отличие от hourMovePct', () => {
+    expect(hourChangePct(candle(100, 105, 99, 103))).toBeCloseTo(3);
+    expect(hourChangePct(candle(100, 105, 95, 97))).toBeCloseTo(-3);
+    expect(hourMovePct(candle(100, 105, 95, 97))).toBeCloseTo(3);
+  });
+
+  it('нулевое открытие даёт ноль, а не Infinity', () => {
+    expect(hourChangePct(candle(0, 1, 0, 1))).toBe(0);
   });
 });

@@ -9,6 +9,8 @@ import {
   HourCandle,
   bookSpreadPct,
   fngHolds,
+  hourChangePct,
+  hourDirection,
   hourMovePct,
   lsHolds,
   parseKline,
@@ -36,6 +38,24 @@ const WEEKDAY_NAMES = [
   'Пятница',
   'Суббота',
 ];
+
+/**
+ * Строка направления для карточки волатильности. Отдельной функцией, потому
+ * что «куда пошла цена» и «насколько трясло» — разные вопросы, и час с большим
+ * размахом честно может не иметь ответа на первый.
+ */
+const directionLine = (c: HourCandle): string => {
+  const change = hourChangePct(c);
+  const abs = `${Math.abs(change).toFixed(2)}%`;
+  switch (hourDirection(c)) {
+    case 'up':
+      return `🟢 Вверх: +${abs}, цена <b>${c.close.toFixed(0)}</b>`;
+    case 'down':
+      return `🔴 Вниз: −${abs}, цена <b>${c.close.toFixed(0)}</b>`;
+    default:
+      return `⚪ Без направления: сводило в обе стороны, итог ${change >= 0 ? '+' : '−'}${abs}`;
+  }
+};
 
 const fmtUsdCompact = (v: number): string => {
   if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
@@ -150,6 +170,7 @@ export class MarketAlertsService implements OnApplicationBootstrap, OnModuleDest
       text: [
         `⚡ Волатильность BTC ×${ratio.toFixed(1)} к обычному часу`,
         `Размах часа: <b>${rangePct(last).toFixed(2)}%</b>`,
+        directionLine(last),
       ].join('\n'),
     }));
   }
