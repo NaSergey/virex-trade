@@ -35,6 +35,15 @@ export default function LoginPage() {
   const next = nextParam && NEXT_PATH.test(nextParam) ? nextParam : '/overview';
 
   /*
+   * Кто пригласил: id из ссылки `/login?mode=register&ref=<userId>`
+   * (см. features/referrals). Читается один раз при заходе на страницу и
+   * передаётся в register() при отправке формы — сам параметр в адресной
+   * строке переживает переключение mode (setMode — локальный стейт, не
+   * router.push) и перезагрузку страницы.
+   */
+  const ref = params.get('ref') ?? undefined;
+
+  /*
    * С какой стороны открыт вход. Кнопка «Начать» на главной ведёт сюда с
    * `?mode=register`: человек, пришедший заводить аккаунт, не должен
    * попадать на форму входа и искать переключатель. Всё, кроме явного
@@ -59,7 +68,7 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       if (mode === 'login') await login(email, password);
-      else await register(email, password, name || undefined);
+      else await register(email, password, name || undefined, ref);
       router.replace(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('genericError'));
