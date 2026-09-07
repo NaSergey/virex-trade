@@ -7,8 +7,9 @@ import { Wrap } from '@/shared/ui/Wrap';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { EquityChart, EquityChartSkeleton } from '@/widgets/equity-chart';
-import { TradesTable } from '@/widgets/trades-table';
+import { TradesTable, sortTrades } from '@/widgets/trades-table';
 import { Pagination } from '@/shared/ui/Pagination';
+import type { LedgerSort } from '@/shared/ui/LedgerTable';
 import { usePeriodFilter, PeriodStrip } from '@/features/period-filter';
 import { LabFilters } from './components/LabFilters';
 import { LabCompare } from './components/LabCompare';
@@ -63,18 +64,28 @@ export const AnalyticsPage = () => {
   const trades = data?.trades ?? [];
   const filtered = data?.filtered;
 
-  // Смена условий сбрасывает список на первый лист: третий лист прежней
-  // выборки в новой означал бы уже не те сделки — та же причина, по которой
-  // Обзор сбрасывает журнал при смене периода.
+  // Сортировка таблицы «Подходящие сделки» — по умолчанию тот же порядок,
+  // что уже приходит с бэкенда (LabService отдаёт trades по убыванию closedAt),
+  // так что до первого клика по заголовку список выглядит как раньше.
+  const [sort, setSort] = useState<LedgerSort>({ key: 'closedAt', dir: -1 });
+  const sortedTrades = useMemo(
+    () => sortTrades(trades, sort, state.filters.rangeTf),
+    [trades, sort, state.filters.rangeTf],
+  );
+
+  // Смена условий или сортировки сбрасывает список на первый лист: третий
+  // лист прежнего порядка после переупорядочивания означал бы уже не те
+  // сделки — та же причина, по которой Обзор сбрасывает журнал при смене
+  // периода.
   const [page, setPage] = useState(1);
   const filtersKey = JSON.stringify(labFilters);
   useEffect(() => {
     setPage(1);
-  }, [filtersKey]);
+  }, [filtersKey, sort]);
 
   const pageTrades = useMemo(
-    () => trades.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [trades, page],
+    () => sortedTrades.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [sortedTrades, page],
   );
 
   return (
@@ -124,6 +135,10 @@ export const AnalyticsPage = () => {
                 skeletonRows={10}
                 compact
                 range={{ tf: state.filters.rangeTf, label: RANGE_TF_LABELS[state.filters.rangeTf] }}
+                sort={sort}
+                onSort={(key) =>
+                  setSort((s) => (s.key === key ? { key, dir: s.dir === -1 ? 1 : -1 } : { key, dir: -1 }))
+                }
               />
               {trades.length > PAGE_SIZE && (
                 <Pagination
