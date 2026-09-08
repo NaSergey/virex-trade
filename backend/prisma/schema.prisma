@@ -25,6 +25,11 @@ model User {
   invitedBy    User?   @relation("Referrals", fields: [invitedById], references: [id], onDelete: SetNull)
   invitedUsers User[]  @relation("Referrals")
 
+  // Кастомное имя для реферальной ссылки вместо userId — необязательное и
+  // уникальное. Формат (латиница, цифры, дефис, 3–30 символов) проверяет DTO
+  // (см. referrals/dto/referral-slug.dto.ts), здесь только колонка.
+  referralSlug String? @unique
+
   // DEPRECATED — superseded by ExchangeConnection, kept only so
   // LegacyCredentialsMigrationService can move existing keys into the new table
   // on boot. Dropping them in the same change would have `prisma db push`
