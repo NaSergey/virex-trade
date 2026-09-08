@@ -47,6 +47,57 @@
   color: var(--ink);
 }
 
+/* ── интро: пустота + сборка (сцены 00–01) ─────────────────────── */
+/* Grid с одной ячейкой — приём, чтобы наложить слово и знак друг на друга по
+   центру, не трогая их `transform`: он целиком отдан GSAP (word/hint едут по
+   y при затухании, знак — масштабируется в задаче 6). `position: absolute` +
+   `transform: translate(-50%,-50%)` для центрирования сделали бы то же самое,
+   но GSAP при первом же `gsap.set/to` заменяет весь inline `transform`
+   целиком по своим x/y/scale — и стёр бы центрирующий сдвиг, которого сам
+   не назначал. `grid-area: 1 / 1` на обоих детях не использует transform
+   вообще, конфликтовать не с чем. */
+.ls-intro {
+  position: relative;
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  overflow: clip;
+  background: var(--ground);
+}
+
+.ls-void,
+.ls-logo-group {
+  grid-area: 1 / 1;
+}
+
+.ls-void {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s3);
+}
+.ls-void-word {
+  font-family: var(--font-mono);
+  font-size: var(--t-m);
+  letter-spacing: 0.42em;
+  text-indent: 0.42em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.ls-void-hint {
+  font-size: var(--t-m);
+  color: var(--ink-3);
+}
+
+.ls-logo-group {
+  width: min(46svh, 74vw);
+}
+.ls-logo-group svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
 /* ── шапка (перенесено из globals.css без изменений вида) ─────────── */
 .lp-top {
   border-bottom: 1px solid var(--rule);

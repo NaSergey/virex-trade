@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
+import { useRef } from 'react';
 import { Button } from '@/shared/ui/Button';
-import { VirexLogo } from '@/shared/ui/VirexLogo';
 import { Wrap } from '@/shared/ui/Wrap';
 import { useLenis } from './lib/useLenis';
 import { LandingHeader } from './components/LandingHeader';
+import { IntroScene } from './components/IntroScene';
 import './landing.css';
 
 /** Разделы продукта — те же пять, что в рейке, минус Настройки: рассказывать про форму ключей нечего. */
@@ -34,6 +35,7 @@ const STEPS = [1, 2, 3] as const;
  */
 export function LandingPage() {
   const t = useTranslations('landing');
+  const lightLayerRef = useRef<HTMLDivElement>(null);
   useLenis();
 
   return (
@@ -41,18 +43,7 @@ export function LandingPage() {
       <LandingHeader />
 
       <main>
-        {/* Первый экран — только знак. Человек, пришедший по ссылке, сначала
-            видит, куда попал, и лишь потом читает, зачем это ему: обещание
-            продукта начинается строкой ниже и не спорит за внимание с
-            логотипом. Знак здесь декоративный — имя продукта уже стоит в
-            шапке, — поэтому он скрыт от экранного диктора. */}
-        <section className="lp-splash">
-          <VirexLogo className="lp-splash-logo" aria-hidden />
-          <span className="lp-splash-word">Virex</span>
-          <span className="lp-splash-more" aria-hidden>
-            ↓
-          </span>
-        </section>
+        <IntroScene lightLayerRef={lightLayerRef} />
 
         <Wrap page>
           <section className="lp-hero">
