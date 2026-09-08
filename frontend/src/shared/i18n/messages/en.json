@@ -462,7 +462,14 @@
     "withKeyLabel": "Connected a key",
     "copy": "copy",
     "copied": "copied",
-    "copyFailed": "failed"
+    "copyFailed": "failed",
+    "customLabel": "Custom name for the link",
+    "slugPlaceholder": "sergey",
+    "formatHint": "Latin letters, digits, hyphen — 3 to 30 characters",
+    "checking": "checking…",
+    "available": "available",
+    "taken": "taken",
+    "slugSaveFailed": "Could not save the link"
   },
   "admin": {
     "title": "Users",

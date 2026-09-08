@@ -539,7 +539,14 @@
     "withKeyLabel": "Подключили ключ",
     "copy": "скопировать",
     "copied": "скопировано",
-    "copyFailed": "не вышло"
+    "copyFailed": "не вышло",
+    "customLabel": "Своё имя для ссылки",
+    "slugPlaceholder": "sergey",
+    "formatHint": "Латиница, цифры, дефис — от 3 до 30 символов",
+    "checking": "проверяю…",
+    "available": "свободно",
+    "taken": "занято",
+    "slugSaveFailed": "Не удалось сохранить ссылку"
   },
   "admin": {
     "title": "Пользователи",
