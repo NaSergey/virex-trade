@@ -7,6 +7,7 @@ import { registerGsap } from '../../lib/gsapConfig';
 import { prefersReducedMotion } from '../../lib/reducedMotion';
 import { VoidIntro } from './VoidIntro';
 import { LogoAssemblyScene } from './LogoAssemblyScene';
+import { LogoZoomFloodScene } from './LogoZoomFloodScene';
 
 /**
  * Сцены 00–02 одним операторским планом: пустота → сборка логотипа → (задача 6)
@@ -28,6 +29,7 @@ export function IntroScene({ lightLayerRef }: { lightLayerRef: RefObject<HTMLDiv
       registerGsap();
       const logo = logoRef.current;
       if (!logo) return;
+      gsap.set(logo, { transformOrigin: '50% 50%' });
 
       const candle = (id: string) => logo.querySelector<SVGPathElement>(`[data-candle="${id}"]`);
       const left = candle('left');
@@ -40,6 +42,8 @@ export function IntroScene({ lightLayerRef }: { lightLayerRef: RefObject<HTMLDiv
       if (prefersReducedMotion()) {
         gsap.set([wordRef.current, hintRef.current], { opacity: 0 });
         gsap.set([left, leftCenter, center, rightCenter, right], { opacity: 1, x: 0, y: 0 });
+        gsap.set(logo, { scale: 26 });
+        if (lightLayerRef.current) gsap.set(lightLayerRef.current, { opacity: 1 });
         return;
       }
 
@@ -47,7 +51,7 @@ export function IntroScene({ lightLayerRef }: { lightLayerRef: RefObject<HTMLDiv
         scrollTrigger: {
           trigger: root.current,
           start: 'top top',
-          end: '+=3400',
+          end: '+=5200',
           scrub: 1,
           pin: true,
           anticipatePin: 1,
@@ -69,9 +73,13 @@ export function IntroScene({ lightLayerRef }: { lightLayerRef: RefObject<HTMLDiv
         .fromTo(rightCenter, { y: 70, opacity: 0 }, { y: 0, opacity: 1, duration: 1.3, ease: 'power3.out' }, 'assembly+=0.15')
         // центральная — последней, строго сверху, довершает знак
         .fromTo(center, { y: -100, opacity: 0 }, { y: 0, opacity: 1, duration: 1.2, ease: 'power3.out' }, 'assembly+=0.4')
-        .addLabel('assembled', 'assembly+=1.9');
-
-      // Задача 6 продолжает этот же timeline с метки 'assembled' (zoom + вспышка).
+        .addLabel('assembled', 'assembly+=1.9')
+        // zoom: знак «летит на зрителя», части уходят за края экрана
+        .to(logo, { scale: 26, duration: 2.2, ease: 'power2.in' }, 'assembled+=0.1')
+        // вспышка: белый слой перекрывает весь экран к концу zoom
+        .to(lightLayerRef.current, { opacity: 1, duration: 1.4, ease: 'power1.inOut' }, 'assembled+=1.1')
+        // короткая пауза на пике белого — визуальный вдох перед контентом
+        .to({}, { duration: 0.5 }, 'assembled+=2.6');
     },
     { scope: root },
   );
@@ -80,6 +88,7 @@ export function IntroScene({ lightLayerRef }: { lightLayerRef: RefObject<HTMLDiv
     <section className="ls-intro ls-dark" ref={root}>
       <VoidIntro wordRef={wordRef} hintRef={hintRef} />
       <LogoAssemblyScene groupRef={logoRef} />
+      <LogoZoomFloodScene />
     </section>
   );
 }

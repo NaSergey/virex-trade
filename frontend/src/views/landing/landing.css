@@ -47,6 +47,33 @@
   color: var(--ink);
 }
 
+/* ── фон-путешествие: фиксированная тёмная/светлая подложка ────────── */
+.ls-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+}
+.ls-bg-dark,
+.ls-bg-light {
+  position: absolute;
+  inset: 0;
+}
+.ls-bg-dark {
+  background: #050505;
+}
+.ls-bg-light {
+  background: #f5f2ea;
+  opacity: 0;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
 /* ── интро: пустота + сборка (сцены 00–01) ─────────────────────── */
 /* Grid с одной ячейкой — приём, чтобы наложить слово и знак друг на друга по
    центру, не трогая их `transform`: он целиком отдан GSAP (word/hint едут по
@@ -62,7 +89,6 @@
   display: grid;
   place-items: center;
   overflow: clip;
-  background: var(--ground);
 }
 
 .ls-void,

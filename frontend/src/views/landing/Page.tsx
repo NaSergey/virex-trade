@@ -8,6 +8,7 @@ import { Wrap } from '@/shared/ui/Wrap';
 import { useLenis } from './lib/useLenis';
 import { LandingHeader } from './components/LandingHeader';
 import { IntroScene } from './components/IntroScene';
+import { SceneBackground } from './components/SceneBackground';
 import './landing.css';
 
 /** Разделы продукта — те же пять, что в рейке, минус Настройки: рассказывать про форму ключей нечего. */
@@ -41,6 +42,7 @@ export function LandingPage() {
   return (
     <>
       <LandingHeader />
+      <SceneBackground ref={lightLayerRef} />
 
       <main>
         <IntroScene lightLayerRef={lightLayerRef} />
