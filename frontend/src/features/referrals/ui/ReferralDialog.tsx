@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/shared/ui/Button';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
-import { Field, Input } from '@/shared/ui/Field';
+import { Input } from '@/shared/ui/Field';
 import { KeyValue } from '@/shared/ui/Lookup';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@/shared/ui/dialog';
 import { useDebouncedValue } from '@/shared/lib/hooks/useDebouncedValue';
@@ -82,12 +82,16 @@ export function ReferralDialog({
           <KeyValue label={t('totalLabel')}>{stats?.total ?? '—'}</KeyValue>
           <KeyValue label={t('withKeyLabel')}>{stats?.withKey ?? '—'}</KeyValue>
 
-          <Field label={t('customLabel')} htmlFor="referral-slug">
-            <span style={{ display: 'flex', gap: 'var(--s2)', alignItems: 'center' }}>
+          {/* Тот же ряд «подпись слева — управление справа», что у доната в
+              меню профиля, а не отдельная форма: строка продолжает те же три
+              выше, а не стоит рядом с ними чужеродным блоком. */}
+          <KeyValue label={t('customLabel')} control valueClassName="">
+            <span style={{ display: 'inline-flex', gap: 'var(--s2)', alignItems: 'center' }}>
               <Input
-                id="referral-slug"
+                aria-label={t('customLabel')}
                 placeholder={t('slugPlaceholder')}
                 maxLength={30}
+                style={{ width: 130 }}
                 value={slugInput}
                 onChange={(e) => setSlugInput(e.target.value)}
               />
@@ -95,13 +99,20 @@ export function ReferralDialog({
                 {setSlug.isPending ? tc('saving') : tc('save')}
               </Button>
             </span>
-          </Field>
+          </KeyValue>
           {status && (
-            <p className={status.cls} style={{ marginTop: 'var(--s1)' }}>
+            <p
+              className={status.cls}
+              style={{ fontSize: 'var(--t-xs)', textAlign: 'right', marginTop: 'calc(-1 * var(--s2))' }}
+            >
               {status.text}
             </p>
           )}
-          <ErrorNote error={setSlug.error} fallback={t('slugSaveFailed')} style={{ marginTop: 'var(--s1)' }} />
+          <ErrorNote
+            error={setSlug.error}
+            fallback={t('slugSaveFailed')}
+            style={{ fontSize: 'var(--t-xs)', textAlign: 'right', marginTop: 'calc(-1 * var(--s2))' }}
+          />
         </DialogBody>
         <DialogFooter>
           <Button variant="solid" onClick={onClose}>
