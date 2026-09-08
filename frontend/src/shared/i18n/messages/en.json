@@ -601,7 +601,8 @@
     "DONATION_AMOUNT_INVALID": "The amount must be a number with at most two decimals",
     "DONATION_AMOUNT_RANGE": "The amount is outside the allowed range",
     "DONATION_TOO_MANY_PENDING": "Several unpaid donations are already open — finish or cancel them",
-    "DONATION_AMOUNT_POOL_EXHAUSTED": "Too many simultaneous payments of this amount — try again in a minute"
+    "DONATION_AMOUNT_POOL_EXHAUSTED": "Too many simultaneous payments of this amount — try again in a minute",
+    "SLUG_TAKEN": "This name is already taken"
   },
   "landing": {
     "signIn": "Sign in",
