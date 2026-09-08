@@ -232,9 +232,16 @@ export class AuthService {
     return createHash('sha256').update(raw).digest('hex');
   }
 
-  /** id пригласившего, если такой пользователь существует, иначе null. */
+  /**
+   * id пригласившего — по `userId` ИЛИ по кастомному слагу ссылки
+   * (`referralSlug`, см. ReferralsService.setSlug), одним запросом. Слаг
+   * сравнивается в нижнем регистре: хранится он тоже в нижнем, а `ref` в
+   * адресной строке человек мог набрать как угодно.
+   */
   private async resolveInviter(ref: string): Promise<string | null> {
-    const inviter = await this.prisma.user.findUnique({ where: { id: ref } });
+    const inviter = await this.prisma.user.findFirst({
+      where: { OR: [{ id: ref }, { referralSlug: ref.toLowerCase() }] },
+    });
     return inviter?.id ?? null;
   }
 

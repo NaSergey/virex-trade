@@ -28,16 +28,22 @@ describe('AuthService.login', () => {
 describe('AuthService.register', () => {
   const baseDto = { email: 'new@example.com', password: 'password123', name: 'New User' };
 
-  // Ручной стаб PrismaService: register() трогает user.findUnique (дважды — по
-  // email и по ref), user.create и refreshToken.create. jwt и tags — заглушки,
-  // как в блоке AuthService.login выше.
-  function makeService(existingUsers: Record<string, { id: string }>) {
+  // Ручной стаб PrismaService: register() трогает user.findUnique (по email),
+  // user.findFirst (резолвит ref по id ИЛИ по слагу — см. resolveInviter),
+  // user.create и refreshToken.create. jwt и tags — заглушки, как в блоке
+  // AuthService.login выше.
+  function makeService(existingUsers: Array<{ id: string; referralSlug?: string }>) {
     const created: any[] = [];
     const prisma = {
       user: {
-        findUnique: async ({ where }: { where: { email?: string; id?: string } }) => {
-          if (where.email) return null; // почта всегда свободна в этих тестах
-          if (where.id) return existingUsers[where.id] ?? null;
+        findUnique: async () => null, // почта всегда свободна в этих тестах
+        findFirst: async ({ where }: { where: { OR: Array<{ id?: string; referralSlug?: string }> } }) => {
+          for (const cond of where.OR) {
+            const found = existingUsers.find(
+              (u) => (cond.id && u.id === cond.id) || (cond.referralSlug && u.referralSlug === cond.referralSlug),
+            );
+            if (found) return found;
+          }
           return null;
         },
         create: async ({ data }: { data: any }) => {
@@ -52,16 +58,24 @@ describe('AuthService.register', () => {
     return { service: new AuthService(prisma, jwt, tags), created };
   }
 
-  it('валидный ref закрепляет пригласившего', async () => {
-    const { service, created } = makeService({ 'inviter-1': { id: 'inviter-1' } });
+  it('валидный ref по id закрепляет пригласившего', async () => {
+    const { service, created } = makeService([{ id: 'inviter-1' }]);
 
     await service.register({ ...baseDto, ref: 'inviter-1' } as any);
 
     expect(created[0].invitedById).toBe('inviter-1');
   });
 
+  it('валидный ref по кастомному слагу закрепляет пригласившего (без учёта регистра)', async () => {
+    const { service, created } = makeService([{ id: 'inviter-1', referralSlug: 'sergey' }]);
+
+    await service.register({ ...baseDto, ref: 'Sergey' } as any);
+
+    expect(created[0].invitedById).toBe('inviter-1');
+  });
+
   it('несуществующий ref не падает и не закрепляет пригласившего', async () => {
-    const { service, created } = makeService({});
+    const { service, created } = makeService([]);
 
     await service.register({ ...baseDto, ref: 'ghost' } as any);
 
@@ -69,7 +83,7 @@ describe('AuthService.register', () => {
   });
 
   it('без ref не закрепляет пригласившего', async () => {
-    const { service, created } = makeService({});
+    const { service, created } = makeService([]);
 
     await service.register(baseDto as any);
 
