@@ -3,10 +3,11 @@
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/shared/ui/Button';
-import { LocaleSwitch } from '@/shared/ui/LocaleSwitch';
-import { ThemeToggle } from '@/shared/ui/ThemeToggle';
 import { VirexLogo } from '@/shared/ui/VirexLogo';
 import { Wrap } from '@/shared/ui/Wrap';
+import { useLenis } from './lib/useLenis';
+import { LandingHeader } from './components/LandingHeader';
+import './landing.css';
 
 /** Разделы продукта — те же пять, что в рейке, минус Настройки: рассказывать про форму ключей нечего. */
 const SECTIONS = ['overview', 'tags', 'analytics', 'market'] as const;
@@ -33,26 +34,11 @@ const STEPS = [1, 2, 3] as const;
  */
 export function LandingPage() {
   const t = useTranslations('landing');
+  useLenis();
 
   return (
     <>
-      <header className="lp-top">
-        <Wrap>
-          <div className="lp-top-in">
-            <div className="mark">
-              {/* <VirexLogo width={42} height={42} /> */}
-              Virex
-            </div>
-            <div className="lp-top-r">
-              <ThemeToggle />
-              <LocaleSwitch className="seg-tight" />
-              <Link href="/login" className="lp-login">
-                {t('signIn')}
-              </Link>
-            </div>
-          </div>
-        </Wrap>
-      </header>
+      <LandingHeader />
 
       <main>
         {/* Первый экран — только знак. Человек, пришедший по ссылке, сначала

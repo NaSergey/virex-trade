@@ -1,0 +1,102 @@
+/* ═══════════════════════════════════════════════════════════════
+   ГЛАВНАЯ — сцены cinematic-лендинга.
+   Правила `.lp-*` здесь — перенесённые как есть из globals.css (шапка,
+   ссылка входа, футер): их вид не меняется, меняется только файл-владелец.
+   Новая разметка сцен — классы `.ls-*`.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── фон-путешествие: светлая/тёмная половина истории ──────────────
+   Переопределяют те же generic-переменные, что уже использует вся
+   остальная система (--ink, --ground, --profit, …), поэтому существующие
+   компоненты внутри сцены не нуждаются в правках — они уже написаны через
+   var(--ink) и просто получают другое значение на время сюжета лендинга,
+   независимо от реальной куки темы. */
+.ls-light {
+  --ground: #f5f2ea;
+  --ink: #1c1a16;
+  --ink-2: #6b655b;
+  --ink-3: #8b8477;
+  --hair: rgba(28, 26, 22, 0.16);
+  --hair-2: rgba(28, 26, 22, 0.28);
+  --rule: rgba(28, 26, 22, 0.32);
+  --major: rgba(28, 26, 22, 0.85);
+  --profit: #2f7d55;
+  --loss: #b23a31;
+  --doubt: #8a6118;
+  --meta: #5a6a86;
+  --meta-dim: #7b8799;
+  --band: #eae5d9;
+  color: var(--ink);
+}
+
+.ls-dark {
+  --ground: #050505;
+  --ink: #e8e4dc;
+  --ink-2: #8e887e;
+  --ink-3: #565149;
+  --hair: rgba(232, 228, 220, 0.14);
+  --hair-2: rgba(232, 228, 220, 0.26);
+  --rule: rgba(232, 228, 220, 0.3);
+  --major: rgba(232, 228, 220, 0.85);
+  --profit: #5ba378;
+  --loss: #c9524a;
+  --doubt: #b8893f;
+  --meta: #7c8ca6;
+  --meta-dim: #5d6b80;
+  --band: #0b0b0a;
+  color: var(--ink);
+}
+
+/* ── шапка (перенесено из globals.css без изменений вида) ─────────── */
+.lp-top {
+  border-bottom: 1px solid var(--rule);
+  padding: var(--s3) 0;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  background: var(--ground);
+  /* Скрыта до первого скролла — первый экран обязан быть пустым. */
+  opacity: 0;
+  transform: translateY(-8px);
+  pointer-events: none;
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+.lp-top-visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.lp-top-in {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+.lp-top-r {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+}
+.lp-login {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  text-decoration: none;
+  border-bottom: 1px solid var(--hair-2);
+  padding-bottom: 1px;
+}
+.lp-login:hover {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+/* ── футер (перенесено из globals.css без изменений вида) ─────────── */
+.lp-foot {
+  border-top: 1px solid var(--rule);
+  padding: var(--s4) 0;
+  font-size: var(--t-xs);
+}

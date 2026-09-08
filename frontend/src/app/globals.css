@@ -2163,35 +2163,6 @@
      средствами, что и продукт за ней: волосяные линейки, моноширинные
      служебные подписи, ни одного радиуса и ни одной тени. Лендинг, обещающий
      одно, а открывающий другое, врёт ещё до регистрации. */
-  .lp-top {
-    border-bottom: 1px solid var(--rule);
-    padding: var(--s3) 0;
-  }
-  .lp-top-in {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--s3);
-  }
-  .lp-top-r {
-    display: flex;
-    align-items: center;
-    gap: var(--s3);
-  }
-  .lp-login {
-    font-family: var(--font-mono);
-    font-size: var(--t-xs);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--ink-2);
-    text-decoration: none;
-    border-bottom: 1px solid var(--hair-2);
-    padding-bottom: 1px;
-  }
-  .lp-login:hover {
-    color: var(--ink);
-    border-color: var(--ink);
-  }
 
   /* ── первый экран главной ──────────────────────────────────────
      Знак во весь экран: страницу открывает тот, кто ещё не знает продукта, и
@@ -2359,12 +2330,6 @@
 
   .lp-end { padding: var(--s5) 0 var(--s6); }
   .lp-end .lp-body { margin-bottom: var(--s4); }
-
-  .lp-foot {
-    border-top: 1px solid var(--rule);
-    padding: var(--s4) 0;
-    font-size: var(--t-xs);
-  }
 
   /* ═══════════════ ОБУЧЕНИЕ ═══════════════ */
   /* Пошаговые туры при первом заходе в раздел (features/onboarding).
