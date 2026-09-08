@@ -124,6 +124,49 @@
   height: auto;
 }
 
+/* ── обещание (сцена 03) ───────────────────────────────────────── */
+.ls-promise {
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  padding: var(--s6) 0;
+}
+.ls-promise h1 {
+  margin: 0 0 var(--s3);
+  max-width: 18ch;
+  font-size: var(--t-xl);
+  font-weight: 400;
+  line-height: 1.15;
+}
+.lp-lede {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-m);
+  line-height: 1.6;
+}
+
+/* ── skip-ссылка ────────────────────────────────────────────────── */
+.ls-skip {
+  position: fixed;
+  top: var(--s3);
+  left: var(--s3);
+  z-index: 60;
+  transform: translateY(-140%);
+  background: var(--ink);
+  color: var(--ground);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: var(--s2) var(--s3);
+  text-decoration: none;
+  transition: transform 0.15s ease;
+}
+.ls-skip:focus {
+  transform: translateY(0);
+}
+
 /* ── шапка (перенесено из globals.css без изменений вида) ─────────── */
 .lp-top {
   border-bottom: 1px solid var(--rule);

@@ -613,6 +613,7 @@
   },
   "landing": {
     "signIn": "Sign in",
+    "skipToContent": "Skip to content",
     "ctaStart": "Create account",
     "ctaNote": "Free. All it needs is read-only exchange keys.",
     "heroTitle": "Find your trading system and make it stable",

@@ -8,6 +8,7 @@ import { Wrap } from '@/shared/ui/Wrap';
 import { useLenis } from './lib/useLenis';
 import { LandingHeader } from './components/LandingHeader';
 import { IntroScene } from './components/IntroScene';
+import { PromiseScene } from './components/PromiseScene';
 import { SceneBackground } from './components/SceneBackground';
 import './landing.css';
 
@@ -41,24 +42,17 @@ export function LandingPage() {
 
   return (
     <>
+      <a href="#promise-scene" className="ls-skip">
+        {t('skipToContent')}
+      </a>
       <LandingHeader />
       <SceneBackground ref={lightLayerRef} />
 
       <main>
         <IntroScene lightLayerRef={lightLayerRef} />
+        <PromiseScene />
 
         <Wrap page>
-          <section className="lp-hero">
-            <h1>{t('heroTitle')}</h1>
-            <p className="lp-lede">{t('heroLede')}</p>
-            <div className="lp-cta">
-              <Link href="/login?mode=register">
-                <Button variant="solid">{t('ctaStart')}</Button>
-              </Link>
-              <span className="lp-note">{t('ctaNote')}</span>
-            </div>
-          </section>
-
           {/* Путь к своей системе. Тот же, что человек увидит первым шагом
               обучения внутри продукта: обещание на входе и первое, что он
               встретит внутри, обязаны совпадать дословно по смыслу. */}
