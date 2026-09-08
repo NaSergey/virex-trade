@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { DEMO_EMAIL, DEMO_PASSWORD, useAuth } from '@/features/auth';
 import { Button } from '@/shared/ui/Button';
 import { Field, Input } from '@/shared/ui/Field';
+import { LocaleSwitch } from '@/shared/ui/LocaleSwitch';
 
 type Mode = 'login' | 'register';
 
@@ -111,6 +112,14 @@ export default function LoginPage() {
         padding: 'var(--s4)',
       }}
     >
+      {/* Фиксирован относительно экрана, а не карточки: человек, открывший
+          форму не на своём языке, должен увидеть переключатель сразу, не
+          дожидаясь загрузки формы и не завися от того, влезла ли карточка на
+          экран. Тот же приём и тумблер, что на лендинге. */}
+      <div style={{ position: 'fixed', top: 'var(--s4)', right: 'var(--s4)', zIndex: 1 }}>
+        <LocaleSwitch className="seg-tight" />
+      </div>
+
       <div style={{ width: '100%', maxWidth: 360 }}>
         <div className="mark" style={{ marginBottom: 'var(--s5)' }}>
           {t('brand')}
