@@ -93,8 +93,12 @@ export function IntroScene({ lightLayerRef }: { lightLayerRef: RefObject<HTMLDiv
         // центральная — последней, строго сверху, довершает знак
         .fromTo(center, { y: -100, opacity: 0 }, { y: 0, opacity: 1, duration: 1.2, ease: 'power3.out' }, 'assembly+=0.4')
         .addLabel('assembled', 'assembly+=1.9')
-        // zoom: знак «летит на зрителя», части уходят за края экрана
-        .to(logo, { scale: 26, duration: 2.2, ease: 'power2.in' }, 'assembled+=0.1');
+        // zoom: знак «летит на зрителя», части уходят за края экрана.
+        // Множитель вдвое меньше, чем при прежнем, вдвое более скромном
+        // размере знака в состоянии покоя (min(46svh,74vw) → min(90svh,92vw))
+        // — конечный, уже забивающий собой весь кадр размер и темп самого
+        // zoom’а остаются теми же, что уже проверены и работают.
+        .to(logo, { scale: 13, duration: 2.2, ease: 'power2.in' }, 'assembled+=0.1');
 
       // Вспышка: белый слой перекрывает весь экран к концу zoom.
       // `fromTo`, а не `to`: `to` берёт начальное значение из DOM в момент
