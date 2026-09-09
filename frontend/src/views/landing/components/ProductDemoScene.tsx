@@ -16,8 +16,16 @@ import { buildEquityGeometry, W, type EquityGeometry } from '@/widgets/equity-ch
 import type { EquityPoint } from '@/entities/trade';
 import { registerGsap } from '../lib/gsapConfig';
 import { prefersReducedMotion } from '../lib/reducedMotion';
+import { isMobileViewport } from '../lib/breakpoints';
 
 const CURVE_HEIGHT = 220;
+
+/** Длина пина сцены: сколько скролла занимает вся демонстрация панели. */
+const PIN_LENGTH_DESKTOP = 2600;
+/** На телефоне путь вдвое короче — двигается то же самое и оттуда же. */
+const PIN_LENGTH_MOBILE = 1300;
+
+type Translate = (key: string) => string;
 
 /** Иллюстративная кривая — с реалистичной просадкой, не идеальная прямая. */
 const DEMO_EQUITY: EquityPoint[] = [
@@ -32,16 +40,30 @@ const DEMO_EQUITY: EquityPoint[] = [
   { time: 8, value: 1240 },
 ];
 
+/** Имена тегов — витринные, но всё же слова, а не термины: идут через переводы. */
 const DEMO_TRADES = [
-  { symbol: 'BTCUSDT', dir: 'long' as const, pnl: 128.4, tag: { name: 'Пробой диапазона', color: '#5b78a3' } },
-  { symbol: 'ETHUSDT', dir: 'short' as const, pnl: -42.1, tag: { name: 'Контртренд', color: '#8a5ba3' } },
+  { symbol: 'BTCUSDT', dir: 'long' as const, pnl: 128.4, tagKey: 'demoTag1', color: '#5b78a3' },
+  { symbol: 'ETHUSDT', dir: 'short' as const, pnl: -42.1, tagKey: 'demoTag2', color: '#8a5ba3' },
 ];
 
-const METRICS = [
-  { key: 'edge', label: 'Edge Score', target: 61, format: (v: number) => Math.round(v).toString() },
-  { key: 'winrate', label: 'Винрейт', target: 57.4, format: (v: number) => `${v.toFixed(1)} %` },
-  { key: 'pf', label: 'Профит-фактор', target: 1.9, format: (v: number) => v.toFixed(2) },
-] as const;
+type DemoMetric = {
+  key: string;
+  /**
+   * Подпись метрики. Функция, а не строка и не ключ: «Edge Score» —
+   * собственное имя метрики продукта, одинаковое в обеих локалях (как
+   * 'Long'/'Short' в аналитике), а винрейт и профит-фактор — обычные слова, и
+   * им нужен перевод. Так оба случая живут в одном поле без ветвлений в JSX.
+   */
+  label: (t: Translate) => string;
+  target: number;
+  format: (v: number) => string;
+};
+
+const METRICS: DemoMetric[] = [
+  { key: 'edge', label: () => 'Edge Score', target: 61, format: (v) => Math.round(v).toString() },
+  { key: 'winrate', label: (t) => t('demoWinrateLabel'), target: 57.4, format: (v) => `${v.toFixed(1)} %` },
+  { key: 'pf', label: (t) => t('demoPfLabel'), target: 1.9, format: (v) => v.toFixed(2) },
+];
 
 const SECTIONS = ['overview', 'tags', 'analytics', 'market'] as const;
 
@@ -81,7 +103,15 @@ export function ProductDemoScene() {
       }
 
       const tl = gsap.timeline({
-        scrollTrigger: { trigger: root.current, start: 'top top', end: '+=2600', scrub: 1, pin: true },
+        scrollTrigger: {
+          trigger: root.current,
+          start: 'top top',
+          // Функция, а не строка — ScrollTrigger зовёт её на каждом refresh;
+          // подробности выбора против `gsap.matchMedia()` — в IntroScene.
+          end: () => `+=${isMobileViewport() ? PIN_LENGTH_MOBILE : PIN_LENGTH_DESKTOP}`,
+          scrub: 1,
+          pin: true,
+        },
       });
 
       tl.addLabel('metrics', 0);
@@ -131,7 +161,7 @@ export function ProductDemoScene() {
             {METRICS.map((m, i) => (
               <MetricCell
                 key={m.key}
-                label={m.label}
+                label={m.label(t)}
                 value={
                   <span ref={(el) => { metricRefs.current[i] = el; }}>
                     {m.format(0)}
@@ -159,12 +189,15 @@ export function ProductDemoScene() {
                   <tr key={row.symbol} ref={(el) => { rowRefs.current[i] = el; }}>
                     <td className="sym">{row.symbol}</td>
                     <td>
+                      {/* 'Long'/'Short' совпадают в обеих локалях и в продукте
+                          не переводятся (ср. DIR_LABELS в аналитике и
+                          TradesTable, где направление печатается как есть). */}
                       <span className={row.dir === 'short' ? 'dir short' : 'dir'}>
                         {row.dir === 'short' ? 'Short' : 'Long'}
                       </span>
                     </td>
                     <td>
-                      <Tag name={row.tag.name} color={row.tag.color} />
+                      <Tag name={t(row.tagKey)} color={row.color} />
                     </td>
                     <td className="r">
                       <Money value={row.pnl} />
