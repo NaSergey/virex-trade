@@ -254,38 +254,17 @@
   line-height: 1.6;
 }
 
-/* ── шапка (перенесено из globals.css без изменений вида) ─────────── */
-.lp-top {
-  border-bottom: 1px solid var(--rule);
-  padding: var(--s3) 0;
+/* ── шапка: только языковой переключатель, тем же приёмом, что на /login —
+   `position: fixed`, виден сразу, без ожидания скролла. Марки, переключателя
+   темы (на /login его тоже нет — тема вне продукта не переключается) и ссылки
+   входа (она уже в конце, в FinaleScene) здесь больше нет. ─────────────── */
+.ls-locale-fixed {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
+  top: var(--s4);
+  right: var(--s4);
   z-index: 40;
-  background: var(--ground);
-  /* Скрыта до первого скролла — первый экран обязан быть пустым. */
-  opacity: 0;
-  transform: translateY(-8px);
-  pointer-events: none;
-  transition: opacity 0.6s ease, transform 0.6s ease;
 }
-.lp-top-visible {
-  opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
-}
-.lp-top-in {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s3);
-}
-.lp-top-r {
-  display: flex;
-  align-items: center;
-  gap: var(--s3);
-}
+
 .lp-login {
   font-family: var(--font-mono);
   font-size: var(--t-xs);
