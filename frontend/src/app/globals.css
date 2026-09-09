@@ -2197,41 +2197,6 @@
     line-height: 1.6;
   }
 
-  /* Шаги — тот же нумерованный список, что на обложке обучения: номер даёт
-     счётчик, а не цифра в разметке, чтобы порядок был один на оба места. */
-  .lp-steps {
-    display: grid;
-    gap: var(--s4);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    counter-reset: lp-step;
-  }
-  .lp-step {
-    counter-increment: lp-step;
-    max-width: 68ch;
-  }
-  .lp-step h3 {
-    margin: 0 0 var(--s2);
-    font-size: var(--t-l);
-    font-weight: 400;
-    line-height: 1.25;
-  }
-  .lp-step h3::before {
-    content: counter(lp-step, decimal-leading-zero);
-    margin-right: var(--s3);
-    font-family: var(--font-mono);
-    font-size: var(--t-s);
-    letter-spacing: 0.1em;
-    color: var(--ink-3);
-  }
-  .lp-step p {
-    margin: 0;
-    color: var(--ink-2);
-    font-size: var(--t-s);
-    line-height: 1.6;
-  }
-
   /* Разделы — сетка в две колонки, разделённая линейками, а не карточками с
      фоном: плашки на этом листе выглядели бы чужими. */
   .lp-grid {

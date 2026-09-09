@@ -9,14 +9,12 @@ import { useLenis } from './lib/useLenis';
 import { LandingHeader } from './components/LandingHeader';
 import { IntroScene } from './components/IntroScene';
 import { PromiseScene } from './components/PromiseScene';
+import { StepsScene } from './components/StepsScene';
 import { SceneBackground } from './components/SceneBackground';
 import './landing.css';
 
 /** Разделы продукта — те же пять, что в рейке, минус Настройки: рассказывать про форму ключей нечего. */
 const SECTIONS = ['overview', 'tags', 'analytics', 'market'] as const;
-
-/** Шаги пути к своей системе — та же тройка, что на обложке обучения. */
-const STEPS = [1, 2, 3] as const;
 
 /**
  * Главная — единственная страница продукта, открытая тому, у кого ещё нет
@@ -51,23 +49,9 @@ export function LandingPage() {
       <main>
         <IntroScene lightLayerRef={lightLayerRef} />
         <PromiseScene />
+        <StepsScene />
 
         <Wrap page>
-          {/* Путь к своей системе. Тот же, что человек увидит первым шагом
-              обучения внутри продукта: обещание на входе и первое, что он
-              встретит внутри, обязаны совпадать дословно по смыслу. */}
-          <section className="lp-sec">
-            <h2>{t('stepsTitle')}</h2>
-            <ol className="lp-steps">
-              {STEPS.map((n) => (
-                <li className="lp-step" key={n}>
-                  <h3>{t(`step${n}Title`)}</h3>
-                  <p>{t(`step${n}Body`)}</p>
-                </li>
-              ))}
-            </ol>
-          </section>
-
           <section className="lp-sec">
             <h2>{t('sectionsTitle')}</h2>
             <div className="lp-grid">
