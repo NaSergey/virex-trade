@@ -11,6 +11,7 @@ import { IntroScene } from './components/IntroScene';
 import { PromiseScene } from './components/PromiseScene';
 import { StepsScene } from './components/StepsScene';
 import { ProductDemoScene } from './components/ProductDemoScene';
+import { TrustScene } from './components/TrustScene';
 import { SceneBackground } from './components/SceneBackground';
 import './landing.css';
 
@@ -49,27 +50,9 @@ export function LandingPage() {
         <PromiseScene />
         <StepsScene />
         <ProductDemoScene />
+        <TrustScene />
 
         <Wrap page>
-          {/* Ключи — единственное место, где продукт просит доверия, и потому
-              единственное, о чём он говорит до того, как его спросят. */}
-          <section className="lp-sec">
-            <h2>{t('keysTitle')}</h2>
-            <p className="lp-body">{t('keysBody')}</p>
-          </section>
-
-          {/* Честный блок. Стоит ДО регистрации намеренно: узнать про одну
-              проверенную биржу после подключения ключей — узнать слишком
-              поздно. */}
-          <section className="lp-sec">
-            <h2>{t('honestTitle')}</h2>
-            <ul className="lp-honest">
-              <li>{t('honest1')}</li>
-              <li>{t('honest2')}</li>
-              <li>{t('honest3')}</li>
-            </ul>
-          </section>
-
           <section className="lp-end">
             <h2>{t('endTitle')}</h2>
             <p className="lp-body">{t('endBody')}</p>

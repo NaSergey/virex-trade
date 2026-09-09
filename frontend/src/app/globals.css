@@ -2175,11 +2175,6 @@
     font-size: var(--t-s);
   }
 
-  .lp-sec {
-    padding: var(--s5) 0;
-    border-bottom: 1px solid var(--rule);
-  }
-  .lp-sec h2,
   .lp-end h2 {
     margin: 0 0 var(--s4);
     font-family: var(--font-mono);
@@ -2189,30 +2184,7 @@
     text-transform: uppercase;
     color: var(--ink-3);
   }
-  .lp-body {
-    max-width: 68ch;
-    margin: 0;
-    color: var(--ink-2);
-    font-size: var(--t-s);
-    line-height: 1.6;
-  }
 
-
-  .lp-honest {
-    display: grid;
-    gap: var(--s3);
-    max-width: 68ch;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .lp-honest li {
-    border-left: 1px solid var(--hair);
-    padding-left: var(--s3);
-    color: var(--ink-2);
-    font-size: var(--t-s);
-    line-height: 1.6;
-  }
 
   .lp-end { padding: var(--s5) 0 var(--s6); }
   .lp-end .lp-body { margin-bottom: var(--s4); }
@@ -2467,7 +2439,6 @@
 }
 
 @media (max-width: 720px) {
-  .lp-sec { padding: var(--s4) 0; }
   .lp-end { padding: var(--s4) 0 var(--s5); }
 
   :root {
