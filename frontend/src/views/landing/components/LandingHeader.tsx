@@ -26,6 +26,11 @@ export function LandingHeader() {
     const onScroll = () => {
       if (window.scrollY > 0) setRevealed(true);
     };
+    // Проверка сразу, а не только по событию: страница может открыться уже
+    // прокрученной (перезагрузка посреди истории, переход по якорю), и тогда
+    // события `scroll` не будет — шапка осталась бы спрятанной до следующего
+    // движения колеса.
+    onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, [revealed]);
