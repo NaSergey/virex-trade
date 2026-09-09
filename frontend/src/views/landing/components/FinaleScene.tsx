@@ -16,7 +16,7 @@ import { prefersReducedMotion } from '../lib/reducedMotion';
  * продукте) и показывает знак статично, без повторной сборки — это payoff
  * истории, а не ещё одна демонстрация того же трюка.
  */
-export function FinaleScene({ lightLayerRef }: { lightLayerRef: RefObject<HTMLDivElement | null> }) {
+export function FinaleScene({ darkLayerRef }: { darkLayerRef: RefObject<HTMLDivElement | null> }) {
   const t = useTranslations('landing');
   const root = useRef<HTMLElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -26,19 +26,38 @@ export function FinaleScene({ lightLayerRef }: { lightLayerRef: RefObject<HTMLDi
       registerGsap();
 
       if (prefersReducedMotion()) {
-        if (lightLayerRef.current) gsap.set(lightLayerRef.current, { opacity: 0 });
+        // Подложку не трогаем: в этом режиме фон каждой сцене красит CSS
+        // (см. landing.css), и общие слои остаются прозрачными.
         return;
       }
 
       const content = contentRef.current ? gsap.utils.toArray<HTMLElement>('.ls-finale-item', contentRef.current) : [];
       gsap.set(content, { opacity: 0, y: 16 });
 
+      // Затемнение начинается, когда верх финала поднялся выше двух третей
+      // экрана, а не когда он только выглянул снизу: с `top 90%` фон успевал
+      // почти дочернеть, пока светлый текст сцены «честно» ещё занимал
+      // верхнюю половину экрана.
+      //
+      // `end: 'max'` — низ документа, а не позиция финала во вьюпорте.
+      // Финал вместе с футером короче экрана, поэтому его верх физически не
+      // может подняться выше середины: любой `end` вида `top …%` оказывается
+      // за пределами доступного скролла, и кроссфейд не доходит до конца —
+      // на самом низу страницы фон так и оставался частично светлым.
+      // `max` ScrollTrigger пересчитывает после того, как пины выше
+      // раздвинут документ, поэтому конец гарантированно достижим.
       const tl = gsap.timeline({
-        scrollTrigger: { trigger: root.current, start: 'top 90%', end: 'top 30%', scrub: 1 },
+        scrollTrigger: { trigger: root.current, start: 'top 70%', end: 'max', scrub: 1 },
       });
 
-      if (lightLayerRef.current) {
-        tl.to(lightLayerRef.current, { opacity: 0, duration: 1, ease: 'power1.inOut' }, 0);
+      // Финал гасит светлую половину истории не тем же слоем, что зажёг её
+      // интро, а вторым тёмным поверх (см. SceneBackground): один слой на две
+      // сцены означал бы две записи в одно свойство и гонку на прыжках
+      // скролла. `fromTo`, а не `to`: концы заданы числами, поэтому значение
+      // слоя — чистая функция прогресса этого ScrollTrigger'а, а не того, что
+      // в DOM оказалось в момент сборки таймлайна.
+      if (darkLayerRef.current) {
+        tl.fromTo(darkLayerRef.current, { opacity: 0 }, { opacity: 1, duration: 1, ease: 'power1.inOut' }, 0);
       }
       tl.to(content, { opacity: 1, y: 0, duration: 1, ease: 'power2.out', stagger: 0.25 }, 0.2);
     },

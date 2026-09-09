@@ -34,6 +34,7 @@ import './landing.css';
 export function LandingPage() {
   const t = useTranslations('landing');
   const lightLayerRef = useRef<HTMLDivElement>(null);
+  const darkTopLayerRef = useRef<HTMLDivElement>(null);
   useLenis();
 
   return (
@@ -42,7 +43,7 @@ export function LandingPage() {
         {t('skipToContent')}
       </a>
       <LandingHeader />
-      <SceneBackground ref={lightLayerRef} />
+      <SceneBackground lightRef={lightLayerRef} darkTopRef={darkTopLayerRef} />
 
       <main>
         <IntroScene lightLayerRef={lightLayerRef} />
@@ -50,10 +51,13 @@ export function LandingPage() {
         <StepsScene />
         <ProductDemoScene />
         <TrustScene />
-        <FinaleScene lightLayerRef={lightLayerRef} />
+        <FinaleScene darkLayerRef={darkTopLayerRef} />
       </main>
 
-      <footer className="lp-foot">
+      {/* `ls-dark` — потому что история заканчивается тёмной: без палитры сцены
+          футер брал бы чернила реальной темы поверх фона финала и в светлой
+          теме продукта читался бы почти никак. */}
+      <footer className="lp-foot ls-dark">
         <Wrap>
           <span className="muted">{t('footer')}</span>
         </Wrap>

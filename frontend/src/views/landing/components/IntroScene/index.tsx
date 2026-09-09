@@ -5,18 +5,31 @@ import { useGSAP } from '@gsap/react';
 import { gsap } from 'gsap';
 import { registerGsap } from '../../lib/gsapConfig';
 import { prefersReducedMotion } from '../../lib/reducedMotion';
+import { isMobileViewport } from '../../lib/breakpoints';
 import { VoidIntro } from './VoidIntro';
 import { LogoAssemblyScene } from './LogoAssemblyScene';
-import { LogoZoomFloodScene } from './LogoZoomFloodScene';
+
+/** Длина пина: сколько скролла занимает весь план от пустоты до вспышки. */
+const PIN_LENGTH_DESKTOP = 5200;
+/**
+ * На телефоне та же дистанция — это больше десятка экранов прокрутки ради
+ * одной сборки знака: страница читается как зависшая. Двигаются те же
+ * элементы и оттуда же, короче только путь.
+ */
+const PIN_LENGTH_MOBILE = 2700;
 
 /**
- * Сцены 00–02 одним операторским планом: пустота → сборка логотипа → (задача 6)
- * zoom и вспышка. Один компонент — один timeline: части логотипа и вспышка
- * обязаны знать конечное состояние друг друга кадр в кадр, и рвать это на
- * несколько независимых ScrollTrigger рискованно на реверсе.
+ * Сцены 00–02 одним операторским планом: пустота → сборка логотипа → zoom и
+ * вспышка. Один компонент — один timeline: части логотипа и вспышка обязаны
+ * знать конечное состояние друг друга кадр в кадр, и рвать это на несколько
+ * независимых ScrollTrigger рискованно на реверсе.
  *
- * Три файла разметки (этот + VoidIntro + LogoAssemblyScene, и в задаче 6 —
- * LogoZoomFloodScene) — для читаемости; вся анимационная логика — здесь.
+ * Сцена 02 (zoom и вспышка) своей разметки не имеет вовсе — это transform
+ * уже собранного знака и opacity общей подложки SceneBackground, — поэтому
+ * отдельного файла у неё нет.
+ *
+ * Два файла разметки (VoidIntro + LogoAssemblyScene) — для читаемости; вся
+ * анимационная логика — здесь.
  */
 export function IntroScene({ lightLayerRef }: { lightLayerRef: RefObject<HTMLDivElement | null> }) {
   const root = useRef<HTMLElement>(null);
@@ -42,8 +55,9 @@ export function IntroScene({ lightLayerRef }: { lightLayerRef: RefObject<HTMLDiv
       if (prefersReducedMotion()) {
         gsap.set([wordRef.current, hintRef.current], { opacity: 0 });
         gsap.set([left, leftCenter, center, rightCenter, right], { opacity: 1, x: 0, y: 0 });
-        gsap.set(logo, { scale: 26 });
-        if (lightLayerRef.current) gsap.set(lightLayerRef.current, { opacity: 1 });
+        // Масштаб не трогаем: знак остаётся собранным в натуральную величину,
+        // а не замороженным посреди zoom'а. Подложку не трогаем тоже — в этом
+        // режиме фон каждой сцене красит CSS (см. landing.css).
         return;
       }
 
@@ -51,7 +65,12 @@ export function IntroScene({ lightLayerRef }: { lightLayerRef: RefObject<HTMLDiv
         scrollTrigger: {
           trigger: root.current,
           start: 'top top',
-          end: '+=5200',
+          // Функция, а не строка: ScrollTrigger зовёт её заново на каждом
+          // refresh, поэтому поворот экрана меняет длину пина без пересборки
+          // таймлайна. `gsap.matchMedia()` сделал бы то же самое, но через
+          // снос и пересборку — а от неё разъезжаются границы соседних
+          // ScrollTrigger'ов, созданных вне matchMedia (кроссфейд финала).
+          end: () => `+=${isMobileViewport() ? PIN_LENGTH_MOBILE : PIN_LENGTH_DESKTOP}`,
           scrub: 1,
           pin: true,
           anticipatePin: 1,
@@ -75,11 +94,25 @@ export function IntroScene({ lightLayerRef }: { lightLayerRef: RefObject<HTMLDiv
         .fromTo(center, { y: -100, opacity: 0 }, { y: 0, opacity: 1, duration: 1.2, ease: 'power3.out' }, 'assembly+=0.4')
         .addLabel('assembled', 'assembly+=1.9')
         // zoom: знак «летит на зрителя», части уходят за края экрана
-        .to(logo, { scale: 26, duration: 2.2, ease: 'power2.in' }, 'assembled+=0.1')
-        // вспышка: белый слой перекрывает весь экран к концу zoom
-        .to(lightLayerRef.current, { opacity: 1, duration: 1.4, ease: 'power1.inOut' }, 'assembled+=1.1')
-        // короткая пауза на пике белого — визуальный вдох перед контентом
-        .to({}, { duration: 0.5 }, 'assembled+=2.6');
+        .to(logo, { scale: 26, duration: 2.2, ease: 'power2.in' }, 'assembled+=0.1');
+
+      // Вспышка: белый слой перекрывает весь экран к концу zoom.
+      // `fromTo`, а не `to`: `to` берёт начальное значение из DOM в момент
+      // сборки таймлайна, и после разрывного прыжка скролла оно уже чужое.
+      // С явными числовыми концами значение слоя — чистая функция прогресса
+      // этого ScrollTrigger'а (GSAP зажимает его в 0 до начала и в 1 после
+      // конца), а не истории записей в DOM.
+      if (lightLayerRef.current) {
+        tl.fromTo(
+          lightLayerRef.current,
+          { opacity: 0 },
+          { opacity: 1, duration: 1.4, ease: 'power1.inOut' },
+          'assembled+=1.1',
+        );
+      }
+
+      // короткая пауза на пике белого — визуальный вдох перед контентом
+      tl.to({}, { duration: 0.5 }, 'assembled+=2.6');
     },
     { scope: root },
   );
@@ -88,7 +121,6 @@ export function IntroScene({ lightLayerRef }: { lightLayerRef: RefObject<HTMLDiv
     <section className="ls-intro ls-dark" ref={root}>
       <VoidIntro wordRef={wordRef} hintRef={hintRef} />
       <LogoAssemblyScene groupRef={logoRef} />
-      <LogoZoomFloodScene />
     </section>
   );
 }
