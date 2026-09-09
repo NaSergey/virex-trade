@@ -10,11 +10,9 @@ import { LandingHeader } from './components/LandingHeader';
 import { IntroScene } from './components/IntroScene';
 import { PromiseScene } from './components/PromiseScene';
 import { StepsScene } from './components/StepsScene';
+import { ProductDemoScene } from './components/ProductDemoScene';
 import { SceneBackground } from './components/SceneBackground';
 import './landing.css';
-
-/** Разделы продукта — те же пять, что в рейке, минус Настройки: рассказывать про форму ключей нечего. */
-const SECTIONS = ['overview', 'tags', 'analytics', 'market'] as const;
 
 /**
  * Главная — единственная страница продукта, открытая тому, у кого ещё нет
@@ -50,20 +48,9 @@ export function LandingPage() {
         <IntroScene lightLayerRef={lightLayerRef} />
         <PromiseScene />
         <StepsScene />
+        <ProductDemoScene />
 
         <Wrap page>
-          <section className="lp-sec">
-            <h2>{t('sectionsTitle')}</h2>
-            <div className="lp-grid">
-              {SECTIONS.map((id) => (
-                <div className="lp-card" key={id}>
-                  <h3>{t(`section_${id}_title`)}</h3>
-                  <p>{t(`section_${id}_body`)}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-
           {/* Ключи — единственное место, где продукт просит доверия, и потому
               единственное, о чём он говорит до того, как его спросят. */}
           <section className="lp-sec">

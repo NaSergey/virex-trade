@@ -2197,24 +2197,6 @@
     line-height: 1.6;
   }
 
-  /* Разделы — сетка в две колонки, разделённая линейками, а не карточками с
-     фоном: плашки на этом листе выглядели бы чужими. */
-  .lp-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--s4) var(--s5);
-  }
-  .lp-card h3 {
-    margin: 0 0 var(--s2);
-    font-size: var(--t-m);
-    font-weight: 400;
-  }
-  .lp-card p {
-    margin: 0;
-    color: var(--ink-2);
-    font-size: var(--t-s);
-    line-height: 1.6;
-  }
 
   .lp-honest {
     display: grid;
@@ -2485,10 +2467,6 @@
 }
 
 @media (max-width: 720px) {
-  /* Разделы главной встают в один столбец: две колонки на 360px дают колонку
-     в полтора слова. Отбивки секций тоже ужимаются — на телефоне --s5/--s6
-     между блоками читаются как пустой экран. */
-  .lp-grid { grid-template-columns: 1fr; }
   .lp-sec { padding: var(--s4) 0; }
   .lp-end { padding: var(--s4) 0 var(--s5); }
 

@@ -273,3 +273,47 @@
   padding: var(--s4) 0;
   font-size: var(--t-xs);
 }
+
+/* ── продукт в движении (сцена 05) ─────────────────────────────── */
+.ls-demo {
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  padding: var(--s5) 0;
+}
+.ls-demo-panel {
+  border: 1px solid var(--rule);
+  padding: var(--s4);
+}
+.ls-demo-curve {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: var(--s4) 0;
+}
+.ls-demo-ledger {
+  min-width: 0;
+}
+.ls-demo-captions {
+  position: relative;
+  margin-top: var(--s4);
+  min-height: 4.8em;
+}
+.ls-demo-caption {
+  position: absolute;
+  inset: 0;
+  max-width: 62ch;
+  color: var(--ink-2);
+  font-size: var(--t-s);
+  line-height: 1.6;
+}
+.ls-demo-caption strong {
+  color: var(--ink);
+  font-weight: 400;
+}
+
+@media (max-width: 720px) {
+  .ls-demo-panel {
+    padding: var(--s3);
+  }
+}
