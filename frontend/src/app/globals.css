@@ -2158,37 +2158,6 @@
     margin-bottom: var(--s1);
   }
 
-  /* ═══════════════ ГЛАВНАЯ ═══════════════ */
-  /* Единственная страница для того, у кого ещё нет аккаунта. Собрана теми же
-     средствами, что и продукт за ней: волосяные линейки, моноширинные
-     служебные подписи, ни одного радиуса и ни одной тени. Лендинг, обещающий
-     одно, а открывающий другое, врёт ещё до регистрации. */
-
-  .lp-cta {
-    display: flex;
-    align-items: center;
-    gap: var(--s3);
-    flex-wrap: wrap;
-  }
-  .lp-note {
-    color: var(--ink-3);
-    font-size: var(--t-s);
-  }
-
-  .lp-end h2 {
-    margin: 0 0 var(--s4);
-    font-family: var(--font-mono);
-    font-size: var(--t-xs);
-    font-weight: 400;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--ink-3);
-  }
-
-
-  .lp-end { padding: var(--s5) 0 var(--s6); }
-  .lp-end .lp-body { margin-bottom: var(--s4); }
-
   /* ═══════════════ ОБУЧЕНИЕ ═══════════════ */
   /* Пошаговые туры при первом заходе в раздел (features/onboarding).
      Затемнение с прямоугольной дыркой под объясняемым элементом и карточка
@@ -2439,8 +2408,6 @@
 }
 
 @media (max-width: 720px) {
-  .lp-end { padding: var(--s4) 0 var(--s5); }
-
   :root {
     --t-xl: 26px;
     --t-l: 19px;

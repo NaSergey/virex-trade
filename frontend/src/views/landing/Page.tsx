@@ -1,9 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useRef } from 'react';
-import { Button } from '@/shared/ui/Button';
 import { Wrap } from '@/shared/ui/Wrap';
 import { useLenis } from './lib/useLenis';
 import { LandingHeader } from './components/LandingHeader';
@@ -12,6 +10,7 @@ import { PromiseScene } from './components/PromiseScene';
 import { StepsScene } from './components/StepsScene';
 import { ProductDemoScene } from './components/ProductDemoScene';
 import { TrustScene } from './components/TrustScene';
+import { FinaleScene } from './components/FinaleScene';
 import { SceneBackground } from './components/SceneBackground';
 import './landing.css';
 
@@ -51,21 +50,7 @@ export function LandingPage() {
         <StepsScene />
         <ProductDemoScene />
         <TrustScene />
-
-        <Wrap page>
-          <section className="lp-end">
-            <h2>{t('endTitle')}</h2>
-            <p className="lp-body">{t('endBody')}</p>
-            <div className="lp-cta">
-              <Link href="/login?mode=register">
-                <Button variant="solid">{t('ctaStart')}</Button>
-              </Link>
-              <Link href="/login" className="lp-login">
-                {t('signIn')}
-              </Link>
-            </div>
-          </section>
-        </Wrap>
+        <FinaleScene lightLayerRef={lightLayerRef} />
       </main>
 
       <footer className="lp-foot">
