@@ -69,6 +69,10 @@ export const TOURS: Tour[] = [
       { anchor: '[data-tour="equity"]', key: 'equity' },
       { anchor: '[data-tour="positions"]', key: 'positions' },
       { anchor: '[data-tour="trades"]', key: 'trades' },
+      // Цены в журнале открывают график сделки. Пунктир под числом виден, но
+      // сам по себе не объясняет, что за ним, — а не рассказать значит оставить
+      // разбор входа тем, кто догадался ткнуть в цену.
+      { anchor: '[data-tour="trade-chart"]', key: 'chart' },
       { key: 'next' },
     ],
   },

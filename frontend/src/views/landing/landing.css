@@ -1,16 +1,21 @@
 /* ═══════════════════════════════════════════════════════════════
-   ГЛАВНАЯ — сцены cinematic-лендинга.
-   Правила `.lp-*` здесь — перенесённые как есть из globals.css (шапка,
-   ссылка входа, футер): их вид не меняется, меняется только файл-владелец.
-   Новая разметка сцен — классы `.ls-*`.
+   ГЛАВНАЯ — лист разбора.
+
+   Страница набрана тем же языком, что и продукт: тёплая кость на почти
+   чёрном, нулевой радиус, структуру держат линейки, а выделение — это
+   выворот, а не цвет. Отсюда и весь её приём: единственная светлая полоса
+   («Что внутри») — не смена настроения, а активная плашка в масштабе
+   страницы.
+
+   Правила `.lp-*` — общие для нескольких сцен (лид, кнопки, ссылка входа,
+   футер). Новая разметка сцен — классы `.ls-*`.
    ═══════════════════════════════════════════════════════════════ */
 
-/* ── фон-путешествие: светлая/тёмная половина истории ──────────────
-   Переопределяют те же generic-переменные, что уже использует вся
-   остальная система (--ink, --ground, --profit, …), поэтому существующие
-   компоненты внутри сцены не нуждаются в правках — они уже написаны через
-   var(--ink) и просто получают другое значение на время сюжета лендинга,
-   независимо от реальной куки темы. */
+/* ── палитра сцены ─────────────────────────────────────────────────
+   Переопределяют те же generic-переменные, что использует вся остальная
+   система (--ink, --ground, --profit, …), поэтому компоненты продукта
+   внутри сцены не нуждаются в правках — они уже написаны через var(--ink)
+   и просто получают другое значение, независимо от реальной куки темы. */
 .ls-light {
   --ground: #f5f2ea;
   --ink: #1c1a16;
@@ -26,7 +31,9 @@
   --meta: #5a6a86;
   --meta-dim: #7b8799;
   --band: #eae5d9;
+  --ink-rgb: 28 26 22;
   color: var(--ink);
+  background: var(--ground);
 }
 
 .ls-dark {
@@ -44,153 +51,124 @@
   --meta: #7c8ca6;
   --meta-dim: #5d6b80;
   --band: #0b0b0a;
+  --ink-rgb: 232 228 220;
   color: var(--ink);
 }
 
-/* ── фон-путешествие: фиксированная тёмная/светлая подложка ────────── */
-.ls-bg {
+/* Лист. Один статичный слой на весь вьюпорт — лендинг тёмный и у того, кто
+   выбрал в приложении светлую тему, а `body` красится реальной темой. */
+.ls-ground {
   position: fixed;
   inset: 0;
   z-index: -1;
-}
-/* Три слоя, а не два, и у каждого ровно один хозяин: интро тянет `light`,
-   финал — `dark-top`. Пока оба сюжетных твина писали opacity одного и того же
-   светлого слоя, вне своих диапазонов они спорили: у интро «до начала» — 0, у
-   финала «до начала» — 1, и на самом верху страницы фон доставался тому, чей
-   scrub дописал последним. Разрывный прыжок (Home с самого низа) оставлял
-   белую заливку поверх пустоты. С отдельным тёмным слоем поверх светлого
-   конфликта нет ни в одной точке: 0/0 — пустота, 1/0 — светлая половина
-   истории, 1/1 — финал. */
-.ls-bg-dark,
-.ls-bg-light,
-.ls-bg-dark-top {
-  position: absolute;
-  inset: 0;
-}
-.ls-bg-dark,
-.ls-bg-dark-top {
   background: #050505;
-}
-.ls-bg-light {
-  background: #f5f2ea;
-}
-.ls-bg-light,
-.ls-bg-dark-top {
-  opacity: 0;
-}
-
-/* При prefers-reduced-motion фон-путешествия нет: каждая сцена красит свой
-   фон сама тем же `--ground`, который уже переопределила у себя. Иначе
-   читаемость зависела бы от opacity общего слоя `.ls-bg-light`, а её в этом
-   режиме никто не тянет по скроллу — и половина сцен оказывалась бы тёмным
-   текстом на тёмном фоне или наоборот. */
-@media (prefers-reduced-motion: reduce) {
-  .ls-light,
-  .ls-dark {
-    background: var(--ground);
-  }
 }
 
 /* Знак — белый рисунок в файле, и globals.css переворачивает его в светлой
    теме продукта. Сцены `.ls-dark` тёмные всегда, независимо от куки темы, —
-   там переворот не нужен и делает знак чёрным на чёрном. */
+   там переворот делает знак чёрным на чёрном. */
 .ls-dark .virex-logo {
   filter: none;
 }
 
-/* ── интро: пустота + сборка (сцены 00–01) ─────────────────────── */
-/* Grid с одной ячейкой — приём, чтобы наложить слово и знак друг на друга по
-   центру, не трогая их `transform`: он целиком отдан GSAP (word/hint едут по
-   y при затухании, знак — масштабируется в задаче 6). `position: absolute` +
-   `transform: translate(-50%,-50%)` для центрирования сделали бы то же самое,
-   но GSAP при первом же `gsap.set/to` заменяет весь inline `transform`
-   целиком по своим x/y/scale — и стёр бы центрирующий сдвиг, которого сам
-   не назначал. `grid-area: 1 / 1` на обоих детях не использует transform
-   вообще, конфликтовать не с чем. */
-.ls-intro {
-  position: relative;
-  min-height: 100svh;
-  display: grid;
-  place-items: center;
-  overflow: clip;
-}
+/* ── общий словарь страницы ────────────────────────────────────── */
 
-.ls-void,
-.ls-logo-group {
-  grid-area: 1 / 1;
-}
-
-.ls-void {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--s3);
-}
-.ls-void-word {
-  font-family: var(--font-mono);
-  font-size: var(--t-m);
-  letter-spacing: 0.42em;
-  text-indent: 0.42em;
-  text-transform: uppercase;
-  color: var(--ink-2);
-}
-.ls-void-hint {
-  font-size: var(--t-m);
+/* Служебный заголовок раздела: капитель моно под линейкой — ровно тот же
+   `h2`, что размечает разделы внутри продукта (см. globals.css). Раздел на
+   лендинге называется так же тихо, как колонка в таблице; говорить должен
+   текст под ним. Линейка приходит из глобального правила и здесь не
+   переопределяется намеренно — это одна и та же шапка раздела. */
+.ls-kicker {
+  font-size: var(--t-xs);
+  letter-spacing: 0.14em;
   color: var(--ink-3);
+  margin: 0 0 var(--s4);
 }
 
-.ls-logo-group {
-  /* Знак заполняет собой почти весь экран, а не стоит скромной маркой в
-     центре пустоты — с этим и должна ощущаться сборка. */
-  width: min(90svh, 92vw);
-}
-.ls-logo-group svg {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
-/* Три сцены центрируют содержимое по вертикали через flex, и `.wrap` в них —
-   flex-элемент: он задаёт `max-width`, но не `width`, поэтому по умолчанию
-   сжимается до ширины содержимого и уезжает от наборной полосы остальных
-   страниц. Возвращаем полосе её ширину явно. */
-.ls-promise > .wrap,
-.ls-steps > .wrap,
-.ls-demo > .wrap {
-  width: 100%;
-}
-
-/* ── обещание (сцена 03) ───────────────────────────────────────── */
-.ls-promise {
-  min-height: 100svh;
-  display: flex;
-  align-items: center;
-  padding: var(--s6) 0;
-}
-.ls-promise h1 {
-  margin: 0 0 var(--s3);
-  max-width: 18ch;
-  font-size: var(--t-xl);
-  font-weight: 400;
-  line-height: 1.15;
-}
 .lp-lede {
-  max-width: 62ch;
+  max-width: 60ch;
   margin: 0;
   color: var(--ink-2);
   font-size: var(--t-m);
   line-height: 1.6;
 }
+.lp-body {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-s);
+  line-height: 1.65;
+}
+.lp-cta {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  flex-wrap: wrap;
+}
+.lp-note {
+  color: var(--ink-3);
+  font-size: var(--t-s);
+}
+.lp-login {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  text-decoration: none;
+  border-bottom: 1px solid var(--hair-2);
+  padding-bottom: 2px;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+.lp-login:hover {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+/* Обёртка магнитной кнопки: её двигает GSAP, поэтому собственных
+   трансформаций у неё нет и быть не должно. */
+.ls-magnet {
+  display: inline-block;
+  will-change: transform;
+}
 
-/* ── skip-ссылка ────────────────────────────────────────────────── */
+/* ── шапка и служебное ─────────────────────────────────────────── */
+
+/* Только языковой переключатель, тем же приёмом, что на /login: fixed, виден
+   с первого кадра, не ждёт скролла. Марки, переключателя темы (на /login его
+   тоже нет — тема вне продукта не переключается) и ссылки входа (она стоит в
+   первом экране и в финале) здесь нет. */
+.ls-locale-fixed {
+  position: fixed;
+  top: var(--s4);
+  right: var(--s4);
+  z-index: 40;
+}
+
+/* Прочитанное — ещё одна линейка, а не полоска-виджет. */
+.ls-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  z-index: 50;
+  background: rgba(232, 228, 220, 0.12);
+}
+.ls-progress-bar {
+  height: 100%;
+  background: var(--color-fg, #e8e4dc);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+}
+
 .ls-skip {
   position: fixed;
   top: var(--s3);
   left: var(--s3);
   z-index: 60;
-  transform: translateY(-140%);
-  background: var(--ink);
-  color: var(--ground);
+  transform: translateY(-160%);
+  background: #e8e4dc;
+  color: #050505;
   font-family: var(--font-mono);
   font-size: var(--t-xs);
   text-transform: uppercase;
@@ -202,204 +180,605 @@
 .ls-skip:focus {
   transform: translateY(0);
 }
+main:focus {
+  outline: none;
+}
 
-/* ── как это работает (сцена 04) ───────────────────────────────── */
-.ls-steps {
+/* ── первый экран ──────────────────────────────────────────────── */
+.ls-hero {
+  position: relative;
   min-height: 100svh;
   display: flex;
   align-items: center;
-  padding: var(--s5) 0;
+  overflow: clip;
+  padding: calc(var(--s6) + var(--s5)) 0 var(--s6);
+  border-bottom: 1px solid var(--hair);
 }
-.ls-steps h2 {
+
+/* Разлиновка листа: горизонтали шагом 48px, поднимающиеся ровно на свой шаг,
+   поэтому цикл незаметен. Маска гасит их к краям — сетка должна читаться как
+   фактура бумаги, а не как таблица поверх текста. */
+.ls-hero-grid {
+  position: absolute;
+  inset: -60px 0 -60px;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(232, 228, 220, 0.055) 0 1px,
+    transparent 1px 48px
+  );
+  -webkit-mask-image: radial-gradient(120% 80% at 60% 40%, #000 0%, transparent 78%);
+  mask-image: radial-gradient(120% 80% at 60% 40%, #000 0%, transparent 78%);
+  pointer-events: none;
+}
+
+.ls-hero-wrap {
+  position: relative;
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  align-items: center;
+  gap: var(--s6);
+}
+
+.ls-hero-copy {
+  position: relative;
+  z-index: 1;
+}
+
+.ls-eyebrow {
   font-family: var(--font-mono);
   font-size: var(--t-xs);
-  font-weight: 400;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--ink-3);
   margin: 0 0 var(--s4);
 }
+/* Тонкая линейка перед надзаголовком — та же роль, что у линейки над итогом
+   в таблице: отмечает, где начинается речь. */
+.ls-eyebrow::before {
+  content: '';
+  display: inline-block;
+  width: 28px;
+  height: 1px;
+  margin-right: var(--s3);
+  vertical-align: middle;
+  background: var(--hair-2);
+}
 
-/* ── шаги (перенесено из globals.css без изменений вида) ───────────
-   Шаги — тот же нумерованный список, что на обложке обучения: номер даёт
-   счётчик, а не цифра в разметке, чтобы порядок был один на оба места. */
-.lp-steps {
+.ls-hero-title {
+  margin: 0 0 var(--s4);
+  max-width: 16ch;
+  font-size: clamp(34px, 5.4vw, 68px);
+  font-weight: 400;
+  line-height: 1.06;
+  letter-spacing: -0.02em;
+}
+
+/* Прорезь, из которой выезжает слово. Нижнее поле с обратным отступом —
+   чтобы `overflow: hidden` не срезал выносные элементы («у», «д», «р»). */
+.ls-word {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+  padding-bottom: 0.14em;
+  margin-bottom: -0.14em;
+}
+.ls-word-in {
+  display: inline-block;
+  will-change: transform;
+}
+
+.ls-hero .lp-cta {
+  margin-top: var(--s5);
+}
+.ls-hero .lp-note {
+  margin-top: var(--s3);
+}
+
+.ls-hero-mark {
+  position: relative;
+  z-index: 0;
+  justify-self: center;
+  width: min(100%, 420px);
+  will-change: transform;
+}
+.ls-hero-mark .virex-logo {
+  display: block;
+  width: 100%;
+  height: auto;
+  opacity: 0.92;
+}
+/* Уровень, медленно идущий по знаку. Тот же смысл, что горизонталь на
+   графике: цена, а не украшение, — поэтому линия хайрлайновая и без свечения. */
+.ls-scanline {
+  position: absolute;
+  left: -6%;
+  right: -6%;
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(232, 228, 220, 0.5), transparent);
+  pointer-events: none;
+}
+
+.ls-hero-cue {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--s4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s2);
+}
+.ls-cue-word {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.ls-cue-rail {
+  position: relative;
+  display: block;
+  width: 1px;
+  height: 44px;
+  overflow: hidden;
+  background: var(--hair);
+}
+.ls-cue-rail i {
+  position: absolute;
+  inset: 0 auto auto 0;
+  display: block;
+  width: 1px;
+  height: 14px;
+  background: var(--ink);
+}
+
+/* ── лента терминов ────────────────────────────────────────────── */
+.ls-rail {
+  overflow: hidden;
+  border-bottom: 1px solid var(--hair);
+  padding: var(--s3) 0;
+}
+.ls-rail-track {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+}
+.ls-rail-run {
+  display: flex;
+  flex: none;
+}
+.ls-rail-item {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding: 0 var(--s5);
+  white-space: nowrap;
+}
+/* Разделитель — точка на базовой линии, а не слэш: в строке величин продукта
+   разделяют тем же. */
+.ls-rail-item::after {
+  content: '·';
+  margin-left: var(--s5);
+  color: var(--hair-2);
+}
+
+/* ── три шага ──────────────────────────────────────────────────── */
+.ls-steps {
+  padding: var(--s6) 0;
+}
+.ls-steps-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  gap: var(--s6);
+  align-items: start;
+}
+
+.ls-steps-aside {
+  position: sticky;
+  top: 22vh;
+}
+.ls-index {
+  display: grid;
+  gap: var(--s2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ls-index-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--s3);
+  align-items: baseline;
+  padding: var(--s2) var(--s3);
+  margin: 0 calc(-1 * var(--s3));
+  color: var(--ink-3);
+  font-size: var(--t-s);
+  line-height: 1.4;
+  transition: color 0.3s ease, background-color 0.3s ease;
+}
+.ls-index-n {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  letter-spacing: 0.1em;
+}
+/* Активный шаг — выворотная плашка: единственный способ выделить в системе,
+   где цвет означает деньги. Тот же приём, что у выбранной кнопки в .seg. */
+.ls-index-item.on {
+  background: var(--ink);
+  color: var(--ground);
+}
+
+.ls-steps-list {
+  display: grid;
+  gap: var(--s6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ls-step {
+  position: relative;
+  padding-left: var(--s4);
+}
+.ls-step-rule {
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 1px;
+  background: var(--hair-2);
+  transform-origin: 50% 0%;
+}
+.ls-step-n {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  margin-bottom: var(--s3);
+}
+.ls-step h3 {
+  margin: 0 0 var(--s3);
+  max-width: 20ch;
+  font-size: clamp(22px, 2.6vw, 34px);
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+.ls-step p {
+  margin: 0;
+  max-width: 60ch;
+  color: var(--ink-2);
+  font-size: var(--t-m);
+  line-height: 1.65;
+}
+
+/* ── что внутри: единственная светлая полоса ───────────────────── */
+.ls-demo {
+  padding: var(--s6) 0;
+  /* Граница жёсткая, по линейке: выворот в этой системе включается сразу, а
+     не растворяется градиентом. */
+  border-top: 1px solid var(--hair);
+  border-bottom: 1px solid var(--hair);
+}
+.ls-demo-wrap {
+  width: 100%;
+}
+.ls-demo-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: var(--s6);
+  align-items: start;
+}
+.ls-demo-sticky {
+  position: sticky;
+  top: 12vh;
+}
+
+.ls-panel {
+  border: 1px solid var(--rule);
+  background: var(--ground);
+}
+.ls-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s2) var(--s3);
+  border-bottom: 1px solid var(--hair);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.ls-panel-brand {
+  color: var(--ink-3);
+}
+.ls-panel-where {
+  color: var(--ink);
+}
+.ls-panel-part {
+  padding: var(--s3);
+  /* Приглушено всё, кроме того, о чём сейчас читают рядом. Не спрятано:
+     панель обязана оставаться одним экраном приложения, а не четырьмя
+     картинками, подменяющими друг друга. */
+  opacity: 0.3;
+  transition: opacity 0.45s ease;
+}
+.ls-panel-curve {
+  display: block;
+  width: 100%;
+  height: auto;
+  padding: 0 var(--s3);
+}
+.ls-panel[data-focus='overview'] .ls-panel-part[data-part='metrics'],
+.ls-panel[data-focus='overview'] .ls-panel-part[data-part='curve'],
+.ls-panel[data-focus='analytics'] .ls-panel-part[data-part='metrics'],
+.ls-panel[data-focus='market'] .ls-panel-part[data-part='curve'],
+.ls-panel[data-focus='tags'] .ls-panel-part[data-part='ledger'] {
+  opacity: 1;
+}
+.ls-panel-ledger {
+  min-width: 0;
+}
+.ls-panel-note {
+  margin: var(--s3) 0 0;
+  color: var(--ink-3);
+  font-size: var(--t-xs);
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+}
+
+.ls-demo-list {
+  display: grid;
+  gap: var(--s5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ls-demo-item {
+  border-left: 1px solid var(--hair);
+  padding-left: var(--s4);
+  transition: border-color 0.35s ease, opacity 0.35s ease;
+  opacity: 0.55;
+}
+.ls-demo-item.on {
+  border-color: var(--ink);
+  opacity: 1;
+}
+.ls-demo-item h3 {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  margin: 0 0 var(--s2);
+  font-size: var(--t-l);
+  font-weight: 400;
+  line-height: 1.2;
+}
+.ls-demo-n {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+}
+.ls-demo-item p {
+  margin: 0;
+  max-width: 54ch;
+  color: var(--ink-2);
+  font-size: var(--t-s);
+  line-height: 1.65;
+}
+
+/* ── честно о состоянии ────────────────────────────────────────── */
+.ls-trust {
+  padding: var(--s6) 0;
+}
+.ls-trust-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s6);
+  align-items: start;
+}
+.lp-honest {
   display: grid;
   gap: var(--s4);
   margin: 0;
   padding: 0;
   list-style: none;
-  counter-reset: lp-step;
 }
-.lp-step {
-  counter-increment: lp-step;
-  max-width: 68ch;
-}
-.lp-step h3 {
-  margin: 0 0 var(--s2);
-  font-size: var(--t-l);
-  font-weight: 400;
-  line-height: 1.25;
-}
-.lp-step h3::before {
-  content: counter(lp-step, decimal-leading-zero);
-  margin-right: var(--s3);
-  font-family: var(--font-mono);
-  font-size: var(--t-s);
-  letter-spacing: 0.1em;
-  color: var(--ink-3);
-}
-.lp-step p {
-  margin: 0;
+.lp-honest li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--s3);
+  border-left: 1px solid var(--hair);
+  padding-left: var(--s3);
   color: var(--ink-2);
   font-size: var(--t-s);
-  line-height: 1.6;
+  line-height: 1.65;
 }
-
-/* ── шапка: только языковой переключатель, тем же приёмом, что на /login —
-   `position: fixed`, виден сразу, без ожидания скролла. Марки, переключателя
-   темы (на /login его тоже нет — тема вне продукта не переключается) и ссылки
-   входа (она уже в конце, в FinaleScene) здесь больше нет. ─────────────── */
-.ls-locale-fixed {
-  position: fixed;
-  top: var(--s4);
-  right: var(--s4);
-  z-index: 40;
-}
-
-.lp-login {
+.ls-honest-n {
   font-family: var(--font-mono);
   font-size: var(--t-xs);
   letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-2);
-  text-decoration: none;
-  border-bottom: 1px solid var(--hair-2);
-  padding-bottom: 1px;
-}
-.lp-login:hover {
-  color: var(--ink);
-  border-color: var(--ink);
+  color: var(--ink-3);
 }
 
-/* ── футер (перенесено из globals.css без изменений вида) ─────────── */
+/* ── финал ─────────────────────────────────────────────────────── */
+.ls-finale {
+  border-top: 1px solid var(--hair);
+  padding: var(--s6) 0 var(--s5);
+}
+.ls-finale-mark {
+  width: 72px;
+  margin-bottom: var(--s4);
+}
+.ls-finale-mark .virex-logo {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+/* Заголовок финала — речь, а не шапка раздела, поэтому глобальный вид `h2`
+   (моно, капитель, линейка снизу) снимается здесь целиком: в этой системе
+   такой набор означает «служебная подпись», и последняя фраза страницы им
+   набрана быть не может. */
+.ls-finale h2 {
+  margin: 0 0 var(--s3);
+  max-width: 20ch;
+  font-family: var(--font-serif);
+  font-size: clamp(26px, 3.4vw, 42px);
+  font-weight: 400;
+  line-height: 1.12;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  color: var(--ink);
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.ls-finale .lp-body {
+  margin-bottom: var(--s5);
+}
+.ls-finale .lp-login {
+  display: inline-block;
+  margin-top: var(--s5);
+}
+
+/* ── футер ─────────────────────────────────────────────────────── */
 .lp-foot {
   border-top: 1px solid var(--rule);
   padding: var(--s4) 0;
   font-size: var(--t-xs);
 }
 
-/* ── продукт в движении (сцена 05) ─────────────────────────────── */
-.ls-demo {
-  min-height: 100svh;
-  display: flex;
-  align-items: center;
-  padding: var(--s5) 0;
-}
-.ls-demo-panel {
-  border: 1px solid var(--rule);
-  padding: var(--s4);
-}
-.ls-demo-curve {
-  display: block;
-  width: 100%;
-  height: auto;
-  margin: var(--s4) 0;
-}
-.ls-demo-ledger {
-  min-width: 0;
-}
-.ls-demo-captions {
-  position: relative;
-  margin-top: var(--s4);
-  min-height: 4.8em;
-}
-.ls-demo-caption {
-  position: absolute;
-  inset: 0;
-  max-width: 62ch;
-  color: var(--ink-2);
-  font-size: var(--t-s);
-  line-height: 1.6;
-}
-.ls-demo-caption strong {
-  color: var(--ink);
-  font-weight: 400;
-}
-
-@media (max-width: 720px) {
-  .ls-demo-panel {
-    padding: var(--s3);
+/* ── планшет ───────────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .ls-hero-wrap {
+    gap: var(--s5);
+  }
+  .ls-hero-mark {
+    width: min(100%, 300px);
+  }
+  .ls-steps-wrap,
+  .ls-demo-cols {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s5);
+  }
+  /* Указатель шагов на узком экране не липнет и не дублирует заголовки
+     справа: сам список шагов и есть навигация по ним. */
+  .ls-steps-aside {
+    position: static;
+  }
+  .ls-index {
+    display: none;
+  }
+  .ls-trust-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s5);
   }
 }
 
-/* ── честно (сцена 06) ─────────────────────────────────────────── */
-.ls-trust {
-  padding: var(--s6) 0;
-}
-.ls-trust-block + .ls-trust-block {
-  margin-top: var(--s5);
-}
-.ls-trust h2 {
-  font-family: var(--font-mono);
-  font-size: var(--t-xs);
-  font-weight: 400;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-  margin: 0 0 var(--s3);
-}
-.lp-body {
-  max-width: 68ch;
-  margin: 0;
-  color: var(--ink-2);
-  font-size: var(--t-s);
-  line-height: 1.6;
-}
-.lp-honest {
-  display: grid;
-  gap: var(--s3);
-  max-width: 68ch;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.lp-honest li {
-  border-left: 1px solid var(--hair);
-  padding-left: var(--s3);
-  color: var(--ink-2);
-  font-size: var(--t-s);
-  line-height: 1.6;
+/* ── телефон ───────────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  .ls-hero {
+    padding: calc(var(--s6) + var(--s3)) 0 calc(var(--s6) + var(--s4));
+    min-height: 100svh;
+  }
+  .ls-hero-wrap {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* Знак уходит за текст полупрозрачной подложкой: рядом с ним на такой
+     ширине не остаётся места ни ему, ни заголовку. */
+  /* Центрирование через `inset` + `margin: auto`, а не трансформацией:
+     трансформация этого элемента целиком принадлежит GSAP (дрейф и
+     параллакс), и он переписал бы центрирующий сдвиг первым же твином. */
+  .ls-hero-mark {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: min(78vw, 420px);
+    height: min(78vw, 420px);
+    opacity: 0.12;
+  }
+  .ls-hero-title {
+    max-width: none;
+  }
+  .ls-rail-item {
+    padding: 0 var(--s4);
+  }
+  .ls-rail-item::after {
+    margin-left: var(--s4);
+  }
+  .ls-steps,
+  .ls-demo,
+  .ls-trust,
+  .ls-finale {
+    padding-top: var(--s5);
+    padding-bottom: var(--s5);
+  }
+  .ls-steps-list {
+    gap: var(--s5);
+  }
+  /* Панель на телефоне не липнет и ничего не приглушает.
+     Липкость требует, чтобы панель была заметно ниже экрана, а на этой
+     ширине продукт раскладывает журнал записями-карточками (см. globals.css)
+     — панель выходит выше вьюпорта целиком, прилипнуть ей некуда, и
+     приглушение подсвечивало бы то, чего в этот момент на экране нет.
+     Поэтому здесь она просто иллюстрация в потоке, целиком видимая, а
+     разделы читаются под ней. */
+  .ls-demo-sticky {
+    position: static;
+  }
+  .ls-panel-part {
+    opacity: 1;
+  }
+  .ls-panel-part,
+  .ls-panel-curve {
+    padding-left: var(--s2);
+    padding-right: var(--s2);
+  }
+  .ls-panel-curve {
+    max-height: 110px;
+  }
+  /* Надзаголовок на этой ширине не помещается в строку вместе с линейкой —
+     а перенос одного слова под неё читается как обрыв. Линейка уходит. */
+  .ls-eyebrow {
+    letter-spacing: 0.12em;
+  }
+  .ls-eyebrow::before {
+    display: none;
+  }
 }
 
-/* ── финал (сцена 07) ──────────────────────────────────────────── */
-.ls-finale {
-  padding: var(--s6) 0 var(--s5);
-}
-.ls-finale-logo {
-  width: 64px;
-  height: 64px;
-  margin-bottom: var(--s4);
-}
-.ls-finale h2 {
-  font-size: var(--t-l);
-  font-weight: 400;
-  margin: 0 0 var(--s3);
-}
-.ls-finale .lp-body {
-  margin-bottom: var(--s4);
-}
-.ls-finale .lp-login {
-  display: inline-block;
-  margin-top: var(--s3);
-}
-.lp-cta {
-  display: flex;
-  align-items: center;
-  gap: var(--s3);
-  flex-wrap: wrap;
-}
-.lp-note {
-  color: var(--ink-3);
-  font-size: var(--t-s);
+/* ── уменьшенное движение ──────────────────────────────────────────
+   Ни одна сцена не полагается на анимацию, чтобы стать видимой: сцены сами
+   выставляют конечное состояние (см. prefersReducedMotion в компонентах), а
+   непрерывные движения — сетка, уровень по знаку, лента, подсказка скролла —
+   выключаются здесь, вместе с их разметкой. */
+@media (prefers-reduced-motion: reduce) {
+  .ls-hero-grid,
+  .ls-scanline,
+  .ls-hero-cue {
+    display: none;
+  }
+  .ls-rail-track {
+    width: auto;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .ls-rail-run + .ls-rail-run {
+    display: none;
+  }
+  .lp-login,
+  .ls-index-item,
+  .ls-demo-item,
+  .ls-panel-part {
+    transition: none;
+  }
+  /* Приглушение частей панели — способ перевести внимание, а не состояние
+     содержимого: без перехода оно превращается в текст на треть краски,
+     который просто плохо читается. Показываем панель целиком. */
+  .ls-panel-part {
+    opacity: 1;
+  }
 }

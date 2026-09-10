@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, type RefObject } from 'react';
+import { useRef } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useGSAP } from '@gsap/react';
@@ -10,77 +10,71 @@ import { VirexLogo } from '@/shared/ui/VirexLogo';
 import { Wrap } from '@/shared/ui/Wrap';
 import { registerGsap } from '../lib/gsapConfig';
 import { prefersReducedMotion } from '../lib/reducedMotion';
+import { candlesFromCenter, revealOnEnter } from '../lib/reveal';
+import { useMagnetic } from '../lib/useMagnetic';
 
 /**
- * Сцена 07: финал. Возвращает фон к тёмной палитре (та же, что в остальном
- * продукте) и показывает знак статично, без повторной сборки — это payoff
- * истории, а не ещё одна демонстрация того же трюка.
+ * Финал: знак печатается второй и последний раз, под ним — единственное
+ * действие страницы.
+ *
+ * Повтор сборки здесь намеренный и он же единственный: первый экран показал
+ * знак живым, финал возвращает тот же жест как подпись под рассказом. Между
+ * ними знака нет вовсе — иначе приём перестаёт что-либо значить.
  */
-export function FinaleScene({ darkLayerRef }: { darkLayerRef: RefObject<HTMLDivElement | null> }) {
+export function FinaleScene() {
   const t = useTranslations('landing');
   const root = useRef<HTMLElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
+  const markRef = useRef<HTMLDivElement>(null);
+  const ctaRef = useRef<HTMLSpanElement>(null);
+
+  useMagnetic(ctaRef);
 
   useGSAP(
     () => {
       registerGsap();
+      const candles = candlesFromCenter(markRef.current);
+      const lines = gsap.utils.toArray<HTMLElement>('.ls-finale-line', root.current ?? undefined);
+      gsap.set(candles, { transformOrigin: '50% 50%' });
 
-      if (prefersReducedMotion()) {
-        // Подложку не трогаем: в этом режиме фон каждой сцене красит CSS
-        // (см. landing.css), и общие слои остаются прозрачными.
-        return;
-      }
+      if (prefersReducedMotion()) return;
 
-      const content = contentRef.current ? gsap.utils.toArray<HTMLElement>('.ls-finale-item', contentRef.current) : [];
-      gsap.set(content, { opacity: 0, y: 16 });
+      gsap.fromTo(
+        candles,
+        { scaleY: 0, opacity: 0 },
+        {
+          scaleY: 1,
+          opacity: 1,
+          duration: 0.85,
+          stagger: 0.08,
+          ease: 'power3.out',
+          scrollTrigger: { trigger: root.current, start: 'top 72%', once: true },
+        },
+      );
 
-      // Затемнение начинается, когда верх финала поднялся выше двух третей
-      // экрана, а не когда он только выглянул снизу: с `top 90%` фон успевал
-      // почти дочернеть, пока светлый текст сцены «честно» ещё занимал
-      // верхнюю половину экрана.
-      //
-      // `end: 'max'` — низ документа, а не позиция финала во вьюпорте.
-      // Финал вместе с футером короче экрана, поэтому его верх физически не
-      // может подняться выше середины: любой `end` вида `top …%` оказывается
-      // за пределами доступного скролла, и кроссфейд не доходит до конца —
-      // на самом низу страницы фон так и оставался частично светлым.
-      // `max` ScrollTrigger пересчитывает после того, как пины выше
-      // раздвинут документ, поэтому конец гарантированно достижим.
-      const tl = gsap.timeline({
-        scrollTrigger: { trigger: root.current, start: 'top 70%', end: 'max', scrub: 1 },
-      });
-
-      // Финал гасит светлую половину истории не тем же слоем, что зажёг её
-      // интро, а вторым тёмным поверх (см. SceneBackground): один слой на две
-      // сцены означал бы две записи в одно свойство и гонку на прыжках
-      // скролла. `fromTo`, а не `to`: концы заданы числами, поэтому значение
-      // слоя — чистая функция прогресса этого ScrollTrigger'а, а не того, что
-      // в DOM оказалось в момент сборки таймлайна.
-      if (darkLayerRef.current) {
-        tl.fromTo(darkLayerRef.current, { opacity: 0 }, { opacity: 1, duration: 1, ease: 'power1.inOut' }, 0);
-      }
-      tl.to(content, { opacity: 1, y: 0, duration: 1, ease: 'power2.out', stagger: 0.25 }, 0.2);
+      revealOnEnter(lines, { trigger: root.current, start: 'top 70%', y: 20, stagger: 0.1 });
     },
     { scope: root },
   );
 
   return (
-    <section className="ls-finale ls-dark" ref={root}>
+    <section className="ls-finale" ref={root}>
       <Wrap>
-        <div ref={contentRef}>
-          <VirexLogo className="ls-finale-logo ls-finale-item" aria-hidden />
-          <h2 className="ls-finale-item">{t('endTitle')}</h2>
-          <p className="lp-body ls-finale-item">{t('endBody')}</p>
-          <div className="lp-cta ls-finale-item">
+        <div className="ls-finale-mark" ref={markRef} aria-hidden>
+          <VirexLogo />
+        </div>
+        <h2 className="ls-finale-line">{t('endTitle')}</h2>
+        <p className="lp-body ls-finale-line">{t('endBody')}</p>
+        <div className="lp-cta ls-finale-line">
+          <span className="ls-magnet" ref={ctaRef}>
             <Link href="/login?mode=register">
               <Button variant="solid">{t('ctaStart')}</Button>
             </Link>
-            <span className="lp-note">{t('ctaNote')}</span>
-          </div>
-          <Link href="/login" className="lp-login ls-finale-item">
-            {t('signIn')}
-          </Link>
+          </span>
+          <span className="lp-note">{t('ctaNote')}</span>
         </div>
+        <Link href="/login" className="lp-login ls-finale-line">
+          {t('signIn')}
+        </Link>
       </Wrap>
     </section>
   );

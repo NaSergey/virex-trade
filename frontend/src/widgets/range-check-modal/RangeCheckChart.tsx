@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { RangeCheckResponse } from '@/entities/trade';
+import { Skeleton } from '@/shared/ui/Skeleton';
 import { formatPriceGrouped } from '@/shared/lib/utils/format';
 import { useLocaleControl } from '@/shared/i18n';
 
@@ -60,6 +61,21 @@ const fmtDay = (t: number, locale: string) =>
   at(t).toLocaleDateString(locale, { day: 'numeric', month: 'short' }).replace('.', '');
 const fmtClock = (t: number, locale: string) => at(t).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 const sameDay = (a: number, b: number) => at(a).toDateString() === at(b).toDateString();
+
+/**
+ * Заглушка на месте графика — ровно тех же размеров, что займёт сам график.
+ *
+ * Стоит рядом с ним, а не в окне, потому что размеры холста заданы здесь: полоса
+ * произвольной высоты сдвигала бы всё, что ниже, в тот момент, когда свечи
+ * пришли, — и открытое окно дёргалось бы уже после открытия.
+ */
+export function RangeCheckChartSkeleton() {
+  return (
+    <div style={{ aspectRatio: `${W} / ${H}`, minHeight: MIN_PX, maxHeight: MAX_PX }}>
+      <Skeleton height="100%" flush />
+    </div>
+  );
+}
 
 /**
  * Свечи вокруг входа: все, что отдала биржа, с пунктирными верхом и низом того
