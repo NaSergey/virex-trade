@@ -1,8 +1,21 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { BacktestTrade, Prisma, Tag } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MarketDataService } from '../market-data/market-data.service';
-import { MINUTE_MS, maxDrawdownPct, pickPriceScale, pickStart, startWindow, summarize } from './backtest-math';
+import {
+  MINUTE_MS,
+  maxDrawdownPct,
+  pickPriceScale,
+  pickStart,
+  positionSize,
+  startWindow,
+  stopOnRightSide,
+  summarize,
+  takeOnRightSide,
+  tradeResult,
+  type Direction,
+  type ExitReason,
+} from './backtest-math';
 
 export interface CreateSessionInput {
   startBalance: number;
@@ -10,6 +23,32 @@ export interface CreateSessionInput {
   hideDate: boolean;
   hidePrice: boolean;
 }
+
+export interface OpenTradeInput {
+  direction: Direction;
+  entryTime: Date;
+  entryPrice: number;
+  stopLoss: number;
+  takeProfit?: number;
+  riskPct: number;
+}
+
+export interface ModifyTradeInput {
+  stopLoss?: number;
+  /** null — убрать тейк. */
+  takeProfit?: number | null;
+}
+
+export interface CloseTradeInput {
+  exitTime: Date;
+  exitPrice: number;
+  reason: ExitReason;
+}
+
+const timeInvalid = () =>
+  new BadRequestException({ message: 'Время сделки вне сессии или раньше входа', code: 'BACKTEST_TIME_INVALID' });
+
+const tradeClosed = () => new ConflictException({ message: 'Сделка уже закрыта', code: 'BACKTEST_TRADE_CLOSED' });
 
 /** Что подтягивать к сделке, чтобы отдать её с тегами. */
 export const TAGS = { tags: { include: { tag: true } } } as const;
@@ -122,6 +161,119 @@ export class BacktestService {
       data: { status: 'finished', finishedAt: new Date() },
     });
     return { session };
+  }
+
+  async openTrade(userId: string, sessionId: string, input: OpenTradeInput) {
+    const s = await this.ownedSession(userId, sessionId);
+    if (s.status !== 'active') throw sessionFinished();
+    if (input.entryTime.getTime() < s.startTime.getTime()) throw timeInvalid();
+    // Сторона — только при входе: дальше стоп можно тянуть в безубыток и в
+    // прибыль, а текущей цены сервер не знает (её проверяет браузер).
+    if (!stopOnRightSide(input.direction, input.entryPrice, input.stopLoss)) {
+      throw new BadRequestException({ message: 'Стоп стоит не по ту сторону от входа', code: 'BACKTEST_STOP_SIDE' });
+    }
+    if (input.takeProfit != null && !takeOnRightSide(input.direction, input.entryPrice, input.takeProfit)) {
+      throw new BadRequestException({ message: 'Тейк стоит не по ту сторону от входа', code: 'BACKTEST_TAKE_SIDE' });
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      // Первым делом — строка сессии: она двигает момент и держит замок (см. bumpCursor).
+      await this.bumpCursor(tx, sessionId, input.entryTime);
+      const open = await tx.backtestTrade.count({ where: { sessionId, exitTime: null } });
+      if (open > 0) throw new ConflictException({ message: 'Открытая сделка уже есть', code: 'BACKTEST_OPEN_TRADE' });
+      // Депозит — под замком: закрытие прошлой сделки могло поменять его после чтения выше.
+      const fresh = await tx.backtestSession.findUnique({ where: { id: sessionId }, select: { balance: true } });
+      const { riskUsdt, qty } = positionSize(fresh!.balance, input.riskPct, input.entryPrice, input.stopLoss);
+      const trade = await tx.backtestTrade.create({
+        data: {
+          sessionId,
+          direction: input.direction,
+          entryTime: input.entryTime,
+          entryPrice: input.entryPrice,
+          stopLoss: input.stopLoss,
+          takeProfit: input.takeProfit ?? null,
+          riskPct: input.riskPct,
+          riskUsdt,
+          qty,
+        },
+        include: TAGS,
+      });
+      return { trade: tradeView(trade) };
+    });
+  }
+
+  async modifyTrade(userId: string, tradeId: string, input: ModifyTradeInput) {
+    const trade = await this.ownedTrade(userId, tradeId);
+    if (trade.exitTime) throw tradeClosed();
+    if (trade.session.status !== 'active') throw sessionFinished();
+    const data: { stopLoss?: number; takeProfit?: number | null } = {};
+    if (input.stopLoss !== undefined) data.stopLoss = input.stopLoss;
+    if (input.takeProfit !== undefined) data.takeProfit = input.takeProfit;
+    const updated = await this.prisma.backtestTrade.update({ where: { id: tradeId }, data, include: TAGS });
+    return { trade: tradeView(updated) };
+  }
+
+  async closeTrade(userId: string, tradeId: string, input: CloseTradeInput) {
+    const trade = await this.ownedTrade(userId, tradeId);
+    if (trade.exitTime) {
+      // Повтор того же закрытия (ответ потерялся, браузер отправил снова) — не ошибка.
+      if (trade.exitTime.getTime() === input.exitTime.getTime() && trade.exitPrice === input.exitPrice) {
+        const same = await this.prisma.backtestTrade.findUnique({ where: { id: tradeId }, include: TAGS });
+        return { trade: tradeView(same!), balance: trade.session.balance };
+      }
+      throw tradeClosed();
+    }
+    if (input.exitTime.getTime() <= trade.entryTime.getTime()) throw timeInvalid();
+
+    // Какая цена и когда исполнилась — решил браузер; сколько это в деньгах —
+    // сервер, одной формулой для всей статистики.
+    const { fee, pnl, r } = tradeResult({
+      direction: trade.direction as Direction,
+      entryPrice: trade.entryPrice,
+      exitPrice: input.exitPrice,
+      qty: trade.qty,
+      riskUsdt: trade.riskUsdt,
+    });
+
+    return this.prisma.$transaction(async (tx) => {
+      await this.bumpCursor(tx, trade.sessionId, input.exitTime);
+      const updated = await tx.backtestTrade.update({
+        where: { id: tradeId },
+        data: { exitTime: input.exitTime, exitPrice: input.exitPrice, exitReason: input.reason, fee, pnl, r },
+        include: TAGS,
+      });
+      const session = await tx.backtestSession.update({
+        where: { id: trade.sessionId },
+        data: { balance: { increment: pnl } },
+      });
+      return { trade: tradeView(updated), balance: session.balance };
+    });
+  }
+
+  async setTradeTags(userId: string, tradeId: string, tagIds: string[]) {
+    await this.ownedTrade(userId, tradeId);
+    const unique = [...new Set(tagIds)];
+    if (unique.length > 0) {
+      const owned = await this.prisma.tag.count({ where: { userId, id: { in: unique } } });
+      if (owned !== unique.length) {
+        throw new BadRequestException({ message: 'Некоторые теги не найдены', code: 'TAGS_NOT_FOUND' });
+      }
+    }
+    await this.prisma.$transaction([
+      this.prisma.backtestTradeTag.deleteMany({ where: { tradeId } }),
+      ...(unique.length > 0
+        ? [this.prisma.backtestTradeTag.createMany({ data: unique.map((tagId) => ({ tradeId, tagId })) })]
+        : []),
+    ]);
+    return { success: true as const };
+  }
+
+  protected async ownedTrade(userId: string, id: string) {
+    const trade = await this.prisma.backtestTrade.findUnique({ where: { id }, include: { session: true } });
+    if (!trade || trade.session.userId !== userId) {
+      throw new NotFoundException({ message: 'Сделка не найдена', code: 'BACKTEST_TRADE_NOT_FOUND' });
+    }
+    return trade;
   }
 
   protected async ownedSession(userId: string, id: string) {
