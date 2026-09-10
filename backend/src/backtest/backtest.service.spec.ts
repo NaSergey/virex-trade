@@ -148,17 +148,22 @@ describe('BacktestService — сессии', () => {
   it('отдаёт сессию со сделками, итогом и просадкой по закрытым', async () => {
     const { service, prisma } = makeService();
     prisma.backtestSession.findUnique.mockResolvedValue({ ...SESSION, startBalance: 1000 });
+    // Порядок входа (findMany по entryTime): a, b, c
+    // Порядок выхода (exitTime): b закрывается раньше, потом a
+    // Просадка считается в порядке закрытия: 1000 → 1100 (b) → 880 (a), макс просадка от пика 20%
     prisma.backtestTrade.findMany.mockResolvedValue([
-      { id: 'a', entryTime: new Date(T0), exitTime: new Date(T0 + DAY), pnl: 100, r: 1, tags: [] },
-      { id: 'b', entryTime: new Date(T0 + 2 * DAY), exitTime: new Date(T0 + 3 * DAY), pnl: -220, r: -1, tags: [] },
-      { id: 'c', entryTime: new Date(T0 + 4 * DAY), exitTime: null, pnl: null, r: null, tags: [] },
+      { id: 'a', entryTime: new Date(T0), exitTime: new Date(T0 + 5 * DAY), pnl: -220, r: -1, tags: [] },
+      { id: 'b', entryTime: new Date(T0 + DAY), exitTime: new Date(T0 + 2 * DAY), pnl: 100, r: 1, tags: [] },
+      { id: 'c', entryTime: new Date(T0 + 6 * DAY), exitTime: null, pnl: null, r: null, tags: [] },
     ]);
 
     const res = await service.getSession('u1', 's1');
 
     expect(res.trades).toHaveLength(3);
     expect(res.summary.trades).toBe(2);
-    expect(res.summary.maxDrawdownPct).toBeCloseTo(20, 9); // 1000 → 1100 → 880
+    // Просадка в порядке закрытия: b (+100) поднимает до 1100, потом a (-220) опускает до 880.
+    // Максимальная просадка от пика 1100 = (1100 - 880) / 1100 * 100 ≈ 20%
+    expect(res.summary.maxDrawdownPct).toBeCloseTo(20, 9);
   });
 
   it('двигает момент только вперёд — самим UPDATE, а не сравнением в коде', async () => {
