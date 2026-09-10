@@ -13,6 +13,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { SettingsModule } from './settings/settings.module';
 import { TagsModule } from './tags/tags.module';
 import { TelegramModule } from './telegram/telegram.module';
+import { MarketDataModule } from './market-data/market-data.module';
 import { MarketEventsModule } from './market-events/market-events.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
@@ -40,6 +41,7 @@ import { ReferralsModule } from './referrals/referrals.module';
     SettingsModule,
     TagsModule,
     TelegramModule,
+    MarketDataModule,
     MarketEventsModule,
     NotificationsModule,
     AdminModule,

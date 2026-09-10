@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { Candle, MarketDataService } from '../market-data/market-data.service';
 
 export interface WeekdayBucket {
   weekday: number; // JS getUTCDay(): 0 = Sunday
@@ -24,24 +24,25 @@ export interface HourlyBucket {
   avgVolatilityPct: number; // avg (high-low)/open — magnitude only, ignores direction
 }
 
+/** changePct больше не колонка — свечи хранят только OHLCV. */
+const changePct = (c: Candle): number => (c.open > 0 ? ((c.close - c.open) / c.open) * 100 : 0);
+
 @Injectable()
 export class MarketEventsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly marketData: MarketDataService) {}
 
   /** Weekday win-rate/avg-move breakdown for the «Вероятности» panel. */
   async getCorrelation(days = 730) {
     const since = new Date(Date.now() - days * 86_400_000);
-    const prices = await this.prisma.dailyPrice.findMany({
-      where: { symbol: 'BTCUSDT', date: { gte: since } },
-      orderBy: { date: 'asc' },
-    });
+    const prices = await this.marketData.getCandles({ timeframe: 1440, from: since });
 
     const weekdayAgg = Array.from({ length: 7 }, () => ({ days: 0, upDays: 0, sum: 0 }));
     for (const p of prices) {
-      const wd = p.date.getUTCDay();
+      const wd = p.time.getUTCDay();
+      const change = changePct(p);
       weekdayAgg[wd].days++;
-      if (p.changePct >= 0) weekdayAgg[wd].upDays++;
-      weekdayAgg[wd].sum += p.changePct;
+      if (change >= 0) weekdayAgg[wd].upDays++;
+      weekdayAgg[wd].sum += change;
     }
     const weekday: WeekdayBucket[] = weekdayAgg.map((w, wd) => ({
       weekday: wd,
@@ -62,17 +63,15 @@ export class MarketEventsService {
    */
   async getHourlyStats(days = 730) {
     const since = new Date(Date.now() - days * 86_400_000);
-    const candles = await this.prisma.hourlyPrice.findMany({
-      where: { symbol: 'BTCUSDT', date: { gte: since } },
-      orderBy: { date: 'asc' },
-    });
+    const candles = await this.marketData.getCandles({ timeframe: 60, from: since });
 
     const hourAgg = Array.from({ length: 24 }, () => ({ samples: 0, upSamples: 0, changeSum: 0, volSum: 0 }));
     for (const c of candles) {
-      const h = c.date.getUTCHours();
+      const h = c.time.getUTCHours();
       hourAgg[h].samples++;
-      if (c.changePct >= 0) hourAgg[h].upSamples++;
-      hourAgg[h].changeSum += c.changePct;
+      const change = changePct(c);
+      if (change >= 0) hourAgg[h].upSamples++;
+      hourAgg[h].changeSum += change;
       if (c.open > 0) hourAgg[h].volSum += ((c.high - c.low) / c.open) * 100;
     }
     const hourly: HourlyBucket[] = hourAgg.map((h, hour) => ({
@@ -100,16 +99,13 @@ export class MarketEventsService {
    */
   async getWeekdayHourStats(days = 730) {
     const since = new Date(Date.now() - days * 86_400_000);
-    const candles = await this.prisma.hourlyPrice.findMany({
-      where: { symbol: 'BTCUSDT', date: { gte: since } },
-      orderBy: { date: 'asc' },
-    });
+    const candles = await this.marketData.getCandles({ timeframe: 60, from: since });
 
     const agg = Array.from({ length: 7 }, () =>
       Array.from({ length: 24 }, () => ({ samples: 0, volSum: 0 })),
     );
     for (const c of candles) {
-      const cell = agg[c.date.getUTCDay()][c.date.getUTCHours()];
+      const cell = agg[c.time.getUTCDay()][c.time.getUTCHours()];
       cell.samples++;
       if (c.open > 0) cell.volSum += ((c.high - c.low) / c.open) * 100;
     }

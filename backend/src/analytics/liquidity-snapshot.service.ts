@@ -18,9 +18,10 @@ const DEPTH_LEVELS = 200;
  * архивирует, поэтому ряд можно только копить вперёд с момента первого
  * запуска, не бэкфилля.
  *
- * Тот же приём, что у HourlyPriceSyncService: OnApplicationBootstrap запускает
- * первый снимок и таймер, OnModuleDestroy его гасит, `syncing` не даёт двум
- * прогонам наложиться, если один почему-то не уложился в интервал.
+ * Тот же приём, что у PriceSyncService (`market-data/price-sync.service.ts`):
+ * OnApplicationBootstrap запускает первый снимок и таймер, OnModuleDestroy
+ * его гасит, `syncing` не даёт двум прогонам наложиться, если один
+ * почему-то не уложился в интервал.
  */
 @Injectable()
 export class LiquiditySnapshotService implements OnApplicationBootstrap, OnModuleDestroy {

@@ -412,41 +412,27 @@ model OpenPositionSeen {
   @@map("open_positions_seen")
 }
 
-// Daily BTC candle from Bybit (category=linear), cached so the Аналитика
-// page can correlate price moves against weekday without live requests per
-// view. Backfilled once by DailyPriceSyncService, then appended one row per
-// UTC day.
-model DailyPrice {
-  id        String   @id @default(uuid())
-  symbol    String   @default("BTCUSDT")
-  date      DateTime // UTC day (candle open time, 00:00)
-  open      Float
-  close     Float
-  changePct Float // (close - open) / open * 100
-
-  @@unique([symbol, date])
-  @@index([date])
-  @@map("daily_prices")
-}
-
-// Hourly BTC candle from Bybit, cached so the Аналитика page can show which
-// UTC hours run hottest (range-based volatility) and which lean up/down,
-// without live requests per view. Backfilled once by HourlyPriceSyncService,
-// then appended one row per UTC hour. high/low (absent from DailyPrice) are
-// what volatility is measured from — (high-low)/open, not just close-open.
-model HourlyPrice {
-  id        String   @id @default(uuid())
-  symbol    String   @default("BTCUSDT")
-  date      DateTime // UTC hour (candle open time, on the hour)
+/// Свечи BTC для графика и бектеста — единственный источник цены в проекте.
+/// Владелец таблицы — MarketDataService; напрямую в неё не ходит больше никто,
+/// кроме `scripts/volatile-hour-preview.ts` — тот поднимает свой PrismaClient
+/// вне Nest DI и обращается к таблице напрямую законно, это не недосмотр.
+model PriceCandle {
+  symbol    String // 'BTCUSDT'
+  timeframe Int // длительность свечи в МИНУТАХ: 1, 5, 15, 60, 240, 1440
+  time      DateTime // время ОТКРЫТИЯ свечи, UTC
   open      Float
   high      Float
   low       Float
   close     Float
-  changePct Float // (close - open) / open * 100
+  volume    Float
 
-  @@unique([symbol, date])
-  @@index([date])
-  @@map("hourly_prices")
+  // Составной первичный ключ вместо uuid: на ~5.9 млн строк суррогатный ключ
+  // стоил бы ~220 МБ данных плюс собственный индекс ~265 МБ ради колонки, к
+  // которой никто не обращается — свечу адресуют символом, таймфреймом и
+  // временем. Этот же ключ и есть индекс диапазонного чтения, и он же
+  // запрещает дубли.
+  @@id([symbol, timeframe, time])
+  @@map("price_candles")
 }
 
 /// Периодический снимок «центра тяжести» книги заявок: средневзвешенная по
