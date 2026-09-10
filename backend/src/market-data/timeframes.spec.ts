@@ -3,6 +3,7 @@ import {
   SYNC_ORDER,
   SYMBOL,
   START_MS,
+  CLOSE_GRACE_MS,
   isValidTimeframe,
   timeframeMs,
   toBinanceInterval,
@@ -47,18 +48,24 @@ describe('timeframes', () => {
     expect(timeframeMs(240)).toBe(14_400_000);
   });
 
+  it('запас на дрейф часов при закрытии свечи равен ровно 30 секундам', () => {
+    expect(CLOSE_GRACE_MS).toBe(30_000);
+  });
+
   // Главный тест файла. Ошибка здесь даёт вечно недорисованную последнюю
   // свечу на графике — она не падает, её надо заметить глазами.
-  it('считает 4h-свечу закрытой ровно в момент закрытия, не раньше', () => {
+  it('считает 4h-свечу закрытой после истечения запаса на дрейф часов', () => {
     const open = Date.UTC(2026, 0, 1, 12, 0, 0);
     const closesAt = Date.UTC(2026, 0, 1, 16, 0, 0);
     expect(isClosed(open, 240, closesAt - 1)).toBe(false);
-    expect(isClosed(open, 240, closesAt)).toBe(true);
+    expect(isClosed(open, 240, closesAt)).toBe(false); // запас не истёк
+    expect(isClosed(open, 240, closesAt + CLOSE_GRACE_MS - 1)).toBe(false);
+    expect(isClosed(open, 240, closesAt + CLOSE_GRACE_MS)).toBe(true);
   });
 
   it('то же правило для минутки', () => {
     const open = Date.UTC(2026, 0, 1, 12, 0, 0);
-    expect(isClosed(open, 1, open + 59_999)).toBe(false);
-    expect(isClosed(open, 1, open + 60_000)).toBe(true);
+    expect(isClosed(open, 1, open + 60_000 + CLOSE_GRACE_MS - 1)).toBe(false);
+    expect(isClosed(open, 1, open + 60_000 + CLOSE_GRACE_MS)).toBe(true);
   });
 });

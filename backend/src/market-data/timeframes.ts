@@ -41,6 +41,18 @@ export const isValidTimeframe = (tf: number): tf is Timeframe =>
 
 export const timeframeMs = (tf: number): number => tf * 60_000;
 
+/**
+ * Запас при проверке закрытия свечи, в миллисекундах.
+ *
+ * Страхует от дрейфа часов сервера вперёд относительно биржи. Если часы сервера
+ * ушли вперёд, синк примет ещё формирующуюся свечу за закрытую и запишет её с
+ * неполными high/low/close/volume. Из-за `skipDuplicates: true` и курсора по
+ * `MAX(time)` такая строка останется неверной НАВСЕГДА — её не перезапишет ни
+ * перезапуск, ни повторный проход. Тридцать секунд ничего не стоят при синке
+ * раз в 15 минут и дают этот зарубежный от неправильной записи.
+ */
+export const CLOSE_GRACE_MS = 30_000;
+
 export const toBinanceInterval = (tf: number): string => {
   const interval = BINANCE_INTERVAL[tf];
   if (!interval) throw new Error(`Неизвестный таймфрейм: ${tf}`);
@@ -48,8 +60,9 @@ export const toBinanceInterval = (tf: number): string => {
 };
 
 /**
- * Свеча закрыта, когда её окно целиком в прошлом. Незакрытую писать нельзя:
- * она ещё меняется, а в базе значилась бы окончательной.
+ * Свеча закрыта, когда её окно целиком в прошлом плюс запас на дрейф часов сервера.
+ * Незакрытую писать нельзя: она ещё меняется, а в базе значилась бы окончательной.
+ * Правило: `openTimeMs + timeframeMs(tf) + CLOSE_GRACE_MS <= nowMs`.
  */
 export const isClosed = (openTimeMs: number, tf: number, nowMs: number): boolean =>
-  openTimeMs + timeframeMs(tf) <= nowMs;
+  openTimeMs + timeframeMs(tf) + CLOSE_GRACE_MS <= nowMs;
