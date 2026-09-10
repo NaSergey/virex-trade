@@ -42,6 +42,16 @@ describe('checkMinute', () => {
   it('без тейка проверяется только стоп', () => {
     expect(checkMinute({ ...LONG, takeProfit: null }, m(104, 200, 103, 150))).toBeNull();
   });
+
+  // Гэп за тейком проверяется раньше касания стопа: открытие уже за тейком
+  // значит, что тейк исполнился первым, что бы ни было потом внутри минутки.
+  it('гэп за тейком раньше касания стопа в той же минутке', () => {
+    expect(checkMinute(LONG, m(110, 112, 90, 95))).toMatchObject({ reason: 'take', price: 105 });
+  });
+
+  it('стоп шорта ровно на максимуме — сработал', () => {
+    expect(checkMinute(SHORT, m(100, 102, 99, 101))).toMatchObject({ reason: 'stop', price: 102 });
+  });
 });
 
 describe('findExit', () => {

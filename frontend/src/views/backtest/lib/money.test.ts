@@ -54,4 +54,9 @@ describe('checkLevels', () => {
     expect(checkLevels('short', 100, 102, 95)).toBeNull();
     expect(checkLevels('short', 100, 99, null)).toBe('stopSide');
   });
+
+  it('без тейка при верном стопе — ошибок нет', () => {
+    expect(checkLevels('long', 100, 98, null)).toBeNull();
+    expect(checkLevels('short', 100, 102, null)).toBeNull();
+  });
 });
