@@ -13,7 +13,7 @@
  * «день × час» за два года набирается около сотни свечей — шум в среднем
  * порядка десяти процентов. То есть само по себе превышение ×1.1 может
  * ничего не значить, и увидеть, где проходит граница между находкой и шумом,
- * можно только на живой таблице hourly_prices.
+ * можно только на живой таблице price_candles.
  *
  * Скрипт ничего не пишет и ничего не рассылает.
  */
@@ -32,12 +32,12 @@ async function main() {
   const prisma = new PrismaClient();
   try {
     const since = new Date(Date.now() - DAYS * 86_400_000);
-    const candles = await prisma.hourlyPrice.findMany({
-      where: { symbol: 'BTCUSDT', date: { gte: since } },
-      orderBy: { date: 'asc' },
+    const candles = await prisma.priceCandle.findMany({
+      where: { symbol: 'BTCUSDT', timeframe: 60, time: { gte: since } },
+      orderBy: { time: 'asc' },
     });
     if (candles.length === 0) {
-      console.log('В hourly_prices нет свечей за период — сигналу не на чем считать.');
+      console.log('В price_candles нет часовых свечей за период — сигналу не на чем считать.');
       return;
     }
 
@@ -45,7 +45,7 @@ async function main() {
       Array.from({ length: 24 }, () => ({ samples: 0, volSum: 0 })),
     );
     for (const c of candles) {
-      const cell = agg[c.date.getUTCDay()][c.date.getUTCHours()];
+      const cell = agg[c.time.getUTCDay()][c.time.getUTCHours()];
       cell.samples++;
       if (c.open > 0) cell.volSum += ((c.high - c.low) / c.open) * 100;
     }
