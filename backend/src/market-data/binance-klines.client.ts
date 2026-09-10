@@ -42,7 +42,10 @@ export class BinanceKlinesClient {
       `&startTime=${startTimeMs}&limit=${limit}`;
 
     for (let attempt = 0; ; attempt++) {
-      const res = await fetch(url);
+      // Умолчания undici — 300 секунд: зависший запрос держал бы флаг
+      // занятости синка до пяти минут и съедал бы тик таймера. 15 секунд
+      // хватает публичному klines с запасом и не путается с ретраями на 429.
+      const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
 
       // 429 — превышен вес запросов; 418 — бан за то, что 429 игнорировали.
       if (res.status === 429 || res.status === 418) {

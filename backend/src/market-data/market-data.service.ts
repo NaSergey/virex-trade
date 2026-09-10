@@ -48,7 +48,8 @@ export class MarketDataService {
 
     const rows = await this.prisma.priceCandle.findMany({
       where: {
-        symbol: q.symbol ?? SYMBOL,
+        // `|| SYMBOL`, а не `??`: пустая строка из `?symbol=` — тоже «не задан».
+        symbol: q.symbol || SYMBOL,
         timeframe: q.timeframe,
         ...(q.from || q.to ? { time: { gte: q.from, lte: q.to } } : {}),
       },
@@ -66,17 +67,20 @@ export class MarketDataService {
    * кубик — и знать это отдельно по каждому ТФ, потому что пока идёт первый
    * прогон синка, у 1d история уже с 2018, а у 1m ещё на середине пути.
    */
-  async getCoverage(symbol = SYMBOL): Promise<Coverage[]> {
+  async getCoverage(symbol?: string): Promise<Coverage[]> {
+    // `||`, а не дефолт параметра: дефолт параметра не ловит пустую строку
+    // из `?symbol=`, а `??` — только `undefined`/`null`.
+    const sym = symbol || SYMBOL;
     return Promise.all(
       TIMEFRAMES.map(async (timeframe) => {
         const [first, last] = await Promise.all([
           this.prisma.priceCandle.findFirst({
-            where: { symbol, timeframe },
+            where: { symbol: sym, timeframe },
             orderBy: { time: 'asc' },
             select: { time: true },
           }),
           this.prisma.priceCandle.findFirst({
-            where: { symbol, timeframe },
+            where: { symbol: sym, timeframe },
             orderBy: { time: 'desc' },
             select: { time: true },
           }),

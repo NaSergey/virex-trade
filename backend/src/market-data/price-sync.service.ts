@@ -54,7 +54,14 @@ export class PriceSyncService implements OnApplicationBootstrap, OnModuleDestroy
     try {
       let inserted = 0;
       for (const timeframe of SYNC_ORDER) {
-        inserted += await this.syncTimeframe(timeframe);
+        // Порядок «от крупного к мелкому» не должен значить, что сбой на
+        // крупном таймфрейме голодом кладёт мелкие: 1440 может упасть от сети
+        // или лимита Binance, а 60/15/5/1 нужны графику независимо от этого.
+        try {
+          inserted += await this.syncTimeframe(timeframe);
+        } catch (e) {
+          this.logger.error(`синк таймфрейма ${timeframe} упал`, e as Error);
+        }
       }
       if (inserted > 0) this.logger.log(`записано свечей: ${inserted}`);
       return { inserted };

@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { PriceSyncService } from './price-sync.service';
 import { START_MS } from './timeframes';
 import { BinanceCandle } from './binance-klines.client';
@@ -138,5 +139,25 @@ describe('PriceSyncService', () => {
 
     expect(result).toEqual({ inserted: 0 });
     expect(fetchKlines).not.toHaveBeenCalled();
+  });
+
+  // Регрессия: sync() держит флаг syncing в try/finally именно для того,
+  // чтобы сбой не убивал синхронизацию навсегда. Без finally этот тест
+  // падает — второй вызов молча вернёт {inserted: 0}, не тронув fetchKlines.
+  it('сбрасывает флаг занятости даже после исключения в fetchKlines', async () => {
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const { service, fetchKlines } = makeService({ pages: [] });
+    fetchKlines.mockReset();
+    fetchKlines.mockRejectedValue(new Error('сеть упала'));
+
+    // Правка 3 перехватывает исключение на уровне каждого таймфрейма, поэтому
+    // sync() отдаёт результат, а не разваливается необработанным отказом.
+    await expect(service.sync()).resolves.toEqual({ inserted: 0 });
+
+    fetchKlines.mockClear();
+    fetchKlines.mockResolvedValue([]);
+    await service.sync();
+
+    expect(fetchKlines).toHaveBeenCalled();
   });
 });

@@ -413,7 +413,9 @@ model OpenPositionSeen {
 }
 
 /// Свечи BTC для графика и бектеста — единственный источник цены в проекте.
-/// Владелец таблицы — MarketDataService; напрямую в неё не ходит больше никто.
+/// Владелец таблицы — MarketDataService; напрямую в неё не ходит больше никто,
+/// кроме `scripts/volatile-hour-preview.ts` — тот поднимает свой PrismaClient
+/// вне Nest DI и обращается к таблице напрямую законно, это не недосмотр.
 model PriceCandle {
   symbol    String // 'BTCUSDT'
   timeframe Int // длительность свечи в МИНУТАХ: 1, 5, 15, 60, 240, 1440
