@@ -76,6 +76,7 @@ model User {
   dismissedTagCombos DismissedTagCombo[]
   balanceSnapshots   BalanceSnapshot[]
   donations          Donation[]
+  backtestSessions   BacktestSession[]
 
   @@map("users")
 }
@@ -236,6 +237,7 @@ model Tag {
 
   tradeTags    TradeTag[]
   positionTags PositionTag[]
+  backtestTradeTags BacktestTradeTag[]
 
   @@unique([userId, name])
   @@map("tags")
@@ -249,6 +251,74 @@ model TradeTag {
 
   @@id([tradeId, tagId])
   @@map("trade_tags")
+}
+
+/// Сессия бектеста: случайный отрезок истории BTC, который пользователь крутит
+/// вручную. Тренировочные сделки живут отдельно от журнала (Trade) — иначе
+/// диагностика живой торговли считала бы сделки, которых не было на бирже.
+model BacktestSession {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Точка старта; выбирает сервер, чтобы её нельзя было «перебросить» из браузера.
+  startTime      DateTime
+  /// Текущий момент сессии: время закрытия последней показанной минутки. Только растёт.
+  cursorTime     DateTime
+  startBalance   Float
+  /// Текущий депозит сессии: стартовый плюс PnL закрытых сделок.
+  balance        Float
+  defaultRiskPct Float
+  hideDate       Boolean
+  hidePrice      Boolean
+  /// Коэффициент показа цен; 1, если цена не скрыта. В базе цены настоящие.
+  priceScale     Float
+  status         String    @default("active") // 'active' | 'finished'
+  createdAt      DateTime  @default(now())
+  finishedAt     DateTime?
+
+  trades BacktestTrade[]
+
+  @@index([userId, status])
+  @@map("backtest_sessions")
+}
+
+/// Сделка бектеста. Открытая — это сделка с пустым exitTime; отдельной
+/// «позиции» нет. Цены настоящие, без масштаба показа.
+model BacktestTrade {
+  id         String          @id @default(uuid())
+  sessionId  String
+  session    BacktestSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  direction  String // 'long' | 'short'
+  entryTime  DateTime
+  entryPrice Float
+  stopLoss   Float
+  takeProfit Float?
+  riskPct    Float
+  riskUsdt   Float
+  qty        Float
+  exitTime   DateTime?
+  exitPrice  Float?
+  exitReason String? // 'stop' | 'take' | 'manual' | 'finish'
+  fee        Float?
+  pnl        Float?
+  r          Float?
+
+  tags BacktestTradeTag[]
+
+  @@index([sessionId])
+  @@map("backtest_trades")
+}
+
+/// Теги на сделках бектеста. Устроено как TradeTag, но отдельной таблицей:
+/// тренировочные сделки не должны попасть в статистику тегов живой торговли.
+model BacktestTradeTag {
+  tradeId String
+  tagId   String
+  trade   BacktestTrade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  tag     Tag           @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([tradeId, tagId])
+  @@map("backtest_trade_tags")
 }
 
 // Market-context snapshot of a closed trade, computed once from Bybit klines
