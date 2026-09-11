@@ -143,7 +143,10 @@ export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, 
     };
   }, [tf, closed]);
 
-  const historyLoadingRef = useRef(false);
+  /** Какие ТФ сейчас догружают историю — на каждый таймфрейм свой флаг, а не один общий:
+   * иначе фетч для ТФ=60 в полёте держал бы заблокированным вызов для только что
+   * выбранного ТФ=240. */
+  const historyLoadingRef = useRef<Record<number, boolean>>({});
   const [historyLoading, setHistoryLoading] = useState(false);
   /** На какой ТФ пан уже упёрся в границу года — чтобы не долбить сервер у края. */
   const historyExhausted = useRef<Record<number, boolean>>({});
@@ -154,14 +157,14 @@ export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, 
    */
   const loadMoreHistory = useCallback(async () => {
     const set = closed[tf];
-    if (!set || historyLoadingRef.current || historyExhausted.current[tf]) return;
+    if (!set || historyLoadingRef.current[tf] || historyExhausted.current[tf]) return;
     const earliest = set.candles[0]?.t ?? set.anchor;
     const floor = cursorRef.current - HISTORY_CAP_MS;
     if (earliest <= floor) {
       historyExhausted.current[tf] = true;
       return;
     }
-    historyLoadingRef.current = true;
+    historyLoadingRef.current[tf] = true;
     setHistoryLoading(true);
     try {
       const chunk = await fetchCandles(tf, { to: earliest - 1, limit: HISTORY_CHUNK });
@@ -177,7 +180,7 @@ export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, 
     } catch (e) {
       setError(e);
     } finally {
-      historyLoadingRef.current = false;
+      historyLoadingRef.current[tf] = false;
       setHistoryLoading(false);
     }
   }, [closed, tf]);
