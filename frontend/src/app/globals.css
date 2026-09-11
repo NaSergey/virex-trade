@@ -469,6 +469,13 @@
      текста и линейкой между дорожками. */
   .asym > .set { max-width: none; }
 
+  /* ═══════════════ БЕКТЕСТ ═══════════════ */
+  /* touch-action: none — иначе на телефоне перетаскивание стопа прокручивало бы страницу. */
+  .replay-chart { display: block; width: 100%; height: auto; touch-action: none; user-select: none; }
+  .replay-chart .lvl-hit { cursor: ns-resize; }
+  .replay-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); margin-top: var(--s3); }
+  .order-panel { display: grid; gap: var(--s3); align-content: start; }
+
   /* ═══════════════ СВОД ПЕРИОДА ═══════════════ */
   .strip {
     border-top: 1px solid var(--hair-2);
