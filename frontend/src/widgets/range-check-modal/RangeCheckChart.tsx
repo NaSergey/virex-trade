@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { RangeCheckResponse } from '@/entities/trade';
+import { useNonPassiveWheel } from '@/shared/lib/hooks/useNonPassiveWheel';
 import { formatPriceGrouped } from '@/shared/lib/utils/format';
 import { useLocaleControl } from '@/shared/i18n';
 
@@ -160,13 +161,12 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
           : fmtClock(tick.time, intlLocale),
     }));
 
-  // Колесо мыши слушаем вручную: React вешает wheel пассивным, а без
-  // preventDefault под курсором вместе с масштабом уезжает и сама модалка.
-  useEffect(() => {
-    const el = svgRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
+  // Колесо мыши слушаем через общий хук: React держит onWheel пассивным, а
+  // без preventDefault под курсором вместе с масштабом уезжает и сама модалка.
+  const onWheel = useCallback(
+    (e: WheelEvent) => {
+      const el = svgRef.current;
+      if (!el) return;
       const rect = el.getBoundingClientRect();
       const scale = W / rect.width;
       const xv = clamp((e.clientX - rect.left) * scale, 0, PW);
@@ -174,10 +174,10 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
       const next = clamp(Math.round(count * (e.deltaY > 0 ? 1.25 : 0.8)), MIN_VISIBLE, len);
       const nf = clamp(Math.round(anchor - ((anchor - from) / count) * next), edge - next, len - edge);
       setSpan({ from: nf, to: nf + next });
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, [from, to, bw, len]);
+    },
+    [from, to, bw, len],
+  );
+  useNonPassiveWheel(svgRef, onWheel);
 
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     // Без этого браузер начинает своё выделение: подписи и цифры на полотне

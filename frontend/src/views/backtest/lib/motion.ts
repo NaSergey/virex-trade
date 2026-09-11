@@ -59,3 +59,28 @@ export function resolveWindow(
     view.anchorTime == null ? maxStart : Math.min(indexAtOrAfter(candles, view.anchorTime), maxStart);
   return { startIdx, endIdx: Math.min(total, startIdx + count), live };
 }
+
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+/**
+ * Один шаг зума с сохранением фокальной точки: свеча под курсором (колесо)
+ * или между пальцами (пинч) остаётся на месте, меняется только то, сколько
+ * свечей помещается вокруг неё. Общая математика для обоих жестов — они
+ * расходились только тем, откуда берут baseIdx (готовый индекс у колеса,
+ * пересчитанный из anchorTime у пинча — колёсный жест синхронный и разовый,
+ * пинчу нужно бережно относиться к возможной догрузке истории посреди себя).
+ */
+export function zoomStep(
+  candles: { t: number }[],
+  baseIdx: number,
+  frameCount: number,
+  focalFrac: number,
+  factor: number,
+  bounds: WindowBounds,
+): { count: number; anchorTime: number | null } {
+  const focalIdx = baseIdx + focalFrac * frameCount;
+  const count = clamp(Math.round(frameCount * factor), bounds.minCount, bounds.maxCount);
+  const maxStart = Math.max(0, candles.length - count);
+  const newStart = clamp(Math.round(focalIdx - focalFrac * count), 0, maxStart);
+  return { count, anchorTime: newStart >= maxStart ? null : candles[newStart]?.t ?? null };
+}

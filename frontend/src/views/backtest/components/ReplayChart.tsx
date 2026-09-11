@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState, type PointerEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'react';
+import { useNonPassiveWheel } from '@/shared/lib/hooks/useNonPassiveWheel';
 import { formatPriceGrouped } from '@/shared/lib/utils/format';
 import { Button } from '@/shared/ui/Button';
-import { glidePrice, indexAtOrAfter, resolveWindow, type ViewState } from '../lib/motion';
+import { glidePrice, indexAtOrAfter, resolveWindow, zoomStep, type ViewState } from '../lib/motion';
 import type { Candle } from '../lib/candles';
 
 const W = 720;
@@ -113,24 +114,19 @@ export function ReplayChart({
   const u = boxW > 0 ? W / boxW : 1;
   const px = (n: number) => n * u;
 
-  useEffect(() => {
+  // Колёсному зуму нужны свежие startIdx/count/candles на момент события, а не
+  // из замыкания при монтаже — читает их из latestRef, а не из состояния,
+  // поэтому сам колбэк стабилен и слушатель не перевешивается на каждый рендер.
+  const onWheel = useCallback((e: WheelEvent) => {
     const el = svgRef.current;
     if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const rect = el.getBoundingClientRect();
-      const xFrac = clamp((e.clientX - rect.left) / rect.width, 0, 1);
-      const { startIdx: s, count: c, candles: cs } = latestRef.current;
-      const focalIdx = s + xFrac * c;
-      const factor = e.deltaY > 0 ? 1 / ZOOM_STEP : ZOOM_STEP;
-      const newCount = clamp(Math.round(c * factor), MIN_COUNT, MAX_COUNT);
-      const maxStart = Math.max(0, cs.length - newCount);
-      const newStart = clamp(Math.round(focalIdx - xFrac * newCount), 0, maxStart);
-      setView({ count: newCount, anchorTime: newStart >= maxStart ? null : cs[newStart]?.t ?? null });
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
+    const rect = el.getBoundingClientRect();
+    const xFrac = clamp((e.clientX - rect.left) / rect.width, 0, 1);
+    const { startIdx: s, count: c, candles: cs } = latestRef.current;
+    const factor = e.deltaY > 0 ? 1 / ZOOM_STEP : ZOOM_STEP;
+    setView(zoomStep(cs, s, c, xFrac, factor, { minCount: MIN_COUNT, maxCount: MAX_COUNT }));
   }, []);
+  useNonPassiveWheel(svgRef, onWheel);
 
   const { startIdx, endIdx, live } = resolveWindow(candles, view, { minCount: MIN_COUNT, maxCount: MAX_COUNT });
   const shown = candles.slice(startIdx, endIdx);
@@ -212,8 +208,10 @@ export function ReplayChart({
 
   const startDrag = (kind: LevelKind) => (e: PointerEvent<SVGRectElement>) => {
     // Не пускаем событие к фоновому пану — иначе на одном клике начались бы
-    // сразу оба жеста.
+    // сразу оба жеста. preventDefault — иначе браузер начинает своё выделение
+    // текста рядом с курсором вместо перетаскивания уровня.
     e.stopPropagation();
+    e.preventDefault();
     svgRef.current?.setPointerCapture(e.pointerId);
     frozen.current = { lo, hi };
     dragPointerId.current = e.pointerId;
@@ -221,6 +219,9 @@ export function ReplayChart({
   };
 
   const startPan = (e: PointerEvent<SVGSVGElement>) => {
+    // Без этого браузер начинает нативное выделение текста (подписи цен и
+    // времени внутри SVG) вместо сдвига графика — драг визуально «залипает».
+    e.preventDefault();
     svgRef.current?.setPointerCapture(e.pointerId);
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointersRef.current.size === 2) {
@@ -255,12 +256,8 @@ export function ReplayChart({
       // Защита от деления на ноль — редкий, но возможный случай, когда два
       // указателя совпадают по координате в момент начала пинча.
       const ratio = pinch.dist === 0 ? 1 : dist / pinch.dist;
-      const newCount = clamp(Math.round(pinch.count / ratio), MIN_COUNT, MAX_COUNT);
       const baseIdx = pinch.anchorT != null ? indexAtOrAfter(candles, pinch.anchorT) : 0;
-      const focalIdx = baseIdx + pinch.midFrac * pinch.count;
-      const maxStart = Math.max(0, candles.length - newCount);
-      const newStart = clamp(Math.round(focalIdx - pinch.midFrac * newCount), 0, maxStart);
-      setView({ count: newCount, anchorTime: newStart >= maxStart ? null : candles[newStart]?.t ?? null });
+      setView(zoomStep(candles, baseIdx, pinch.count, pinch.midFrac, 1 / ratio, { minCount: MIN_COUNT, maxCount: MAX_COUNT }));
       return;
     }
     const pan = panRef.current;

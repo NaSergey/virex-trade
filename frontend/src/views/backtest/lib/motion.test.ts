@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { glidePrice, indexAtOrAfter, resolveWindow } from './motion';
+import { glidePrice, indexAtOrAfter, resolveWindow, zoomStep } from './motion';
 
 describe('glidePrice', () => {
   it('концы точно совпадают с open и close', () => {
@@ -64,5 +64,30 @@ describe('resolveWindow', () => {
   it('count зажимается границами', () => {
     const r = resolveWindow(cs, { count: 1000, anchorTime: null }, { minCount: 5, maxCount: 20 });
     expect(r.endIdx - r.startIdx).toBe(20);
+  });
+});
+
+describe('zoomStep', () => {
+  const cs = Array.from({ length: 50 }, (_, i) => ({ t: i * 60_000 }));
+  const bounds = { minCount: 5, maxCount: 100 };
+
+  it('приближение держит фокальную свечу на месте', () => {
+    // Фокус на полпути кадра [20,30) — это индекс 25; сузили кадр до 5 свечей
+    // вокруг той же точки.
+    const r = zoomStep(cs, 20, 10, 0.5, 0.5, bounds);
+    expect(r.count).toBe(5);
+    expect(r.anchorTime).toBe(23 * 60_000);
+  });
+
+  it('count зажимается границами', () => {
+    const r = zoomStep(cs, 0, 10, 0, 100, { minCount: 5, maxCount: 20 });
+    expect(r.count).toBe(20);
+  });
+
+  it('новое окно уезжает к правому краю — anchorTime становится null (живой режим)', () => {
+    const short = cs.slice(0, 10);
+    const r = zoomStep(short, 5, 5, 1, 2, bounds);
+    expect(r.count).toBe(10);
+    expect(r.anchorTime).toBeNull();
   });
 });
