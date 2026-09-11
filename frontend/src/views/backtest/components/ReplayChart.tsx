@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { formatPriceGrouped } from '@/shared/lib/utils/format';
 import { Button } from '@/shared/ui/Button';
-import { glidePrice, resolveWindow, type ViewState } from '../lib/motion';
+import { glidePrice, indexAtOrAfter, resolveWindow, type ViewState } from '../lib/motion';
 import type { Candle } from '../lib/candles';
 
 const W = 720;
@@ -81,12 +81,17 @@ export function ReplayChart({
   const [drag, setDrag] = useState<LevelKind | null>(null);
   const frozen = useRef<{ lo: number; hi: number } | null>(null);
   const lastDrag = useRef<number | null>(null);
+  /** Указатель, который тащит уровень — чтобы движение/отпускание другого пальца его не задевало. */
+  const dragPointerId = useRef<number | null>(null);
   const [view, setView] = useState<ViewState>({ count: DEFAULT_COUNT, anchorTime: null });
-  const panRef = useRef<{ startX: number; startIdx: number; count: number; slot: number } | null>(null);
+  // Якорь пана/пинча — время свечи, а не индекс: догрузка истории при подходе
+  // к краю (onNeedHistory) может прямо во время того же жеста добавить свечи
+  // в начало массива и сдвинуть все индексы — время сдвиг не портит.
+  const panRef = useRef<{ startX: number; anchorT: number | null; count: number; slot: number } | null>(null);
   const [animCandle, setAnimCandle] = useState<Candle | null>(null);
   const prevLastRef = useRef<Candle | null>(null);
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
-  const pinchRef = useRef<{ dist: number; count: number; startIdx: number; midFrac: number } | null>(null);
+  const pinchRef = useRef<{ dist: number; count: number; anchorT: number | null; midFrac: number } | null>(null);
   /**
    * Колёсный зум висит на нативном (не React) листенере, чтобы звать
    * preventDefault — React с версии 17 держит onWheel пассивным, и внутри
@@ -211,6 +216,7 @@ export function ReplayChart({
     e.stopPropagation();
     svgRef.current?.setPointerCapture(e.pointerId);
     frozen.current = { lo, hi };
+    dragPointerId.current = e.pointerId;
     setDrag(kind);
   };
 
@@ -224,16 +230,18 @@ export function ReplayChart({
       pinchRef.current = {
         dist: Math.hypot(a.x - b.x, a.y - b.y),
         count,
-        startIdx,
+        anchorT: candles[startIdx]?.t ?? null,
         midFrac: clamp(((a.x + b.x) / 2 - rect.left) / rect.width, 0, 1),
       };
       return;
     }
-    panRef.current = { startX: svgX(e.clientX), startIdx, count, slot };
+    panRef.current = { startX: svgX(e.clientX), anchorT: candles[startIdx]?.t ?? null, count, slot };
   };
 
   const onMove = (e: PointerEvent<SVGSVGElement>) => {
-    if (drag && onDragLevel) {
+    // Только указатель, начавший этот драг — иначе второй палец на фоне (пан)
+    // дёргал бы уровень чужим движением.
+    if (drag && onDragLevel && e.pointerId === dragPointerId.current) {
       const p = priceAt(svgY(e.clientY));
       lastDrag.current = p;
       onDragLevel(drag, p, false);
@@ -244,9 +252,12 @@ export function ReplayChart({
     if (pinch && pointersRef.current.size === 2) {
       const [a, b] = [...pointersRef.current.values()];
       const dist = Math.hypot(a.x - b.x, a.y - b.y);
-      const ratio = dist / pinch.dist;
+      // Защита от деления на ноль — редкий, но возможный случай, когда два
+      // указателя совпадают по координате в момент начала пинча.
+      const ratio = pinch.dist === 0 ? 1 : dist / pinch.dist;
       const newCount = clamp(Math.round(pinch.count / ratio), MIN_COUNT, MAX_COUNT);
-      const focalIdx = pinch.startIdx + pinch.midFrac * pinch.count;
+      const baseIdx = pinch.anchorT != null ? indexAtOrAfter(candles, pinch.anchorT) : 0;
+      const focalIdx = baseIdx + pinch.midFrac * pinch.count;
       const maxStart = Math.max(0, candles.length - newCount);
       const newStart = clamp(Math.round(focalIdx - pinch.midFrac * newCount), 0, maxStart);
       setView({ count: newCount, anchorTime: newStart >= maxStart ? null : candles[newStart]?.t ?? null });
@@ -256,22 +267,32 @@ export function ReplayChart({
     if (!pan) return;
     const dx = svgX(e.clientX) - pan.startX;
     const deltaSlots = Math.round(dx / pan.slot);
+    const baseIdx = pan.anchorT != null ? indexAtOrAfter(candles, pan.anchorT) : 0;
     const maxStart = Math.max(0, candles.length - pan.count);
-    const newStart = clamp(pan.startIdx - deltaSlots, 0, maxStart);
+    const newStart = clamp(baseIdx - deltaSlots, 0, maxStart);
     setView({ count: pan.count, anchorTime: newStart >= maxStart ? null : candles[newStart]?.t ?? null });
   };
 
   const endDrag = (e: PointerEvent<SVGSVGElement>) => {
     pointersRef.current.delete(e.pointerId);
-    if (pointersRef.current.size < 2) pinchRef.current = null;
-    if (drag) {
+    const remaining = [...pointersRef.current.entries()];
+    if (remaining.length < 2) pinchRef.current = null;
+    if (drag && e.pointerId === dragPointerId.current) {
       if (onDragLevel && lastDrag.current != null) onDragLevel(drag, lastDrag.current, true);
       setDrag(null);
       frozen.current = null;
       lastDrag.current = null;
+      dragPointerId.current = null;
       return;
     }
-    panRef.current = null;
+    if (remaining.length === 1) {
+      // Пинч завершился отпусканием одного из двух пальцев — продолжаем
+      // панорамирование оставшимся, а не ждём нового касания.
+      const [, pos] = remaining[0];
+      panRef.current = { startX: svgX(pos.x), anchorT: candles[startIdx]?.t ?? null, count, slot };
+    } else {
+      panRef.current = null;
+    }
   };
 
   const goLive = () => setView((v) => ({ ...v, anchorTime: null }));

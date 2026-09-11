@@ -218,6 +218,10 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
         <div>
           {replay.ready ? (
             <ReplayChart
+              // Пересоздаём при смене ТФ: окно показа (пан/зум) — локальное
+              // состояние графика, набранное на одном ТФ, бессмысленно на
+              // другом наборе свечей.
+              key={replay.tf}
               candles={screenCandles}
               levels={levels}
               labelFor={labelFor}
@@ -225,7 +229,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
               liveLabel={t('live')}
               glide={screenGlide}
               onDragLevel={onDragLevel}
-              onNeedHistory={() => void replay.loadMoreHistory()}
+              onNeedHistory={replay.loadMoreHistory}
               historyLoading={replay.historyLoading}
             />
           ) : (
