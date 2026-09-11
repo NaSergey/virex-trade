@@ -750,6 +750,7 @@
     "step": "Step",
     "speed": "Autoplay",
     "pause": "Pause",
+    "live": "→ now",
     "backToList": "Back to list",
     "historyEnded": "History has run out — finishing the session.",
     "dayN": "day {n}",

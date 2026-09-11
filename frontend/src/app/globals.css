@@ -474,6 +474,10 @@
   .replay-chart { display: block; width: 100%; height: auto; touch-action: none; user-select: none; }
   .replay-chart .lvl-hit { cursor: ns-resize; }
   .replay-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); margin-top: var(--s3); }
+  /* Обёртка даёт координаты для кнопки «→ сейчас», абсолютно позиционированной
+     над графиком — сам SVG остаётся без изменений размеров. */
+  .replay-chart-wrap { position: relative; }
+  .replay-live { position: absolute; top: var(--s2); right: var(--s2); background: var(--ground); }
   .order-panel { display: grid; gap: var(--s3); align-content: start; }
 
   /* ═══════════════ СВОД ПЕРИОДА ═══════════════ */

@@ -223,7 +223,10 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
               levels={levels}
               labelFor={labelFor}
               levelLabel={(k) => t(`level.${k}`)}
+              liveLabel={t('live')}
               onDragLevel={onDragLevel}
+              onNeedHistory={() => void replay.loadMoreHistory()}
+              historyLoading={replay.historyLoading}
             />
           ) : (
             <Skeleton height={380} />
