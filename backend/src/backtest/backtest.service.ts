@@ -309,6 +309,39 @@ export class BacktestService {
     return { success: true as const };
   }
 
+  async stats(userId: string) {
+    const [sessions, trades] = await Promise.all([
+      this.prisma.backtestSession.count({ where: { userId } }),
+      this.prisma.backtestTrade.findMany({
+        where: { session: { userId }, exitTime: { not: null } },
+        include: TAGS,
+      }),
+    ]);
+
+    type TagRef = { id: string; name: string; color: string; type: string };
+    const buckets = new Map<string, { tag: TagRef; rows: { pnl: number; r: number }[] }>();
+    for (const t of trades) {
+      // Сделка засчитывается целиком каждому своему тегу, как в журнале
+      // (statsByTag): деление поровну обессмыслило бы число. Поэтому строки по
+      // тегам пересекаются и в общий итог не складываются.
+      for (const { tag } of t.tags) {
+        const bucket = buckets.get(tag.id) ?? {
+          tag: { id: tag.id, name: tag.name, color: tag.color, type: tag.type },
+          rows: [],
+        };
+        bucket.rows.push(closedNumbers(t));
+        buckets.set(tag.id, bucket);
+      }
+    }
+
+    return {
+      overall: { sessions, ...summarize(trades.map(closedNumbers)) },
+      byTag: [...buckets.values()]
+        .map(({ tag, rows }) => ({ tag, ...summarize(rows) }))
+        .sort((a, b) => b.trades - a.trades || a.tag.name.localeCompare(b.tag.name)),
+    };
+  }
+
   protected async ownedTrade(userId: string, id: string) {
     const trade = await this.prisma.backtestTrade.findUnique({ where: { id }, include: { session: true } });
     if (!trade || trade.session.userId !== userId) {

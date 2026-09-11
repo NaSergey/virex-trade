@@ -492,3 +492,36 @@ describe('BacktestService — сделки', () => {
     });
   });
 });
+
+describe('BacktestService — статистика', () => {
+  const tag = (id: string, name: string) => ({ tag: { id, name, color: '#111111', type: 'setup' } });
+
+  // Как в журнале (statsByTag): сделка не делится между тегами, а целиком идёт каждому.
+  it('сделка засчитывается каждому своему тегу, общий итог — по одному разу', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.count.mockResolvedValue(2);
+    prisma.backtestTrade.findMany.mockResolvedValue([
+      { id: 'a', pnl: 10, r: 1, tags: [tag('x', 'Пробой'), tag('y', 'Ретест')] },
+      { id: 'b', pnl: -5, r: -0.5, tags: [tag('x', 'Пробой')] },
+    ]);
+
+    const res = await service.stats('u1');
+
+    expect(res.overall).toMatchObject({ sessions: 2, trades: 2, pnl: 5 });
+    expect(res.byTag.map((b) => [b.tag.id, b.trades])).toEqual([
+      ['x', 2],
+      ['y', 1],
+    ]);
+    expect(res.byTag[0].totalR).toBeCloseTo(0.5, 9);
+  });
+
+  it('берёт только закрытые сделки своих сессий', async () => {
+    const { service, prisma } = makeService();
+
+    await service.stats('u1');
+
+    expect(prisma.backtestTrade.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { session: { userId: 'u1' }, exitTime: { not: null } } }),
+    );
+  });
+});
