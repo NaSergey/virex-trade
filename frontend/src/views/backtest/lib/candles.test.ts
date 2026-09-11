@@ -7,6 +7,7 @@ import {
   lastPrice,
   loadedUntil,
   nextStop,
+  scaleCandle,
   visibleCandles,
   type Candle,
 } from './candles';
@@ -87,6 +88,17 @@ describe('lastPrice и loadedUntil', () => {
   it('загружено до закрытия последней минутки', () => {
     expect(loadedUntil(mins(at(12), 10))).toBe(at(12, 10));
     expect(loadedUntil([])).toBeNull();
+  });
+});
+
+describe('scaleCandle', () => {
+  it('масштабирует O/H/L/C, время не трогает', () => {
+    expect(scaleCandle({ t: 1000, o: 10, h: 12, l: 9, c: 11 }, 2)).toEqual({ t: 1000, o: 20, h: 24, l: 18, c: 22 });
+  });
+
+  it('scale=1 — тот же объект, без копии', () => {
+    const c = { t: 1000, o: 10, h: 12, l: 9, c: 11 };
+    expect(scaleCandle(c, 1)).toBe(c);
   });
 });
 

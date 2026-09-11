@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { formatPriceGrouped } from '@/shared/lib/utils/format';
 import { Button } from '@/shared/ui/Button';
-import { resolveWindow, type ViewState } from '../lib/motion';
+import { glidePrice, resolveWindow, type ViewState } from '../lib/motion';
 import type { Candle } from '../lib/candles';
 
 const W = 720;
@@ -61,6 +61,7 @@ export function ReplayChart({
   onDragLevel,
   onNeedHistory,
   historyLoading,
+  glide,
 }: {
   candles: Candle[];
   levels: Level[];
@@ -72,6 +73,8 @@ export function ReplayChart({
   /** Пан подошёл к загруженному краю — время догрузить историю назад. */
   onNeedHistory?: () => void;
   historyLoading?: boolean;
+  /** В настоящих для экрана (масштабированных) ценах — минутка, которую сейчас анимируем. */
+  glide: { minute: Candle; durationMs: number } | null;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [boxW, setBoxW] = useState(0);
@@ -80,6 +83,8 @@ export function ReplayChart({
   const lastDrag = useRef<number | null>(null);
   const [view, setView] = useState<ViewState>({ count: DEFAULT_COUNT, anchorTime: null });
   const panRef = useRef<{ startX: number; startIdx: number; count: number; slot: number } | null>(null);
+  const [animCandle, setAnimCandle] = useState<Candle | null>(null);
+  const prevLastRef = useRef<Candle | null>(null);
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
   const pinchRef = useRef<{ dist: number; count: number; startIdx: number; midFrac: number } | null>(null);
   /**
@@ -131,6 +136,41 @@ export function ReplayChart({
   useEffect(() => {
     if (!live && startIdx <= EDGE_THRESHOLD && !historyLoading) onNeedHistory?.();
   }, [startIdx, live, historyLoading, onNeedHistory]);
+
+  useEffect(() => {
+    // На монтировании — база для первого тика: иначе уже накопленная часть
+    // формирующейся свечи «обрушилась» бы до открытия на первой анимации.
+    prevLastRef.current = shown.length ? shown[shown.length - 1] : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!glide) return;
+    const newLast = shown.length ? shown[shown.length - 1] : null;
+    if (!newLast) return;
+    const prev = prevLastRef.current;
+    const sameBucket = prev != null && prev.t === newLast.t;
+    const base = sameBucket
+      ? prev!
+      : { t: newLast.t, o: glide.minute.o, h: glide.minute.o, l: glide.minute.o, c: glide.minute.o };
+    const { minute, durationMs } = glide;
+    const t0 = performance.now();
+    let raf = 0;
+    const frame = (now: number) => {
+      const ph = Math.min(1, (now - t0) / durationMs);
+      const price = glidePrice(minute.o, minute.h, minute.l, minute.c, ph);
+      if (ph < 1) {
+        setAnimCandle({ t: newLast.t, o: base.o, h: Math.max(base.h, price), l: Math.min(base.l, price), c: price });
+        raf = requestAnimationFrame(frame);
+      } else {
+        setAnimCandle(null); // доигралось — дальше рисуем настоящие финальные значения
+      }
+    };
+    raf = requestAnimationFrame(frame);
+    prevLastRef.current = newLast;
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [glide]);
 
   let lo: number;
   let hi: number;
@@ -260,12 +300,16 @@ export function ReplayChart({
         ))}
 
         {shown.map((c, i) => {
-          const color = c.c >= c.o ? 'var(--profit)' : 'var(--loss)';
-          const top = y(Math.max(c.o, c.c));
-          const bottom = y(Math.min(c.o, c.c));
+          // Последняя свеча во время анимации минутки — берём анимированные
+          // значения, а не финальные: они и так почти совпадают в конце пути,
+          // разница видна только на глаз, не на шкале.
+          const draw = animCandle && i === shown.length - 1 && animCandle.t === c.t ? animCandle : c;
+          const color = draw.c >= draw.o ? 'var(--profit)' : 'var(--loss)';
+          const top = y(Math.max(draw.o, draw.c));
+          const bottom = y(Math.min(draw.o, draw.c));
           return (
             <g key={c.t}>
-              <line x1={cx(i)} x2={cx(i)} y1={y(c.h)} y2={y(c.l)} stroke={color} strokeWidth={px(1)} />
+              <line x1={cx(i)} x2={cx(i)} y1={y(draw.h)} y2={y(draw.l)} stroke={color} strokeWidth={px(1)} />
               <rect x={cx(i) - bodyW / 2} y={top} width={bodyW} height={Math.max(px(1), bottom - top)} fill={color} />
             </g>
           );

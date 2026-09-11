@@ -33,6 +33,11 @@ export const TIMEFRAMES = [1, 5, 15, 60, 240, 1440] as const;
 
 export const fromApi = (c: ApiCandle): Candle => ({ t: Date.parse(c.time), o: c.open, h: c.high, l: c.low, c: c.close });
 
+/** Свеча, домноженная на масштаб скрытой цены сессии; scale=1 — тот же объект, без копии. */
+export function scaleCandle(c: Candle, scale: number): Candle {
+  return scale === 1 ? c : { t: c.t, o: c.o * scale, h: c.h * scale, l: c.l * scale, c: c.c * scale };
+}
+
 export const tfMs = (tf: number) => tf * MINUTE;
 
 /** Начало корзины таймфрейма, куда попадает момент t. Корзины выровнены по UTC — как у биржи. */

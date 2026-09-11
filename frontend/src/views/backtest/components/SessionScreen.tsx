@@ -19,7 +19,7 @@ import {
   useSetBacktestTags,
 } from '../api/hooks';
 import type { BacktestTrade, Direction, ExitReason, SessionDetail } from '../api/types';
-import { TIMEFRAMES, dayNumber } from '../lib/candles';
+import { TIMEFRAMES, dayNumber, scaleCandle } from '../lib/candles';
 import { checkLevels, fromScreen, toInput, toScreen } from '../lib/money';
 import { SPEEDS, useReplay } from '../model/useReplay';
 import { OrderPanel, type Draft } from './OrderPanel';
@@ -86,12 +86,11 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   const stopN = Number(draft.stop);
   const takeN = draft.take.trim() ? Number(draft.take) : null;
 
-  const screenCandles = useMemo(
-    () =>
-      scale === 1
-        ? replay.candles
-        : replay.candles.map((c) => ({ t: c.t, o: c.o * scale, h: c.h * scale, l: c.l * scale, c: c.c * scale })),
-    [replay.candles, scale],
+  const screenCandles = useMemo(() => replay.candles.map((c) => scaleCandle(c, scale)), [replay.candles, scale]);
+
+  const screenGlide = useMemo(
+    () => (replay.glide ? { minute: scaleCandle(replay.glide.minute, scale), durationMs: replay.glide.durationMs } : null),
+    [replay.glide, scale],
   );
 
   const levels: Level[] = [];
@@ -224,6 +223,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
               labelFor={labelFor}
               levelLabel={(k) => t(`level.${k}`)}
               liveLabel={t('live')}
+              glide={screenGlide}
               onDragLevel={onDragLevel}
               onNeedHistory={() => void replay.loadMoreHistory()}
               historyLoading={replay.historyLoading}
