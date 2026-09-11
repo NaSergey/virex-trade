@@ -23,6 +23,7 @@ function makeService() {
       findUnique: jest.fn(),
       create: jest.fn(({ data }) => ({ id: 't1', tags: [], ...data })),
       update: jest.fn(({ data }) => ({ id: 't1', tags: [], ...data })),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     backtestTradeTag: { deleteMany: jest.fn(), createMany: jest.fn() },
     tag: { count: jest.fn() },
@@ -216,6 +217,18 @@ describe('BacktestService — сессии', () => {
       data: { status: 'finished', finishedAt: expect.any(Date) },
     });
   });
+
+  it('не завершает: сессию завершили конкурентно между проверкой и локом — до подсчёта сделок не доходит', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+    prisma.$executeRaw.mockResolvedValueOnce(0);
+
+    const err = await rejection(service.finish('u1', 's1'));
+
+    expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_SESSION_FINISHED' });
+    expect(prisma.backtestTrade.count).not.toHaveBeenCalled();
+    expect(prisma.backtestSession.update).not.toHaveBeenCalled();
+  });
 });
 
 describe('BacktestService — сделки', () => {
@@ -307,17 +320,31 @@ describe('BacktestService — сделки', () => {
     expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_SESSION_FINISHED' });
   });
 
+  it('сессию завершили конкурентно между проверкой и локом — сделку не открывает', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+    prisma.$executeRaw.mockResolvedValueOnce(0);
+
+    const err = await rejection(service.openTrade('u1', 's1', OPEN));
+
+    expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_SESSION_FINISHED' });
+    expect(prisma.backtestTrade.create).not.toHaveBeenCalled();
+  });
+
   it('закрывает: PnL, R и комиссию считает сервер, депозит растёт на PnL', async () => {
     const { service, prisma } = makeService();
-    prisma.backtestTrade.findUnique.mockResolvedValue(TRADE);
+    prisma.backtestTrade.findUnique
+      .mockResolvedValueOnce(TRADE)
+      .mockResolvedValueOnce({ ...TRADE, exitTime: new Date(T0 + DAY), exitPrice: 104, exitReason: 'take', tags: [] });
 
     await service.closeTrade('u1', 't1', { exitTime: new Date(T0 + DAY), exitPrice: 104, reason: 'take' });
 
-    const data = prisma.backtestTrade.update.mock.calls[0][0].data;
-    expect(data.pnl).toBeCloseTo(194.39, 6);
-    expect(data.r).toBeCloseTo(1.9439, 6);
-    expect(data.fee).toBeCloseTo(5.61, 6);
-    expect(data.exitReason).toBe('take');
+    const call = prisma.backtestTrade.updateMany.mock.calls[0][0];
+    expect(call.where).toEqual({ id: 't1', exitTime: null });
+    expect(call.data.pnl).toBeCloseTo(194.39, 6);
+    expect(call.data.r).toBeCloseTo(1.9439, 6);
+    expect(call.data.fee).toBeCloseTo(5.61, 6);
+    expect(call.data.exitReason).toBe('take');
     const inc = prisma.backtestSession.update.mock.calls[0][0].data.balance.increment;
     expect(inc).toBeCloseTo(194.39, 6);
   });
@@ -352,6 +379,38 @@ describe('BacktestService — сделки', () => {
     expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_TRADE_CLOSED' });
   });
 
+  // Оба запроса читают exitTime: null до входа в свою транзакцию; побеждает
+  // тот, кто первым прошёл bumpCursor. Второй должен увидеть уже закрытую
+  // сделку внутри транзакции, а не начислить PnL повторно.
+  it('гонка при закрытии: updateMany не задел строку, но данные совпадают — тот же повтор', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestTrade.findUnique
+      .mockResolvedValueOnce(TRADE) // ownedTrade — ещё не закрыта на момент чтения
+      .mockResolvedValueOnce({ ...TRADE, exitTime: new Date(T0 + DAY), exitPrice: 104, tags: [] }); // перечитывание внутри транзакции
+    prisma.backtestTrade.updateMany.mockResolvedValueOnce({ count: 0 });
+    prisma.backtestSession.findUnique.mockResolvedValue({ balance: 10_194.39 });
+
+    const res = await service.closeTrade('u1', 't1', { exitTime: new Date(T0 + DAY), exitPrice: 104, reason: 'take' });
+
+    expect(prisma.backtestSession.update).not.toHaveBeenCalled();
+    expect(res.balance).toBe(10_194.39);
+  });
+
+  it('гонка при закрытии: updateMany не задел строку, данные другие — отказ', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestTrade.findUnique
+      .mockResolvedValueOnce(TRADE)
+      .mockResolvedValueOnce({ ...TRADE, exitTime: new Date(T0 + DAY), exitPrice: 90, tags: [] });
+    prisma.backtestTrade.updateMany.mockResolvedValueOnce({ count: 0 });
+
+    const err = await rejection(
+      service.closeTrade('u1', 't1', { exitTime: new Date(T0 + DAY), exitPrice: 104, reason: 'take' }),
+    );
+
+    expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_TRADE_CLOSED' });
+    expect(prisma.backtestSession.update).not.toHaveBeenCalled();
+  });
+
   it('чужая сделка отвечает 404', async () => {
     const { service, prisma } = makeService();
     prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, session: { ...SESSION, userId: 'u2' } });
@@ -364,18 +423,42 @@ describe('BacktestService — сделки', () => {
 
   it('тейк можно убрать, передав null', async () => {
     const { service, prisma } = makeService();
-    prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, takeProfit: 105 });
+    prisma.backtestTrade.findUnique
+      .mockResolvedValueOnce({ ...TRADE, takeProfit: 105 })
+      .mockResolvedValueOnce({ ...TRADE, takeProfit: null, tags: [] });
 
     await service.modifyTrade('u1', 't1', { takeProfit: null });
 
-    expect(prisma.backtestTrade.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 't1' }, data: { takeProfit: null } }),
-    );
+    expect(prisma.backtestTrade.updateMany).toHaveBeenCalledWith({
+      where: { id: 't1', exitTime: null },
+      data: { takeProfit: null },
+    });
   });
 
   it('закрытую сделку не двигают', async () => {
     const { service, prisma } = makeService();
     prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, exitTime: new Date(T0 + DAY) });
+
+    const err = await rejection(service.modifyTrade('u1', 't1', { stopLoss: 99 }));
+
+    expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_TRADE_CLOSED' });
+  });
+
+  it('правку уровней отклоняет: сессию завершили конкурентно между чтением и локом', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestTrade.findUnique.mockResolvedValueOnce(TRADE);
+    prisma.$executeRaw.mockResolvedValueOnce(0);
+
+    const err = await rejection(service.modifyTrade('u1', 't1', { stopLoss: 99 }));
+
+    expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_SESSION_FINISHED' });
+    expect(prisma.backtestTrade.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('правку уровней отклоняет: сделку закрыли конкурентно между чтением и локом', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestTrade.findUnique.mockResolvedValueOnce(TRADE);
+    prisma.backtestTrade.updateMany.mockResolvedValueOnce({ count: 0 });
 
     const err = await rejection(service.modifyTrade('u1', 't1', { stopLoss: 99 }));
 

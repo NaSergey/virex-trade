@@ -153,14 +153,21 @@ export class BacktestService {
   async finish(userId: string, id: string) {
     const s = await this.ownedSession(userId, id);
     if (s.status !== 'active') throw sessionFinished();
-    // Позицию закрывает браузер (он знает цену момента), сервер только проверяет.
-    const open = await this.prisma.backtestTrade.count({ where: { sessionId: id, exitTime: null } });
-    if (open > 0) throw new ConflictException({ message: 'Сначала закройте открытую сделку', code: 'BACKTEST_OPEN_TRADE' });
-    const session = await this.prisma.backtestSession.update({
-      where: { id },
-      data: { status: 'finished', finishedAt: new Date() },
+    return this.prisma.$transaction(async (tx) => {
+      // Лок строки сессии + защита статуса — тот же bumpCursor, что у входа и
+      // выхода сделки; GREATEST с уже известным cursorTime дальше его не
+      // сдвинет, но замок и проверку status='active' даёт.
+      const bumped = await this.bumpCursor(tx, id, s.cursorTime);
+      if (bumped === 0) throw sessionFinished();
+      // Позицию закрывает браузер (он знает цену момента), сервер только проверяет.
+      const open = await tx.backtestTrade.count({ where: { sessionId: id, exitTime: null } });
+      if (open > 0) throw new ConflictException({ message: 'Сначала закройте открытую сделку', code: 'BACKTEST_OPEN_TRADE' });
+      const session = await tx.backtestSession.update({
+        where: { id },
+        data: { status: 'finished', finishedAt: new Date() },
+      });
+      return { session };
     });
-    return { session };
   }
 
   async openTrade(userId: string, sessionId: string, input: OpenTradeInput) {
@@ -178,7 +185,11 @@ export class BacktestService {
 
     return this.prisma.$transaction(async (tx) => {
       // Первым делом — строка сессии: она двигает момент и держит замок (см. bumpCursor).
-      await this.bumpCursor(tx, sessionId, input.entryTime);
+      // Результат проверяем: сессию могли завершить между внешней проверкой
+      // выше и входом сюда — тогда WHERE status='active' не заденет ни одной
+      // строки, и создавать сделку в уже завершённой сессии нельзя.
+      const bumped = await this.bumpCursor(tx, sessionId, input.entryTime);
+      if (bumped === 0) throw sessionFinished();
       const open = await tx.backtestTrade.count({ where: { sessionId, exitTime: null } });
       if (open > 0) throw new ConflictException({ message: 'Открытая сделка уже есть', code: 'BACKTEST_OPEN_TRADE' });
       // Депозит — под замком: закрытие прошлой сделки могло поменять его после чтения выше.
@@ -209,8 +220,17 @@ export class BacktestService {
     const data: { stopLoss?: number; takeProfit?: number | null } = {};
     if (input.stopLoss !== undefined) data.stopLoss = input.stopLoss;
     if (input.takeProfit !== undefined) data.takeProfit = input.takeProfit;
-    const updated = await this.prisma.backtestTrade.update({ where: { id: tradeId }, data, include: TAGS });
-    return { trade: tradeView(updated) };
+
+    return this.prisma.$transaction(async (tx) => {
+      // Тот же замок + защита статуса сессии, что у входа и выхода сделки —
+      // сессию или саму сделку могли завершить между чтением выше и сюда.
+      const bumped = await this.bumpCursor(tx, trade.sessionId, trade.session.cursorTime);
+      if (bumped === 0) throw sessionFinished();
+      const result = await tx.backtestTrade.updateMany({ where: { id: tradeId, exitTime: null }, data });
+      if (result.count === 0) throw tradeClosed();
+      const updated = await tx.backtestTrade.findUnique({ where: { id: tradeId }, include: TAGS });
+      return { trade: tradeView(updated!) };
+    });
   }
 
   async closeTrade(userId: string, tradeId: string, input: CloseTradeInput) {
@@ -237,16 +257,37 @@ export class BacktestService {
 
     return this.prisma.$transaction(async (tx) => {
       await this.bumpCursor(tx, trade.sessionId, input.exitTime);
-      const updated = await tx.backtestTrade.update({
-        where: { id: tradeId },
+      // Условный апдейт — щит от гонки: параллельный дубликат этого же запроса
+      // (оба увидели exitTime: null до входа в свою транзакцию) не должен
+      // начислить PnL дважды. bumpCursor выше уже держит замок строки сессии,
+      // так что вторая транзакция досюда доходит только после коммита первой.
+      const result = await tx.backtestTrade.updateMany({
+        where: { id: tradeId, exitTime: null },
         data: { exitTime: input.exitTime, exitPrice: input.exitPrice, exitReason: input.reason, fee, pnl, r },
-        include: TAGS,
       });
+      if (result.count === 0) {
+        // Кто-то уже закрыл сделку в гонке — перечитать и разобраться: тот же
+        // это запрос (повтор) или другой (отказ).
+        const raced = await tx.backtestTrade.findUnique({ where: { id: tradeId }, include: TAGS });
+        if (!raced) throw tradeClosed();
+        const same = raced.exitTime?.getTime() === input.exitTime.getTime() && raced.exitPrice === input.exitPrice;
+        if (!same) throw tradeClosed();
+        // Тот же повтор — баланс не трогаем. Берём его свежим, а не из
+        // значения, прочитанного до входа в транзакцию: оно может быть
+        // устаревшим (сессия могла обновиться под тем же замком).
+        const fresh = await tx.backtestSession.findUnique({
+          where: { id: trade.sessionId },
+          select: { balance: true },
+        });
+        return { trade: tradeView(raced), balance: fresh!.balance };
+      }
+      // Сделка реально закрыта нами.
       const session = await tx.backtestSession.update({
         where: { id: trade.sessionId },
         data: { balance: { increment: pnl } },
       });
-      return { trade: tradeView(updated), balance: session.balance };
+      const updated = await tx.backtestTrade.findUnique({ where: { id: tradeId }, include: TAGS });
+      return { trade: tradeView(updated!), balance: session.balance };
     });
   }
 
