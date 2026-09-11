@@ -124,7 +124,7 @@ export function OrderPanel({
         </>
       )}
 
-      <Button variant="risk" onClick={onFinish}>
+      <Button variant="risk" onClick={onFinish} disabled={disabled}>
         {t('finish')}
       </Button>
     </div>
