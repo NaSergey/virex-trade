@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'rea
 import { useNonPassiveWheel } from '@/shared/lib/hooks/useNonPassiveWheel';
 import { formatPriceGrouped } from '@/shared/lib/utils/format';
 import { Button } from '@/shared/ui/Button';
-import { glidePrice, indexAtOrAfter, resolveWindow, zoomStep, type ViewState } from '../lib/motion';
+import { anchorTimeAt, frameAtTime, frameBounds, glidePrice, resolveWindow, zoomStep, type ViewState } from '../lib/motion';
 import type { Candle } from '../lib/candles';
 
 const W = 720;
@@ -97,10 +97,10 @@ export function ReplayChart({
    * Колёсный зум висит на нативном (не React) листенере, чтобы звать
    * preventDefault — React с версии 17 держит onWheel пассивным, и внутри
    * него preventDefault просто не работает. Листенеру нужны свежие
-   * startIdx/count/candles на момент события, а не из замыкания при монтаже —
+   * frameStart/count/candles на момент события, а не из замыкания при монтаже —
    * отсюда ref, обновляемый каждый рендер.
    */
-  const latestRef = useRef({ startIdx: 0, count: DEFAULT_COUNT, candles: [] as Candle[] });
+  const latestRef = useRef({ frameStart: 0, count: DEFAULT_COUNT, candles: [] as Candle[] });
 
   useEffect(() => {
     const el = svgRef.current;
@@ -114,7 +114,7 @@ export function ReplayChart({
   const u = boxW > 0 ? W / boxW : 1;
   const px = (n: number) => n * u;
 
-  // Колёсному зуму нужны свежие startIdx/count/candles на момент события, а не
+  // Колёсному зуму нужны свежие frameStart/count/candles на момент события, а не
   // из замыкания при монтаже — читает их из latestRef, а не из состояния,
   // поэтому сам колбэк стабилен и слушатель не перевешивается на каждый рендер.
   const onWheel = useCallback((e: WheelEvent) => {
@@ -122,14 +122,20 @@ export function ReplayChart({
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const xFrac = clamp((e.clientX - rect.left) / rect.width, 0, 1);
-    const { startIdx: s, count: c, candles: cs } = latestRef.current;
+    const { frameStart: s, count: c, candles: cs } = latestRef.current;
     const factor = e.deltaY > 0 ? 1 / ZOOM_STEP : ZOOM_STEP;
     setView(zoomStep(cs, s, c, xFrac, factor, { minCount: MIN_COUNT, maxCount: MAX_COUNT }));
   }, []);
   useNonPassiveWheel(svgRef, onWheel);
 
-  const { startIdx, endIdx, live } = resolveWindow(candles, view, { minCount: MIN_COUNT, maxCount: MAX_COUNT });
+  const { frameStart, startIdx, endIdx, count, live } = resolveWindow(candles, view, {
+    minCount: MIN_COUNT,
+    maxCount: MAX_COUNT,
+  });
   const shown = candles.slice(startIdx, endIdx);
+  // Свечей в shown может быть меньше count — кадр уехал в пустоту левее
+  // истории; сдвиг переводит индекс внутри shown в позицию внутри кадра.
+  const renderOffset = startIdx - frameStart;
 
   // Пан подошёл к загруженному краю — просим родителя догрузить историю
   // назад. Догрузка добавляет свечи в начало массива; окно держится за
@@ -189,12 +195,13 @@ export function ReplayChart({
   const plotH = H - PT - PB;
   const y = (p: number) => PT + ((hi - p) / (hi - lo)) * plotH;
   const priceAt = (yy: number) => clamp(hi - ((yy - PT) / plotH) * (hi - lo), lo, hi);
-  const count = endIdx - startIdx;
   const slot = count > 0 ? PW / count : PW;
   useEffect(() => {
-    latestRef.current = { startIdx, count, candles };
+    latestRef.current = { frameStart, count, candles };
   });
-  const cx = (i: number) => i * slot + slot / 2;
+  // Индекс — позиция в кадре (может выходить за пределы shown, если кадр
+  // уехал в пустоту), а не индекс внутри shown.
+  const cx = (frameIdx: number) => frameIdx * slot + slot / 2;
   const bodyW = Math.max(px(1), slot * 0.66);
 
   const svgY = (clientY: number) => {
@@ -231,12 +238,12 @@ export function ReplayChart({
       pinchRef.current = {
         dist: Math.hypot(a.x - b.x, a.y - b.y),
         count,
-        anchorT: candles[startIdx]?.t ?? null,
+        anchorT: anchorTimeAt(candles, frameStart),
         midFrac: clamp(((a.x + b.x) / 2 - rect.left) / rect.width, 0, 1),
       };
       return;
     }
-    panRef.current = { startX: svgX(e.clientX), anchorT: candles[startIdx]?.t ?? null, count, slot };
+    panRef.current = { startX: svgX(e.clientX), anchorT: anchorTimeAt(candles, frameStart), count, slot };
   };
 
   const onMove = (e: PointerEvent<SVGSVGElement>) => {
@@ -256,18 +263,21 @@ export function ReplayChart({
       // Защита от деления на ноль — редкий, но возможный случай, когда два
       // указателя совпадают по координате в момент начала пинча.
       const ratio = pinch.dist === 0 ? 1 : dist / pinch.dist;
-      const baseIdx = pinch.anchorT != null ? indexAtOrAfter(candles, pinch.anchorT) : 0;
-      setView(zoomStep(candles, baseIdx, pinch.count, pinch.midFrac, 1 / ratio, { minCount: MIN_COUNT, maxCount: MAX_COUNT }));
+      const baseFrame = pinch.anchorT != null ? frameAtTime(candles, pinch.anchorT) : 0;
+      setView(zoomStep(candles, baseFrame, pinch.count, pinch.midFrac, 1 / ratio, { minCount: MIN_COUNT, maxCount: MAX_COUNT }));
       return;
     }
     const pan = panRef.current;
     if (!pan) return;
     const dx = svgX(e.clientX) - pan.startX;
     const deltaSlots = Math.round(dx / pan.slot);
-    const baseIdx = pan.anchorT != null ? indexAtOrAfter(candles, pan.anchorT) : 0;
-    const maxStart = Math.max(0, candles.length - pan.count);
-    const newStart = clamp(baseIdx - deltaSlots, 0, maxStart);
-    setView({ count: pan.count, anchorTime: newStart >= maxStart ? null : candles[newStart]?.t ?? null });
+    const baseFrame = pan.anchorT != null ? frameAtTime(candles, pan.anchorT) : 0;
+    // Зажимаем сразу здесь, а не только в resolveWindow — иначе «запас»
+    // перескролла копится сверх видимого, и жест на возврате едет вхолостую,
+    // прежде чем кадр вообще сдвинется с места.
+    const { min: minFrame, max: maxFrame } = frameBounds(candles, pan.count);
+    const newFrame = clamp(baseFrame - deltaSlots, minFrame, maxFrame);
+    setView({ count: pan.count, anchorTime: newFrame >= maxFrame ? null : anchorTimeAt(candles, newFrame) });
   };
 
   const endDrag = (e: PointerEvent<SVGSVGElement>) => {
@@ -286,7 +296,7 @@ export function ReplayChart({
       // Пинч завершился отпусканием одного из двух пальцев — продолжаем
       // панорамирование оставшимся, а не ждём нового касания.
       const [, pos] = remaining[0];
-      panRef.current = { startX: svgX(pos.x), anchorT: candles[startIdx]?.t ?? null, count, slot };
+      panRef.current = { startX: svgX(pos.x), anchorT: anchorTimeAt(candles, frameStart), count, slot };
     } else {
       panRef.current = null;
     }
@@ -327,14 +337,20 @@ export function ReplayChart({
           const bottom = y(Math.min(draw.o, draw.c));
           return (
             <g key={c.t}>
-              <line x1={cx(i)} x2={cx(i)} y1={y(draw.h)} y2={y(draw.l)} stroke={color} strokeWidth={px(1)} />
-              <rect x={cx(i) - bodyW / 2} y={top} width={bodyW} height={Math.max(px(1), bottom - top)} fill={color} />
+              <line x1={cx(renderOffset + i)} x2={cx(renderOffset + i)} y1={y(draw.h)} y2={y(draw.l)} stroke={color} strokeWidth={px(1)} />
+              <rect
+                x={cx(renderOffset + i) - bodyW / 2}
+                y={top}
+                width={bodyW}
+                height={Math.max(px(1), bottom - top)}
+                fill={color}
+              />
             </g>
           );
         })}
 
         {timeIdx.map((i) => (
-          <text key={i} x={cx(i)} y={H - px(7)} fill="var(--color-muted)" fontSize={px(10)} textAnchor="middle">
+          <text key={i} x={cx(renderOffset + i)} y={H - px(7)} fill="var(--color-muted)" fontSize={px(10)} textAnchor="middle">
             {labelFor(shown[i].t)}
           </text>
         ))}

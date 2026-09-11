@@ -40,27 +40,81 @@ export interface WindowBounds {
   maxCount: number;
 }
 
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+/** Шаг между соседними свечами: они всегда выровнены по границе бакета
+    таймфрейма, поэтому шаг постоянный — считаем по первым двум. */
+const stepOf = (candles: { t: number }[]) => (candles.length >= 2 ? candles[1].t - candles[0].t : 0);
+
 /**
- * Где стоит окно просмотра: индексы в массиве свечей и следит ли оно за живым
- * краем. Якорь хранится временем, а не индексом — массив растёт слева при
- * догрузке истории для пана, и индекс от этого сместился бы, а время нет.
+ * Позиция в «кадре» (может быть отрицательной — левее первой загруженной
+ * свечи, туда, где реальных данных ещё/уже нет) для времени `time`.
+ * Экстраполирует постоянным шагом за пределами массива — так же, как
+ * `RangeCheckChart` умеет уезжать за края данных индексами.
+ */
+export function frameAtTime(candles: { t: number }[], time: number): number {
+  if (candles.length === 0) return 0;
+  const step = stepOf(candles);
+  if (time < candles[0].t) return step > 0 ? -Math.round((candles[0].t - time) / step) : 0;
+  return indexAtOrAfter(candles, time);
+}
+
+/** Обратная операция: время якоря для позиции кадра (в т.ч. отрицательной) —
+    пан/пинч используют, чтобы зафиксировать текущую позицию в `ViewState.anchorTime`. */
+export function anchorTimeAt(candles: { t: number }[], frameStart: number): number | null {
+  if (candles.length === 0) return null;
+  if (frameStart < 0) return candles[0].t - -frameStart * (stepOf(candles) || 1);
+  if (frameStart < candles.length) return candles[frameStart].t;
+  return candles[candles.length - 1].t;
+}
+
+/**
+ * Куда пану/зуму можно уводить кадр при данном count: не дальше живого края
+ * справа и не дальше `edge` настоящих свечей слева — левее только пустое
+ * поле, как в графике «Диапазон входа» (`RangeCheckChart`). Общая для
+ * `resolveWindow` и обработчиков жестов в `ReplayChart`, которым нужно знать
+ * эти границы ещё до того, как состояние осядет и `resolveWindow` пересчитает
+ * их сама — иначе «запас» перескролла копится сверх видимого и жест на
+ * возврате едет вхолостую, прежде чем кадр вообще сдвинется.
+ */
+export function frameBounds(candles: { t: number }[], count: number, edgeMin = 3): { min: number; max: number } {
+  const total = candles.length;
+  const edge = Math.min(edgeMin, total);
+  return { min: edge - count, max: Math.max(0, total - count) };
+}
+
+/**
+ * Где стоит окно просмотра: индексы для среза массива, ширина кадра и следит
+ * ли оно за живым краем. Якорь хранится временем, а не индексом — массив
+ * растёт слева при догрузке истории для пана, и индекс от этого сместился
+ * бы, а время нет.
+ *
+ * Кадр умеет уезжать левее первой загруженной свечи (виртуальный `frameStart`
+ * отрицательный, `startIdx` при этом зажат в 0) — иначе при короткой истории
+ * (старт сессии, только что выбранный ТФ) пан упирался бы в стену намертво.
+ * Вправо (за живой край, в будущее, которого ещё не было) кадр не уезжает —
+ * там принципиально нет данных, а не просто «ещё не загружены».
  */
 export function resolveWindow(
   candles: { t: number }[],
   view: ViewState,
   bounds: WindowBounds,
-): { startIdx: number; endIdx: number; live: boolean } {
+  edgeMin = 3,
+): { frameStart: number; startIdx: number; endIdx: number; count: number; live: boolean } {
   const total = candles.length;
-  const count = Math.min(bounds.maxCount, Math.max(bounds.minCount, view.count));
-  const maxStart = Math.max(0, total - count);
+  const count = clamp(view.count, bounds.minCount, bounds.maxCount);
+  const { min: minFrameStart, max: maxFrameStart } = frameBounds(candles, count, edgeMin);
   const live = view.anchorTime == null;
   // Проверка написана заново (не через `live`), чтобы TS сузил anchorTime до number.
-  const startIdx =
-    view.anchorTime == null ? maxStart : Math.min(indexAtOrAfter(candles, view.anchorTime), maxStart);
-  return { startIdx, endIdx: Math.min(total, startIdx + count), live };
+  const frameStart = clamp(
+    view.anchorTime == null ? maxFrameStart : frameAtTime(candles, view.anchorTime),
+    minFrameStart,
+    maxFrameStart,
+  );
+  const startIdx = clamp(frameStart, 0, total);
+  const endIdx = clamp(frameStart + count, 0, total);
+  return { frameStart, startIdx, endIdx, count, live };
 }
-
-const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 /**
  * Один шаг зума с сохранением фокальной точки: свеча под курсором (колесо)
