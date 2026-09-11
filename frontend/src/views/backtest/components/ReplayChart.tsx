@@ -18,6 +18,7 @@ const MAX_COUNT = 400;
 /** Насколько близко к загруженному краю пан просит родителя догрузить историю. */
 const EDGE_THRESHOLD = 15;
 const TICKS = 5;
+const ZOOM_STEP = 1.15;
 
 export type LevelKind = 'entry' | 'stop' | 'take';
 
@@ -79,6 +80,16 @@ export function ReplayChart({
   const lastDrag = useRef<number | null>(null);
   const [view, setView] = useState<ViewState>({ count: DEFAULT_COUNT, anchorTime: null });
   const panRef = useRef<{ startX: number; startIdx: number; count: number; slot: number } | null>(null);
+  const pointersRef = useRef(new Map<number, { x: number; y: number }>());
+  const pinchRef = useRef<{ dist: number; count: number; startIdx: number; midFrac: number } | null>(null);
+  /**
+   * Колёсный зум висит на нативном (не React) листенере, чтобы звать
+   * preventDefault — React с версии 17 держит onWheel пассивным, и внутри
+   * него preventDefault просто не работает. Листенеру нужны свежие
+   * startIdx/count/candles на момент события, а не из замыкания при монтаже —
+   * отсюда ref, обновляемый каждый рендер.
+   */
+  const latestRef = useRef({ startIdx: 0, count: DEFAULT_COUNT, candles: [] as Candle[] });
 
   useEffect(() => {
     const el = svgRef.current;
@@ -91,6 +102,25 @@ export function ReplayChart({
 
   const u = boxW > 0 ? W / boxW : 1;
   const px = (n: number) => n * u;
+
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const xFrac = clamp((e.clientX - rect.left) / rect.width, 0, 1);
+      const { startIdx: s, count: c, candles: cs } = latestRef.current;
+      const focalIdx = s + xFrac * c;
+      const factor = e.deltaY > 0 ? 1 / ZOOM_STEP : ZOOM_STEP;
+      const newCount = clamp(Math.round(c * factor), MIN_COUNT, MAX_COUNT);
+      const maxStart = Math.max(0, cs.length - newCount);
+      const newStart = clamp(Math.round(focalIdx - xFrac * newCount), 0, maxStart);
+      setView({ count: newCount, anchorTime: newStart >= maxStart ? null : cs[newStart]?.t ?? null });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
 
   const { startIdx, endIdx, live } = resolveWindow(candles, view, { minCount: MIN_COUNT, maxCount: MAX_COUNT });
   const shown = candles.slice(startIdx, endIdx);
@@ -120,6 +150,9 @@ export function ReplayChart({
   const priceAt = (yy: number) => clamp(hi - ((yy - PT) / plotH) * (hi - lo), lo, hi);
   const count = endIdx - startIdx;
   const slot = count > 0 ? PW / count : PW;
+  useEffect(() => {
+    latestRef.current = { startIdx, count, candles };
+  });
   const cx = (i: number) => i * slot + slot / 2;
   const bodyW = Math.max(px(1), slot * 0.66);
 
@@ -143,6 +176,19 @@ export function ReplayChart({
 
   const startPan = (e: PointerEvent<SVGSVGElement>) => {
     svgRef.current?.setPointerCapture(e.pointerId);
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointersRef.current.size === 2) {
+      panRef.current = null;
+      const [a, b] = [...pointersRef.current.values()];
+      const rect = svgRef.current!.getBoundingClientRect();
+      pinchRef.current = {
+        dist: Math.hypot(a.x - b.x, a.y - b.y),
+        count,
+        startIdx,
+        midFrac: clamp(((a.x + b.x) / 2 - rect.left) / rect.width, 0, 1),
+      };
+      return;
+    }
     panRef.current = { startX: svgX(e.clientX), startIdx, count, slot };
   };
 
@@ -151,6 +197,19 @@ export function ReplayChart({
       const p = priceAt(svgY(e.clientY));
       lastDrag.current = p;
       onDragLevel(drag, p, false);
+      return;
+    }
+    if (pointersRef.current.has(e.pointerId)) pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const pinch = pinchRef.current;
+    if (pinch && pointersRef.current.size === 2) {
+      const [a, b] = [...pointersRef.current.values()];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      const ratio = dist / pinch.dist;
+      const newCount = clamp(Math.round(pinch.count / ratio), MIN_COUNT, MAX_COUNT);
+      const focalIdx = pinch.startIdx + pinch.midFrac * pinch.count;
+      const maxStart = Math.max(0, candles.length - newCount);
+      const newStart = clamp(Math.round(focalIdx - pinch.midFrac * newCount), 0, maxStart);
+      setView({ count: newCount, anchorTime: newStart >= maxStart ? null : candles[newStart]?.t ?? null });
       return;
     }
     const pan = panRef.current;
@@ -162,7 +221,9 @@ export function ReplayChart({
     setView({ count: pan.count, anchorTime: newStart >= maxStart ? null : candles[newStart]?.t ?? null });
   };
 
-  const endDrag = () => {
+  const endDrag = (e: PointerEvent<SVGSVGElement>) => {
+    pointersRef.current.delete(e.pointerId);
+    if (pointersRef.current.size < 2) pinchRef.current = null;
     if (drag) {
       if (onDragLevel && lastDrag.current != null) onDragLevel(drag, lastDrag.current, true);
       setDrag(null);
