@@ -194,6 +194,16 @@ export class BacktestService {
       if (open > 0) throw new ConflictException({ message: 'Открытая сделка уже есть', code: 'BACKTEST_OPEN_TRADE' });
       // Депозит — под замком: закрытие прошлой сделки могло поменять его после чтения выше.
       const fresh = await tx.backtestSession.findUnique({ where: { id: sessionId }, select: { balance: true } });
+      if (fresh!.balance <= 0) {
+        // Слитый депозит: риск от него уже не считается — от нулевого или
+        // отрицательного баланса qty/riskUsdt выходят некорректными (r и pnl
+        // расходятся в знаке, при balance === 0 — NaN). Сессию отсюда можно
+        // только завершить.
+        throw new ConflictException({
+          message: 'Депозит сессии исчерпан — сессию можно только завершить',
+          code: 'BACKTEST_NO_BALANCE',
+        });
+      }
       const { riskUsdt, qty } = positionSize(fresh!.balance, input.riskPct, input.entryPrice, input.stopLoss);
       const trade = await tx.backtestTrade.create({
         data: {

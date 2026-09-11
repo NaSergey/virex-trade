@@ -615,6 +615,7 @@
     "BACKTEST_SESSION_NOT_FOUND": "Session not found",
     "BACKTEST_SESSION_FINISHED": "The session is already finished",
     "BACKTEST_OPEN_TRADE": "Close the open trade first",
+    "BACKTEST_NO_BALANCE": "The session's balance is exhausted — you can only finish the session",
     "BACKTEST_TRADE_NOT_FOUND": "Trade not found",
     "BACKTEST_TRADE_CLOSED": "The trade is already closed",
     "BACKTEST_STOP_SIDE": "The stop is on the wrong side of the entry",

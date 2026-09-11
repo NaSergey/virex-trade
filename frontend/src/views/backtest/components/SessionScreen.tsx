@@ -124,6 +124,11 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
     const err = checkLevels(direction, screenPrice, stopN, takeN);
     setHint(err ? t(err) : null);
     if (err) return;
+    // Открытие сделки — значимое событие: автопрокрутка встаёт, как и при
+    // срабатывании уровня уже открытой сделки. Пока сервер не ответил и сделка
+    // не появилась в detail.trades, курсор иначе продолжал бы уезжать вперёд, и
+    // минутки между входом и новым курсором не проверились бы на стоп/тейк.
+    replay.setSpeed(null);
     openM.mutate({
       direction,
       entryTime: new Date(replay.cursor).toISOString(),

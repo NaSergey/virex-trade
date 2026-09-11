@@ -115,10 +115,10 @@ export function OrderPanel({
               })}
             </p>
           )}
-          <Button variant="solid" onClick={() => onOpen('long')} disabled={disabled}>
+          <Button variant="solid" onClick={() => onOpen('long')} disabled={disabled || balance <= 0}>
             {t('long')}
           </Button>
-          <Button onClick={() => onOpen('short')} disabled={disabled}>
+          <Button onClick={() => onOpen('short')} disabled={disabled || balance <= 0}>
             {t('short')}
           </Button>
         </>

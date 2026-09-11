@@ -331,6 +331,29 @@ describe('BacktestService — сделки', () => {
     expect(prisma.backtestTrade.create).not.toHaveBeenCalled();
   });
 
+  it('депозит слит (баланс под замком <= 0) — сделку не открывает', async () => {
+    const { service, prisma } = makeService();
+    // Первое чтение (ownedSession) — сессия ещё активна; второе, под замком
+    // транзакции, — баланс уже не положителен (слился на прошлой сделке).
+    prisma.backtestSession.findUnique.mockResolvedValueOnce(SESSION).mockResolvedValueOnce({ balance: 0 });
+
+    const err = await rejection(service.openTrade('u1', 's1', OPEN));
+
+    expect(err).toBeInstanceOf(ConflictException);
+    expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_NO_BALANCE' });
+    expect(prisma.backtestTrade.create).not.toHaveBeenCalled();
+  });
+
+  it('отрицательный баланс под замком — тоже отказ', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValueOnce(SESSION).mockResolvedValueOnce({ balance: -12.5 });
+
+    const err = await rejection(service.openTrade('u1', 's1', OPEN));
+
+    expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_NO_BALANCE' });
+    expect(prisma.backtestTrade.create).not.toHaveBeenCalled();
+  });
+
   it('закрывает: PnL, R и комиссию считает сервер, депозит растёт на PnL', async () => {
     const { service, prisma } = makeService();
     prisma.backtestTrade.findUnique

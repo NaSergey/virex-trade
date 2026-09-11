@@ -786,6 +786,7 @@
     "BACKTEST_SESSION_NOT_FOUND": "Сессия не найдена",
     "BACKTEST_SESSION_FINISHED": "Сессия уже завершена",
     "BACKTEST_OPEN_TRADE": "Сначала закройте открытую сделку",
+    "BACKTEST_NO_BALANCE": "Депозит сессии исчерпан — сессию можно только завершить",
     "BACKTEST_TRADE_NOT_FOUND": "Сделка не найдена",
     "BACKTEST_TRADE_CLOSED": "Сделка уже закрыта",
     "BACKTEST_STOP_SIDE": "Стоп стоит не по ту сторону от входа",
