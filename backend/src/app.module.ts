@@ -15,6 +15,7 @@ import { TagsModule } from './tags/tags.module';
 import { TelegramModule } from './telegram/telegram.module';
 import { MarketDataModule } from './market-data/market-data.module';
 import { MarketEventsModule } from './market-events/market-events.module';
+import { BacktestModule } from './backtest/backtest.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
 import { DonationsModule } from './donations/donations.module';
@@ -43,6 +44,7 @@ import { ReferralsModule } from './referrals/referrals.module';
     TelegramModule,
     MarketDataModule,
     MarketEventsModule,
+    BacktestModule,
     NotificationsModule,
     AdminModule,
     DonationsModule,
