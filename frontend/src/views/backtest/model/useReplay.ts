@@ -23,8 +23,10 @@ const LOOKAHEAD_MS = 3 * DAY;
 const CHUNK = 5000;
 /** Сколько закрытых свечей таймфрейма брать в прошлое. */
 const CLOSED_LIMIT = 300;
-/** Сколько свечей отдавать графику. */
-const VISIBLE = 120;
+/** Дальше в прошлое пан не пускает — год от текущего момента сессии, не от сегодняшней даты. */
+export const HISTORY_CAP_MS = 365 * DAY;
+/** Кусок истории на одну догрузку при пане. */
+const HISTORY_CHUNK = 500;
 /** Момент сохраняется на сервер не чаще, чем раз в столько. */
 const SAVE_DELAY_MS = 3000;
 /** Скорости автопрокрутки — шагов в секунду. */
@@ -48,6 +50,9 @@ export interface Replay {
    * после ручного «Шага»: там анимации нет по замыслу.
    */
   glide: { minute: Candle; durationMs: number } | null;
+  /** Догрузить ещё истории назад для текущего ТФ — вызывает ReplayChart, приближаясь к краю. */
+  loadMoreHistory: () => Promise<void>;
+  historyLoading: boolean;
   /** Цена последней показанной минутки, настоящая. */
   price: number | null;
   ready: boolean;
@@ -138,10 +143,51 @@ export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, 
     };
   }, [tf, closed]);
 
+  const historyLoadingRef = useRef(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  /** На какой ТФ пан уже упёрся в границу года — чтобы не долбить сервер у края. */
+  const historyExhausted = useRef<Record<number, boolean>>({});
+
+  /**
+   * Довесок истории для пана назад: следующий кусок закрытых свечей текущего
+   * ТФ перед уже загруженными, не дальше года от текущего момента сессии.
+   */
+  const loadMoreHistory = useCallback(async () => {
+    const set = closed[tf];
+    if (!set || historyLoadingRef.current || historyExhausted.current[tf]) return;
+    const earliest = set.candles[0]?.t ?? set.anchor;
+    const floor = cursorRef.current - HISTORY_CAP_MS;
+    if (earliest <= floor) {
+      historyExhausted.current[tf] = true;
+      return;
+    }
+    historyLoadingRef.current = true;
+    setHistoryLoading(true);
+    try {
+      const chunk = await fetchCandles(tf, { to: earliest - 1, limit: HISTORY_CHUNK });
+      const filtered = chunk.filter((c) => c.t >= floor);
+      if (chunk.length < HISTORY_CHUNK || filtered.length < chunk.length) historyExhausted.current[tf] = true;
+      if (filtered.length > 0) {
+        setClosed((prev) => {
+          const cur = prev[tf];
+          if (!cur) return prev;
+          return { ...prev, [tf]: { ...cur, candles: [...filtered, ...cur.candles] } };
+        });
+      }
+    } catch (e) {
+      setError(e);
+    } finally {
+      historyLoadingRef.current = false;
+      setHistoryLoading(false);
+    }
+  }, [closed, tf]);
+
   const candles = useMemo(() => {
     const set = closed[tf];
     if (!set) return [];
-    return visibleCandles({ closed: set.candles, anchor: set.anchor, minutes, tf, cursor }).slice(-VISIBLE);
+    // Полный загруженный ряд, не только «последние 120»: окно показа теперь
+    // выбирает сам ReplayChart (пан и зум), а не хук.
+    return visibleCandles({ closed: set.candles, anchor: set.anchor, minutes, tf, cursor });
   }, [closed, tf, minutes, cursor]);
 
   const price = useMemo(() => lastPrice(minutes, cursor), [minutes, cursor]);
@@ -259,6 +305,8 @@ export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, 
     setTf,
     candles,
     glide,
+    loadMoreHistory,
+    historyLoading,
     price,
     ready: closed[tf] != null && price != null,
     step,
