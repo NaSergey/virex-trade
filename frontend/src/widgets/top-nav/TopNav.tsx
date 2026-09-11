@@ -15,7 +15,7 @@ import { ThemeToggle } from '@/shared/ui/ThemeToggle';
 // import { VirexLogo } from '@/shared/ui/VirexLogo';
 import { useLocaleControl } from '@/shared/i18n';
 
-type Tab = 'overview' | 'tags' | 'analytics' | 'market' | 'settings' | 'admin';
+type Tab = 'overview' | 'tags' | 'analytics' | 'market' | 'backtest' | 'settings' | 'admin';
 
 type NavItem = { id: Tab; labelKey: Tab; ownerOnly?: boolean };
 
@@ -24,6 +24,7 @@ const NAV: NavItem[] = [
   { id: 'tags', labelKey: 'tags' },
   { id: 'analytics', labelKey: 'analytics' },
   { id: 'market', labelKey: 'market' },
+  { id: 'backtest', labelKey: 'backtest' },
   { id: 'settings', labelKey: 'settings' },
   // Аналитика по пользователям сервиса. Стоит последней и видна только
   // владельцу: остальным ссылка вернула бы 403, а пункт в рейке обещал бы
