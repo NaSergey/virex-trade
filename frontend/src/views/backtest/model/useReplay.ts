@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchCandles, saveCursor } from '../api/hooks';
 import type { BacktestTrade, SessionDetail } from '../api/types';
+import { advanceTo } from '../lib/advance';
 import {
   DAY,
   MINUTE,
@@ -14,7 +15,7 @@ import {
   visibleCandles,
   type Candle,
 } from '../lib/candles';
-import { findExit, type Exit } from '../lib/fills';
+import type { Exit } from '../lib/fills';
 
 /** Сколько минуток держать загруженными впереди момента сессии. */
 const LOOKAHEAD_MS = 3 * DAY;
@@ -41,6 +42,12 @@ export interface Replay {
   setTf: (tf: number) => void;
   /** В настоящих ценах. */
   candles: Candle[];
+  /**
+   * Минутка, которая только что «приземлилась» на автопрокрутке, и на сколько
+   * мс её отрисовать — для плавного хода цены внутри тика. null на паузе и
+   * после ручного «Шага»: там анимации нет по замыслу.
+   */
+  glide: { minute: Candle; durationMs: number } | null;
   /** Цена последней показанной минутки, настоящая. */
   price: number | null;
   ready: boolean;
@@ -139,48 +146,86 @@ export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, 
 
   const price = useMemo(() => lastPrice(minutes, cursor), [minutes, cursor]);
 
-  const step = useCallback(async () => {
-    if (busy.current || endedRef.current) return;
-    busy.current = true;
-    setError(null);
-    try {
-      const from = cursorRef.current;
-      const target = nextStop(from, tfRef.current);
-      await ensureMinutes(target + LOOKAHEAD_MS);
-      const reach = Math.min(target, loadedUntil(minutesRef.current) ?? from);
-      if (reach > from) {
+  /**
+   * Общая механика продвижения: и мгновенный «Шаг» (target — закрытие свечи
+   * ТФ), и минутный тик автопрокрутки (target — from + минута) идут через
+   * одну проверку срабатывания (`advanceTo`) — раздельные реализации однажды
+   * разошлись бы, и молча.
+   */
+  const advance = useCallback(
+    async (target: number, onLanded?: (from: number, reach: number) => void) => {
+      if (busy.current || endedRef.current) return;
+      busy.current = true;
+      setError(null);
+      try {
+        const from = cursorRef.current;
+        await ensureMinutes(target + LOOKAHEAD_MS);
         const open = openRef.current;
-        if (open && !closing.current.has(open.id)) {
-          const exit = findExit(open, minutesRef.current, Math.max(Date.parse(open.entryTime), from), reach);
-          if (exit) {
+        const position =
+          open && !closing.current.has(open.id)
+            ? { direction: open.direction, stopLoss: open.stopLoss, takeProfit: open.takeProfit, entryTime: Date.parse(open.entryTime) }
+            : null;
+        const { reach, complete, exit } = advanceTo({
+          from,
+          target,
+          minutes: minutesRef.current,
+          loadedUntil: loadedUntil(minutesRef.current),
+          position,
+        });
+        if (reach > from) {
+          if (exit && open) {
             closing.current.add(open.id);
             // Сработал уровень — автопрокрутка встаёт, чтобы исход не проскочил мимо глаз.
             setSpeed(null);
             onExitRef.current(open, exit);
           }
+          cursorRef.current = reach;
+          setCursor(reach);
+          onLanded?.(from, reach);
         }
-        cursorRef.current = reach;
-        setCursor(reach);
-      }
-      // Шаг не дошёл до цели — минутки кончились, дальше крутить нечего.
-      if (reach < target) {
-        endedRef.current = true;
-        setEnded(true);
+        // Не дошли до цели — минутки кончились, дальше крутить нечего.
+        if (!complete) {
+          endedRef.current = true;
+          setEnded(true);
+          setSpeed(null);
+        }
+      } catch (e) {
+        setError(e);
         setSpeed(null);
+      } finally {
+        busy.current = false;
       }
-    } catch (e) {
-      setError(e);
-      setSpeed(null);
-    } finally {
-      busy.current = false;
-    }
-  }, [ensureMinutes]);
+    },
+    [ensureMinutes],
+  );
 
-  const stepRef = useRef(step);
-  stepRef.current = step;
+  /** Мгновенный прыжок до закрытия текущей свечи ТФ — без анимации, для ручного разбора. */
+  const step = useCallback(() => advance(nextStop(cursorRef.current, tfRef.current)), [advance]);
+
+  const [glide, setGlide] = useState<{ minute: Candle; durationMs: number } | null>(null);
+
+  /**
+   * Тик автопрокрутки — ровно одна настоящая минутка, не вся свеча ТФ:
+   * скорость (шагов в секунду) стала «минут симуляции в секунду» и не зависит
+   * от выбранного таймфрейма. `speedNow` — из замыкания эффекта интервала, а
+   * не из состояния `speed`, чтобы длительность анимации не разошлась со
+   * ставкой, на которой тик на самом деле случился.
+   */
+  const tick = useCallback(
+    (speedNow: number) =>
+      advance(cursorRef.current + MINUTE, (from) => {
+        const landed = minutesRef.current.find((m) => m.t === from);
+        // Минутки может не быть — дыра в истории биржи; тогда просто без анимации.
+        if (landed) setGlide({ minute: landed, durationMs: 1000 / speedNow });
+      }),
+    [advance],
+  );
+
+  const tickRef = useRef(tick);
+  tickRef.current = tick;
   useEffect(() => {
     if (!speed) return;
-    const h = setInterval(() => void stepRef.current(), 1000 / speed);
+    const h = setInterval(() => void tickRef.current(speed), 1000 / speed);
     return () => clearInterval(h);
   }, [speed]);
 
@@ -213,6 +258,7 @@ export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, 
     tf,
     setTf,
     candles,
+    glide,
     price,
     ready: closed[tf] != null && price != null,
     step,
