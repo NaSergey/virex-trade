@@ -51,3 +51,35 @@ export function checkLevels(direction: Direction, price: number, stop: number, t
   if (take != null && (direction === 'long' ? take <= price : take >= price)) return 'takeSide';
   return null;
 }
+
+/**
+ * Риск в USDT по проценту от депозита — не зависит от стопа, в отличие от
+ * `previewSize`: слайдер риска обязан показывать сумму сразу, даже пока стоп
+ * ещё не введён (`previewSize` без стопа вернёт null целиком).
+ */
+export function riskAmount(balance: number, riskPct: number): number | null {
+  if (!(balance > 0) || !(riskPct > 0)) return null;
+  return (balance * riskPct) / 100;
+}
+
+/**
+ * Диапазон слайдера стопа/тейка — по правильную сторону от цены, ±20%.
+ *
+ * Пока сделка не открыта, направление ещё не выбрано: пользователь вправе
+ * поставить стоп по любую сторону цены — сторону в итоге определяют сами
+ * уровни через `checkLevels`, когда он нажмёт «Лонг» или «Шорт», а не
+ * наоборот. Поэтому без направления диапазон симметричный вокруг цены, а не
+ * заранее сужен в одну сторону.
+ */
+export function levelSliderRange(
+  kind: 'stop' | 'take',
+  price: number,
+  direction: Direction | null,
+): { min: number; max: number } {
+  const lo = price * 0.8;
+  const hi = price * 1.2;
+  if (direction == null) return { min: lo, max: hi };
+  const long = direction === 'long';
+  const belowSide = kind === 'stop' ? long : !long;
+  return belowSide ? { min: lo, max: price } : { min: price, max: hi };
+}

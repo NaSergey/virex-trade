@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkLevels, formatR, fromScreen, previewSize, toInput, toScreen, unrealizedPnl } from './money';
+import { checkLevels, formatR, fromScreen, levelSliderRange, previewSize, riskAmount, toInput, toScreen, unrealizedPnl } from './money';
 
 describe('previewSize', () => {
   it('риск, размер, номинал и плечо', () => {
@@ -58,5 +58,34 @@ describe('checkLevels', () => {
   it('без тейка при верном стопе — ошибок нет', () => {
     expect(checkLevels('long', 100, 98, null)).toBeNull();
     expect(checkLevels('short', 100, 102, null)).toBeNull();
+  });
+});
+
+describe('riskAmount', () => {
+  it('процент от депозита, не зависит от стопа', () => {
+    expect(riskAmount(10_000, 1)).toBe(100);
+  });
+
+  it('без депозита или без риска — числа нет', () => {
+    expect(riskAmount(0, 1)).toBeNull();
+    expect(riskAmount(10_000, 0)).toBeNull();
+    expect(riskAmount(10_000, NaN)).toBeNull();
+  });
+});
+
+describe('levelSliderRange', () => {
+  it('направление ещё не выбрано — симметрично вокруг цены', () => {
+    expect(levelSliderRange('stop', 100, null)).toEqual({ min: 80, max: 120 });
+    expect(levelSliderRange('take', 100, null)).toEqual({ min: 80, max: 120 });
+  });
+
+  it('лонг: стоп снизу, тейк сверху', () => {
+    expect(levelSliderRange('stop', 100, 'long')).toEqual({ min: 80, max: 100 });
+    expect(levelSliderRange('take', 100, 'long')).toEqual({ min: 100, max: 120 });
+  });
+
+  it('шорт — зеркально', () => {
+    expect(levelSliderRange('stop', 100, 'short')).toEqual({ min: 100, max: 120 });
+    expect(levelSliderRange('take', 100, 'short')).toEqual({ min: 80, max: 100 });
   });
 });
