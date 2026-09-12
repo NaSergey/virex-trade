@@ -16,6 +16,7 @@ export function MarketCloseModal({
   trade,
   remaining,
   screenPrice,
+  canClose,
   onSubmit,
   onClose,
   isPending,
@@ -24,6 +25,10 @@ export function MarketCloseModal({
   trade: BacktestTrade;
   remaining: number;
   screenPrice: number;
+  /** Как и раньше у «Закрыть по рынку» в OrderPanel: сделку нельзя закрыть в тот же
+   * момент, когда она открыта (совпадает с проверкой `timeInvalid` на сервере) —
+   * без этого клик по кнопке ничего не делал бы, и без единой подсказки почему. */
+  canClose: boolean;
   onSubmit: (qty: number) => void;
   onClose: () => void;
   isPending: boolean;
@@ -62,7 +67,7 @@ export function MarketCloseModal({
         <DialogActions
           confirmLabel={t('marketCloseConfirm')}
           confirmVariant="risk"
-          confirmDisabled={isPending || !(qty > 0)}
+          confirmDisabled={isPending || !(qty > 0) || !canClose}
           onConfirm={() => onSubmit(qty)}
           onCancel={onClose}
         />

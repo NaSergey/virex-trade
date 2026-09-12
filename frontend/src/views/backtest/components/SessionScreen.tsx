@@ -453,6 +453,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
           trade={openTrade}
           remaining={openTrade.qty - openTrade.closedQty}
           screenPrice={screenPrice}
+          canClose={canClose}
           onSubmit={submitMarket}
           onClose={() => setMarketModal(false)}
           isPending={closeM.isPending}
