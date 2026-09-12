@@ -53,6 +53,11 @@ export class OpenTradeDto {
   @Min(0.01)
   @Max(100)
   riskPct: number;
+
+  @IsNumber()
+  @Min(1)
+  @Max(100)
+  leverage: number;
 }
 
 export class ModifyTradeDto {

@@ -237,6 +237,7 @@ describe('BacktestService — сделки', () => {
     entryPrice: 100,
     stopLoss: 98,
     riskPct: 1,
+    leverage: 10,
   };
 
   const TRADE = {
@@ -249,6 +250,8 @@ describe('BacktestService — сделки', () => {
     takeProfit: null,
     qty: 50,
     riskUsdt: 100,
+    leverage: 10,
+    closedQty: 0,
     exitTime: null,
     exitPrice: null,
     session: SESSION,
@@ -266,6 +269,33 @@ describe('BacktestService — сделки', () => {
         data: expect.objectContaining({ sessionId: 's1', direction: 'long', riskUsdt: 100, qty: 50, takeProfit: null }),
       }),
     );
+  });
+
+  it('открывает сделку: сохраняет плечо', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+
+    await service.openTrade('u1', 's1', OPEN);
+
+    expect(prisma.backtestTrade.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ leverage: 10 }) }),
+    );
+  });
+
+  it('маржа больше депозита — отказ, сделку не создаёт', async () => {
+    const { service, prisma } = makeService();
+    // SESSION.balance=10000, entry=100, stop=98 (dist=2). При leverage=1 margin = notional =
+    // riskUsdt/dist*entry = (balance*riskPct/100)/2*100 = balance*riskPct/2 — при riskPct=1
+    // это 0.5*balance, всегда МЕНЬШЕ баланса (риск считается не в вакууме, а от него же),
+    // поэтому обычный riskPct margin никогда не превысит. Берём riskPct=5:
+    // riskUsdt=500, qty=250, notional=25000, margin@1x=25000 > 10000.
+    prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+
+    const err = await rejection(service.openTrade('u1', 's1', { ...OPEN, leverage: 1, riskPct: 5 }));
+
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_MARGIN_EXCEEDS_BALANCE' });
+    expect(prisma.backtestTrade.create).not.toHaveBeenCalled();
   });
 
   it('не открывает вторую сделку, пока есть открытая', async () => {

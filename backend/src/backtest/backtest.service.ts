@@ -30,6 +30,7 @@ export interface OpenTradeInput {
   stopLoss: number;
   takeProfit?: number;
   riskPct: number;
+  leverage: number;
 }
 
 export interface ModifyTradeInput {
@@ -203,6 +204,11 @@ export class BacktestService {
         });
       }
       const { riskUsdt, qty } = positionSize(fresh!.balance, input.riskPct, input.entryPrice, input.stopLoss);
+      const notional = qty * input.entryPrice;
+      const margin = notional / input.leverage;
+      if (margin > fresh!.balance) {
+        throw new BadRequestException({ message: 'Маржа больше депозита', code: 'BACKTEST_MARGIN_EXCEEDS_BALANCE' });
+      }
       const trade = await tx.backtestTrade.create({
         data: {
           sessionId,
@@ -214,6 +220,7 @@ export class BacktestService {
           riskPct: input.riskPct,
           riskUsdt,
           qty,
+          leverage: input.leverage,
         },
         include: TAGS,
       });
