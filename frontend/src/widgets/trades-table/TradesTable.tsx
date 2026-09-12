@@ -1,12 +1,14 @@
 'use client';
 
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import type { RangeTf, Trade } from '@/entities/trade';
+import { usePrefetchRangeCheck, type RangeTf, type Trade } from '@/entities/trade';
 import { Tags } from '@/entities/tag';
 import { Button } from '@/shared/ui/Button';
 import { LedgerTable, type LedgerColumn, type LedgerSort } from '@/shared/ui/LedgerTable';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { Money } from '@/shared/ui/Money';
+import { RangeCheckModal } from '@/widgets/range-check-modal';
 import { TradeOrders } from './TradeOrders';
 import { formatPriceGrouped, formatQty, durationUnitLabels } from '@/shared/lib/utils/format';
 import { formatRangePos } from '@/shared/lib/utils/range';
@@ -29,6 +31,54 @@ function fmtHold(openedAt: string | null, closedAt: string, units: { d: string; 
   const m = String(min % 60).padStart(2, '0');
   if (d > 0) return `${d} ${units.d} ${h} ${units.h} ${m} ${units.m}`;
   return h > 0 ? `${h} ${units.h} ${m} ${units.m}` : `${min} ${units.m}`;
+}
+
+/**
+ * Цена в журнале — вход или выход, — за которой открывается график сделки.
+ *
+ * Кнопкой прямо на числе, а не отдельной колонкой: окно показывает коридор
+ * вокруг ЭТОЙ цены, и десятая колонка в девятиколоночной таблице стоила бы
+ * ширины тегам ради действия, которому и так есть куда встать. Раньше вход в
+ * график был только в раскрытой строке — то есть его не видел никто, кто
+ * строку не раскрыл.
+ *
+ * Клик не пускается в строку: та по клику раскрывается, и график открывался бы
+ * вместе с разворотом записи.
+ */
+function PriceCue({
+  price,
+  trade,
+  onOpen,
+  title,
+  tour,
+}: {
+  price: number;
+  trade: Trade;
+  onOpen: (trade: Trade) => void;
+  title: string;
+  /** Якорь обучения. Стоит на входе — обе цены ведут в одно окно, а подсветить тур умеет один узел. */
+  tour?: boolean;
+}) {
+  const prefetchRange = usePrefetchRangeCheck();
+  return (
+    <button
+      type="button"
+      className="px-cue"
+      title={title}
+      data-tour={tour ? 'trade-chart' : undefined}
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpen(trade);
+      }}
+      // Свечи заказываются, пока курсор ещё идёт к числу: за ними бэкенд ходит
+      // на биржу, и без прогрева окно открывается заглушкой.
+      onPointerEnter={() => prefetchRange(trade.id)}
+      onFocus={() => prefetchRange(trade.id)}
+      onTouchStart={() => prefetchRange(trade.id)}
+    >
+      {formatPriceGrouped(price)}
+    </button>
+  );
 }
 
 /** Колонка диапазона: нужна там, где по нему же и фильтруют. */
@@ -96,6 +146,9 @@ export function TradesTable({
   const { locale } = useLocaleControl();
   const intlLocale = locale === 'en' ? 'en-US' : 'ru-RU';
   const units = durationUnitLabels(locale);
+  // Окно графика живёт здесь, а не в раскрытой строке: открыть его теперь можно
+  // из двух мест — с цены в строке и кнопкой в развороте, — а окно одно.
+  const [chartTrade, setChartTrade] = useState<Trade | null>(null);
   // sortKey ставится только когда есть onSort: сам по себе sortKey красит
   // заголовок LedgerTable курсором-указателем (см. LedgerTable.tsx), и без
   // этого условия заголовки на Обзоре выглядели бы кликабельными, ничего не
@@ -123,7 +176,15 @@ export function TradesTable({
       align: 'right',
       cellClassName: 'n',
       sortKey: colSortKey('entry'),
-      render: (tr) => formatPriceGrouped(tr.avgEntryPrice),
+      render: (tr) => (
+        <PriceCue
+          price={tr.avgEntryPrice}
+          trade={tr}
+          onOpen={setChartTrade}
+          title={t('showOnChartTitle')}
+          tour
+        />
+      ),
     },
     {
       key: 'exit',
@@ -131,7 +192,9 @@ export function TradesTable({
       align: 'right',
       cellClassName: 'n',
       sortKey: colSortKey('exit'),
-      render: (tr) => formatPriceGrouped(tr.avgExitPrice),
+      render: (tr) => (
+        <PriceCue price={tr.avgExitPrice} trade={tr} onOpen={setChartTrade} title={t('showOnChartTitle')} />
+      ),
     },
     ...(range
       ? [
@@ -209,20 +272,23 @@ export function TradesTable({
   ];
 
   return (
-    <LedgerTable
-      columns={compact ? columns.filter((c) => !ROOMY_ONLY.has(c.key)) : columns}
-      rows={trades}
-      rowKey={(tr) => tr.id}
-      isLoading={isLoading}
-      skeletonRows={skeletonRows}
-      renderExpanded={(tr) => <TradeOrders trade={tr} />}
-      sort={sort}
-      onSort={onSort}
-      empty={
-        empty ?? (
-          <EmptyState title={t('emptyTitle')}>{t('emptyBody')}</EmptyState>
-        )
-      }
-    />
+    <>
+      <LedgerTable
+        columns={compact ? columns.filter((c) => !ROOMY_ONLY.has(c.key)) : columns}
+        rows={trades}
+        rowKey={(tr) => tr.id}
+        isLoading={isLoading}
+        skeletonRows={skeletonRows}
+        renderExpanded={(tr) => <TradeOrders trade={tr} onRangeCheck={() => setChartTrade(tr)} />}
+        sort={sort}
+        onSort={onSort}
+        empty={
+          empty ?? (
+            <EmptyState title={t('emptyTitle')}>{t('emptyBody')}</EmptyState>
+          )
+        }
+      />
+      {chartTrade && <RangeCheckModal trade={chartTrade} onClose={() => setChartTrade(null)} />}
+    </>
   );
 }

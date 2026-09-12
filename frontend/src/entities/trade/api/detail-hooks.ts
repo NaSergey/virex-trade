@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiJson, qs } from '@/shared/api/http';
 import type {
   ExecMarker,
@@ -38,13 +38,42 @@ export const useTradeOrders = (tradeId: string | null) =>
     staleTime: DETAIL_STALE,
   });
 
+/**
+ * Таймфрейм, на котором окно проверки диапазона открывается. Живёт здесь, а не
+ * в самом окне: с ним же греется кэш до открытия, а префетч другого ТФ грел бы
+ * пустоту — ключ запроса не совпал бы с тем, который окно потом спросит.
+ */
+export const RANGE_TF_DEFAULT: RangeTf = '4h';
+
+// Один набор опций на хук и на префетч — по той же причине: ключ и запрос
+// обязаны совпадать до знака.
+const rangeCheckQuery = (tradeId: string, tf: RangeTf) => ({
+  queryKey: ['rangeCheck', tradeId, tf],
+  queryFn: () => apiJson<RangeCheckResponse>(`/api/trades/${tradeId}/range-check${qs({ tf })}`),
+  staleTime: DETAIL_STALE,
+});
+
 export const useRangeCheck = (tradeId: string | null, tf: RangeTf) =>
   useQuery({
-    queryKey: ['rangeCheck', tradeId, tf],
-    queryFn: () => apiJson<RangeCheckResponse>(`/api/trades/${tradeId}/range-check${qs({ tf })}`),
+    ...rangeCheckQuery(tradeId ?? '', tf),
     enabled: !!tradeId,
-    staleTime: DETAIL_STALE,
   });
+
+/**
+ * Свечи для окна проверки диапазона — заранее, пока человек только тянется к
+ * кнопке. Бэкенд ходит за ними живьём на биржу, и без прогрева окно открывается
+ * пустым на полсекунды: сначала заглушка, потом график.
+ *
+ * `prefetchQuery` уважает staleTime, поэтому повторное наведение на ту же
+ * кнопку запроса не шлёт, а промах (человек навёл и не нажал) стоит одного
+ * запроса и попадает в тот же кэш, из которого окно потом и прочитает.
+ */
+export const usePrefetchRangeCheck = () => {
+  const qc = useQueryClient();
+  return (tradeId: string, tf: RangeTf = RANGE_TF_DEFAULT) => {
+    void qc.prefetchQuery(rangeCheckQuery(tradeId, tf));
+  };
+};
 
 export const useExecutions = (symbol: string, days = 30) =>
   useQuery({

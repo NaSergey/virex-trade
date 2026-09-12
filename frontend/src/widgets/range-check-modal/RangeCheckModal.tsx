@@ -6,13 +6,12 @@ import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@
 import { Seg } from '@/shared/ui/Seg';
 import { Button } from '@/shared/ui/Button';
 import { SectionHead } from '@/shared/ui/SectionHead';
-import { Skeleton } from '@/shared/ui/Skeleton';
 import { Lookup, KeyValue } from '@/shared/ui/Lookup';
-import { useRangeCheck, type RangeTf, type Trade } from '@/entities/trade';
+import { useRangeCheck, RANGE_TF_DEFAULT, type RangeTf, type Trade } from '@/entities/trade';
 import { formatPriceGrouped } from '@/shared/lib/utils/format';
 import { formatRangePos } from '@/shared/lib/utils/range';
 import { useLocaleControl } from '@/shared/i18n';
-import { RangeCheckChart } from './RangeCheckChart';
+import { RangeCheckChart, RangeCheckChartSkeleton } from './RangeCheckChart';
 
 const TF_OPTIONS = [
   { value: '15m' as const, label: '15M' },
@@ -37,7 +36,9 @@ export function RangeCheckModal({ trade, onClose }: { trade: Trade; onClose: () 
   const t = useTranslations('rangeCheck');
   const tc = useTranslations('common');
   const { locale } = useLocaleControl();
-  const [tf, setTf] = useState<RangeTf>('4h');
+  // Тот же ТФ, которым греется кэш по наведению на кнопку (usePrefetchRangeCheck),
+  // иначе окно спросит запрос, которого в кэше нет.
+  const [tf, setTf] = useState<RangeTf>(RANGE_TF_DEFAULT);
   const { data, isLoading, isError } = useRangeCheck(trade.id, tf);
 
   /**
@@ -67,7 +68,7 @@ export function RangeCheckModal({ trade, onClose }: { trade: Trade; onClose: () 
           </SectionHead>
 
           {isLoading ? (
-            <Skeleton height={120} />
+            <RangeCheckChartSkeleton />
           ) : isError ? (
             <p className="neg">{t('candlesLoadFailed')}</p>
           ) : data && data.candles.length > 0 ? (

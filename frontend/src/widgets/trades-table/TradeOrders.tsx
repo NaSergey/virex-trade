@@ -1,8 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useTradeOrders, type Trade, type TradeOrder } from '@/entities/trade';
+import { useTradeOrders, usePrefetchRangeCheck, type Trade, type TradeOrder } from '@/entities/trade';
 import { Button } from '@/shared/ui/Button';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { SkeletonLines } from '@/shared/ui/Skeleton';
@@ -11,7 +10,6 @@ import { Money } from '@/shared/ui/Money';
 import { formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
 import { formatRangePos } from '@/shared/lib/utils/range';
 import { useLocaleControl } from '@/shared/i18n';
-import { RangeCheckModal } from '@/widgets/range-check-modal';
 
 /** Время ордера — с секундами: внутри одной позиции ордера идут плотно. */
 function fmtOrderTime(iso: string, locale: string): string {
@@ -72,15 +70,16 @@ function OrderRow({
  * был рынок на входе.
  *
  * Оба блока отвечают на один вопрос — «что это была за сделка», — поэтому стоят
- * рядом, а не в двух разных местах интерфейса. Проверка диапазона живёт здесь
- * же, а не колонкой таблицы: это инструмент разбора одной сделки, а раскрытая
- * строка и есть её разбор.
+ * рядом, а не в двух разных местах интерфейса. Кнопка графика стоит здесь же —
+ * у самих чисел «Диапазон 1H/4H», которые он объясняет; второй вход в то же
+ * окно — цены входа и выхода в строке журнала, для тех, кто запись не раскрывал.
+ * Окно на оба входа одно и живёт в TradesTable.
  */
-export function TradeOrders({ trade }: { trade: Trade }) {
+export function TradeOrders({ trade, onRangeCheck }: { trade: Trade; onRangeCheck: () => void }) {
   const t = useTranslations('tradesTable');
   const { locale } = useLocaleControl();
   const { data, isLoading, isError } = useTradeOrders(trade.id);
-  const [rangeCheck, setRangeCheck] = useState(false);
+  const prefetchRange = usePrefetchRangeCheck();
   const orders = data?.orders ?? [];
   const ctx = trade.context;
 
@@ -139,8 +138,15 @@ export function TradeOrders({ trade }: { trade: Trade }) {
               className="cue"
               onClick={(e) => {
                 e.stopPropagation();
-                setRangeCheck(true);
+                onRangeCheck();
               }}
+              /* Свечи заказываются, пока курсор ещё только идёт к кнопке: за них
+                 бэкенд ходит на биржу, и без этого окно открывается заглушкой.
+                 Три события, а не одно наведение: клавиатура доходит до кнопки
+                 фокусом, палец — касанием. */
+              onPointerEnter={() => prefetchRange(trade.id)}
+              onFocus={() => prefetchRange(trade.id)}
+              onTouchStart={() => prefetchRange(trade.id)}
               title={t('showOnChartTitle')}
             >
               {t('rangeButton')}
@@ -179,8 +185,6 @@ export function TradeOrders({ trade }: { trade: Trade }) {
           )}
         </div>
       </div>
-
-      {rangeCheck && <RangeCheckModal trade={trade} onClose={() => setRangeCheck(false)} />}
     </div>
   );
 }
