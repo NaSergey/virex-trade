@@ -88,8 +88,16 @@ export class CloseTradeDto {
   @IsPositive()
   exitPrice: number;
 
-  @IsIn(['stop', 'take', 'manual', 'finish'])
+  @IsIn(['stop', 'take', 'manual', 'finish', 'limit'])
   reason: ExitReason;
+
+  @IsOptional()
+  @IsPositive()
+  qty?: number;
+
+  @IsOptional()
+  @IsString()
+  closeOrderId?: string;
 }
 
 export class SetBacktestTagsDto {

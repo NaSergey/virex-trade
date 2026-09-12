@@ -21,7 +21,7 @@ export const SCALED_MIN = 100;
 export const SCALED_MAX = 1000;
 
 export type Direction = 'long' | 'short';
-export type ExitReason = 'stop' | 'take' | 'manual' | 'finish';
+export type ExitReason = 'stop' | 'take' | 'manual' | 'finish' | 'limit';
 
 export function positionSize(balance: number, riskPct: number, entry: number, stop: number) {
   const riskUsdt = (balance * riskPct) / 100;

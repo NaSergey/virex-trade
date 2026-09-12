@@ -49,12 +49,17 @@ export interface CloseTradeInput {
   exitTime: Date;
   exitPrice: number;
   reason: ExitReason;
+  qty?: number;
+  closeOrderId?: string;
 }
 
 const timeInvalid = () =>
   new BadRequestException({ message: 'Время сделки вне сессии или раньше входа', code: 'BACKTEST_TIME_INVALID' });
 
 const tradeClosed = () => new ConflictException({ message: 'Сделка уже закрыта', code: 'BACKTEST_TRADE_CLOSED' });
+
+/** Допуск на накопленную погрешность float-сложений closedQty. */
+const QTY_EPS = 1e-8;
 
 /** Что подтягивать к сделке, чтобы отдать её с тегами. */
 export const TAGS = { tags: { include: { tag: true } } } as const;
@@ -300,7 +305,7 @@ export class BacktestService {
   async closeTrade(userId: string, tradeId: string, input: CloseTradeInput) {
     const trade = await this.ownedTrade(userId, tradeId);
     if (trade.exitTime) {
-      // Повтор того же закрытия (ответ потерялся, браузер отправил снова) — не ошибка.
+      // Уже закрыта целиком — повтор того же финального запроса не ошибка.
       if (trade.exitTime.getTime() === input.exitTime.getTime() && trade.exitPrice === input.exitPrice) {
         const same = await this.prisma.backtestTrade.findUnique({ where: { id: tradeId }, include: TAGS });
         return { trade: tradeView(same!), balance: trade.session.balance };
@@ -309,47 +314,75 @@ export class BacktestService {
     }
     if (input.exitTime.getTime() <= trade.entryTime.getTime()) throw timeInvalid();
 
-    // Какая цена и когда исполнилась — решил браузер; сколько это в деньгах —
-    // сервер, одной формулой для всей статистики.
-    const { fee, pnl, r } = tradeResult({
+    const remaining = trade.qty - trade.closedQty;
+    const qty = input.qty ?? remaining;
+    if (qty > remaining + QTY_EPS) {
+      throw new BadRequestException({ message: 'Объём закрытия больше остатка', code: 'BACKTEST_QTY_EXCEEDS_REMAINING' });
+    }
+
+    const { fee, pnl } = tradeResult({
       direction: trade.direction as Direction,
       entryPrice: trade.entryPrice,
       exitPrice: input.exitPrice,
-      qty: trade.qty,
+      qty,
       riskUsdt: trade.riskUsdt,
     });
 
     return this.prisma.$transaction(async (tx) => {
       await this.bumpCursor(tx, trade.sessionId, input.exitTime);
-      // Условный апдейт — щит от гонки: параллельный дубликат этого же запроса
-      // (оба увидели exitTime: null до входа в свою транзакцию) не должен
-      // начислить PnL дважды. bumpCursor выше уже держит замок строки сессии,
-      // так что вторая транзакция досюда доходит только после коммита первой.
-      const result = await tx.backtestTrade.updateMany({
-        where: { id: tradeId, exitTime: null },
-        data: { exitTime: input.exitTime, exitPrice: input.exitPrice, exitReason: input.reason, fee, pnl, r },
+      // CAS по closedQty — тот же замысел, что раньше был у `exitTime: null`:
+      // параллельный дубликат этого же запроса не должен начислить PnL дважды.
+      const cas = await tx.backtestTrade.updateMany({
+        where: { id: tradeId, closedQty: trade.closedQty },
+        data: { closedQty: { increment: qty } },
       });
-      if (result.count === 0) {
-        // Кто-то уже закрыл сделку в гонке — перечитать и разобраться: тот же
-        // это запрос (повтор) или другой (отказ).
+      if (cas.count === 0) {
+        // Гонка или потерянный-и-повторённый ответ — разбираемся по последнему exit.
         const raced = await tx.backtestTrade.findUnique({ where: { id: tradeId }, include: TAGS });
         if (!raced) throw tradeClosed();
-        const same = raced.exitTime?.getTime() === input.exitTime.getTime() && raced.exitPrice === input.exitPrice;
+        const exits = await tx.backtestTradeExit.findMany({ where: { tradeId }, orderBy: { createdAt: 'desc' }, take: 1 });
+        const last = exits[0];
+        const same =
+          last != null &&
+          last.qty === qty &&
+          last.price === input.exitPrice &&
+          last.time.getTime() === input.exitTime.getTime() &&
+          last.reason === input.reason;
         if (!same) throw tradeClosed();
-        // Тот же повтор — баланс не трогаем. Берём его свежим, а не из
-        // значения, прочитанного до входа в транзакцию: оно может быть
-        // устаревшим (сессия могла обновиться под тем же замком).
-        const fresh = await tx.backtestSession.findUnique({
-          where: { id: trade.sessionId },
-          select: { balance: true },
-        });
+        const fresh = await tx.backtestSession.findUnique({ where: { id: trade.sessionId }, select: { balance: true } });
         return { trade: tradeView(raced), balance: fresh!.balance };
       }
-      // Сделка реально закрыта нами.
+
+      await tx.backtestTradeExit.create({
+        data: { tradeId, qty, price: input.exitPrice, time: input.exitTime, reason: input.reason, fee, pnl },
+      });
+      if (input.closeOrderId) {
+        await tx.backtestCloseOrder.deleteMany({ where: { id: input.closeOrderId, tradeId } });
+      }
       const session = await tx.backtestSession.update({
         where: { id: trade.sessionId },
         data: { balance: { increment: pnl } },
       });
+
+      const newClosedQty = trade.closedQty + qty;
+      if (newClosedQty >= trade.qty - QTY_EPS) {
+        const exits = await tx.backtestTradeExit.findMany({ where: { tradeId } });
+        const totalFee = exits.reduce((s, e) => s + e.fee, 0);
+        const totalPnl = exits.reduce((s, e) => s + e.pnl, 0);
+        await tx.backtestTrade.update({
+          where: { id: tradeId },
+          data: {
+            exitTime: input.exitTime,
+            exitPrice: input.exitPrice,
+            exitReason: input.reason,
+            fee: totalFee,
+            pnl: totalPnl,
+            r: totalPnl / trade.riskUsdt,
+          },
+        });
+        await tx.backtestCloseOrder.deleteMany({ where: { tradeId } });
+      }
+
       const updated = await tx.backtestTrade.findUnique({ where: { id: tradeId }, include: TAGS });
       return { trade: tradeView(updated!), balance: session.balance };
     });
