@@ -283,6 +283,10 @@ model BacktestSession {
 
 /// Сделка бектеста. Открытая — это сделка с пустым exitTime; отдельной
 /// «позиции» нет. Цены настоящие, без масштаба показа.
+///
+/// closedQty растёт с каждым частичным закрытием (BacktestTradeExit); когда
+/// доходит до qty, сделка закрыта и exitTime/exitPrice/exitReason/fee/pnl/r
+/// становятся агрегатом по всем строкам BacktestTradeExit, а не одним событием.
 model BacktestTrade {
   id         String          @id @default(uuid())
   sessionId  String
@@ -295,17 +299,59 @@ model BacktestTrade {
   riskPct    Float
   riskUsdt   Float
   qty        Float
+  /// Плечо, с которым сделка открыта; 1–100. Не меняется добором или правкой
+  /// стопа/тейка — как на бирже, плечо позиции нельзя перевыставить, пока она
+  /// открыта. @default(1) — только чтобы существующие строки могли мигрировать
+  /// без ошибки NOT NULL; новые сделки всегда получают явное значение из DTO.
+  leverage   Float           @default(1)
+  /// Сколько уже закрыто частями (BacktestTradeExit.qty). qty - closedQty = остаток.
+  closedQty  Float           @default(0)
   exitTime   DateTime?
   exitPrice  Float?
-  exitReason String? // 'stop' | 'take' | 'manual' | 'finish'
+  exitReason String? // 'stop' | 'take' | 'manual' | 'finish' | 'limit'
   fee        Float?
   pnl        Float?
   r          Float?
 
-  tags BacktestTradeTag[]
+  tags        BacktestTradeTag[]
+  exits       BacktestTradeExit[]
+  closeOrders BacktestCloseOrder[]
 
   @@index([sessionId])
   @@map("backtest_trades")
+}
+
+/// Одно частичное или финальное закрытие открытой сделки.
+model BacktestTradeExit {
+  id        String        @id @default(uuid())
+  tradeId   String
+  trade     BacktestTrade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  qty       Float
+  price     Float
+  time      DateTime
+  reason    String // 'stop' | 'take' | 'manual' | 'finish' | 'limit'
+  fee       Float
+  pnl       Float
+  /// Порядок вставки — по нему находим «последнее» закрытие при разборе
+  /// повтора запроса (time — симулированное время в бектесте, не для этого).
+  createdAt DateTime      @default(now())
+
+  @@index([tradeId])
+  @@map("backtest_trade_exits")
+}
+
+/// Висящий лимитный ордер на (частичное) закрытие. Живёт до срабатывания цены
+/// в реплее или ручной отмены; на одну сделку может висеть несколько сразу.
+model BacktestCloseOrder {
+  id        String        @id @default(uuid())
+  tradeId   String
+  trade     BacktestTrade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  price     Float
+  qty       Float
+  createdAt DateTime      @default(now())
+
+  @@index([tradeId])
+  @@map("backtest_close_orders")
 }
 
 /// Теги на сделках бектеста. Устроено как TradeTag, но отдельной таблицей:
