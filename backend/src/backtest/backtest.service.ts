@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MarketDataService } from '../market-data/market-data.service';
 import {
   MINUTE_MS,
+  averageIn,
   maxDrawdownPct,
   pickPriceScale,
   pickStart,
@@ -37,6 +38,11 @@ export interface ModifyTradeInput {
   stopLoss?: number;
   /** null — убрать тейк. */
   takeProfit?: number | null;
+}
+
+export interface AddToTradeInput {
+  entryPrice: number;
+  riskPct: number;
 }
 
 export interface CloseTradeInput {
@@ -242,6 +248,49 @@ export class BacktestService {
       const bumped = await this.bumpCursor(tx, trade.sessionId, trade.session.cursorTime);
       if (bumped === 0) throw sessionFinished();
       const result = await tx.backtestTrade.updateMany({ where: { id: tradeId, exitTime: null }, data });
+      if (result.count === 0) throw tradeClosed();
+      const updated = await tx.backtestTrade.findUnique({ where: { id: tradeId }, include: TAGS });
+      return { trade: tradeView(updated!) };
+    });
+  }
+
+  async addToTrade(userId: string, tradeId: string, input: AddToTradeInput) {
+    const trade = await this.ownedTrade(userId, tradeId);
+    if (trade.exitTime) throw tradeClosed();
+    if (trade.session.status !== 'active') throw sessionFinished();
+
+    return this.prisma.$transaction(async (tx) => {
+      const bumped = await this.bumpCursor(tx, trade.sessionId, trade.session.cursorTime);
+      if (bumped === 0) throw sessionFinished();
+      const fresh = await tx.backtestSession.findUnique({ where: { id: trade.sessionId }, select: { balance: true } });
+
+      const { riskUsdt: addRiskUsdt, qty: addQty } = positionSize(
+        fresh!.balance,
+        input.riskPct,
+        input.entryPrice,
+        trade.stopLoss,
+      );
+      const newQty = trade.qty + addQty;
+      const newEntry = averageIn(trade.qty, trade.entryPrice, addQty, input.entryPrice);
+      const newRiskUsdt = trade.riskUsdt + addRiskUsdt;
+      const newRiskPct = (newRiskUsdt / fresh!.balance) * 100;
+      const direction = trade.direction as Direction;
+
+      if (!stopOnRightSide(direction, newEntry, trade.stopLoss)) {
+        throw new BadRequestException({ message: 'Добор загоняет средний вход за стоп', code: 'BACKTEST_STOP_SIDE' });
+      }
+      if (trade.takeProfit != null && !takeOnRightSide(direction, newEntry, trade.takeProfit)) {
+        throw new BadRequestException({ message: 'Добор загоняет средний вход за тейк', code: 'BACKTEST_TAKE_SIDE' });
+      }
+      const margin = (newQty * newEntry) / trade.leverage;
+      if (margin > fresh!.balance) {
+        throw new BadRequestException({ message: 'Маржа добора больше депозита', code: 'BACKTEST_MARGIN_EXCEEDS_BALANCE' });
+      }
+
+      const result = await tx.backtestTrade.updateMany({
+        where: { id: tradeId, exitTime: null },
+        data: { qty: newQty, entryPrice: newEntry, riskUsdt: newRiskUsdt, riskPct: newRiskPct },
+      });
       if (result.count === 0) throw tradeClosed();
       const updated = await tx.backtestTrade.findUnique({ where: { id: tradeId }, include: TAGS });
       return { trade: tradeView(updated!) };

@@ -543,6 +543,68 @@ describe('BacktestService — сделки', () => {
       ],
     });
   });
+
+  describe('добор позиции', () => {
+    it('усредняет вход и суммирует риск', async () => {
+      const { service, prisma } = makeService();
+      // TRADE: qty=50 @100, riskUsdt=100, leverage=10. Добор: riskPct=1 на balance=10000 → riskUsdt=100,
+      // dist=|110-98|=12, addQty=100/12=25/3≈8.333. newQty=175/3≈58.333,
+      // newEntry=(50*100+25/3*110)/(175/3)=17750/175≈101.4286.
+      prisma.backtestTrade.findUnique.mockResolvedValueOnce(TRADE).mockResolvedValueOnce({
+        ...TRADE,
+        qty: TRADE.qty + 100 / 12,
+        entryPrice: (50 * 100 + (100 / 12) * 110) / (50 + 100 / 12),
+        riskUsdt: 200,
+        tags: [],
+      });
+      prisma.backtestSession.findUnique.mockResolvedValue({ balance: 10_000 });
+
+      await service.addToTrade('u1', 't1', { entryPrice: 110, riskPct: 1 });
+
+      const call = prisma.backtestTrade.updateMany.mock.calls[0][0];
+      expect(call.where).toEqual({ id: 't1', exitTime: null });
+      expect(call.data.qty).toBeCloseTo(58.333, 3);
+      expect(call.data.entryPrice).toBeCloseTo(101.4286, 3);
+      expect(call.data.riskUsdt).toBeCloseTo(200, 6);
+    });
+
+    it('без открытой сделки — отказ', async () => {
+      const { service, prisma } = makeService();
+      prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, exitTime: new Date(T0 + DAY) });
+
+      const err = await rejection(service.addToTrade('u1', 't1', { entryPrice: 110, riskPct: 1 }));
+
+      expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_TRADE_CLOSED' });
+    });
+
+    it('добор, загоняющий средний вход за стоп — отказ', async () => {
+      const { service, prisma } = makeService();
+      // Шорт: стоп 105 выше входа 100 (правильная сторона). Средневзвешенный вход —
+      // всегда между старой ценой входа (100) и ценой добора: чтобы он мог перейти
+      // за 105, цена самого добора обязана быть НЕ ниже 105 — иначе среднее двух
+      // чисел меньше 105 в принципе не может стать больше 105 ни при каком весе.
+      // Добор по 110 большим риском (вес добора большой) тянет среднее выше стопа.
+      const SHORT_TRADE = { ...TRADE, direction: 'short', entryPrice: 100, stopLoss: 105, riskUsdt: 100, qty: 20 };
+      prisma.backtestTrade.findUnique.mockResolvedValue(SHORT_TRADE);
+      prisma.backtestSession.findUnique.mockResolvedValue({ balance: 10_000 });
+
+      // riskUsdt_add = 10000*50/100 = 5000, dist = |110-105| = 5, addQty = 1000.
+      // newQty = 1020, newEntry = (20*100 + 1000*110)/1020 ≈ 109.8 — выше стопа 105.
+      const err = await rejection(service.addToTrade('u1', 't1', { entryPrice: 110, riskPct: 50 }));
+
+      expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_STOP_SIDE' });
+    });
+
+    it('маржа добора больше депозита — отказ', async () => {
+      const { service, prisma } = makeService();
+      prisma.backtestTrade.findUnique.mockResolvedValue(TRADE);
+      prisma.backtestSession.findUnique.mockResolvedValue({ balance: 10 });
+
+      const err = await rejection(service.addToTrade('u1', 't1', { entryPrice: 110, riskPct: 1 }));
+
+      expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_MARGIN_EXCEEDS_BALANCE' });
+    });
+  });
 });
 
 describe('BacktestService — статистика', () => {

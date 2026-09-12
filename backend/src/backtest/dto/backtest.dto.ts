@@ -71,6 +71,16 @@ export class ModifyTradeDto {
   takeProfit?: number | null;
 }
 
+export class AddToTradeDto {
+  @IsPositive()
+  entryPrice: number;
+
+  @IsNumber()
+  @Min(0.01)
+  @Max(100)
+  riskPct: number;
+}
+
 export class CloseTradeDto {
   @IsISO8601()
   exitTime: string;

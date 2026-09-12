@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { BacktestService } from './backtest.service';
 import {
+  AddToTradeDto,
   AdvanceDto,
   CloseTradeDto,
   CreateSessionDto,
@@ -50,6 +51,11 @@ export class BacktestController {
   @Patch('trades/:id')
   modify(@CurrentUser('userId') userId: string, @Param('id') id: string, @Body() dto: ModifyTradeDto) {
     return this.backtest.modifyTrade(userId, id, dto);
+  }
+
+  @Post('trades/:id/add')
+  add(@CurrentUser('userId') userId: string, @Param('id') id: string, @Body() dto: AddToTradeDto) {
+    return this.backtest.addToTrade(userId, id, dto);
   }
 
   @Post('trades/:id/close')
