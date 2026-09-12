@@ -54,6 +54,57 @@ describe('checkMinute', () => {
   });
 });
 
+describe('checkMinute — лимит-ордера на закрытие', () => {
+  const LONG_WIDE: Position = { direction: 'long', stopLoss: 90, takeProfit: 120 };
+
+  it('касание лимит-ордера — своя цена и объём, стоп/тейк далеко', () => {
+    const exit = checkMinute(LONG_WIDE, m(100, 106, 94, 100), [{ id: 'o1', price: 95, qty: 5 }]);
+    expect(exit).toEqual({ reason: 'limit', price: 95, time: T + MINUTE, qty: 5, closeOrderId: 'o1' });
+  });
+
+  it('стоп важнее лимит-ордера в той же минутке', () => {
+    const exit = checkMinute(LONG_WIDE, m(100, 100, 85, 100), [{ id: 'o1', price: 95, qty: 5 }]);
+    expect(exit?.reason).toBe('stop');
+  });
+
+  it('тейк важнее лимит-ордера в той же минутке', () => {
+    const exit = checkMinute(LONG_WIDE, m(100, 125, 100, 100), [{ id: 'o1', price: 115, qty: 5 }]);
+    expect(exit?.reason).toBe('take');
+  });
+
+  it('несколько лимитов задеты — срабатывает ближайший к открытию свечи', () => {
+    const exit = checkMinute(LONG_WIDE, m(100, 106, 94, 100), [
+      { id: 'far', price: 95, qty: 1 },
+      { id: 'near', price: 102, qty: 2 },
+    ]);
+    expect(exit?.closeOrderId).toBe('near');
+  });
+
+  it('гэп мимо лимит-ордера (диапазон свечи его не задел) — не исполняется', () => {
+    // Весь диапазон [98,110] уровня 95 не касается.
+    const exit = checkMinute(LONG_WIDE, m(100, 110, 98, 105), [{ id: 'o1', price: 95, qty: 5 }]);
+    expect(exit).toBeNull();
+  });
+
+  it('без лимит-ордеров ведёт себя как раньше', () => {
+    expect(checkMinute(LONG_WIDE, m(100, 105, 95, 100))).toBeNull();
+  });
+});
+
+describe('findExit — лимит-ордера передаются в каждую минутку', () => {
+  it('находит первую минутку, где сработал лимит', () => {
+    const minutes = [m(100, 101, 99, 100, T), m(100, 106, 94, 100, T + MINUTE)];
+    const exit = findExit(
+      { direction: 'long', stopLoss: 90, takeProfit: 120 },
+      minutes,
+      T,
+      T + 2 * MINUTE,
+      [{ id: 'o1', price: 95, qty: 5 }],
+    );
+    expect(exit).toEqual({ reason: 'limit', price: 95, time: T + 2 * MINUTE, qty: 5, closeOrderId: 'o1' });
+  });
+});
+
 describe('findExit', () => {
   const series = [m(100, 101, 99, 100, T), m(100, 101, 97, 98, T + MINUTE), m(98, 110, 90, 100, T + 2 * MINUTE)];
 

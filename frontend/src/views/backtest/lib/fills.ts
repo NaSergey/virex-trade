@@ -18,15 +18,30 @@ export interface Position {
   takeProfit: number | null;
 }
 
+export interface CloseOrder {
+  id: string;
+  price: number;
+  qty: number;
+}
+
 export interface Exit {
-  reason: 'stop' | 'take';
+  reason: 'stop' | 'take' | 'limit';
   price: number;
   /** Закрытие минутки, в которой сработало. */
   time: number;
+  /** Заполнено только у 'limit' — частичный выход на свой объём, не весь остаток. */
+  qty?: number;
+  closeOrderId?: string;
+}
+
+/** Ближайший к цене открытия свечи среди кандидатов — тот, кого price достиг бы первым. */
+function closestToOpen(candidates: CloseOrder[], open: number): CloseOrder | null {
+  if (candidates.length === 0) return null;
+  return candidates.reduce((best, o) => (Math.abs(o.price - open) < Math.abs(best.price - open) ? o : best));
 }
 
 /** Правила в порядке спеки; первое совпавшее решает. */
-export function checkMinute(p: Position, m: Candle): Exit | null {
+export function checkMinute(p: Position, m: Candle, closeOrders: CloseOrder[] = []): Exit | null {
   const long = p.direction === 'long';
   const s = p.stopLoss;
   const tp = p.takeProfit;
@@ -41,15 +56,21 @@ export function checkMinute(p: Position, m: Candle): Exit | null {
   if (long ? m.l <= s : m.h >= s) return { reason: 'stop', price: s, time };
   // 4. Касание тейка.
   if (tp != null && (long ? m.h >= tp : m.l <= tp)) return { reason: 'take', price: tp, time };
+  // 6. Касание лимит-ордера на закрытие — у него, в отличие от стопа/тейка,
+  // нет фиксированной стороны от входа, поэтому гэпа для него нет (см. спеку):
+  // диапазон свечи не задел уровень — ордер просто не исполнился в эту минутку.
+  const touched = closeOrders.filter((o) => o.price <= m.h && o.price >= m.l);
+  const fired = closestToOpen(touched, m.o);
+  if (fired) return { reason: 'limit', price: fired.price, time, qty: fired.qty, closeOrderId: fired.id };
   return null;
 }
 
 /** Первая сработавшая минутка среди открытых не раньше from и закрытых не позже to. */
-export function findExit(p: Position, minutes: Candle[], from: number, to: number): Exit | null {
+export function findExit(p: Position, minutes: Candle[], from: number, to: number, closeOrders: CloseOrder[] = []): Exit | null {
   for (const m of minutes) {
     if (m.t < from) continue;
     if (m.t + MINUTE > to) break;
-    const exit = checkMinute(p, m);
+    const exit = checkMinute(p, m, closeOrders);
     if (exit) return exit;
   }
   return null;

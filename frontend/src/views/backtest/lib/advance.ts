@@ -1,5 +1,5 @@
 import type { Candle } from './candles';
-import { findExit, type Direction, type Exit } from './fills';
+import { findExit, type CloseOrder, type Direction, type Exit } from './fills';
 
 /** Открытая позиция в виде, достаточном для проверки срабатывания. entryTime — в мс. */
 export interface OpenPosition {
@@ -30,12 +30,14 @@ export function advanceTo(p: {
   minutes: Candle[];
   loadedUntil: number | null;
   position: OpenPosition | null;
+  /** Необязательное — без висящих лимит-ордеров ведёт себя как раньше. */
+  closeOrders?: CloseOrder[];
 }): AdvanceResult {
   const reach = Math.min(p.target, p.loadedUntil ?? p.from);
   const complete = reach >= p.target;
   let exit: Exit | null = null;
   if (reach > p.from && p.position) {
-    exit = findExit(p.position, p.minutes, Math.max(p.position.entryTime, p.from), reach);
+    exit = findExit(p.position, p.minutes, Math.max(p.position.entryTime, p.from), reach, p.closeOrders ?? []);
   }
   return { reach, complete, exit };
 }
