@@ -155,14 +155,15 @@ export function OrderPanel({
         <Field
           label={
             <span className="fld-head">
-              <span>{t('risk')}</span>
-              <span className="fld-val">
-                {(risk || 0).toFixed(1)}%{riskUsd != null && ` · ${formatPriceGrouped(riskUsd)} USDT`}
+              <span className="fld-left">
+                <span className="fld-val">{(risk || 0).toFixed(1)}%</span>
+                <span>{t('risk')}</span>
               </span>
+              {riskUsd != null && <span className="fld-val">{formatPriceGrouped(riskUsd)} USDT</span>}
             </span>
           }
         >
-          {(id) => (
+          {() => (
             <>
               <Slider
                 value={clamp(risk || 0, 0, 10)}
@@ -172,7 +173,6 @@ export function OrderPanel({
                 onChange={(v) => onDraft({ ...draft, risk: toInput(v) })}
                 aria-label={t('risk')}
               />
-              <Input id={id} full inputMode="decimal" value={draft.risk} onChange={set('risk')} />
             </>
           )}
         </Field>

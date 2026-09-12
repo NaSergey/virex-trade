@@ -537,6 +537,7 @@
      отдельной строкой ниже: это одна и та же величина двумя единицами, не
      два разных факта. */
   .fld-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s2); }
+  .fld-left { display: flex; align-items: baseline; gap: var(--s1); }
   .fld-val { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--ink); white-space: nowrap; }
   /* Экран активной сессии — единственное место продукта без наборной полосы
      (.wrap): терминал занимает всю ширину окна, а не читательскую колонку в
