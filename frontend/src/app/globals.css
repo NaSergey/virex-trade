@@ -464,6 +464,15 @@
      в настройках это ключи и уведомления, и назначить одному из них главную
      колонку было бы неправдой. */
   .asym.even { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Терминал бектеста: правая колонка — тикет ордера фиксированной ширины,
+     а не доля листа, — на широком мониторе резиновые 3/11 растянули бы поля
+     ввода и кнопки до нечитаемых пропорций. Ширину диктует сам тикет, график
+     забирает всё, что осталось. */
+  .asym.terminal { grid-template-columns: minmax(0, 1fr) 360px; }
+  /* Тикет ниже — сам законченная панель со своей рамкой; вторая линия рядом
+     с ней читалась бы как задвоенная рамка, поэтому дорожку здесь не делит
+     линейка .marg, только её отступ. */
+  .asym.terminal > .marg { border-left: 0; }
   /* Ширину строки внутри сетки держит сама колонка. Оставленный здесь
      max-width лечил бы болезнь, которой нет, и оставлял дыру между концом
      текста и линейкой между дорожками. */
@@ -479,6 +488,50 @@
   .replay-chart-wrap { position: relative; }
   .replay-live { position: absolute; top: var(--s2); right: var(--s2); background: var(--ground); }
   .order-panel { display: grid; gap: var(--s3); align-content: start; }
+  .order-actions { display: flex; gap: var(--s2); }
+  .order-actions .btn { flex: 1; }
+  /* Ползунок значения (Slider из shared/ui) — единственное текущее место
+     использования; токены свои, кросс-браузерная стилизация range только
+     через псевдоэлементы track/thumb. */
+  .slider {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 100%;
+    height: 2px;
+    margin: var(--s2) 0;
+    background: linear-gradient(to right, var(--ink) 0 var(--slider-pct), var(--hair) var(--slider-pct) 100%);
+    cursor: pointer;
+  }
+  .slider:disabled { opacity: 0.4; cursor: default; }
+  .slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 10px;
+    height: 10px;
+    background: var(--ink);
+    border: 0;
+  }
+  .slider::-moz-range-thumb {
+    width: 10px;
+    height: 10px;
+    background: var(--ink);
+    border: 0;
+    border-radius: 0;
+  }
+  .slider::-moz-range-track { background: transparent; }
+  /* Карточка предпросмотра размера — те же строки .kv (через KeyValue), что и
+     остальная панель, просто обведены рамкой и подняты фоном: это готовый
+     ответ «сколько купить», а не ещё одна строка среди прочих. */
+  .size-preview {
+    border: 1px solid var(--hair);
+    background: var(--band);
+    padding: 0 var(--s2);
+  }
+  .size-preview .kv:last-child { border-bottom: 0; }
+  /* Экран активной сессии — единственное место продукта без наборной полосы
+     (.wrap): терминал занимает всю ширину окна, а не читательскую колонку в
+     1360px. Поле у края минимальное — только чтобы кнопки и цифры не липли к
+     самой рамке браузера, не «воздух» страницы-гроссбуха. */
+  .bt-live { padding: 0 var(--s2) var(--s6); }
 
   /* ═══════════════ СВОД ПЕРИОДА ═══════════════ */
   .strip {
@@ -1198,6 +1251,21 @@
     background: var(--loss);
     color: var(--ground);
   }
+  /* Long/Short тикета бектеста — единственное место продукта, где кнопка сама
+     залита деньговым цветом, а не только рамкой (как .btn.risk): это главное
+     действие терминала, а не предупреждение. */
+  .btn.long {
+    background: var(--profit);
+    border-color: var(--profit);
+    color: var(--ground);
+  }
+  .btn.long:hover { opacity: 0.85; }
+  .btn.short {
+    background: var(--loss);
+    border-color: var(--loss);
+    color: var(--ground);
+  }
+  .btn.short:hover { opacity: 0.85; }
   .btn:disabled {
     opacity: 0.3;
     cursor: default;
