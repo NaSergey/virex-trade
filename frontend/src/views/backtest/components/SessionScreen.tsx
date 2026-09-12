@@ -21,7 +21,7 @@ import {
 } from '../api/hooks';
 import type { BacktestTrade, Direction, ExitReason, SessionDetail } from '../api/types';
 import { TIMEFRAMES, dayNumber, scaleCandle } from '../lib/candles';
-import { checkLevels, fromScreen, levelImpact, previewSize, toInput, toScreen } from '../lib/money';
+import { checkLevels, fromScreen, impliedDirection, levelImpact, previewSize, toInput, toScreen } from '../lib/money';
 import { SPEEDS, useReplay } from '../model/useReplay';
 import { OrderPanel, type Draft } from './OrderPanel';
 import { ReplayChart, type Level, type LevelKind } from './ReplayChart';
@@ -116,26 +116,30 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
     [replay.glide, scale],
   );
 
-  // Что будет, если сработает стоп: движение в % и результат в USDT — тем же
-  // размером, что уже выбран (открытой сделки — её qty, ещё не открытой —
-  // предпросмотр по риску и дистанции до стопа). Направление для ещё не
-  // открытой сделки не выбрано — implied по стороне стопа от цены, тем же
-  // приёмом, что и диапазон слайдера (`levelSliderRange`).
-  const stopImpact =
-    stopN > 0 && replay.price != null && screenPrice != null
-      ? (() => {
-          const qty = openTrade ? openTrade.qty : previewSize(session.balance, Number(draft.risk), replay.price!, fromScreen(stopN, scale))?.qty;
-          if (qty == null) return null;
-          const impactDirection: Direction = openTrade ? openTrade.direction : stopN < screenPrice ? 'long' : 'short';
-          const refReal = openTrade ? openTrade.entryPrice : replay.price;
-          return levelImpact(impactDirection, refReal, fromScreen(stopN, scale), qty);
-        })()
+  // Сторона одна на оба уровня — та же, что решает диапазон слайдеров в
+  // OrderPanel (`impliedDirection`): иначе стоп и тейк могли бы разойтись по
+  // одну сторону цены при показе результата, хотя слайдер такого уже не даст
+  // набрать.
+  const impactDirection = screenPrice != null ? impliedDirection(openTrade?.direction ?? null, stopN, takeN, screenPrice) : null;
+  // Размер — тот же, что уже выбран: у открытой сделки её qty, у ещё не
+  // открытой — предпросмотр по риску и дистанции до стопа (тот же qty
+  // используют оба уровня: позицию размерил стоп, а не тейк).
+  const impactQty = openTrade
+    ? openTrade.qty
+    : stopN > 0 && replay.price != null
+      ? previewSize(session.balance, Number(draft.risk), replay.price, fromScreen(stopN, scale))?.qty ?? null
+      : null;
+  const impactRef = openTrade ? openTrade.entryPrice : replay.price;
+  /** Результат в USDT, если цена дойдёт до levelReal — та же формула, что у «Сейчас» в панели. */
+  const levelUsdt = (levelReal: number) =>
+    impactDirection != null && impactQty != null && impactRef != null
+      ? levelImpact(impactDirection, impactRef, levelReal, impactQty).usdt
       : null;
 
   const levels: Level[] = [];
   if (openTrade) levels.push({ kind: 'entry', price: toScreen(openTrade.entryPrice, scale), draggable: false });
-  if (stopN > 0) levels.push({ kind: 'stop', price: stopN, draggable: true, impact: stopImpact });
-  if (takeN != null && takeN > 0) levels.push({ kind: 'take', price: takeN, draggable: true });
+  if (stopN > 0) levels.push({ kind: 'stop', price: stopN, draggable: true, impact: levelUsdt(fromScreen(stopN, scale)) });
+  if (takeN != null && takeN > 0) levels.push({ kind: 'take', price: takeN, draggable: true, impact: levelUsdt(fromScreen(takeN, scale)) });
 
   // Скрытая дата: день недели и время суток видны (биржевые сессии, выходные),
   // год и число — нет; вместо даты — номер дня от старта.

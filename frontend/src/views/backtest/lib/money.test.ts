@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { checkLevels, formatR, fromScreen, levelImpact, levelSliderRange, previewSize, riskAmount, toInput, toScreen, unrealizedPnl } from './money';
+import {
+  checkLevels,
+  formatR,
+  fromScreen,
+  impliedDirection,
+  levelImpact,
+  levelSliderRange,
+  previewSize,
+  riskAmount,
+  toInput,
+  toScreen,
+  unrealizedPnl,
+} from './money';
 
 describe('previewSize', () => {
   it('риск, размер, номинал и плечо', () => {
@@ -70,6 +82,30 @@ describe('riskAmount', () => {
     expect(riskAmount(0, 1)).toBeNull();
     expect(riskAmount(10_000, 0)).toBeNull();
     expect(riskAmount(10_000, NaN)).toBeNull();
+  });
+});
+
+describe('impliedDirection', () => {
+  it('открытая сделка решает сама, что бы ни было набрано в полях', () => {
+    expect(impliedDirection('short', 105, 90, 100)).toBe('short');
+  });
+
+  it('стоп ниже цены — лонг, стоп выше — шорт', () => {
+    expect(impliedDirection(null, 98, null, 100)).toBe('long');
+    expect(impliedDirection(null, 102, null, 100)).toBe('short');
+  });
+
+  it('стопа ещё нет — решает тейк', () => {
+    expect(impliedDirection(null, NaN, 105, 100)).toBe('long');
+    expect(impliedDirection(null, NaN, 95, 100)).toBe('short');
+  });
+
+  it('стоп в приоритете перед тейком, даже если тейк на другую сторону указывает', () => {
+    expect(impliedDirection(null, 98, 95, 100)).toBe('long');
+  });
+
+  it('ничего не набрано — направления нет', () => {
+    expect(impliedDirection(null, NaN, null, 100)).toBeNull();
   });
 });
 

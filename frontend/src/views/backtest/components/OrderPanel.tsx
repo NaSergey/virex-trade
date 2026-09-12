@@ -10,7 +10,7 @@ import { Slider } from '@/shared/ui/Slider';
 import { Tooltip } from '@/shared/ui/Tooltip';
 import { fmtPctSigned, formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
 import type { BacktestTrade, Direction } from '../api/types';
-import { formatR, fromScreen, levelSliderRange, previewSize, riskAmount, toScreen, unrealizedPnl } from '../lib/money';
+import { formatR, fromScreen, impliedDirection, levelSliderRange, previewSize, riskAmount, toScreen, unrealizedPnl } from '../lib/money';
 
 /** Поля панели — строками, как их набирает человек, и в экранных ценах. */
 export interface Draft {
@@ -70,8 +70,11 @@ export function OrderPanel({
   const stop = Number(draft.stop);
   const take = draft.take.trim() ? Number(draft.take) : null;
   const risk = Number(draft.risk);
-  const direction = openTrade?.direction ?? null;
   const screenPrice = price != null ? toScreen(price, scale) : null;
+  // Сторона стопа/тейка одна на двоих: без неё диапазоны выбирались бы
+  // независимо, и слайдер тейка на глаз никак не был бы связан со стопом,
+  // хотя в одной сделке они обязаны стоять по разные стороны цены.
+  const direction = screenPrice != null ? impliedDirection(openTrade?.direction ?? null, stop, take, screenPrice) : null;
   const stopRange = screenPrice != null ? levelSliderRange('stop', screenPrice, direction) : null;
   const takeRange = screenPrice != null ? levelSliderRange('take', screenPrice, direction) : null;
   // Значение слайдера и подпись в процентах — от одного и того же зажатого

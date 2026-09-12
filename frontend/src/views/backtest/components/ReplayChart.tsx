@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'react';
 import { useNonPassiveWheel } from '@/shared/lib/hooks/useNonPassiveWheel';
-import { fmtPctSigned, formatMoney, formatPriceGrouped } from '@/shared/lib/utils/format';
+import { formatMoney, formatPriceGrouped } from '@/shared/lib/utils/format';
 import { Button } from '@/shared/ui/Button';
 import { anchorTimeAt, frameAtTime, frameBounds, glidePrice, resolveWindow, zoomStep, type ViewState } from '../lib/motion';
 import type { Candle } from '../lib/candles';
@@ -27,8 +27,8 @@ export interface Level {
   kind: LevelKind;
   price: number;
   draggable: boolean;
-  /** Что будет при срабатывании: движение и результат в USDT. Сейчас есть только у стопа. */
-  impact?: { pct: number; usdt: number } | null;
+  /** Результат в USDT, если сработает — только у стопа и тейка, не у входа. */
+  impact?: number | null;
 }
 
 const LEVEL_COLOR: Record<LevelKind, string> = {
@@ -379,8 +379,12 @@ export function ReplayChart({
               strokeDasharray={l.kind === 'entry' ? undefined : `${px(5)} ${px(4)}`}
             />
             <text x={px(4)} y={y(l.price) - px(4)} fill={LEVEL_COLOR[l.kind]} fontSize={px(10)} fontFamily="var(--font-mono)">
-              {levelLabel(l.kind)} {formatPriceGrouped(l.price)}
-              {l.impact && ` · ${fmtPctSigned(l.impact.pct)} · ${formatMoney(l.impact.usdt)} USDT`}
+              {/* Вход подписан ценой — это точка отсчёта. Стоп и тейк подписаны
+                  результатом в USDT, а не ценой: цену и так видно по самой линии
+                  и высоте над свечами, а вот что она значит в деньгах — нет. */}
+              {l.kind === 'entry'
+                ? `${levelLabel(l.kind)} ${formatPriceGrouped(l.price)}`
+                : `${levelLabel(l.kind)}${l.impact != null ? ` ${formatMoney(l.impact)} USDT` : ''}`}
             </text>
             {l.draggable && onDragLevel && (
               <rect
