@@ -8,7 +8,7 @@ import { KeyValue } from '@/shared/ui/Lookup';
 import { Money } from '@/shared/ui/Money';
 import { Slider } from '@/shared/ui/Slider';
 import { Tooltip } from '@/shared/ui/Tooltip';
-import { formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
+import { fmtPctSigned, formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
 import type { BacktestTrade, Direction } from '../api/types';
 import { formatR, fromScreen, levelSliderRange, previewSize, riskAmount, toScreen, unrealizedPnl } from '../lib/money';
 
@@ -74,6 +74,12 @@ export function OrderPanel({
   const screenPrice = price != null ? toScreen(price, scale) : null;
   const stopRange = screenPrice != null ? levelSliderRange('stop', screenPrice, direction) : null;
   const takeRange = screenPrice != null ? levelSliderRange('take', screenPrice, direction) : null;
+  // Значение слайдера и подпись в процентах — от одного и того же зажатого
+  // числа, иначе на краю диапазона слайдер и подпись разошлись бы на глаз.
+  const stopValue = stopRange ? clamp(stop || screenPrice!, stopRange.min, stopRange.max) : null;
+  const takeValue = takeRange ? clamp(take ?? screenPrice!, takeRange.min, takeRange.max) : null;
+  const stopPct = stopValue != null && screenPrice ? ((stopValue - screenPrice) / screenPrice) * 100 : null;
+  const takePct = takeValue != null && screenPrice ? ((takeValue - screenPrice) / screenPrice) * 100 : null;
 
   const preview =
     !openTrade && price != null && stop > 0 ? previewSize(balance, risk, price, fromScreen(stop, scale)) : null;
@@ -128,15 +134,18 @@ export function OrderPanel({
       <Field label={t('stop')}>
         {(id) => (
           <>
-            {stopRange && (
-              <Slider
-                value={clamp(stop || screenPrice!, stopRange.min, stopRange.max)}
-                min={stopRange.min}
-                max={stopRange.max}
-                step={(stopRange.max - stopRange.min) / 200 || 1}
-                onChange={(v) => onDraft({ ...draft, stop: String(v) })}
-                aria-label={t('stop')}
-              />
+            {stopRange && stopValue != null && (
+              <div className="lvl-row">
+                <Slider
+                  value={stopValue}
+                  min={stopRange.min}
+                  max={stopRange.max}
+                  step={(stopRange.max - stopRange.min) / 200 || 1}
+                  onChange={(v) => onDraft({ ...draft, stop: String(v) })}
+                  aria-label={t('stop')}
+                />
+                <span className="lvl-pct">{fmtPctSigned(stopPct!)}</span>
+              </div>
             )}
             <Input id={id} full inputMode="decimal" value={draft.stop} onChange={set('stop')} />
           </>
@@ -145,15 +154,18 @@ export function OrderPanel({
       <Field label={t('take')}>
         {(id) => (
           <>
-            {takeRange && (
-              <Slider
-                value={clamp(take ?? screenPrice!, takeRange.min, takeRange.max)}
-                min={takeRange.min}
-                max={takeRange.max}
-                step={(takeRange.max - takeRange.min) / 200 || 1}
-                onChange={(v) => onDraft({ ...draft, take: String(v) })}
-                aria-label={t('take')}
-              />
+            {takeRange && takeValue != null && (
+              <div className="lvl-row">
+                <Slider
+                  value={takeValue}
+                  min={takeRange.min}
+                  max={takeRange.max}
+                  step={(takeRange.max - takeRange.min) / 200 || 1}
+                  onChange={(v) => onDraft({ ...draft, take: String(v) })}
+                  aria-label={t('take')}
+                />
+                <span className="lvl-pct">{fmtPctSigned(takePct!)}</span>
+              </div>
             )}
             <Input id={id} full inputMode="decimal" value={draft.take} onChange={set('take')} />
           </>

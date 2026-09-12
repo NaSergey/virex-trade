@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkLevels, formatR, fromScreen, levelSliderRange, previewSize, riskAmount, toInput, toScreen, unrealizedPnl } from './money';
+import { checkLevels, formatR, fromScreen, levelImpact, levelSliderRange, previewSize, riskAmount, toInput, toScreen, unrealizedPnl } from './money';
 
 describe('previewSize', () => {
   it('риск, размер, номинал и плечо', () => {
@@ -74,18 +74,38 @@ describe('riskAmount', () => {
 });
 
 describe('levelSliderRange', () => {
-  it('направление ещё не выбрано — симметрично вокруг цены', () => {
-    expect(levelSliderRange('stop', 100, null)).toEqual({ min: 80, max: 120 });
+  it('направление ещё не выбрано — симметрично вокруг цены, стоп уже тейка', () => {
+    expect(levelSliderRange('stop', 100, null)).toEqual({ min: 93, max: 107 });
     expect(levelSliderRange('take', 100, null)).toEqual({ min: 80, max: 120 });
   });
 
-  it('лонг: стоп снизу, тейк сверху', () => {
-    expect(levelSliderRange('stop', 100, 'long')).toEqual({ min: 80, max: 100 });
+  it('лонг: стоп снизу (±7%), тейк сверху (±20%)', () => {
+    expect(levelSliderRange('stop', 100, 'long')).toEqual({ min: 93, max: 100 });
     expect(levelSliderRange('take', 100, 'long')).toEqual({ min: 100, max: 120 });
   });
 
   it('шорт — зеркально', () => {
-    expect(levelSliderRange('stop', 100, 'short')).toEqual({ min: 100, max: 120 });
+    expect(levelSliderRange('stop', 100, 'short')).toEqual({ min: 100, max: 107 });
     expect(levelSliderRange('take', 100, 'short')).toEqual({ min: 80, max: 100 });
+  });
+});
+
+describe('levelImpact', () => {
+  it('лонг, стоп ниже цены — убыток и отрицательный процент', () => {
+    const { pct, usdt } = levelImpact('long', 100, 98, 50);
+    expect(pct).toBeCloseTo(-2, 6);
+    expect(usdt).toBeCloseTo(-105.445, 6);
+  });
+
+  it('шорт, стоп выше цены — тот же убыток, знак процента положительный (цена выросла)', () => {
+    const { pct, usdt } = levelImpact('short', 100, 102, 50);
+    expect(pct).toBeCloseTo(2, 6);
+    expect(usdt).toBeLessThan(0);
+  });
+
+  it('движение в плюс дороги — положительный результат', () => {
+    const { pct, usdt } = levelImpact('long', 100, 105, 50);
+    expect(pct).toBeCloseTo(5, 6);
+    expect(usdt).toBeGreaterThan(0);
   });
 });

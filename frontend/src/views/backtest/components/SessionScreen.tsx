@@ -21,7 +21,7 @@ import {
 } from '../api/hooks';
 import type { BacktestTrade, Direction, ExitReason, SessionDetail } from '../api/types';
 import { TIMEFRAMES, dayNumber, scaleCandle } from '../lib/candles';
-import { checkLevels, fromScreen, toInput, toScreen } from '../lib/money';
+import { checkLevels, fromScreen, levelImpact, previewSize, toInput, toScreen } from '../lib/money';
 import { SPEEDS, useReplay } from '../model/useReplay';
 import { OrderPanel, type Draft } from './OrderPanel';
 import { ReplayChart, type Level, type LevelKind } from './ReplayChart';
@@ -116,9 +116,25 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
     [replay.glide, scale],
   );
 
+  // Что будет, если сработает стоп: движение в % и результат в USDT — тем же
+  // размером, что уже выбран (открытой сделки — её qty, ещё не открытой —
+  // предпросмотр по риску и дистанции до стопа). Направление для ещё не
+  // открытой сделки не выбрано — implied по стороне стопа от цены, тем же
+  // приёмом, что и диапазон слайдера (`levelSliderRange`).
+  const stopImpact =
+    stopN > 0 && replay.price != null && screenPrice != null
+      ? (() => {
+          const qty = openTrade ? openTrade.qty : previewSize(session.balance, Number(draft.risk), replay.price!, fromScreen(stopN, scale))?.qty;
+          if (qty == null) return null;
+          const impactDirection: Direction = openTrade ? openTrade.direction : stopN < screenPrice ? 'long' : 'short';
+          const refReal = openTrade ? openTrade.entryPrice : replay.price;
+          return levelImpact(impactDirection, refReal, fromScreen(stopN, scale), qty);
+        })()
+      : null;
+
   const levels: Level[] = [];
   if (openTrade) levels.push({ kind: 'entry', price: toScreen(openTrade.entryPrice, scale), draggable: false });
-  if (stopN > 0) levels.push({ kind: 'stop', price: stopN, draggable: true });
+  if (stopN > 0) levels.push({ kind: 'stop', price: stopN, draggable: true, impact: stopImpact });
   if (takeN != null && takeN > 0) levels.push({ kind: 'take', price: takeN, draggable: true });
 
   // Скрытая дата: день недели и время суток видны (биржевые сессии, выходные),

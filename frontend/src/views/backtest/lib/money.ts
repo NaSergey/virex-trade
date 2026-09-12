@@ -62,8 +62,16 @@ export function riskAmount(balance: number, riskPct: number): number | null {
   return (balance * riskPct) / 100;
 }
 
+/** Максимальное отклонение стопа от цены — шире не даёт слить депозит одним движением слайдера. */
+const STOP_PCT = 0.07;
+/** Тейк не так рискован ограничивать — размах шире, ±20%. */
+const TAKE_PCT = 0.2;
+
 /**
- * Диапазон слайдера стопа/тейка — по правильную сторону от цены, ±20%.
+ * Диапазон слайдера стопа/тейка — по правильную сторону от цены. Стоп зажат
+ * ±7%: шире слайдер уже не «риск на сделку», а «половина депозита одним
+ * движением». Тейк свободнее, ±20% — далёкий тейк не опасен так, как далёкий
+ * стоп.
  *
  * Пока сделка не открыта, направление ещё не выбрано: пользователь вправе
  * поставить стоп по любую сторону цены — сторону в итоге определяют сами
@@ -76,10 +84,25 @@ export function levelSliderRange(
   price: number,
   direction: Direction | null,
 ): { min: number; max: number } {
-  const lo = price * 0.8;
-  const hi = price * 1.2;
+  const pct = kind === 'stop' ? STOP_PCT : TAKE_PCT;
+  const lo = price * (1 - pct);
+  const hi = price * (1 + pct);
   if (direction == null) return { min: lo, max: hi };
   const long = direction === 'long';
   const belowSide = kind === 'stop' ? long : !long;
   return belowSide ? { min: lo, max: price } : { min: price, max: hi };
+}
+
+/**
+ * Что случится, если цена дойдёт до уровня: движение в процентах от точки
+ * отсчёта (вход у открытой сделки, текущая цена у ещё не открытой) и
+ * результат в USDT при данном размере позиции — та же формула, что и у
+ * «Сейчас» в панели ордера (`unrealizedPnl`), только на гипотетической цене
+ * уровня вместо текущей. Проценты не заходят через `toScreen`/`fromScreen`:
+ * отношение двух цен не меняется от того, что обе умножены на один масштаб.
+ */
+export function levelImpact(direction: Direction, refPrice: number, levelPrice: number, qty: number): { pct: number; usdt: number } {
+  const pct = ((levelPrice - refPrice) / refPrice) * 100;
+  const usdt = unrealizedPnl(direction, refPrice, levelPrice, qty);
+  return { pct, usdt };
 }

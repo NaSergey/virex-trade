@@ -527,6 +527,12 @@
     padding: 0 var(--s2);
   }
   .size-preview .kv:last-child { border-bottom: 0; }
+  /* Слайдер уровня (стоп/тейк) вместе с подписью процента от цены — число
+     тут же, а не только на самом графике: панель ордера читается без
+     графика перед глазами. */
+  .lvl-row { display: flex; align-items: center; gap: var(--s2); }
+  .lvl-row .slider { flex: 1; }
+  .lvl-pct { flex: none; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--ink-2); white-space: nowrap; }
   /* Экран активной сессии — единственное место продукта без наборной полосы
      (.wrap): терминал занимает всю ширину окна, а не читательскую колонку в
      1360px. Поле у края минимальное — только чтобы кнопки и цифры не липли к
