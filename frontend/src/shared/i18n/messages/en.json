@@ -773,7 +773,6 @@
     "notionalLabel": "Notional",
     "sizeCoin": "Size",
     "leverageLabel": "Leverage",
-    "riskAmountLabel": "Risk",
     "long": "Long",
     "short": "Short",
     "direction": { "long": "Long", "short": "Short" },

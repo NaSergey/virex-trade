@@ -152,7 +152,16 @@ export function OrderPanel({
           )}
         </>
       ) : (
-        <Field label={t('risk')}>
+        <Field
+          label={
+            <span className="fld-head">
+              <span>{t('risk')}</span>
+              <span className="fld-val">
+                {(risk || 0).toFixed(1)}%{riskUsd != null && ` · ${formatPriceGrouped(riskUsd)} USDT`}
+              </span>
+            </span>
+          }
+        >
           {(id) => (
             <>
               <Slider
@@ -167,10 +176,6 @@ export function OrderPanel({
             </>
           )}
         </Field>
-      )}
-
-      {!openTrade && riskUsd != null && (
-        <KeyValue label={t('riskAmountLabel')}>{formatPriceGrouped(riskUsd)} USDT</KeyValue>
       )}
 
       <Field label={t('stop')}>

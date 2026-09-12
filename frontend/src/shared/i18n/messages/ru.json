@@ -506,7 +506,6 @@
     "notionalLabel": "Объём",
     "sizeCoin": "Размер",
     "leverageLabel": "Плечо",
-    "riskAmountLabel": "Риск",
     "long": "Лонг",
     "short": "Шорт",
     "direction": { "long": "Лонг", "short": "Шорт" },

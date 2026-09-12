@@ -533,6 +533,11 @@
   .lvl-row { display: flex; align-items: center; gap: var(--s2); }
   .lvl-row .slider { flex: 1; }
   .lvl-pct { flex: none; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--ink-2); white-space: nowrap; }
+  /* Подпись поля риска с числом сразу справа — процент и сумма в USDT, а не
+     отдельной строкой ниже: это одна и та же величина двумя единицами, не
+     два разных факта. */
+  .fld-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s2); }
+  .fld-val { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--ink); white-space: nowrap; }
   /* Экран активной сессии — единственное место продукта без наборной полосы
      (.wrap): терминал занимает всю ширину окна, а не читательскую колонку в
      1360px. Поле у края минимальное — только чтобы кнопки и цифры не липли к
