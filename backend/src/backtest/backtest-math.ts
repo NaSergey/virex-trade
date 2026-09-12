@@ -116,3 +116,8 @@ export function maxDrawdownPct(startBalance: number, pnls: number[]): number {
   }
   return dd;
 }
+
+/** Средневзвешенная цена входа после добора тем же qty*entry-весом с обеих сторон. */
+export function averageIn(qtyA: number, entryA: number, qtyB: number, entryB: number): number {
+  return (qtyA * entryA + qtyB * entryB) / (qtyA + qtyB);
+}

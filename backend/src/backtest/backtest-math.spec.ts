@@ -1,4 +1,5 @@
 import {
+  averageIn,
   DAY_MS,
   maxDrawdownPct,
   pickPriceScale,
@@ -134,5 +135,15 @@ describe('maxDrawdownPct', () => {
 
   it('без убытков — ноль', () => {
     expect(maxDrawdownPct(1000, [10, 20])).toBe(0);
+  });
+});
+
+describe('averageIn', () => {
+  it('средневзвешенная цена по объёму', () => {
+    expect(averageIn(10, 100, 10, 120)).toBeCloseTo(110, 9);
+  });
+
+  it('разные объёмы — вес больше у большего', () => {
+    expect(averageIn(30, 100, 10, 140)).toBeCloseTo(110, 9);
   });
 });
