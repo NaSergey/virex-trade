@@ -2,7 +2,7 @@ import type { TagItem } from '@/entities/tag';
 import type { Direction } from '../lib/fills';
 
 export type { Direction };
-export type ExitReason = 'stop' | 'take' | 'manual' | 'finish';
+export type ExitReason = 'stop' | 'take' | 'manual' | 'finish' | 'limit';
 
 /** Как её отдаёт `/api/backtest/sessions*`. Цены везде настоящие, без масштаба показа. */
 export interface BacktestSession {
@@ -30,6 +30,8 @@ export interface BacktestTrade {
   riskPct: number;
   riskUsdt: number;
   qty: number;
+  leverage: number;
+  closedQty: number;
   exitTime: string | null;
   exitPrice: number | null;
   exitReason: ExitReason | null;
@@ -37,6 +39,14 @@ export interface BacktestTrade {
   pnl: number | null;
   r: number | null;
   tags: TagItem[];
+}
+
+export interface BacktestCloseOrder {
+  id: string;
+  tradeId: string;
+  price: number;
+  qty: number;
+  createdAt: string;
 }
 
 export interface Summary {
@@ -51,6 +61,7 @@ export interface Summary {
 export interface SessionDetail {
   session: BacktestSession;
   trades: BacktestTrade[];
+  closeOrders: BacktestCloseOrder[];
   summary: Summary & { maxDrawdownPct: number };
 }
 
