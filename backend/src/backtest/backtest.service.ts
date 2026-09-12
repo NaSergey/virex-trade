@@ -140,12 +140,16 @@ export class BacktestService {
       orderBy: { entryTime: 'asc' },
       include: TAGS,
     });
+    const closeOrders = await this.prisma.backtestCloseOrder.findMany({
+      where: { trade: { sessionId: id, exitTime: null } },
+    });
     const closed = trades
       .filter((t) => t.exitTime != null)
       .sort((a, b) => a.exitTime!.getTime() - b.exitTime!.getTime());
     return {
       session,
       trades: trades.map(tradeView),
+      closeOrders,
       summary: {
         ...summarize(closed.map(closedNumbers)),
         maxDrawdownPct: maxDrawdownPct(session.startBalance, closed.map((t) => t.pnl ?? 0)),
@@ -300,6 +304,32 @@ export class BacktestService {
       const updated = await tx.backtestTrade.findUnique({ where: { id: tradeId }, include: TAGS });
       return { trade: tradeView(updated!) };
     });
+  }
+
+  async createCloseOrder(userId: string, tradeId: string, input: { price: number; qty: number }) {
+    const trade = await this.ownedTrade(userId, tradeId);
+    if (trade.exitTime) throw tradeClosed();
+    if (trade.session.status !== 'active') throw sessionFinished();
+    const remaining = trade.qty - trade.closedQty;
+    if (input.qty > remaining + QTY_EPS) {
+      throw new BadRequestException({ message: 'Объём больше остатка', code: 'BACKTEST_QTY_EXCEEDS_REMAINING' });
+    }
+    const order = await this.prisma.backtestCloseOrder.create({
+      data: { tradeId, price: input.price, qty: input.qty },
+    });
+    return { closeOrder: order };
+  }
+
+  async cancelCloseOrder(userId: string, orderId: string) {
+    const order = await this.prisma.backtestCloseOrder.findUnique({
+      where: { id: orderId },
+      include: { trade: { include: { session: true } } },
+    });
+    if (!order || order.trade.session.userId !== userId) {
+      throw new NotFoundException({ message: 'Ордер не найден', code: 'BACKTEST_CLOSE_ORDER_NOT_FOUND' });
+    }
+    await this.prisma.backtestCloseOrder.delete({ where: { id: orderId } });
+    return { success: true as const };
   }
 
   async closeTrade(userId: string, tradeId: string, input: CloseTradeInput) {

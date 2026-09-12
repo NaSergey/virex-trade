@@ -81,6 +81,14 @@ export class AddToTradeDto {
   riskPct: number;
 }
 
+export class CreateCloseOrderDto {
+  @IsPositive()
+  price: number;
+
+  @IsPositive()
+  qty: number;
+}
+
 export class CloseTradeDto {
   @IsISO8601()
   exitTime: string;

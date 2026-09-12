@@ -30,7 +30,13 @@ function makeService() {
       create: jest.fn(({ data }) => ({ id: 'e1', createdAt: new Date(), ...data })),
       findMany: jest.fn().mockResolvedValue([]),
     },
-    backtestCloseOrder: { deleteMany: jest.fn() },
+    backtestCloseOrder: {
+      deleteMany: jest.fn(),
+      create: jest.fn(({ data }) => ({ id: 'o1', createdAt: new Date(), ...data })),
+      findUnique: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
+      delete: jest.fn(),
+    },
     tag: { count: jest.fn() },
     $executeRaw: jest.fn().mockResolvedValue(1),
     $transaction: jest.fn(),
@@ -665,6 +671,54 @@ describe('BacktestService — сделки', () => {
       const err = await rejection(service.addToTrade('u1', 't1', { entryPrice: 110, riskPct: 1 }));
 
       expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_MARGIN_EXCEEDS_BALANCE' });
+    });
+  });
+
+  describe('лимит-ордера на закрытие', () => {
+    it('создаёт ордер в пределах остатка', async () => {
+      const { service, prisma } = makeService();
+      prisma.backtestTrade.findUnique.mockResolvedValue(TRADE);
+
+      await service.createCloseOrder('u1', 't1', { price: 110, qty: 20 });
+
+      expect(prisma.backtestCloseOrder.create).toHaveBeenCalledWith({ data: { tradeId: 't1', price: 110, qty: 20 } });
+    });
+
+    it('объём больше остатка — отказ', async () => {
+      const { service, prisma } = makeService();
+      prisma.backtestTrade.findUnique.mockResolvedValue(TRADE);
+
+      const err = await rejection(service.createCloseOrder('u1', 't1', { price: 110, qty: 999 }));
+
+      expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_QTY_EXCEEDS_REMAINING' });
+    });
+
+    it('на закрытую сделку ордер не поставить', async () => {
+      const { service, prisma } = makeService();
+      prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, exitTime: new Date(T0 + DAY) });
+
+      const err = await rejection(service.createCloseOrder('u1', 't1', { price: 110, qty: 1 }));
+
+      expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_TRADE_CLOSED' });
+    });
+
+    it('отменяет свой ордер', async () => {
+      const { service, prisma } = makeService();
+      prisma.backtestCloseOrder.findUnique.mockResolvedValue({ id: 'o1', trade: { session: { userId: 'u1' } } });
+
+      await service.cancelCloseOrder('u1', 'o1');
+
+      expect(prisma.backtestCloseOrder.delete).toHaveBeenCalledWith({ where: { id: 'o1' } });
+    });
+
+    it('чужой ордер — 404', async () => {
+      const { service, prisma } = makeService();
+      prisma.backtestCloseOrder.findUnique.mockResolvedValue({ id: 'o1', trade: { session: { userId: 'u2' } } });
+
+      const err = await rejection(service.cancelCloseOrder('u1', 'o1'));
+
+      expect(err).toBeInstanceOf(NotFoundException);
+      expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_CLOSE_ORDER_NOT_FOUND' });
     });
   });
 });

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { BacktestService } from './backtest.service';
@@ -6,6 +6,7 @@ import {
   AddToTradeDto,
   AdvanceDto,
   CloseTradeDto,
+  CreateCloseOrderDto,
   CreateSessionDto,
   ModifyTradeDto,
   OpenTradeDto,
@@ -66,6 +67,16 @@ export class BacktestController {
   @Put('trades/:id/tags')
   tags(@CurrentUser('userId') userId: string, @Param('id') id: string, @Body() dto: SetBacktestTagsDto) {
     return this.backtest.setTradeTags(userId, id, dto.tagIds);
+  }
+
+  @Post('trades/:id/close-orders')
+  createCloseOrder(@CurrentUser('userId') userId: string, @Param('id') id: string, @Body() dto: CreateCloseOrderDto) {
+    return this.backtest.createCloseOrder(userId, id, dto);
+  }
+
+  @Delete('close-orders/:id')
+  cancelCloseOrder(@CurrentUser('userId') userId: string, @Param('id') id: string) {
+    return this.backtest.cancelCloseOrder(userId, id);
   }
 
   @Get('stats')
