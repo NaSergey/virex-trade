@@ -12,8 +12,11 @@ import { Seg, type SegOption } from '@/shared/ui/Seg';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import { Wrap } from '@/shared/ui/Wrap';
 import {
+  useAddToTrade,
   useBacktestSession,
+  useCancelCloseOrder,
   useCloseTrade,
+  useCreateCloseOrder,
   useFinishSession,
   useModifyTrade,
   useOpenTrade,
@@ -21,8 +24,22 @@ import {
 } from '../api/hooks';
 import type { BacktestTrade, Direction, ExitReason, SessionDetail } from '../api/types';
 import { TIMEFRAMES, dayNumber, scaleCandle } from '../lib/candles';
-import { applyStopChange, checkLevels, fromScreen, impliedDirection, levelImpact, previewSize, toInputPrice, toScreen } from '../lib/money';
+import {
+  applyStopChange,
+  checkLevels,
+  fromScreen,
+  impliedDirection,
+  levelImpact,
+  liquidationPrice,
+  previewSize,
+  toInputPrice,
+  toScreen,
+} from '../lib/money';
 import { SPEEDS, useReplay } from '../model/useReplay';
+import { ChangeLevelsModal } from './ChangeLevelsModal';
+import { LimitCloseModal } from './LimitCloseModal';
+import { MarketCloseModal } from './MarketCloseModal';
+import { OpenPositionsPanel } from './OpenPositionsPanel';
 import { OrderPanel, type Draft } from './OrderPanel';
 import { ReplayChart, type Level, type LevelKind } from './ReplayChart';
 import { SessionSummary } from './SessionSummary';
@@ -71,41 +88,28 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
 
   const { data: tagsData } = useTags();
   const openM = useOpenTrade(session.id);
+  const addM = useAddToTrade(session.id);
   const modifyM = useModifyTrade(session.id);
   const closeM = useCloseTrade(session.id);
+  const createOrderM = useCreateCloseOrder(session.id);
+  const cancelOrderM = useCancelCloseOrder(session.id);
   const finishM = useFinishSession(session.id);
   const tagsM = useSetBacktestTags(session.id);
 
-  const closeTrade = (trade: BacktestTrade, time: number, price: number, reason: ExitReason) =>
-    closeM.mutateAsync({ tradeId: trade.id, exitTime: new Date(time).toISOString(), exitPrice: price, reason });
+  const closeTrade = (trade: BacktestTrade, time: number, price: number, reason: ExitReason, qty?: number, closeOrderId?: string) =>
+    closeM.mutateAsync({ tradeId: trade.id, exitTime: new Date(time).toISOString(), exitPrice: price, reason, qty, closeOrderId });
 
   const replay = useReplay(detail, (trade, exit) => {
-    void closeTrade(trade, exit.time, exit.price, exit.reason).catch(() => undefined);
+    void closeTrade(trade, exit.time, exit.price, exit.reason, exit.qty, exit.closeOrderId).catch(() => undefined);
   });
 
-  // Риск на первой сделке сессии стартует с системного значения — трейдер сам
-  // подвигает слайдер на нужную сделку, отдельно спрашивать его при старте сессии не нужно.
-  const [draft, setDraft] = useState<Draft>({ risk: '1', stop: '', take: '' });
+  const [draft, setDraft] = useState<Draft>({ risk: '1', stop: '', take: '', leverage: '1' });
   const [hint, setHint] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
-
-  // Уровни открытой сделки приезжают в поля, когда сделка появляется или правка
-  // сохранилась; закрылась — поля очищаются. Не на каждый рендер: иначе
-  // набранное в полях стиралось бы.
-  const openId = openTrade?.id;
-  const openStop = openTrade?.stopLoss;
-  const openTake = openTrade?.takeProfit;
-  useEffect(() => {
-    setDraft((d) =>
-      openId == null || openStop == null
-        ? { ...d, stop: '', take: '' }
-        : {
-            ...d,
-            stop: toInputPrice(toScreen(openStop, scale)),
-            take: openTake != null ? toInputPrice(toScreen(openTake, scale)) : '',
-          },
-    );
-  }, [openId, openStop, openTake, scale]);
+  const [limitModal, setLimitModal] = useState(false);
+  const [marketModal, setMarketModal] = useState(false);
+  const [levelsModal, setLevelsModal] = useState(false);
+  const [tab, setTab] = useState<'open' | 'history'>('open');
 
   const screenPrice = replay.price != null ? toScreen(replay.price, scale) : null;
   const stopN = Number(draft.stop);
@@ -133,7 +137,8 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   const impactQty = openTrade
     ? openTrade.qty
     : stopN > 0 && replay.price != null
-      ? previewSize(session.balance, Number(draft.risk), replay.price, fromScreen(stopN, scale))?.qty ?? null
+      ? previewSize(session.balance, Number(draft.risk), replay.price, fromScreen(stopN, scale), Number(draft.leverage) || 1, direction ?? 'long')
+          ?.qty ?? null
       : null;
   const impactRef = openTrade ? openTrade.entryPrice : replay.price;
 
@@ -147,11 +152,22 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
     const levelUsdt = (levelReal: number) =>
       direction != null && impactQty != null && impactRef != null ? levelImpact(direction, impactRef, levelReal, impactQty).usdt : null;
     const list: Level[] = [];
-    if (openTrade) list.push({ kind: 'entry', price: toScreen(openTrade.entryPrice, scale), draggable: false });
-    if (stopN > 0) list.push({ kind: 'stop', price: stopN, draggable: true, impact: levelUsdt(fromScreen(stopN, scale)) });
-    if (takeN != null && takeN > 0) list.push({ kind: 'take', price: takeN, draggable: true, impact: levelUsdt(fromScreen(takeN, scale)) });
+    if (openTrade) {
+      list.push({ id: 'entry', kind: 'entry', price: toScreen(openTrade.entryPrice, scale), draggable: false });
+      list.push({
+        id: 'liq',
+        kind: 'liq',
+        price: toScreen(liquidationPrice(openTrade.direction, openTrade.entryPrice, openTrade.leverage), scale),
+        draggable: false,
+      });
+    }
+    if (stopN > 0) list.push({ id: 'stop', kind: 'stop', price: stopN, draggable: true, impact: levelUsdt(fromScreen(stopN, scale)) });
+    if (takeN != null && takeN > 0) list.push({ id: 'take', kind: 'take', price: takeN, draggable: true, impact: levelUsdt(fromScreen(takeN, scale)) });
+    for (const o of detail.closeOrders) {
+      list.push({ id: o.id, kind: 'limitClose', price: toScreen(o.price, scale), draggable: false, impact: levelUsdt(o.price) });
+    }
     return list;
-  }, [openTrade, scale, stopN, takeN, direction, impactQty, impactRef]);
+  }, [openTrade, scale, stopN, takeN, direction, impactQty, impactRef, detail.closeOrders]);
 
   // Скрытая дата: день недели и время суток видны (биржевые сессии, выходные),
   // год и число — нет; вместо даты — номер дня от старта. useCallback по той же
@@ -197,7 +213,18 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
       stopLoss: fromScreen(stopN, scale),
       takeProfit: takeN != null ? fromScreen(takeN, scale) : undefined,
       riskPct: risk,
+      leverage: Number(draft.leverage) || 1,
     });
+  };
+
+  const addToPosition = (direction: Direction) => {
+    if (replay.price == null || !openTrade || openTrade.direction !== direction) return;
+    const risk = Number(draft.risk);
+    if (!(risk >= 0.01 && risk <= 100)) {
+      setHint(t('riskInvalid'));
+      return;
+    }
+    addM.mutate({ tradeId: openTrade.id, entryPrice: replay.price, riskPct: risk });
   };
 
   const applyLevels = (stop: number, take: number | null) => {
@@ -205,11 +232,10 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
     const err = checkLevels(openTrade.direction, screenPrice, stop, take);
     setHint(err ? t(err) : null);
     if (err) return;
-    modifyM.mutate({
-      tradeId: openTrade.id,
-      stopLoss: fromScreen(stop, scale),
-      takeProfit: take != null ? fromScreen(take, scale) : null,
-    });
+    modifyM.mutate(
+      { tradeId: openTrade.id, stopLoss: fromScreen(stop, scale), takeProfit: take != null ? fromScreen(take, scale) : null },
+      { onSuccess: () => setLevelsModal(false) },
+    );
   };
 
   // applyLevels меняется каждый рендер (замыкает openTrade/screenPrice/t) —
@@ -236,9 +262,14 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
     }
   }, [setDraft]);
 
-  const closeManual = () => {
+  const submitLimit = (price: number, qty: number) => {
+    if (!openTrade) return;
+    createOrderM.mutate({ tradeId: openTrade.id, price, qty }, { onSuccess: () => setLimitModal(false) });
+  };
+
+  const submitMarket = (qty: number) => {
     if (!openTrade || replay.price == null || !canClose) return;
-    void closeTrade(openTrade, replay.cursor, replay.price, 'manual').catch(() => undefined);
+    void closeTrade(openTrade, replay.cursor, replay.price, 'manual', qty).then(() => setMarketModal(false)).catch(() => undefined);
   };
 
   const finishing = useRef(false);
@@ -338,37 +369,96 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
           <OrderPanel
             draft={draft}
             onDraft={setDraft}
-            openTrade={openTrade}
+            sameDirectionOpen={openTrade?.direction ?? null}
+            openLeverage={openTrade?.leverage ?? null}
             scale={scale}
             price={replay.price}
             balance={session.balance}
             disabled={busy || closePending || !replay.ready}
-            canClose={canClose}
             hint={hint}
             onOpen={open}
-            onApply={() => applyLevels(stopN, takeN)}
-            onClose={closeManual}
+            onAdd={addToPosition}
             onFinish={askFinish}
           />
-          <ErrorNote error={openM.error ?? modifyM.error ?? finishM.error} fallback={t('actionFailed')} />
-          {closeM.isError && (
-            <p className="neg">
-              {t('closeFailed')}{' '}
-              <Button tight onClick={() => closeM.variables && closeM.mutate(closeM.variables)}>
-                {t('retryClose')}
-              </Button>
-            </p>
-          )}
+          <ErrorNote error={openM.error ?? addM.error ?? finishM.error} fallback={t('actionFailed')} />
         </div>
       </div>
 
-      <SessionTrades
-        trades={trades}
-        scale={scale}
-        labelFor={labelFor}
-        tags={tagsData?.tags ?? []}
-        onSetTags={(tradeId, tagIds) => tagsM.mutate({ tradeId, tagIds })}
-      />
+      {closeM.isError && closeM.variables && (
+        <p className="neg">
+          {t('closeFailed')}{' '}
+          <Button tight onClick={() => closeM.mutate(closeM.variables!)}>
+            {t('retryClose')}
+          </Button>
+        </p>
+      )}
+
+      <SectionHead title={tab === 'open' ? t('openPositionsTab') : t('historyTab')}>
+        <Seg
+          options={[
+            { value: 'open' as const, label: t('openPositionsTab') },
+            { value: 'history' as const, label: t('historyTab') },
+          ]}
+          value={tab}
+          onChange={setTab}
+          ariaLabel={t('openPositionsTab')}
+        />
+      </SectionHead>
+      {tab === 'open' ? (
+        <OpenPositionsPanel
+          trade={openTrade}
+          scale={scale}
+          price={replay.price}
+          closeOrders={detail.closeOrders}
+          onLimit={() => setLimitModal(true)}
+          onMarket={() => setMarketModal(true)}
+          onCancelOrder={(id) => cancelOrderM.mutate(id)}
+          onChangeLevels={() => setLevelsModal(true)}
+        />
+      ) : (
+        <SessionTrades
+          trades={trades}
+          scale={scale}
+          labelFor={labelFor}
+          tags={tagsData?.tags ?? []}
+          onSetTags={(tradeId, tagIds) => tagsM.mutate({ tradeId, tagIds })}
+        />
+      )}
+
+      {levelsModal && openTrade && screenPrice != null && (
+        <ChangeLevelsModal
+          trade={openTrade}
+          scale={scale}
+          screenPrice={screenPrice}
+          onApply={applyLevels}
+          onClose={() => setLevelsModal(false)}
+          isPending={modifyM.isPending}
+          error={modifyM.error}
+        />
+      )}
+      {limitModal && openTrade && screenPrice != null && (
+        <LimitCloseModal
+          trade={openTrade}
+          remaining={openTrade.qty - openTrade.closedQty}
+          scale={scale}
+          screenPrice={screenPrice}
+          onSubmit={submitLimit}
+          onClose={() => setLimitModal(false)}
+          isPending={createOrderM.isPending}
+          error={createOrderM.error}
+        />
+      )}
+      {marketModal && openTrade && screenPrice != null && (
+        <MarketCloseModal
+          trade={openTrade}
+          remaining={openTrade.qty - openTrade.closedQty}
+          screenPrice={screenPrice}
+          onSubmit={submitMarket}
+          onClose={() => setMarketModal(false)}
+          isPending={closeM.isPending}
+          error={closeM.isError ? closeM.error : null}
+        />
+      )}
 
       {confirm && <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />}
     </div>

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchCandles, saveCursor } from '../api/hooks';
-import type { BacktestTrade, SessionDetail } from '../api/types';
+import type { BacktestCloseOrder, BacktestTrade, SessionDetail } from '../api/types';
 import { advanceTo } from '../lib/advance';
 import {
   DAY,
@@ -15,7 +15,7 @@ import {
   visibleCandles,
   type Candle,
 } from '../lib/candles';
-import type { Exit } from '../lib/fills';
+import type { CloseOrder, Exit } from '../lib/fills';
 
 /** Сколько минуток держать загруженными впереди момента сессии. */
 const LOOKAHEAD_MS = 3 * DAY;
@@ -100,6 +100,8 @@ export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, 
   const closing = useRef(new Set<string>());
   const openRef = useRef<BacktestTrade | null>(null);
   openRef.current = detail.trades.find((x) => x.exitTime == null) ?? null;
+  const closeOrdersRef = useRef<BacktestCloseOrder[]>([]);
+  closeOrdersRef.current = detail.closeOrders;
   const onExitRef = useRef(onExit);
   onExitRef.current = onExit;
 
@@ -220,6 +222,7 @@ export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, 
           minutes: minutesRef.current,
           loadedUntil: loadedUntil(minutesRef.current),
           position,
+          closeOrders: closeOrdersRef.current.map((o): CloseOrder => ({ id: o.id, price: o.price, qty: o.qty })),
         });
         if (reach > from) {
           if (exit && open) {
