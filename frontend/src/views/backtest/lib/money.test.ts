@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyStopChange,
+  averageIn,
   checkLevels,
   formatR,
   fromScreen,
   impliedDirection,
   levelImpact,
   levelSliderRange,
+  liquidationPrice,
   previewSize,
   riskAmount,
   signedPctFromStop,
@@ -18,12 +20,35 @@ import {
 } from './money';
 
 describe('previewSize', () => {
-  it('риск, размер, номинал и плечо', () => {
-    expect(previewSize(10_000, 1, 100, 98)).toEqual({ riskUsdt: 100, qty: 50, notional: 5000, leverage: 0.5 });
+  it('риск, размер, номинал и маржа', () => {
+    expect(previewSize(10_000, 1, 100, 98, 10, 'long')).toEqual({
+      riskUsdt: 100,
+      qty: 50,
+      notional: 5000,
+      margin: 500,
+      liqPrice: 90,
+    });
   });
 
   it('стоп на цене входа — размера нет', () => {
-    expect(previewSize(10_000, 1, 100, 100)).toBeNull();
+    expect(previewSize(10_000, 1, 100, 100, 10, 'long')).toBeNull();
+  });
+});
+
+describe('liquidationPrice', () => {
+  it('лонг — ниже входа на 1/leverage', () => {
+    expect(liquidationPrice('long', 100, 10)).toBeCloseTo(90, 9);
+    expect(liquidationPrice('long', 100, 100)).toBeCloseTo(99, 9);
+  });
+
+  it('шорт — выше входа на 1/leverage', () => {
+    expect(liquidationPrice('short', 100, 10)).toBeCloseTo(110, 9);
+  });
+});
+
+describe('averageIn', () => {
+  it('средневзвешенная цена по объёму', () => {
+    expect(averageIn(10, 100, 10, 120)).toBeCloseTo(110, 9);
   });
 });
 

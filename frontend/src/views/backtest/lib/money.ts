@@ -9,14 +9,28 @@ import type { Direction } from './fills';
 /** Та же ставка, что на сервере (`FEE_RATE` в backtest-math.ts). */
 export const FEE_RATE = 0.00055;
 
-export function previewSize(balance: number, riskPct: number, entry: number, stop: number) {
+/**
+ * Предпросмотр размера и маржи — те же формулы, что на сервере при открытии
+ * (`positionSize`/margin-проверка в `backtest.service.ts`), чтобы число до
+ * отправки не расходилось с тем, что вернётся.
+ */
+export function previewSize(balance: number, riskPct: number, entry: number, stop: number, leverage: number, direction: Direction) {
   const dist = Math.abs(entry - stop);
   if (!(dist > 0) || !(balance > 0) || !(riskPct > 0)) return null;
   const riskUsdt = (balance * riskPct) / 100;
   const qty = riskUsdt / dist;
   const notional = qty * entry;
-  // Плечо справочное: маржа и ликвидация в бектесте не моделируются.
-  return { riskUsdt, qty, notional, leverage: notional / balance };
+  return { riskUsdt, qty, notional, margin: notional / leverage, liqPrice: liquidationPrice(direction, entry, leverage) };
+}
+
+/** Ликвидация — упрощённо, без поддерживающей маржи и комиссий: long ниже входа, short выше, на 1/leverage. */
+export function liquidationPrice(direction: Direction, entry: number, leverage: number): number {
+  return direction === 'long' ? entry * (1 - 1 / leverage) : entry * (1 + 1 / leverage);
+}
+
+/** Средневзвешенная цена входа после добора — тот же расчёт, что на сервере (backtest-math.ts). */
+export function averageIn(qtyA: number, entryA: number, qtyB: number, entryB: number): number {
+  return (qtyA * entryA + qtyB * entryB) / (qtyA + qtyB);
 }
 
 /** Результат, если закрыть сейчас: с комиссией входа и выхода. */
