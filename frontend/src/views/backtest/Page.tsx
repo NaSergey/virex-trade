@@ -15,6 +15,9 @@ import { StatsBlock } from './components/StatsBlock';
  * С открытой — экран прокрутки. Какая сессия открыта — состояние страницы, а
  * не адрес: useSearchParams потребовал бы Suspense-границу ради одной
  * переменной, а делиться ссылкой на тренировочную сессию незачем.
+ *
+ * Обёртку в .wrap здесь не ставим безусловно: активная сессия — терминал во
+ * всю ширину окна и сама решает про поля страницы (см. SessionScreen).
  */
 export function BacktestPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -22,11 +25,7 @@ export function BacktestPage() {
   const stats = useBacktestStats();
 
   if (sessionId) {
-    return (
-      <Wrap page>
-        <SessionScreen id={sessionId} onLeave={() => setSessionId(null)} />
-      </Wrap>
-    );
+    return <SessionScreen id={sessionId} onLeave={() => setSessionId(null)} />;
   }
 
   return (

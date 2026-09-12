@@ -69,18 +69,23 @@ export function anchorTimeAt(candles: { t: number }[], frameStart: number): numb
 }
 
 /**
- * Куда пану/зуму можно уводить кадр при данном count: не дальше живого края
- * справа и не дальше `edge` настоящих свечей слева — левее только пустое
- * поле, как в графике «Диапазон входа» (`RangeCheckChart`). Общая для
- * `resolveWindow` и обработчиков жестов в `ReplayChart`, которым нужно знать
- * эти границы ещё до того, как состояние осядет и `resolveWindow` пересчитает
- * их сама — иначе «запас» перескролла копится сверх видимого и жест на
- * возврате едет вхолостую, прежде чем кадр вообще сдвинется.
+ * Куда пану/зуму можно уводить кадр при данном count: не дальше `edge`
+ * настоящих свечей с любого края — за ними уже пустое поле, симметрично
+ * слева и справа, как в графике «Диапазон входа» (`RangeCheckChart`), где
+ * `from` так же зажат в `[edge - count, len - edge]`. Правый край раньше
+ * держался вплотную к живым свечам («в будущем данных нет») — но по той же
+ * логике в будущем нет данных и у `RangeCheckChart`, а он всё равно даёт
+ * оттащить последнюю свечу от края; пустое поле — это просто пустое поле,
+ * а не утверждение о существовании данных. Общая для `resolveWindow` и
+ * обработчиков жестов в `ReplayChart`, которым нужно знать эти границы ещё
+ * до того, как состояние осядет и `resolveWindow` пересчитает их сама —
+ * иначе «запас» перескролла копится сверх видимого и жест на возврате едет
+ * вхолостую, прежде чем кадр вообще сдвинется.
  */
 export function frameBounds(candles: { t: number }[], count: number, edgeMin = 3): { min: number; max: number } {
   const total = candles.length;
   const edge = Math.min(edgeMin, total);
-  return { min: edge - count, max: Math.max(0, total - count) };
+  return { min: edge - count, max: total - edge };
 }
 
 /**
@@ -89,11 +94,15 @@ export function frameBounds(candles: { t: number }[], count: number, edgeMin = 3
  * растёт слева при догрузке истории для пана, и индекс от этого сместился
  * бы, а время нет.
  *
- * Кадр умеет уезжать левее первой загруженной свечи (виртуальный `frameStart`
- * отрицательный, `startIdx` при этом зажат в 0) — иначе при короткой истории
- * (старт сессии, только что выбранный ТФ) пан упирался бы в стену намертво.
- * Вправо (за живой край, в будущее, которого ещё не было) кадр не уезжает —
- * там принципиально нет данных, а не просто «ещё не загружены».
+ * Кадр умеет уезжать за любой край загруженных данных, оставляя пустое поле
+ * (виртуальный `frameStart` отрицательный слева или такой, что `frameStart +
+ * count` больше длины массива справа; `startIdx`/`endIdx` при этом зажаты в
+ * границы массива) — иначе при короткой истории пан упирался бы в стену
+ * намертво, а последние свечи было бы не оттащить от правого края холста.
+ * «Живой» край (`anchorTime === null`) — это не предел `frameBounds`, а
+ * конкретная позиция вплотную к последним свечам без пустоты справа: именно
+ * туда встаёт кадр по умолчанию и по кнопке «→ сейчас», а в пустоту за этим
+ * краем уводит только ручной пан.
  */
 export function resolveWindow(
   candles: { t: number }[],
@@ -106,8 +115,11 @@ export function resolveWindow(
   const { min: minFrameStart, max: maxFrameStart } = frameBounds(candles, count, edgeMin);
   const live = view.anchorTime == null;
   // Проверка написана заново (не через `live`), чтобы TS сузил anchorTime до number.
+  // «Живая» позиция — впритык к последним свечам (total - count), а не
+  // maxFrameStart: тот теперь шире (пускает пустоту справа), и подставлять
+  // его сюда сделало бы пустой правый отступ видом по умолчанию.
   const frameStart = clamp(
-    view.anchorTime == null ? maxFrameStart : frameAtTime(candles, view.anchorTime),
+    view.anchorTime == null ? Math.max(0, total - count) : frameAtTime(candles, view.anchorTime),
     minFrameStart,
     maxFrameStart,
   );
@@ -123,6 +135,12 @@ export function resolveWindow(
  * расходились только тем, откуда берут baseIdx (готовый индекс у колеса,
  * пересчитанный из anchorTime у пинча — колёсный жест синхронный и разовый,
  * пинчу нужно бережно относиться к возможной догрузке истории посреди себя).
+ *
+ * Границы — те же `frameBounds`, что у пана, а не свой отдельный `[0, total -
+ * count]`: раньше зум пересчитывал позицию независимо от пана и обрезал её
+ * этим более узким пределом на каждый шаг колеса, поэтому любая, даже
+ * случайная прокрутка колеса/тачпада после пана отдёргивала кадр обратно к
+ * живому краю — пан отодвигал свечи, а следующий же зум откатывал назад.
  */
 export function zoomStep(
   candles: { t: number }[],
@@ -131,10 +149,12 @@ export function zoomStep(
   focalFrac: number,
   factor: number,
   bounds: WindowBounds,
+  edgeMin = 3,
 ): { count: number; anchorTime: number | null } {
   const focalIdx = baseIdx + focalFrac * frameCount;
   const count = clamp(Math.round(frameCount * factor), bounds.minCount, bounds.maxCount);
-  const maxStart = Math.max(0, candles.length - count);
-  const newStart = clamp(Math.round(focalIdx - focalFrac * count), 0, maxStart);
-  return { count, anchorTime: newStart >= maxStart ? null : candles[newStart]?.t ?? null };
+  const { min: minStart, max: maxStart } = frameBounds(candles, count, edgeMin);
+  const newStart = clamp(Math.round(focalIdx - focalFrac * count), minStart, maxStart);
+  const flush = Math.max(0, candles.length - count);
+  return { count, anchorTime: newStart === flush ? null : anchorTimeAt(candles, newStart) };
 }

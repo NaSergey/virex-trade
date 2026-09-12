@@ -80,6 +80,9 @@ export function ReplayChart({
   const svgRef = useRef<SVGSVGElement>(null);
   const [boxW, setBoxW] = useState(0);
   const [drag, setDrag] = useState<LevelKind | null>(null);
+  // Курсор — единственная подсказка, что фон вообще можно тащить: без неё
+  // рабочий пан на глаз неотличим от графика, прибитого к живому краю.
+  const [grabbing, setGrabbing] = useState(false);
   const frozen = useRef<{ lo: number; hi: number } | null>(null);
   const lastDrag = useRef<number | null>(null);
   /** Указатель, который тащит уровень — чтобы движение/отпускание другого пальца его не задевало. */
@@ -231,6 +234,7 @@ export function ReplayChart({
     e.preventDefault();
     svgRef.current?.setPointerCapture(e.pointerId);
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    setGrabbing(true);
     if (pointersRef.current.size === 2) {
       panRef.current = null;
       const [a, b] = [...pointersRef.current.values()];
@@ -277,13 +281,18 @@ export function ReplayChart({
     // прежде чем кадр вообще сдвинется с места.
     const { min: minFrame, max: maxFrame } = frameBounds(candles, pan.count);
     const newFrame = clamp(baseFrame - deltaSlots, minFrame, maxFrame);
-    setView({ count: pan.count, anchorTime: newFrame >= maxFrame ? null : anchorTimeAt(candles, newFrame) });
+    // «Живой» — только ровно вплотную к последним свечам, а не весь путь до
+    // maxFrame: тот теперь пускает дальше, в пустоту справа, и её нужно уметь
+    // удержать вместо того, чтобы тут же схлопнуться обратно в live.
+    const flushFrame = Math.max(0, candles.length - pan.count);
+    setView({ count: pan.count, anchorTime: newFrame === flushFrame ? null : anchorTimeAt(candles, newFrame) });
   };
 
   const endDrag = (e: PointerEvent<SVGSVGElement>) => {
     pointersRef.current.delete(e.pointerId);
     const remaining = [...pointersRef.current.entries()];
     if (remaining.length < 2) pinchRef.current = null;
+    if (remaining.length === 0) setGrabbing(false);
     if (drag && e.pointerId === dragPointerId.current) {
       if (onDragLevel && lastDrag.current != null) onDragLevel(drag, lastDrag.current, true);
       setDrag(null);
@@ -312,6 +321,7 @@ export function ReplayChart({
       <svg
         ref={svgRef}
         className="replay-chart"
+        style={{ cursor: grabbing ? 'grabbing' : 'grab' }}
         viewBox={`0 0 ${W} ${H}`}
         onPointerDown={startPan}
         onPointerMove={onMove}

@@ -10,6 +10,7 @@ import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { Seg, type SegOption } from '@/shared/ui/Seg';
 import { Skeleton } from '@/shared/ui/Skeleton';
+import { Wrap } from '@/shared/ui/Wrap';
 import {
   useBacktestSession,
   useCloseTrade,
@@ -27,13 +28,35 @@ import { ReplayChart, type Level, type LevelKind } from './ReplayChart';
 import { SessionSummary } from './SessionSummary';
 import { SessionTrades } from './SessionTrades';
 
-/** Сессия целиком: загрузка, прокрутка активной или итог завершённой. */
+/**
+ * Сессия целиком: загрузка, прокрутка активной или итог завершённой.
+ *
+ * Обёртку страницы (`.wrap`, читательская колонка в 1360px) выбирает это
+ * состояние, а не вызывающий `Page.tsx`: итог завершённой сессии — такой же
+ * отчёт, как остальные страницы продукта, а вот у активной сессии свой
+ * терминал во всю ширину окна (см. `.bt-live` и комментарий в `ActiveSession`).
+ */
 export function SessionScreen({ id, onLeave }: { id: string; onLeave: () => void }) {
   const t = useTranslations('backtest');
   const { data, error } = useBacktestSession(id);
-  if (error) return <ErrorNote error={error} fallback={t('loadFailed')} />;
-  if (!data) return <Skeleton height={380} />;
-  if (data.session.status === 'finished') return <SessionSummary detail={data} onLeave={onLeave} />;
+  if (error)
+    return (
+      <Wrap page>
+        <ErrorNote error={error} fallback={t('loadFailed')} />
+      </Wrap>
+    );
+  if (!data)
+    return (
+      <Wrap page>
+        <Skeleton height={380} />
+      </Wrap>
+    );
+  if (data.session.status === 'finished')
+    return (
+      <Wrap page>
+        <SessionSummary detail={data} onLeave={onLeave} />
+      </Wrap>
+    );
   return <ActiveSession detail={data} onLeave={onLeave} />;
 }
 
@@ -209,12 +232,15 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   ];
 
   return (
-    <>
+    // Терминал во всю ширину окна — единственное место продукта без .wrap
+    // (см. комментарий у SessionScreen). Итог той же сессии после завершения
+    // возвращается в обычную читательскую колонку сам, через SessionScreen.
+    <div className="bt-live">
       <SectionHead title={t('timeframe')}>
         <Seg options={tfOptions} value={replay.tf} onChange={replay.setTf} ariaLabel={t('timeframe')} />
       </SectionHead>
 
-      <div className="asym">
+      <div className="asym terminal">
         <div>
           {replay.ready ? (
             <ReplayChart
@@ -290,6 +316,6 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
       />
 
       {confirm && <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />}
-    </>
+    </div>
   );
 }

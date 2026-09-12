@@ -11,17 +11,21 @@ import { cn } from '@/shared/lib/utils/css';
  * - `solid` — главное действие формы или диалога, одно на экран;
  * - `bare` — действие в строке текста: рамки нет, подчёркивание по наведению;
  * - `risk` — необратимое, в цвете убытка;
+ * - `long` / `short` — открытие позиции в торговом тикете: заливка в цвете
+ *   прибыли/убытка, тот же язык, что у ▲/▼ в журнале сделок (`.dir`);
  * - `add`  — «+ тег» рядом с пилюлями: пунктир, садится на их линию;
  * - `none` — кнопка со своей полной разметкой (`.pick`): общий класс не нужен,
  *   но нужны type="button" и единый набор пропсов.
  */
-export type ButtonVariant = 'default' | 'solid' | 'bare' | 'risk' | 'add' | 'none';
+export type ButtonVariant = 'default' | 'solid' | 'bare' | 'risk' | 'long' | 'short' | 'add' | 'none';
 
 const VARIANT_CLASS: Record<ButtonVariant, string> = {
   default: 'btn',
   solid: 'btn solid',
   bare: 'btn bare',
   risk: 'btn risk',
+  long: 'btn long',
+  short: 'btn short',
   add: 'tag-add',
   none: '',
 };

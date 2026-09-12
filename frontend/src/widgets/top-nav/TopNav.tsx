@@ -17,7 +17,7 @@ import { useLocaleControl } from '@/shared/i18n';
 
 type Tab = 'overview' | 'tags' | 'analytics' | 'market' | 'backtest' | 'settings' | 'admin';
 
-type NavItem = { id: Tab; labelKey: Tab; ownerOnly?: boolean };
+type NavItem = { id: Tab; labelKey: Tab };
 
 const NAV: NavItem[] = [
   { id: 'overview', labelKey: 'overview' },
@@ -26,10 +26,6 @@ const NAV: NavItem[] = [
   { id: 'market', labelKey: 'market' },
   { id: 'backtest', labelKey: 'backtest' },
   { id: 'settings', labelKey: 'settings' },
-  // Аналитика по пользователям сервиса. Стоит последней и видна только
-  // владельцу: остальным ссылка вернула бы 403, а пункт в рейке обещал бы
-  // раздел, которого у них нет.
-  { id: 'admin', labelKey: 'admin', ownerOnly: true },
 ];
 
 /**
@@ -156,7 +152,7 @@ export function TopNav() {
               aria-hidden
             />
           )}
-          {NAV.filter((item) => !item.ownerOnly || user?.isAdmin).map((item) => (
+          {NAV.map((item) => (
             <Link
               key={item.id}
               href={`/${item.id}`}
@@ -237,6 +233,19 @@ export function TopNav() {
                   {tc('open')}
                 </Button>
               </KeyValue>
+              {/* Аналитика по пользователям сервиса — не раздел работы с
+                  журналом, а инструмент владельца, тот же класс пунктов, что
+                  донат и рефералы. В общей рейке разделов она обещала бы
+                  доступ, которого у обычного пользователя нет; здесь её видно
+                  только владельцу (`user.isAdmin`), и это тот редкий случай,
+                  когда справа — не окно, а обычный переход по адресу. */}
+              {user?.isAdmin && (
+                <KeyValue label={t('admin')} control valueClassName="">
+                  <Link className="btn bare" href="/admin" onClick={() => setMenuOpen(false)}>
+                    {tc('open')}
+                  </Link>
+                </KeyValue>
+              )}
               <Button
                 variant="risk"
                 style={{ marginTop: 'var(--s3)', width: '100%' }}
