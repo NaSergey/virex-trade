@@ -130,7 +130,7 @@ export function OrderPanel({
           <>
             {stopRange && (
               <Slider
-                value={clamp(stop || stopRange.min, stopRange.min, stopRange.max)}
+                value={clamp(stop || screenPrice!, stopRange.min, stopRange.max)}
                 min={stopRange.min}
                 max={stopRange.max}
                 step={(stopRange.max - stopRange.min) / 200 || 1}
@@ -147,7 +147,7 @@ export function OrderPanel({
           <>
             {takeRange && (
               <Slider
-                value={clamp(take ?? takeRange.min, takeRange.min, takeRange.max)}
+                value={clamp(take ?? screenPrice!, takeRange.min, takeRange.max)}
                 min={takeRange.min}
                 max={takeRange.max}
                 step={(takeRange.max - takeRange.min) / 200 || 1}
