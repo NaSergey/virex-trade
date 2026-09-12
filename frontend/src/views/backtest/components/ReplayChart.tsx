@@ -21,13 +21,15 @@ const EDGE_THRESHOLD = 15;
 const TICKS = 5;
 const ZOOM_STEP = 1.15;
 
-export type LevelKind = 'entry' | 'stop' | 'take';
+export type LevelKind = 'entry' | 'stop' | 'take' | 'liq' | 'limitClose';
 
 export interface Level {
+  /** Ключ строки — не kind: лимит-ордеров одного kind может быть несколько. */
+  id: string;
   kind: LevelKind;
   price: number;
   draggable: boolean;
-  /** Результат в USDT, если сработает — только у стопа и тейка, не у входа. */
+  /** Результат в USDT, если сработает — не у входа и не у ликвидации. */
   impact?: number | null;
 }
 
@@ -35,6 +37,8 @@ const LEVEL_COLOR: Record<LevelKind, string> = {
   entry: 'var(--color-fg)',
   stop: 'var(--loss)',
   take: 'var(--profit)',
+  liq: 'var(--loss)',
+  limitClose: 'var(--color-muted)',
 };
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -388,7 +392,7 @@ export const ReplayChart = memo(function ReplayChart({
         ))}
 
         {levels.map((l) => (
-          <g key={l.kind}>
+          <g key={l.id}>
             <line
               x1={0}
               x2={PW}
@@ -399,10 +403,10 @@ export const ReplayChart = memo(function ReplayChart({
               strokeDasharray={l.kind === 'entry' ? undefined : `${px(5)} ${px(4)}`}
             />
             <text x={px(4)} y={y(l.price) - px(4)} fill={LEVEL_COLOR[l.kind]} fontSize={px(10)} fontFamily="var(--font-mono)">
-              {/* Вход подписан ценой — это точка отсчёта. Стоп и тейк подписаны
-                  результатом в USDT, а не ценой: цену и так видно по самой линии
-                  и высоте над свечами, а вот что она значит в деньгах — нет. */}
-              {l.kind === 'entry'
+              {/* Вход и ликвидация подписаны ценой — это точки отсчёта, не
+                  результат. Стоп, тейк и лимит-ордер подписаны результатом в
+                  USDT: цену и так видно по линии и высоте над свечами. */}
+              {l.kind === 'entry' || l.kind === 'liq'
                 ? `${levelLabel(l.kind)} ${formatPriceGrouped(l.price)}`
                 : `${levelLabel(l.kind)}${l.impact != null ? ` ${formatMoney(l.impact)} USDT` : ''}`}
             </text>
