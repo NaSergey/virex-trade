@@ -66,13 +66,12 @@ const SESSION = {
   cursorTime: new Date(T0),
   startBalance: 10_000,
   balance: 10_000,
-  defaultRiskPct: 1,
   hideDate: true,
   hidePrice: false,
   priceScale: 1,
 };
 
-const INPUT = { startBalance: 10_000, defaultRiskPct: 1, hideDate: true, hidePrice: false };
+const INPUT = { startBalance: 10_000, hideDate: true, hidePrice: false };
 
 describe('BacktestService — сессии', () => {
   it('ставит старт в начало окна и момент сессии туда же', async () => {

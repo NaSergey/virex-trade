@@ -38,6 +38,12 @@ export const formatR = (r: number) => `${r >= 0 ? '+' : '−'}${Math.abs(r).toFi
 /** Число для поля ввода: после умножения на масштаб без хвоста из пятнадцати знаков. */
 export const toInput = (v: number) => String(Number(v.toPrecision(8)));
 
+/** Цена стопа/тейка, выставленная программно (слайдер, зеркалирование, синхронизация
+ * с сервером) — округлена до десятых: точнее для входа/выхода в бэктесте не нужно, а
+ * лишние знаки при быстром драге только рябят на глаз. Руками напечатанное число это
+ * не трогает — оно остаётся как есть, см. `setStopText` в OrderPanel. */
+export const toInputPrice = (v: number) => v.toFixed(1);
+
 export type LevelError = 'stopRequired' | 'stopSide' | 'takeSide';
 
 /**
@@ -168,9 +174,9 @@ export function applyStopChange(
   const prevTake = prev.take.trim() ? Number(prev.take) : null;
   const prevDirection = impliedDirection(openDirection, prevStop, prevTake, screenPrice);
   const nextDirection = impliedDirection(openDirection, newStopScreen, prevTake, screenPrice);
-  const stop = toInput(newStopScreen);
+  const stop = toInputPrice(newStopScreen);
   if (prevDirection != null && nextDirection != null && prevDirection !== nextDirection && prevTake != null) {
-    return { stop, take: toInput(2 * screenPrice - prevTake) };
+    return { stop, take: toInputPrice(2 * screenPrice - prevTake) };
   }
   return { stop, take: prev.take };
 }

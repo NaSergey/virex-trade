@@ -12,6 +12,7 @@ import {
   signedPctFromStop,
   stopFromSignedPct,
   toInput,
+  toInputPrice,
   toScreen,
   unrealizedPnl,
 } from './money';
@@ -51,6 +52,11 @@ describe('formatR и toInput', () => {
   it('поле ввода без хвоста из пятнадцати знаков', () => {
     expect(toInput(0.1 + 0.2)).toBe('0.3');
     expect(toInput(523.456789123)).toBe('523.45679');
+  });
+
+  it('цена стопа/тейка округляется до десятых', () => {
+    expect(toInputPrice(53233.14)).toBe('53233.1');
+    expect(toInputPrice(97)).toBe('97.0');
   });
 });
 
@@ -135,19 +141,19 @@ describe('applyStopChange', () => {
   it('стоп меняет сторону — тейк зеркалится через цену', () => {
     // Было: лонг (стоп 98, тейк 110). Новый стоп — 103 (выше цены, шорт).
     const result = applyStopChange({ stop: '98', take: '110' }, 103, 100, null);
-    expect(result.stop).toBe('103');
+    expect(result.stop).toBe('103.0');
     expect(Number(result.take)).toBeCloseTo(90, 6); // 2*100 - 110
   });
 
   it('сторона не поменялась — тейк не трогаем', () => {
     const result = applyStopChange({ stop: '98', take: '110' }, 97, 100, null);
-    expect(result.stop).toBe('97');
+    expect(result.stop).toBe('97.0');
     expect(result.take).toBe('110');
   });
 
   it('тейка ещё нет — мирроить нечего', () => {
     const result = applyStopChange({ stop: '98', take: '' }, 103, 100, null);
-    expect(result.stop).toBe('103');
+    expect(result.stop).toBe('103.0');
     expect(result.take).toBe('');
   });
 

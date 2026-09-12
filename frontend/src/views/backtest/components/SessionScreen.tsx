@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useTags } from '@/entities/tag';
 import { useLocaleControl } from '@/shared/i18n';
@@ -21,7 +21,7 @@ import {
 } from '../api/hooks';
 import type { BacktestTrade, Direction, ExitReason, SessionDetail } from '../api/types';
 import { TIMEFRAMES, dayNumber, scaleCandle } from '../lib/candles';
-import { applyStopChange, checkLevels, fromScreen, impliedDirection, levelImpact, previewSize, toInput, toScreen } from '../lib/money';
+import { applyStopChange, checkLevels, fromScreen, impliedDirection, levelImpact, previewSize, toInputPrice, toScreen } from '../lib/money';
 import { SPEEDS, useReplay } from '../model/useReplay';
 import { OrderPanel, type Draft } from './OrderPanel';
 import { ReplayChart, type Level, type LevelKind } from './ReplayChart';
@@ -83,7 +83,9 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
     void closeTrade(trade, exit.time, exit.price, exit.reason).catch(() => undefined);
   });
 
-  const [draft, setDraft] = useState<Draft>({ risk: String(session.defaultRiskPct), stop: '', take: '' });
+  // Риск на первой сделке сессии стартует с системного значения — трейдер сам
+  // подвигает слайдер на нужную сделку, отдельно спрашивать его при старте сессии не нужно.
+  const [draft, setDraft] = useState<Draft>({ risk: '1', stop: '', take: '' });
   const [hint, setHint] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
@@ -99,8 +101,8 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
         ? { ...d, stop: '', take: '' }
         : {
             ...d,
-            stop: toInput(toScreen(openStop, scale)),
-            take: openTake != null ? toInput(toScreen(openTake, scale)) : '',
+            stop: toInputPrice(toScreen(openStop, scale)),
+            take: openTake != null ? toInputPrice(toScreen(openTake, scale)) : '',
           },
     );
   }, [openId, openStop, openTake, scale]);
@@ -134,24 +136,38 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
       ? previewSize(session.balance, Number(draft.risk), replay.price, fromScreen(stopN, scale))?.qty ?? null
       : null;
   const impactRef = openTrade ? openTrade.entryPrice : replay.price;
-  /** Результат в USDT, если цена дойдёт до levelReal — та же формула, что у «Сейчас» в панели. */
-  const levelUsdt = (levelReal: number) =>
-    direction != null && impactQty != null && impactRef != null ? levelImpact(direction, impactRef, levelReal, impactQty).usdt : null;
 
-  const levels: Level[] = [];
-  if (openTrade) levels.push({ kind: 'entry', price: toScreen(openTrade.entryPrice, scale), draggable: false });
-  if (stopN > 0) levels.push({ kind: 'stop', price: stopN, draggable: true, impact: levelUsdt(fromScreen(stopN, scale)) });
-  if (takeN != null && takeN > 0) levels.push({ kind: 'take', price: takeN, draggable: true, impact: levelUsdt(fromScreen(takeN, scale)) });
+  // Уровни — своим useMemo, а не строятся прямо в теле рендера: ReplayChart
+  // (memo, см. его комментарий) сверяет этот массив по ссылке, и без useMemo
+  // она менялась бы на любой тик любого слайдера панели, включая риск на
+  // сделке без стопа — там числа на графике вообще не меняются, но график всё
+  // равно перерисовывался бы целиком.
+  const levels = useMemo<Level[]>(() => {
+    /** Результат в USDT, если цена дойдёт до levelReal — та же формула, что у «Сейчас» в панели. */
+    const levelUsdt = (levelReal: number) =>
+      direction != null && impactQty != null && impactRef != null ? levelImpact(direction, impactRef, levelReal, impactQty).usdt : null;
+    const list: Level[] = [];
+    if (openTrade) list.push({ kind: 'entry', price: toScreen(openTrade.entryPrice, scale), draggable: false });
+    if (stopN > 0) list.push({ kind: 'stop', price: stopN, draggable: true, impact: levelUsdt(fromScreen(stopN, scale)) });
+    if (takeN != null && takeN > 0) list.push({ kind: 'take', price: takeN, draggable: true, impact: levelUsdt(fromScreen(takeN, scale)) });
+    return list;
+  }, [openTrade, scale, stopN, takeN, direction, impactQty, impactRef]);
 
   // Скрытая дата: день недели и время суток видны (биржевые сессии, выходные),
-  // год и число — нет; вместо даты — номер дня от старта.
-  const labelFor = (ms: number) => {
-    const d = new Date(ms);
-    const time = d.toLocaleTimeString(intl, { hour: '2-digit', minute: '2-digit' });
-    return session.hideDate
-      ? `${d.toLocaleDateString(intl, { weekday: 'short' })} ${time} · ${t('dayN', { n: dayNumber(ms, startMs) })}`
-      : `${d.toLocaleDateString(intl, { day: 'numeric', month: 'short', year: '2-digit' })} ${time}`;
-  };
+  // год и число — нет; вместо даты — номер дня от старта. useCallback по той же
+  // причине, что и levels выше — стабильная ссылка нужна memo(ReplayChart).
+  const labelFor = useCallback(
+    (ms: number) => {
+      const d = new Date(ms);
+      const time = d.toLocaleTimeString(intl, { hour: '2-digit', minute: '2-digit' });
+      return session.hideDate
+        ? `${d.toLocaleDateString(intl, { weekday: 'short' })} ${time} · ${t('dayN', { n: dayNumber(ms, startMs) })}`
+        : `${d.toLocaleDateString(intl, { day: 'numeric', month: 'short', year: '2-digit' })} ${time}`;
+    },
+    [intl, session.hideDate, startMs, t],
+  );
+  // Тем же поводом, что и labelFor выше — стабильная ссылка для memo(ReplayChart).
+  const levelLabel = useCallback((kind: LevelKind) => t(`level.${kind}`), [t]);
 
   const busy = openM.isPending || modifyM.isPending || closeM.isPending || finishM.isPending;
   // Пока закрытие не сохранено, новую сделку не открыть: сервер увидел бы две открытые.
@@ -196,22 +212,29 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
     });
   };
 
-  const onDragLevel = (kind: LevelKind, price: number, done: boolean) => {
+  // applyLevels меняется каждый рендер (замыкает openTrade/screenPrice/t) —
+  // onDragLevel читает его через реф, а не напрямую, чтобы у самого onDragLevel
+  // была стабильная ссылка: иначе она менялась бы на каждый тик риска в
+  // OrderPanel, хотя драг по графику тут ни при чём, и рвала бы memo(ReplayChart).
+  const applyLevelsRef = useRef(applyLevels);
+  applyLevelsRef.current = applyLevels;
+  const dragCtxRef = useRef({ draft, openTrade, screenPrice, stopN });
+  dragCtxRef.current = { draft, openTrade, screenPrice, stopN };
+
+  const onDragLevel = useCallback((kind: LevelKind, price: number, done: boolean) => {
     if (kind === 'entry') return;
+    const { draft: d, openTrade: ot, screenPrice: sp, stopN: sn } = dragCtxRef.current;
     // Драг стопа по графику — та же смена стороны с зеркалированием тейка,
     // что и в OrderPanel (`applyStopChange`): третье место, откуда стоп можно
     // подвинуть, не должно вести себя иначе, чем слайдер и поле.
-    const next =
-      kind === 'stop' && screenPrice != null
-        ? applyStopChange(draft, price, screenPrice, openTrade?.direction ?? null)
-        : { stop: draft.stop, take: toInput(price) };
-    setDraft({ ...draft, ...next });
+    const next = kind === 'stop' && sp != null ? applyStopChange(d, price, sp, ot?.direction ?? null) : { stop: d.stop, take: toInputPrice(price) };
+    setDraft((prev) => ({ ...prev, ...next }));
     // На сервер — только отпускание: сохранять каждое движение мыши незачем.
-    if (done && openTrade) {
+    if (done && ot) {
       const nextTake = next.take.trim() ? Number(next.take) : null;
-      applyLevels(kind === 'stop' ? price : stopN, kind === 'take' ? price : nextTake);
+      applyLevelsRef.current(kind === 'stop' ? price : sn, kind === 'take' ? price : nextTake);
     }
-  };
+  }, [setDraft]);
 
   const closeManual = () => {
     if (!openTrade || replay.price == null || !canClose) return;
@@ -283,7 +306,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
               candles={screenCandles}
               levels={levels}
               labelFor={labelFor}
-              levelLabel={(k) => t(`level.${k}`)}
+              levelLabel={levelLabel}
               liveLabel={t('live')}
               glide={screenGlide}
               onDragLevel={onDragLevel}

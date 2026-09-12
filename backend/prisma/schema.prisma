@@ -267,7 +267,6 @@ model BacktestSession {
   startBalance   Float
   /// Текущий депозит сессии: стартовый плюс PnL закрытых сделок.
   balance        Float
-  defaultRiskPct Float
   hideDate       Boolean
   hidePrice      Boolean
   /// Коэффициент показа цен; 1, если цена не скрыта. В базе цены настоящие.

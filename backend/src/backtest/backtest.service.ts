@@ -19,7 +19,6 @@ import {
 
 export interface CreateSessionInput {
   startBalance: number;
-  defaultRiskPct: number;
   hideDate: boolean;
   hidePrice: boolean;
 }
@@ -102,7 +101,6 @@ export class BacktestService {
         cursorTime: new Date(start),
         startBalance: input.startBalance,
         balance: input.startBalance,
-        defaultRiskPct: input.defaultRiskPct,
         hideDate: input.hideDate,
         hidePrice: input.hidePrice,
         priceScale: input.hidePrice ? pickPriceScale(last.close, this.rnd) : 1,

@@ -19,11 +19,6 @@ export class CreateSessionDto {
   @Max(10_000_000)
   startBalance: number;
 
-  @IsNumber()
-  @Min(0.01)
-  @Max(100)
-  defaultRiskPct: number;
-
   @IsBoolean()
   hideDate: boolean;
 

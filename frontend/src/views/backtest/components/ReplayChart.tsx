@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'react';
+import { memo, useCallback, useEffect, useRef, useState, type PointerEvent } from 'react';
 import { useNonPassiveWheel } from '@/shared/lib/hooks/useNonPassiveWheel';
 import { formatMoney, formatPriceGrouped } from '@/shared/lib/utils/format';
 import { Button } from '@/shared/ui/Button';
@@ -54,8 +54,14 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
  * Стоп и тейк перетаскиваются. Их «горячая зона» останавливает событие
  * (`stopPropagation`) — иначе один и тот же клик начинал бы и перетаскивание
  * уровня, и пан фона.
+ *
+ * Обёрнут в `memo`: рисует до сотен SVG-узлов (по два-три на свечу плюс
+ * уровни), и без этого весь график перерисовывался бы на любой ре-рендер
+ * родителя — включая тик слайдера риска, который к самому графику отношения
+ * не имеет. Пропсы, которые родитель обязан держать стабильными между такими
+ * тиками (`levels`, `labelFor`, колбэки), см. в SessionScreen.
  */
-export function ReplayChart({
+export const ReplayChart = memo(function ReplayChart({
   candles,
   levels,
   labelFor,
@@ -189,9 +195,23 @@ export function ReplayChart({
   if (drag && frozen.current) {
     ({ lo, hi } = frozen.current);
   } else {
-    const values = [...shown.flatMap((c) => [c.h, c.l]), ...levels.map((l) => l.price)];
-    lo = values.length ? Math.min(...values) : 0;
-    hi = values.length ? Math.max(...values) : 1;
+    // Циклом, а не Math.min(...values)/Math.max(...values): спред на массиве
+    // высот-минимумов до ~800 чисел (до 400 свечей × 2) выделял бы промежуточный
+    // массив и распаковывал его в аргументы на каждый тик драга уровня.
+    lo = Infinity;
+    hi = -Infinity;
+    for (const c of shown) {
+      if (c.h > hi) hi = c.h;
+      if (c.l < lo) lo = c.l;
+    }
+    for (const l of levels) {
+      if (l.price > hi) hi = l.price;
+      if (l.price < lo) lo = l.price;
+    }
+    if (!Number.isFinite(lo) || !Number.isFinite(hi)) {
+      lo = 0;
+      hi = 1;
+    }
     const pad = (hi - lo) * 0.06 || Math.abs(hi) * 0.01 || 1;
     lo -= pad;
     hi += pad;
@@ -407,4 +427,4 @@ export function ReplayChart({
       )}
     </div>
   );
-}
+});

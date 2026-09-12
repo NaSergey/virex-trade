@@ -11,7 +11,6 @@ export interface BacktestSession {
   cursorTime: string;
   startBalance: number;
   balance: number;
-  defaultRiskPct: number;
   hideDate: boolean;
   hidePrice: boolean;
   priceScale: number;

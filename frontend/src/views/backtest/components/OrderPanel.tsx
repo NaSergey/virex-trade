@@ -22,6 +22,7 @@ import {
   stopFromSignedPct,
   STOP_RISK_PCT,
   toInput,
+  toInputPrice,
   toScreen,
   unrealizedPnl,
 } from '../lib/money';
@@ -102,6 +103,13 @@ export function OrderPanel({
   // диапазона, который сужался в сторону уже выбранного (или подразумеваемого
   // по знаку самого стопа) направления — это путало, куда крутить.
   const stopSignedPct = screenPrice != null ? clamp(signedPctFromStop(stop || screenPrice, screenPrice), -STOP_RISK_PCT, STOP_RISK_PCT) : null;
+  // Подпись у поля — не позиция слайдера, а на сколько процентов сама цена
+  // стопа отличается от текущей: минус, если стоп ниже цены, плюс, если выше
+  // — то же правило знака, что у тейка (takePct) и у чтения графика вслух.
+  // У stopSignedPct знак противоположный нарочно (вправо/плюс всегда лонг,
+  // независимо от того, ниже или выше стопа цена) — годится крутить слайдер,
+  // но как число рядом с «Стоп» читалось бы обратной подсказкой.
+  const stopPct = stopSignedPct != null ? -stopSignedPct : null;
   // Значение тейка и подпись — от одного и того же зажатого числа, иначе на
   // краю диапазона слайдер и подпись разошлись бы на глаз.
   const takeValue = takeRange ? clamp(take ?? screenPrice!, takeRange.min, takeRange.max) : null;
@@ -156,8 +164,8 @@ export function OrderPanel({
           label={
             <span className="fld-head">
               <span className="fld-left">
-                <span className="fld-val">{(risk || 0).toFixed(1)}%</span>
-                <span>{t('risk')}</span>
+                <span className="fld-val"></span>
+                <span>{t('risk')} {(risk || 0).toFixed(1)}%</span>
               </span>
               {riskUsd != null && <span className="fld-val">{formatPriceGrouped(riskUsd)} USDT</span>}
             </span>
@@ -178,41 +186,49 @@ export function OrderPanel({
         </Field>
       )}
 
-      <Field label={t('stop')}>
+      <Field
+        label={
+          <span className="fld-head">
+            <span>{t('stop')}</span>
+            {stopPct != null && <span className="fld-val">{fmtPctSigned(stopPct)}</span>}
+          </span>
+        }
+      >
         {(id) => (
           <>
             {screenPrice != null && stopSignedPct != null && (
-              <div className="lvl-row">
-                <Slider
-                  value={stopSignedPct}
-                  min={-STOP_RISK_PCT}
-                  max={STOP_RISK_PCT}
-                  step={(STOP_RISK_PCT * 2) / 200}
-                  onChange={(pct) => setStop(stopFromSignedPct(pct, screenPrice))}
-                  aria-label={t('stop')}
-                />
-                <span className="lvl-pct">{fmtPctSigned(stopSignedPct)}</span>
-              </div>
+              <Slider
+                value={stopSignedPct}
+                min={-STOP_RISK_PCT}
+                max={STOP_RISK_PCT}
+                step={(STOP_RISK_PCT * 2) / 200}
+                onChange={(pct) => setStop(stopFromSignedPct(pct, screenPrice))}
+                aria-label={t('stop')}
+              />
             )}
             <Input id={id} full inputMode="decimal" value={draft.stop} onChange={setStopText} />
           </>
         )}
       </Field>
-      <Field label={t('take')}>
+      <Field
+        label={
+          <span className="fld-head">
+            <span>{t('take')}</span>
+            {takePct != null && <span className="fld-val">{fmtPctSigned(takePct)}</span>}
+          </span>
+        }
+      >
         {(id) => (
           <>
             {takeRange && takeValue != null && (
-              <div className="lvl-row">
-                <Slider
-                  value={takeValue}
-                  min={takeRange.min}
-                  max={takeRange.max}
-                  step={(takeRange.max - takeRange.min) / 200 || 1}
-                  onChange={(v) => onDraft({ ...draft, take: toInput(v) })}
-                  aria-label={t('take')}
-                />
-                <span className="lvl-pct">{fmtPctSigned(takePct!)}</span>
-              </div>
+              <Slider
+                value={takeValue}
+                min={takeRange.min}
+                max={takeRange.max}
+                step={(takeRange.max - takeRange.min) / 200 || 1}
+                onChange={(v) => onDraft({ ...draft, take: toInputPrice(v) })}
+                aria-label={t('take')}
+              />
             )}
             <Input id={id} full inputMode="decimal" value={draft.take} onChange={set('take')} />
           </>
@@ -221,7 +237,9 @@ export function OrderPanel({
 
       {!openTrade && preview && (
         <div className="size-preview">
-          <KeyValue label={t('sizeCoin')}>{formatQty(preview.qty)}</KeyValue>
+          {/* Предпросмотр размера — прикидка по риску, а не число ордера на бирже:
+              восемь знаков formatQty тут только шумят, трёх достаточно на глаз. */}
+          <KeyValue label={t('sizeCoin')}>{formatQty(Number(preview.qty.toFixed(3)))}</KeyValue>
           <KeyValue label={t('notionalLabel')}>{formatPriceGrouped(preview.notional)} USDT</KeyValue>
         </div>
       )}

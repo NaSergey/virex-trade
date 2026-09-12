@@ -52,7 +52,7 @@ const json = (method: string, body?: unknown): RequestInit => ({
 export const useCreateSession = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { startBalance: number; defaultRiskPct: number; hideDate: boolean; hidePrice: boolean }) =>
+    mutationFn: (input: { startBalance: number; hideDate: boolean; hidePrice: boolean }) =>
       apiJson<{ session: BacktestSession }>('/api/backtest/sessions', json('POST', input)),
     onSettled: () => refresh(qc),
   });
