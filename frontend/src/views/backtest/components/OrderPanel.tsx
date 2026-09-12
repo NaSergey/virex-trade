@@ -10,7 +10,21 @@ import { Slider } from '@/shared/ui/Slider';
 import { Tooltip } from '@/shared/ui/Tooltip';
 import { fmtPctSigned, formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
 import type { BacktestTrade, Direction } from '../api/types';
-import { formatR, fromScreen, impliedDirection, levelSliderRange, previewSize, riskAmount, toScreen, unrealizedPnl } from '../lib/money';
+import {
+  applyStopChange,
+  formatR,
+  fromScreen,
+  impliedDirection,
+  levelSliderRange,
+  previewSize,
+  riskAmount,
+  signedPctFromStop,
+  stopFromSignedPct,
+  STOP_RISK_PCT,
+  toInput,
+  toScreen,
+  unrealizedPnl,
+} from '../lib/money';
 
 /** Поля панели — строками, как их набирает человек, и в экранных ценах. */
 export interface Draft {
@@ -30,9 +44,16 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
  *
  * Риск и уровни правит слайдер поверх текстового поля: оба меняют один и тот
  * же черновик, поле остаётся источником точного числа тем, кому слайдер
- * недостаточно точен. Диапазон слайдера стопа/тейка симметричный вокруг
- * цены, пока сделка не открыта (направление ещё не выбрано), и сужается на
- * верную сторону, когда сделка уже идёт (`levelSliderRange`).
+ * недостаточно точен.
+ *
+ * Слайдер стопа задаёт направление и дистанцию одним движением: центр —
+ * цена, вправо (плюс) — лонг, влево (минус) — шорт, по 7% в каждую сторону
+ * (`stopFromSignedPct`/`signedPctFromStop`). Тейк идёт следом: направление
+ * стопа — общее для обоих уровней (`impliedDirection`), диапазон тейка
+ * сужается на верную сторону, как только сторона стопа известна
+ * (`levelSliderRange`), а если стоп меняет сторону — уже введённый тейк
+ * зеркалится вместе с ним, синхронно, в том же обработчике, что двигает
+ * стоп (`applyStopChange`), а не отдельным эффектом на кадр позже.
  */
 export function OrderPanel({
   draft,
@@ -75,14 +96,32 @@ export function OrderPanel({
   // независимо, и слайдер тейка на глаз никак не был бы связан со стопом,
   // хотя в одной сделке они обязаны стоять по разные стороны цены.
   const direction = screenPrice != null ? impliedDirection(openTrade?.direction ?? null, stop, take, screenPrice) : null;
-  const stopRange = screenPrice != null ? levelSliderRange('stop', screenPrice, direction) : null;
   const takeRange = screenPrice != null ? levelSliderRange('take', screenPrice, direction) : null;
-  // Значение слайдера и подпись в процентах — от одного и того же зажатого
-  // числа, иначе на краю диапазона слайдер и подпись разошлись бы на глаз.
-  const stopValue = stopRange ? clamp(stop || screenPrice!, stopRange.min, stopRange.max) : null;
+  // Слайдер стопа — центр на цене, вправо (плюс) лонг, влево (минус) шорт,
+  // по 7% в каждую сторону: направление и дистанция одним числом, вместо
+  // диапазона, который сужался в сторону уже выбранного (или подразумеваемого
+  // по знаку самого стопа) направления — это путало, куда крутить.
+  const stopSignedPct = screenPrice != null ? clamp(signedPctFromStop(stop || screenPrice, screenPrice), -STOP_RISK_PCT, STOP_RISK_PCT) : null;
+  // Значение тейка и подпись — от одного и того же зажатого числа, иначе на
+  // краю диапазона слайдер и подпись разошлись бы на глаз.
   const takeValue = takeRange ? clamp(take ?? screenPrice!, takeRange.min, takeRange.max) : null;
-  const stopPct = stopValue != null && screenPrice ? ((stopValue - screenPrice) / screenPrice) * 100 : null;
   const takePct = takeValue != null && screenPrice ? ((takeValue - screenPrice) / screenPrice) * 100 : null;
+
+  /** Стоп получил новую цену — тейк зеркалится тут же, если сторона поменялась (см. `applyStopChange`). */
+  const setStop = (newStopScreen: number) => {
+    if (screenPrice == null) return;
+    onDraft({ ...draft, ...applyStopChange(draft, newStopScreen, screenPrice, openTrade?.direction ?? null) });
+  };
+  /** То же самое из текстового поля: сам стоп остаётся как напечатан (без переформатирования на каждый знак), зеркалится только тейк. */
+  const setStopText = (e: ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    if (screenPrice == null) {
+      onDraft({ ...draft, stop: raw });
+      return;
+    }
+    const { take: nextTake } = applyStopChange(draft, Number(raw), screenPrice, openTrade?.direction ?? null);
+    onDraft({ ...draft, stop: raw, take: nextTake });
+  };
 
   const preview =
     !openTrade && price != null && stop > 0 ? previewSize(balance, risk, price, fromScreen(stop, scale)) : null;
@@ -121,7 +160,7 @@ export function OrderPanel({
                 min={0}
                 max={10}
                 step={0.1}
-                onChange={(v) => onDraft({ ...draft, risk: String(v) })}
+                onChange={(v) => onDraft({ ...draft, risk: toInput(v) })}
                 aria-label={t('risk')}
               />
               <Input id={id} full inputMode="decimal" value={draft.risk} onChange={set('risk')} />
@@ -137,20 +176,20 @@ export function OrderPanel({
       <Field label={t('stop')}>
         {(id) => (
           <>
-            {stopRange && stopValue != null && (
+            {screenPrice != null && stopSignedPct != null && (
               <div className="lvl-row">
                 <Slider
-                  value={stopValue}
-                  min={stopRange.min}
-                  max={stopRange.max}
-                  step={(stopRange.max - stopRange.min) / 200 || 1}
-                  onChange={(v) => onDraft({ ...draft, stop: String(v) })}
+                  value={stopSignedPct}
+                  min={-STOP_RISK_PCT}
+                  max={STOP_RISK_PCT}
+                  step={(STOP_RISK_PCT * 2) / 200}
+                  onChange={(pct) => setStop(stopFromSignedPct(pct, screenPrice))}
                   aria-label={t('stop')}
                 />
-                <span className="lvl-pct">{fmtPctSigned(stopPct!)}</span>
+                <span className="lvl-pct">{fmtPctSigned(stopSignedPct)}</span>
               </div>
             )}
-            <Input id={id} full inputMode="decimal" value={draft.stop} onChange={set('stop')} />
+            <Input id={id} full inputMode="decimal" value={draft.stop} onChange={setStopText} />
           </>
         )}
       </Field>
@@ -164,7 +203,7 @@ export function OrderPanel({
                   min={takeRange.min}
                   max={takeRange.max}
                   step={(takeRange.max - takeRange.min) / 200 || 1}
-                  onChange={(v) => onDraft({ ...draft, take: String(v) })}
+                  onChange={(v) => onDraft({ ...draft, take: toInput(v) })}
                   aria-label={t('take')}
                 />
                 <span className="lvl-pct">{fmtPctSigned(takePct!)}</span>

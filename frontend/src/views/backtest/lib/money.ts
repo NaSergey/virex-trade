@@ -64,8 +64,32 @@ export function riskAmount(balance: number, riskPct: number): number | null {
 
 /** Максимальное отклонение стопа от цены — шире не даёт слить депозит одним движением слайдера. */
 const STOP_PCT = 0.07;
+/** То же самое в процентных пунктах слайдера стопа — ±7. */
+export const STOP_RISK_PCT = STOP_PCT * 100;
 /** Тейк не так рискован ограничивать — размах шире, ±20%. */
 const TAKE_PCT = 0.2;
+
+/**
+ * Слайдер стопа задаёт сразу направление и дистанцию одним числом: центр —
+ * цена, направления ещё нет; вправо (положительный процент) — лонг, стоп
+ * встаёт настолько ниже цены; влево (отрицательный) — шорт, стоп настолько
+ * выше. Раздельные кнопка направления и диапазон в одну сторону путали —
+ * положение слайдера физически (правее/левее) не совпадало с тем, какую
+ * сделку он готовит, и приводило именно к той стороне, что не ожидал
+ * пользователь.
+ *
+ * Формула одна на оба знака: `price × (1 − pct/100)` при pct=−3 даёт
+ * `price × 1.03` — стоп на 3 % выше цены, ровно то же самое, что и `price ×
+ * (1 + 0.03)` для шорта.
+ */
+export function stopFromSignedPct(pct: number, price: number): number {
+  return price * (1 - pct / 100);
+}
+
+/** Обратное преобразование — положение слайдера по уже введённой (или снесённой драгом) цене стопа. */
+export function signedPctFromStop(stopPrice: number, price: number): number {
+  return ((price - stopPrice) / price) * 100;
+}
 
 /**
  * Направление, которое подразумевают уже введённые уровни, — до того, как
@@ -116,6 +140,39 @@ export function levelSliderRange(
   const long = direction === 'long';
   const belowSide = kind === 'stop' ? long : !long;
   return belowSide ? { min: lo, max: price } : { min: price, max: hi };
+}
+
+/**
+ * Черновик стопа и тейка после того, как стоп получил новую цену — общая
+ * точка для всех трёх мест, откуда стоп можно подвинуть (слайдер, текстовое
+ * поле, драг уровня прямо по графику).
+ *
+ * Если новый стоп меняет подразумеваемое направление (`impliedDirection`),
+ * уже введённый тейк был по правильную сторону для прежнего направления и
+ * стал неверным для нового — зеркалим его через цену: та же дистанция,
+ * другая сторона, а не молча оставляем то, что стало противоречить самому
+ * стопу.
+ *
+ * Синхронно и чисто (без стейта, без эффекта): вызывающий обязан применить
+ * оба поля одним обновлением состояния, в том же обработчике, что и сам
+ * стоп — иначе один кадр между «стоп уже новый» и «тейк ещё старый» успел бы
+ * отрисоваться на графике.
+ */
+export function applyStopChange(
+  prev: { stop: string; take: string },
+  newStopScreen: number,
+  screenPrice: number,
+  openDirection: Direction | null,
+): { stop: string; take: string } {
+  const prevStop = Number(prev.stop);
+  const prevTake = prev.take.trim() ? Number(prev.take) : null;
+  const prevDirection = impliedDirection(openDirection, prevStop, prevTake, screenPrice);
+  const nextDirection = impliedDirection(openDirection, newStopScreen, prevTake, screenPrice);
+  const stop = toInput(newStopScreen);
+  if (prevDirection != null && nextDirection != null && prevDirection !== nextDirection && prevTake != null) {
+    return { stop, take: toInput(2 * screenPrice - prevTake) };
+  }
+  return { stop, take: prev.take };
 }
 
 /**

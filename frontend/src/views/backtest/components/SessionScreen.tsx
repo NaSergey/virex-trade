@@ -21,7 +21,7 @@ import {
 } from '../api/hooks';
 import type { BacktestTrade, Direction, ExitReason, SessionDetail } from '../api/types';
 import { TIMEFRAMES, dayNumber, scaleCandle } from '../lib/candles';
-import { checkLevels, fromScreen, impliedDirection, levelImpact, previewSize, toInput, toScreen } from '../lib/money';
+import { applyStopChange, checkLevels, fromScreen, impliedDirection, levelImpact, previewSize, toInput, toScreen } from '../lib/money';
 import { SPEEDS, useReplay } from '../model/useReplay';
 import { OrderPanel, type Draft } from './OrderPanel';
 import { ReplayChart, type Level, type LevelKind } from './ReplayChart';
@@ -109,6 +109,15 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   const stopN = Number(draft.stop);
   const takeN = draft.take.trim() ? Number(draft.take) : null;
 
+  // Направление одно на стоп и тейк — решает его стоп (или тейк, пока стоп
+  // пуст), см. impliedDirection: иначе стоп и тейк могли бы разойтись по одну
+  // сторону цены, хотя слайдер такого уже не даст набрать. Смена стороны —
+  // с зеркалированием уже введённого тейка — происходит синхронно там, где
+  // стоп реально меняется: в OrderPanel (слайдер, поле) и в onDragLevel ниже
+  // (драг по графику), одной и той же функцией `applyStopChange` — не здесь
+  // реактивно, чтобы не ловить кадр со старым, ещё не поправленным тейком.
+  const direction = screenPrice != null ? impliedDirection(openTrade?.direction ?? null, stopN, takeN, screenPrice) : null;
+
   const screenCandles = useMemo(() => replay.candles.map((c) => scaleCandle(c, scale)), [replay.candles, scale]);
 
   const screenGlide = useMemo(
@@ -116,11 +125,6 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
     [replay.glide, scale],
   );
 
-  // Сторона одна на оба уровня — та же, что решает диапазон слайдеров в
-  // OrderPanel (`impliedDirection`): иначе стоп и тейк могли бы разойтись по
-  // одну сторону цены при показе результата, хотя слайдер такого уже не даст
-  // набрать.
-  const impactDirection = screenPrice != null ? impliedDirection(openTrade?.direction ?? null, stopN, takeN, screenPrice) : null;
   // Размер — тот же, что уже выбран: у открытой сделки её qty, у ещё не
   // открытой — предпросмотр по риску и дистанции до стопа (тот же qty
   // используют оба уровня: позицию размерил стоп, а не тейк).
@@ -132,9 +136,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   const impactRef = openTrade ? openTrade.entryPrice : replay.price;
   /** Результат в USDT, если цена дойдёт до levelReal — та же формула, что у «Сейчас» в панели. */
   const levelUsdt = (levelReal: number) =>
-    impactDirection != null && impactQty != null && impactRef != null
-      ? levelImpact(impactDirection, impactRef, levelReal, impactQty).usdt
-      : null;
+    direction != null && impactQty != null && impactRef != null ? levelImpact(direction, impactRef, levelReal, impactQty).usdt : null;
 
   const levels: Level[] = [];
   if (openTrade) levels.push({ kind: 'entry', price: toScreen(openTrade.entryPrice, scale), draggable: false });
@@ -196,9 +198,19 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
 
   const onDragLevel = (kind: LevelKind, price: number, done: boolean) => {
     if (kind === 'entry') return;
-    setDraft((d) => ({ ...d, [kind]: toInput(price) }));
+    // Драг стопа по графику — та же смена стороны с зеркалированием тейка,
+    // что и в OrderPanel (`applyStopChange`): третье место, откуда стоп можно
+    // подвинуть, не должно вести себя иначе, чем слайдер и поле.
+    const next =
+      kind === 'stop' && screenPrice != null
+        ? applyStopChange(draft, price, screenPrice, openTrade?.direction ?? null)
+        : { stop: draft.stop, take: toInput(price) };
+    setDraft({ ...draft, ...next });
     // На сервер — только отпускание: сохранять каждое движение мыши незачем.
-    if (done && openTrade) applyLevels(kind === 'stop' ? price : stopN, kind === 'take' ? price : takeN);
+    if (done && openTrade) {
+      const nextTake = next.take.trim() ? Number(next.take) : null;
+      applyLevels(kind === 'stop' ? price : stopN, kind === 'take' ? price : nextTake);
+    }
   };
 
   const closeManual = () => {

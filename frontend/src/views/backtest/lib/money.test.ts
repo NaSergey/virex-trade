@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyStopChange,
   checkLevels,
   formatR,
   fromScreen,
@@ -8,6 +9,8 @@ import {
   levelSliderRange,
   previewSize,
   riskAmount,
+  signedPctFromStop,
+  stopFromSignedPct,
   toInput,
   toScreen,
   unrealizedPnl,
@@ -85,6 +88,25 @@ describe('riskAmount', () => {
   });
 });
 
+describe('stopFromSignedPct / signedPctFromStop', () => {
+  it('вправо (плюс) — лонг, стоп ниже цены', () => {
+    expect(stopFromSignedPct(3, 100)).toBe(97);
+  });
+
+  it('влево (минус) — шорт, стоп выше цены', () => {
+    expect(stopFromSignedPct(-3, 100)).toBe(103);
+  });
+
+  it('центр — стоп на самой цене', () => {
+    expect(stopFromSignedPct(0, 100)).toBe(100);
+  });
+
+  it('туда и обратно', () => {
+    expect(signedPctFromStop(97, 100)).toBeCloseTo(3, 6);
+    expect(signedPctFromStop(103, 100)).toBeCloseTo(-3, 6);
+  });
+});
+
 describe('impliedDirection', () => {
   it('открытая сделка решает сама, что бы ни было набрано в полях', () => {
     expect(impliedDirection('short', 105, 90, 100)).toBe('short');
@@ -106,6 +128,34 @@ describe('impliedDirection', () => {
 
   it('ничего не набрано — направления нет', () => {
     expect(impliedDirection(null, NaN, null, 100)).toBeNull();
+  });
+});
+
+describe('applyStopChange', () => {
+  it('стоп меняет сторону — тейк зеркалится через цену', () => {
+    // Было: лонг (стоп 98, тейк 110). Новый стоп — 103 (выше цены, шорт).
+    const result = applyStopChange({ stop: '98', take: '110' }, 103, 100, null);
+    expect(result.stop).toBe('103');
+    expect(Number(result.take)).toBeCloseTo(90, 6); // 2*100 - 110
+  });
+
+  it('сторона не поменялась — тейк не трогаем', () => {
+    const result = applyStopChange({ stop: '98', take: '110' }, 97, 100, null);
+    expect(result.stop).toBe('97');
+    expect(result.take).toBe('110');
+  });
+
+  it('тейка ещё нет — мирроить нечего', () => {
+    const result = applyStopChange({ stop: '98', take: '' }, 103, 100, null);
+    expect(result.stop).toBe('103');
+    expect(result.take).toBe('');
+  });
+
+  it('открытая сделка — направление её, не стопа', () => {
+    // Стоп двигается в пределах той же (открытой) стороны — тейк не зеркалится,
+    // даже если голый расчёт по цене показал бы смену стороны.
+    const result = applyStopChange({ stop: '98', take: '110' }, 99, 100, 'long');
+    expect(result.take).toBe('110');
   });
 });
 
