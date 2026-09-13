@@ -11,6 +11,7 @@ import {
   ModifyTradeDto,
   OpenTradeDto,
   SetBacktestTagsDto,
+  SetLeverageDto,
 } from './dto/backtest.dto';
 
 @UseGuards(JwtAuthGuard)
@@ -57,6 +58,11 @@ export class BacktestController {
   @Post('trades/:id/add')
   add(@CurrentUser('userId') userId: string, @Param('id') id: string, @Body() dto: AddToTradeDto) {
     return this.backtest.addToTrade(userId, id, dto);
+  }
+
+  @Patch('sessions/:id/leverage')
+  setLeverage(@CurrentUser('userId') userId: string, @Param('id') id: string, @Body() dto: SetLeverageDto) {
+    return this.backtest.setLeverage(userId, id, dto.leverage);
   }
 
   @Post('trades/:id/close')

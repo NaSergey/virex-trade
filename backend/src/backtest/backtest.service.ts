@@ -306,6 +306,32 @@ export class BacktestService {
     });
   }
 
+  async setLeverage(userId: string, sessionId: string, leverage: number) {
+    const s = await this.ownedSession(userId, sessionId);
+    if (s.status !== 'active') throw sessionFinished();
+
+    return this.prisma.$transaction(async (tx) => {
+      // cursorTime — свежим чтением внутри транзакции, а не из `s` выше: у modifyTrade
+      // для той же цели (bumpCursor как замок, без содержательного нового момента) есть
+      // готовое значение под рукой через ownedTrade (trade.session.cursorTime), но
+      // ownedSession отдаёт только то, что уже проверено выше (status) — своё чтение
+      // надёжнее, чем полагаться на непроверенный состав остальных полей.
+      const fresh = await tx.backtestSession.findUnique({ where: { id: sessionId }, select: { balance: true, cursorTime: true } });
+      const bumped = await this.bumpCursor(tx, sessionId, fresh!.cursorTime);
+      if (bumped === 0) throw sessionFinished();
+      const open = await tx.backtestTrade.findMany({ where: { sessionId, exitTime: null } });
+      for (const trade of open) {
+        const margin = (trade.qty * trade.entryPrice) / leverage;
+        if (margin > fresh!.balance) {
+          throw new BadRequestException({ message: 'Маржа больше депозита', code: 'BACKTEST_MARGIN_EXCEEDS_BALANCE' });
+        }
+      }
+      await tx.backtestTrade.updateMany({ where: { sessionId, exitTime: null }, data: { leverage } });
+      const trades = await tx.backtestTrade.findMany({ where: { sessionId, exitTime: null }, include: TAGS });
+      return { trades: trades.map(tradeView) };
+    });
+  }
+
   async createCloseOrder(userId: string, tradeId: string, input: { price: number; qty: number }) {
     const trade = await this.ownedTrade(userId, tradeId);
     if (trade.exitTime) throw tradeClosed();

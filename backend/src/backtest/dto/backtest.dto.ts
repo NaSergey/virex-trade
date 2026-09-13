@@ -81,6 +81,13 @@ export class AddToTradeDto {
   riskPct: number;
 }
 
+export class SetLeverageDto {
+  @IsNumber()
+  @Min(1)
+  @Max(100)
+  leverage: number;
+}
+
 export class CreateCloseOrderDto {
   @IsPositive()
   price: number;

@@ -739,6 +739,60 @@ describe('BacktestService — сделки', () => {
       expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_CLOSE_ORDER_NOT_FOUND' });
     });
   });
+
+  describe('плечо сессии', () => {
+    it('меняет плечо у всех открытых сделок сессии', async () => {
+      const { service, prisma } = makeService();
+      prisma.backtestSession.findUnique
+        .mockResolvedValueOnce(SESSION) // ownedSession
+        .mockResolvedValueOnce({ balance: 10_000, cursorTime: SESSION.cursorTime }); // свежее чтение под замком
+      prisma.backtestTrade.findMany.mockResolvedValueOnce([
+        { ...TRADE, id: 't1', direction: 'long', qty: 50, entryPrice: 100 },
+        { ...TRADE, id: 't2', direction: 'short', qty: 20, entryPrice: 100 },
+      ]);
+
+      await service.setLeverage('u1', 's1', 20);
+
+      expect(prisma.backtestTrade.updateMany).toHaveBeenCalledWith({
+        where: { sessionId: 's1', exitTime: null },
+        data: { leverage: 20 },
+      });
+    });
+
+    it('отказ, если новая маржа хоть одной сделки больше депозита', async () => {
+      const { service, prisma } = makeService();
+      prisma.backtestSession.findUnique
+        .mockResolvedValueOnce(SESSION)
+        .mockResolvedValueOnce({ balance: 100, cursorTime: SESSION.cursorTime });
+      prisma.backtestTrade.findMany.mockResolvedValueOnce([{ ...TRADE, id: 't1', qty: 50, entryPrice: 100 }]);
+      // margin = 50*100/1 = 5000 > 100
+
+      const err = await rejection(service.setLeverage('u1', 's1', 1));
+
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_MARGIN_EXCEEDS_BALANCE' });
+      expect(prisma.backtestTrade.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('чужая сессия — 404', async () => {
+      const { service, prisma } = makeService();
+      prisma.backtestSession.findUnique.mockResolvedValue({ ...SESSION, userId: 'u2' });
+
+      const err = await rejection(service.setLeverage('u1', 's1', 10));
+
+      expect(err).toBeInstanceOf(NotFoundException);
+      expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_SESSION_NOT_FOUND' });
+    });
+
+    it('завершённая сессия — отказ', async () => {
+      const { service, prisma } = makeService();
+      prisma.backtestSession.findUnique.mockResolvedValue({ ...SESSION, status: 'finished' });
+
+      const err = await rejection(service.setLeverage('u1', 's1', 10));
+
+      expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_SESSION_FINISHED' });
+    });
+  });
 });
 
 describe('BacktestService — статистика', () => {

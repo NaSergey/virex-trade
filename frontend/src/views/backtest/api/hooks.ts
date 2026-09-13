@@ -101,6 +101,15 @@ export const useAddToTrade = (id: string) => {
   });
 };
 
+export const useSetLeverage = (id: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (leverage: number) =>
+      apiJson<{ trades: BacktestTrade[] }>(`/api/backtest/sessions/${id}/leverage`, json('PATCH', { leverage })),
+    onSettled: () => refresh(qc, id),
+  });
+};
+
 export const useCloseTrade = (id: string) => {
   const qc = useQueryClient();
   return useMutation({
