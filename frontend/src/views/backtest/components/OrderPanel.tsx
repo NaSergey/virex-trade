@@ -36,11 +36,11 @@ const MIN_LEVERAGE = 1;
 const MAX_LEVERAGE = 100;
 
 /**
- * Вход, уровни, риск и плечо — панель никогда не смотрит на то, открыта ли
- * сделка: сама открытая позиция и её закрытие живут в `OpenPositionsPanel` под
- * графиком. Единственное, что меняется по состоянию открытой сделки той же
- * стороны (`sameDirectionOpen`), — подписи и обработчик кнопок Лонг/Шорт: они
- * либо открывают новую сделку, либо добирают уже открытую.
+ * Вход, уровни, риск и плечо — панель никогда не смотрит на то, что уже открыто: сама
+ * открытая позиция (хедж — до двух сделок разом) и её закрытие живут в
+ * `OpenPositionsPanel` под графиком. Единственное, что меняется по тому, какие стороны
+ * уже открыты (`openDirections`), — подписи и обработчик кнопок Лонг/Шорт: свой
+ * направление добирает уже открытую, чужое — открывает новую независимо от первой.
  *
  * Слайдер стопа задаёт направление и дистанцию одним движением: центр — цена,
  * вправо (плюс) — лонг, влево (минус) — шорт, по 7% в каждую сторону
@@ -54,8 +54,7 @@ const MAX_LEVERAGE = 100;
 export function OrderPanel({
   draft,
   onDraft,
-  sameDirectionOpen,
-  openLeverage,
+  openDirections,
   scale,
   price,
   balance,
@@ -67,10 +66,10 @@ export function OrderPanel({
 }: {
   draft: Draft;
   onDraft: (d: Draft) => void;
-  /** Сторона уже открытой сделки, если она есть — кнопки становятся добором, а не открытием. */
-  sameDirectionOpen: Direction | null;
-  /** Плечо открытой сделки — панель его только показывает, слайдер её не меняет добором. */
-  openLeverage: number | null;
+  /** Стороны уже открытых сделок (хедж — до двух) — решают только подпись и обработчик
+   * кнопок Лонг/Шорт: своя сторона добирает, а не открывает заново. Больше ни на что
+   * панель не смотрит. */
+  openDirections: Direction[];
   scale: number;
   /** Настоящая цена последней показанной минутки. */
   price: number | null;
@@ -88,11 +87,10 @@ export function OrderPanel({
   const take = draft.take.trim() ? Number(draft.take) : null;
   const risk = Number(draft.risk);
   const leverage = clamp(Number(draft.leverage) || MIN_LEVERAGE, MIN_LEVERAGE, MAX_LEVERAGE);
-  const effectiveLeverage = openLeverage ?? leverage;
   const screenPrice = price != null ? toScreen(price, scale) : null;
-  // Сторона стопа/тейка одна на двоих, и если сделка уже открыта — она решает
-  // сама, независимо от того, что набрано в полях (см. impliedDirection).
-  const direction = screenPrice != null ? impliedDirection(sameDirectionOpen, stop, take, screenPrice) : null;
+  // Панель больше не привязана ни к какой открытой сделке — направление всегда решают
+  // только уже набранные стоп/тейк (см. impliedDirection).
+  const direction = screenPrice != null ? impliedDirection(null, stop, take, screenPrice) : null;
   const takeRange = screenPrice != null ? levelSliderRange('take', screenPrice, direction) : null;
   const stopSignedPct = screenPrice != null ? clamp(signedPctFromStop(stop || screenPrice, screenPrice), -STOP_RISK_PCT, STOP_RISK_PCT) : null;
   const stopPct = stopSignedPct != null ? -stopSignedPct : null;
@@ -102,7 +100,7 @@ export function OrderPanel({
   /** Стоп получил новую цену — тейк зеркалится тут же, если сторона поменялась. */
   const setStop = (newStopScreen: number) => {
     if (screenPrice == null) return;
-    onDraft({ ...draft, ...applyStopChange(draft, newStopScreen, screenPrice, sameDirectionOpen) });
+    onDraft({ ...draft, ...applyStopChange(draft, newStopScreen, screenPrice, null) });
   };
   const setStopText = (e: ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
@@ -110,13 +108,13 @@ export function OrderPanel({
       onDraft({ ...draft, stop: raw });
       return;
     }
-    const { take: nextTake } = applyStopChange(draft, Number(raw), screenPrice, sameDirectionOpen);
+    const { take: nextTake } = applyStopChange(draft, Number(raw), screenPrice, null);
     onDraft({ ...draft, stop: raw, take: nextTake });
   };
 
   const preview =
     price != null && stop > 0
-      ? previewSize(balance, risk, price, fromScreen(stop, scale), effectiveLeverage, direction ?? 'long')
+      ? previewSize(balance, risk, price, fromScreen(stop, scale), leverage, direction ?? 'long')
       : null;
   const riskUsd = riskAmount(balance, risk);
 
@@ -149,14 +147,13 @@ export function OrderPanel({
         )}
       </Field>
 
-      <Field label={<span className="fld-head"><span>{t('leverageLabel')} {effectiveLeverage.toFixed(0)}×</span></span>}>
+      <Field label={<span className="fld-head"><span>{t('leverageLabel')} {leverage.toFixed(0)}×</span></span>}>
         {() => (
           <Slider
-            value={effectiveLeverage}
+            value={leverage}
             min={MIN_LEVERAGE}
             max={MAX_LEVERAGE}
             step={1}
-            disabled={openLeverage != null}
             onChange={(v) => onDraft({ ...draft, leverage: toInput(v) })}
             aria-label={t('leverageLabel')}
           />
@@ -230,20 +227,19 @@ export function OrderPanel({
       <div className="order-actions">
         <Button
           variant="long"
-          onClick={() => (sameDirectionOpen === 'long' ? onAdd('long') : onOpen('long'))}
-          disabled={disabled || balance <= 0 || sameDirectionOpen === 'short'}
+          onClick={() => (openDirections.includes('long') ? onAdd('long') : onOpen('long'))}
+          disabled={disabled || balance <= 0}
         >
-          {sameDirectionOpen === 'long' ? t('addLong') : t('long')}
+          {openDirections.includes('long') ? t('addLong') : t('long')}
         </Button>
         <Button
           variant="short"
-          onClick={() => (sameDirectionOpen === 'short' ? onAdd('short') : onOpen('short'))}
-          disabled={disabled || balance <= 0 || sameDirectionOpen === 'long'}
+          onClick={() => (openDirections.includes('short') ? onAdd('short') : onOpen('short'))}
+          disabled={disabled || balance <= 0}
         >
-          {sameDirectionOpen === 'short' ? t('addShort') : t('short')}
+          {openDirections.includes('short') ? t('addShort') : t('short')}
         </Button>
       </div>
-      {sameDirectionOpen != null && <p className="muted">{t('hedgeUnsupported')}</p>}
 
       <div className="risk-zone">
         <Button variant="risk" onClick={onFinish} disabled={disabled}>

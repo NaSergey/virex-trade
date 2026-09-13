@@ -21,6 +21,7 @@ import {
   useModifyTrade,
   useOpenTrade,
   useSetBacktestTags,
+  useSetLeverage,
 } from '../api/hooks';
 import type { BacktestTrade, Direction, ExitReason, SessionDetail } from '../api/types';
 import { TIMEFRAMES, dayNumber, scaleCandle } from '../lib/candles';
@@ -32,6 +33,7 @@ import {
   levelImpact,
   liquidationPrice,
   previewSize,
+  toInput,
   toInputPrice,
   toScreen,
 } from '../lib/money';
@@ -84,7 +86,12 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   const { session, trades } = detail;
   const scale = session.priceScale;
   const startMs = Date.parse(session.startTime);
-  const openTrade = trades.find((x) => x.exitTime == null) ?? null;
+  // useMemo, не голый .filter(): `levels` ниже держит openTrades в зависимостях, а
+  // ReplayChart — memo (см. его комментарий) и сверяет уровни по ссылке. .find() у
+  // одной сделки был стабилен сам по себе (тот же объект из массива), .filter() каждый
+  // раз аллоцирует новый массив — без useMemo levels пересчитывался бы на любой рендер,
+  // включая тик слайдера риска, который к открытым сделкам отношения не имеет.
+  const openTrades = useMemo(() => trades.filter((x) => x.exitTime == null), [trades]);
 
   const { data: tagsData } = useTags();
   const openM = useOpenTrade(session.id);
@@ -95,6 +102,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   const cancelOrderM = useCancelCloseOrder(session.id);
   const finishM = useFinishSession(session.id);
   const tagsM = useSetBacktestTags(session.id);
+  const setLeverageM = useSetLeverage(session.id);
 
   const closeTrade = (trade: BacktestTrade, time: number, price: number, reason: ExitReason, qty?: number, closeOrderId?: string) =>
     closeM.mutateAsync({ tradeId: trade.id, exitTime: new Date(time).toISOString(), exitPrice: price, reason, qty, closeOrderId });
@@ -106,9 +114,9 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   const [draft, setDraft] = useState<Draft>({ risk: '1', stop: '', take: '', leverage: '1' });
   const [hint, setHint] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
-  const [limitModal, setLimitModal] = useState(false);
-  const [marketModal, setMarketModal] = useState(false);
-  const [levelsModal, setLevelsModal] = useState(false);
+  const [limitModalFor, setLimitModalFor] = useState<string | null>(null);
+  const [marketModalFor, setMarketModalFor] = useState<string | null>(null);
+  const [levelsModalFor, setLevelsModalFor] = useState<string | null>(null);
   const [tab, setTab] = useState<'open' | 'history'>('open');
 
   const screenPrice = replay.price != null ? toScreen(replay.price, scale) : null;
@@ -122,7 +130,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   // стоп реально меняется: в OrderPanel (слайдер, поле) и в onDragLevel ниже
   // (драг по графику), одной и той же функцией `applyStopChange` — не здесь
   // реактивно, чтобы не ловить кадр со старым, ещё не поправленным тейком.
-  const direction = screenPrice != null ? impliedDirection(openTrade?.direction ?? null, stopN, takeN, screenPrice) : null;
+  const direction = screenPrice != null ? impliedDirection(null, stopN, takeN, screenPrice) : null;
 
   const screenCandles = useMemo(() => replay.candles.map((c) => scaleCandle(c, scale)), [replay.candles, scale]);
 
@@ -131,16 +139,14 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
     [replay.glide, scale],
   );
 
-  // Размер — тот же, что уже выбран: у открытой сделки её qty, у ещё не
-  // открытой — предпросмотр по риску и дистанции до стопа (тот же qty
-  // используют оба уровня: позицию размерил стоп, а не тейк).
-  const impactQty = openTrade
-    ? openTrade.qty
-    : stopN > 0 && replay.price != null
+  // Черновик описывает только следующий ордер — открытых сделок это больше не
+  // касается, их уровни строятся из них самих ниже.
+  const impactQty =
+    stopN > 0 && replay.price != null
       ? previewSize(session.balance, Number(draft.risk), replay.price, fromScreen(stopN, scale), Number(draft.leverage) || 1, direction ?? 'long')
           ?.qty ?? null
       : null;
-  const impactRef = openTrade ? openTrade.entryPrice : replay.price;
+  const impactRef = replay.price;
 
   // Уровни — своим useMemo, а не строятся прямо в теле рендера: ReplayChart
   // (memo, см. его комментарий) сверяет этот массив по ссылке, и без useMemo
@@ -148,26 +154,80 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   // сделке без стопа — там числа на графике вообще не меняются, но график всё
   // равно перерисовывался бы целиком.
   const levels = useMemo<Level[]>(() => {
-    /** Результат в USDT, если цена дойдёт до levelReal — та же формула, что у «Сейчас» в панели. */
-    const levelUsdt = (levelReal: number) =>
-      direction != null && impactQty != null && impactRef != null ? levelImpact(direction, impactRef, levelReal, impactQty).usdt : null;
     const list: Level[] = [];
-    if (openTrade) {
-      list.push({ id: 'entry', kind: 'entry', price: toScreen(openTrade.entryPrice, scale), draggable: false });
+
+    // Уровни уже открытых сделок — от их собственных stopLoss/takeProfit, не от
+    // черновика панели: с хеджем сделок может быть две, у каждой свои уровни.
+    for (const trade of openTrades) {
+      const remaining = trade.qty - trade.closedQty;
+      list.push({ id: `entry-${trade.id}`, kind: 'entry', tradeId: trade.id, price: toScreen(trade.entryPrice, scale), draggable: false });
       list.push({
-        id: 'liq',
+        id: `liq-${trade.id}`,
         kind: 'liq',
-        price: toScreen(liquidationPrice(openTrade.direction, openTrade.entryPrice, openTrade.leverage), scale),
+        tradeId: trade.id,
+        price: toScreen(liquidationPrice(trade.direction, trade.entryPrice, trade.leverage), scale),
         draggable: false,
       });
+      list.push({
+        id: `stop-${trade.id}`,
+        kind: 'stop',
+        tradeId: trade.id,
+        price: toScreen(trade.stopLoss, scale),
+        draggable: true,
+        impact: levelImpact(trade.direction, trade.entryPrice, trade.stopLoss, remaining).usdt,
+      });
+      if (trade.takeProfit != null) {
+        list.push({
+          id: `take-${trade.id}`,
+          kind: 'take',
+          tradeId: trade.id,
+          price: toScreen(trade.takeProfit, scale),
+          draggable: true,
+          impact: levelImpact(trade.direction, trade.entryPrice, trade.takeProfit, remaining).usdt,
+        });
+      }
     }
-    if (stopN > 0) list.push({ id: 'stop', kind: 'stop', price: stopN, draggable: true, impact: levelUsdt(fromScreen(stopN, scale)) });
-    if (takeN != null && takeN > 0) list.push({ id: 'take', kind: 'take', price: takeN, draggable: true, impact: levelUsdt(fromScreen(takeN, scale)) });
+
+    // Черновик следующего ордера — не привязан ни к какой сделке.
+    if (stopN > 0) {
+      list.push({
+        id: 'draft-stop',
+        kind: 'stop',
+        price: stopN,
+        draggable: true,
+        impact:
+          direction != null && impactQty != null && impactRef != null
+            ? levelImpact(direction, impactRef, fromScreen(stopN, scale), impactQty).usdt
+            : null,
+      });
+    }
+    if (takeN != null && takeN > 0) {
+      list.push({
+        id: 'draft-take',
+        kind: 'take',
+        price: takeN,
+        draggable: true,
+        impact:
+          direction != null && impactQty != null && impactRef != null
+            ? levelImpact(direction, impactRef, fromScreen(takeN, scale), impactQty).usdt
+            : null,
+      });
+    }
+
     for (const o of detail.closeOrders) {
-      list.push({ id: o.id, kind: 'limitClose', price: toScreen(o.price, scale), draggable: false, impact: levelUsdt(o.price) });
+      const trade = openTrades.find((t) => t.id === o.tradeId);
+      if (!trade) continue;
+      list.push({
+        id: o.id,
+        kind: 'limitClose',
+        tradeId: o.tradeId,
+        price: toScreen(o.price, scale),
+        draggable: false,
+        impact: levelImpact(trade.direction, trade.entryPrice, o.price, o.qty).usdt,
+      });
     }
     return list;
-  }, [openTrade, scale, stopN, takeN, direction, impactQty, impactRef, detail.closeOrders]);
+  }, [openTrades, scale, stopN, takeN, direction, impactQty, impactRef, detail.closeOrders]);
 
   // Скрытая дата: день недели и время суток видны (биржевые сессии, выходные),
   // год и число — нет; вместо даты — номер дня от старта. useCallback по той же
@@ -188,7 +248,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   const busy = openM.isPending || modifyM.isPending || closeM.isPending || finishM.isPending;
   // Пока закрытие не сохранено, новую сделку не открыть: сервер увидел бы две открытые.
   const closePending = closeM.isPending || closeM.isError;
-  const canClose = openTrade != null && replay.cursor > Date.parse(openTrade.entryTime);
+  const canClose = (trade: BacktestTrade) => replay.cursor > Date.parse(trade.entryTime);
 
   const open = (direction: Direction) => {
     if (replay.price == null || screenPrice == null) return;
@@ -218,58 +278,64 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   };
 
   const addToPosition = (direction: Direction) => {
-    if (replay.price == null || !openTrade || openTrade.direction !== direction) return;
+    if (replay.price == null) return;
+    const trade = openTrades.find((x) => x.direction === direction);
+    if (!trade) return;
     const risk = Number(draft.risk);
     if (!(risk >= 0.01 && risk <= 100)) {
       setHint(t('riskInvalid'));
       return;
     }
-    addM.mutate({ tradeId: openTrade.id, entryPrice: replay.price, riskPct: risk });
+    addM.mutate({ tradeId: trade.id, entryPrice: replay.price, riskPct: risk });
   };
 
-  const applyLevels = (stop: number, take: number | null) => {
-    if (!openTrade || screenPrice == null) return;
-    const err = checkLevels(openTrade.direction, screenPrice, stop, take);
+  // Принимает screenPrice параметром, а не читает внешний — иначе стал бы источником
+  // рассинхрона у onDragLevel ниже: тот мемоизирован почти без зависимостей (стабильная
+  // ссылка нужна memo(ReplayChart)) и звал бы эту функцию с ценой того рендера, на
+  // котором она была создана, а не текущей. Модалка «Изменить уровни» вызывает эту же
+  // функцию напрямую, из своего рендера — там внешний screenPrice и так свежий.
+  const applyLevels = (trade: BacktestTrade, screenPriceNow: number, stop: number, take: number | null) => {
+    const err = checkLevels(trade.direction, screenPriceNow, stop, take);
     setHint(err ? t(err) : null);
     if (err) return;
     modifyM.mutate(
-      { tradeId: openTrade.id, stopLoss: fromScreen(stop, scale), takeProfit: take != null ? fromScreen(take, scale) : null },
-      { onSuccess: () => setLevelsModal(false) },
+      { tradeId: trade.id, stopLoss: fromScreen(stop, scale), takeProfit: take != null ? fromScreen(take, scale) : null },
+      { onSuccess: () => setLevelsModalFor(null) },
     );
   };
 
-  // applyLevels меняется каждый рендер (замыкает openTrade/screenPrice/t) —
-  // onDragLevel читает его через реф, а не напрямую, чтобы у самого onDragLevel
-  // была стабильная ссылка: иначе она менялась бы на каждый тик риска в
-  // OrderPanel, хотя драг по графику тут ни при чём, и рвала бы memo(ReplayChart).
-  const applyLevelsRef = useRef(applyLevels);
-  applyLevelsRef.current = applyLevels;
-  const dragCtxRef = useRef({ draft, openTrade, screenPrice, stopN });
-  dragCtxRef.current = { draft, openTrade, screenPrice, stopN };
+  const dragCtxRef = useRef({ draft, openTrades, screenPrice });
+  dragCtxRef.current = { draft, openTrades, screenPrice };
 
-  const onDragLevel = useCallback((kind: LevelKind, price: number, done: boolean) => {
-    if (kind === 'entry') return;
-    const { draft: d, openTrade: ot, screenPrice: sp, stopN: sn } = dragCtxRef.current;
-    // Драг стопа по графику — та же смена стороны с зеркалированием тейка,
-    // что и в OrderPanel (`applyStopChange`): третье место, откуда стоп можно
-    // подвинуть, не должно вести себя иначе, чем слайдер и поле.
-    const next = kind === 'stop' && sp != null ? applyStopChange(d, price, sp, ot?.direction ?? null) : { stop: d.stop, take: toInputPrice(price) };
-    setDraft((prev) => ({ ...prev, ...next }));
-    // На сервер — только отпускание: сохранять каждое движение мыши незачем.
-    if (done && ot) {
-      const nextTake = next.take.trim() ? Number(next.take) : null;
-      applyLevelsRef.current(kind === 'stop' ? price : sn, kind === 'take' ? price : nextTake);
+  const onDragLevel = useCallback((id: string, kind: LevelKind, price: number, done: boolean, tradeId?: string) => {
+    if (kind === 'entry' || kind === 'liq') return;
+    const { draft: d, openTrades: ots, screenPrice: sp } = dragCtxRef.current;
+    if (tradeId != null) {
+      // Уровень уже открытой сделки — направление зафиксировано, зеркалить нечего;
+      // сохраняем на сервер только по отпусканию.
+      if (!done || sp == null) return;
+      const trade = ots.find((t) => t.id === tradeId);
+      if (!trade) return;
+      const nextStop = kind === 'stop' ? price : toScreen(trade.stopLoss, scale);
+      const nextTake = kind === 'take' ? price : trade.takeProfit != null ? toScreen(trade.takeProfit, scale) : null;
+      applyLevels(trade, sp, nextStop, nextTake);
+      return;
     }
-  }, [setDraft]);
+    // Черновик следующего ордера — направление ещё не зафиксировано, стоп может
+    // поменять сторону и утянуть за собой уже введённый тейк (applyStopChange).
+    if (sp == null) return;
+    const next = kind === 'stop' ? applyStopChange(d, price, sp, null) : { stop: d.stop, take: toInputPrice(price) };
+    setDraft((prev) => ({ ...prev, ...next }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scale]);
 
-  const submitLimit = (price: number, qty: number) => {
-    if (!openTrade) return;
-    createOrderM.mutate({ tradeId: openTrade.id, price, qty }, { onSuccess: () => setLimitModal(false) });
+  const submitLimit = (trade: BacktestTrade, price: number, qty: number) => {
+    createOrderM.mutate({ tradeId: trade.id, price, qty }, { onSuccess: () => setLimitModalFor(null) });
   };
 
-  const submitMarket = (qty: number) => {
-    if (!openTrade || replay.price == null || !canClose) return;
-    void closeTrade(openTrade, replay.cursor, replay.price, 'manual', qty).then(() => setMarketModal(false)).catch(() => undefined);
+  const submitMarket = (trade: BacktestTrade, qty: number) => {
+    if (replay.price == null || !canClose(trade)) return;
+    void closeTrade(trade, replay.cursor, replay.price, 'manual', qty).then(() => setMarketModalFor(null)).catch(() => undefined);
   };
 
   const finishing = useRef(false);
@@ -279,8 +345,10 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
     replay.setSpeed(null);
     try {
       // Позицию закрывает браузер — он знает цену момента; сервер лишь проверяет, что открытых нет.
-      if (openTrade && replay.price != null && canClose) {
-        await closeTrade(openTrade, replay.cursor, replay.price, 'finish');
+      if (replay.price != null) {
+        for (const trade of openTrades) {
+          if (canClose(trade)) await closeTrade(trade, replay.cursor, replay.price, 'finish');
+        }
       }
       await replay.flush();
       await finishM.mutateAsync();
@@ -296,11 +364,41 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
     if (replay.ended) void finishRef.current();
   }, [replay.ended]);
 
+  // Плечо общее на все открытые сделки — держим черновик синхронным с сервером, пока
+  // хоть одна открыта: свой слайдер стал бы источником рассинхрона. Не тот же приём,
+  // что у стопа/тейка (те специально НЕ синкаются — черновик там всегда про следующий
+  // ордер): плечо, в отличие от них, — общее состояние символа, а не намерение на будущее.
+  //
+  // Правится прямо в рендере, не в эффекте — официальный паттерн React для «поправить
+  // состояние при смене внешнего значения» (adjust state while rendering): setState в
+  // эффекте потребовал бы лишний цикл рендер → коммит → эффект → рендер на каждую смену
+  // плеча, здесь же React перезапускает тот же рендер сразу, без лишнего коммита.
+  const openLeverageValue = openTrades[0]?.leverage ?? null;
+  const [syncedLeverage, setSyncedLeverage] = useState(openLeverageValue);
+  if (openLeverageValue !== syncedLeverage) {
+    setSyncedLeverage(openLeverageValue);
+    if (openLeverageValue != null) setDraft((prev) => ({ ...prev, leverage: toInput(openLeverageValue) }));
+  }
+
+  // Коммит плеча — по паузе после последнего движения слайдера, не на каждый кадр
+  // (Slider шлёт onChange через requestAnimationFrame). Тем же приёмом, что автосохранение
+  // курсора в useReplay (SAVE_DELAY_MS). Сравнение с openLeverageValue — не оптимизация,
+  // а разрыв цикла с эффектом синхронизации выше: тот при открытии новой сделки меняет
+  // draft.leverage под сервер, и без проверки это тут же гнало бы то же значение обратно.
+  useEffect(() => {
+    if (openTrades.length === 0) return;
+    const v = Number(draft.leverage);
+    if (!(v >= 1) || v === openLeverageValue) return;
+    const h = setTimeout(() => setLeverageM.mutate(v), 600);
+    return () => clearTimeout(h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft.leverage, openTrades.length, openLeverageValue]);
+
   const askFinish = () =>
     setConfirm({
       title: t('finishTitle'),
       subtitle: t('finishSubtitle'),
-      consequences: [...(openTrade ? [t('finishOpenTrade')] : []), t('finishReveal')],
+      consequences: [...(openTrades.length > 0 ? [t('finishOpenTrade')] : []), t('finishReveal')],
       word: t('finishWord'),
       onConfirm: () => void finishNow(),
     });
@@ -369,8 +467,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
           <OrderPanel
             draft={draft}
             onDraft={setDraft}
-            sameDirectionOpen={openTrade?.direction ?? null}
-            openLeverage={openTrade?.leverage ?? null}
+            openDirections={openTrades.map((x) => x.direction)}
             scale={scale}
             price={replay.price}
             balance={session.balance}
@@ -380,7 +477,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
             onAdd={addToPosition}
             onFinish={askFinish}
           />
-          <ErrorNote error={openM.error ?? addM.error ?? finishM.error} fallback={t('actionFailed')} />
+          <ErrorNote error={openM.error ?? addM.error ?? finishM.error ?? setLeverageM.error} fallback={t('actionFailed')} />
         </div>
       </div>
 
@@ -406,14 +503,15 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
       </SectionHead>
       {tab === 'open' ? (
         <OpenPositionsPanel
-          trade={openTrade}
+          trades={openTrades}
           scale={scale}
           price={replay.price}
+          cursor={replay.cursor}
           closeOrders={detail.closeOrders}
-          onLimit={() => setLimitModal(true)}
-          onMarket={() => setMarketModal(true)}
+          onLimit={(trade) => setLimitModalFor(trade.id)}
+          onMarket={(trade) => setMarketModalFor(trade.id)}
           onCancelOrder={(id) => cancelOrderM.mutate(id)}
-          onChangeLevels={() => setLevelsModal(true)}
+          onChangeLevels={(trade) => setLevelsModalFor(trade.id)}
         />
       ) : (
         <SessionTrades
@@ -425,41 +523,50 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
         />
       )}
 
-      {levelsModal && openTrade && screenPrice != null && (
-        <ChangeLevelsModal
-          trade={openTrade}
-          scale={scale}
-          screenPrice={screenPrice}
-          onApply={applyLevels}
-          onClose={() => setLevelsModal(false)}
-          isPending={modifyM.isPending}
-          error={modifyM.error}
-        />
-      )}
-      {limitModal && openTrade && screenPrice != null && (
-        <LimitCloseModal
-          trade={openTrade}
-          remaining={openTrade.qty - openTrade.closedQty}
-          scale={scale}
-          screenPrice={screenPrice}
-          onSubmit={submitLimit}
-          onClose={() => setLimitModal(false)}
-          isPending={createOrderM.isPending}
-          error={createOrderM.error}
-        />
-      )}
-      {marketModal && openTrade && screenPrice != null && (
-        <MarketCloseModal
-          trade={openTrade}
-          remaining={openTrade.qty - openTrade.closedQty}
-          screenPrice={screenPrice}
-          canClose={canClose}
-          onSubmit={submitMarket}
-          onClose={() => setMarketModal(false)}
-          isPending={closeM.isPending}
-          error={closeM.isError ? closeM.error : null}
-        />
-      )}
+      {levelsModalFor != null && screenPrice != null && (() => {
+        const trade = openTrades.find((x) => x.id === levelsModalFor);
+        return trade ? (
+          <ChangeLevelsModal
+            trade={trade}
+            scale={scale}
+            screenPrice={screenPrice}
+            onApply={(stop, take) => applyLevels(trade, screenPrice, stop, take)}
+            onClose={() => setLevelsModalFor(null)}
+            isPending={modifyM.isPending}
+            error={modifyM.error}
+          />
+        ) : null;
+      })()}
+      {limitModalFor != null && screenPrice != null && (() => {
+        const trade = openTrades.find((x) => x.id === limitModalFor);
+        return trade ? (
+          <LimitCloseModal
+            trade={trade}
+            remaining={trade.qty - trade.closedQty}
+            scale={scale}
+            screenPrice={screenPrice}
+            onSubmit={(price, qty) => submitLimit(trade, price, qty)}
+            onClose={() => setLimitModalFor(null)}
+            isPending={createOrderM.isPending}
+            error={createOrderM.error}
+          />
+        ) : null;
+      })()}
+      {marketModalFor != null && screenPrice != null && (() => {
+        const trade = openTrades.find((x) => x.id === marketModalFor);
+        return trade ? (
+          <MarketCloseModal
+            trade={trade}
+            remaining={trade.qty - trade.closedQty}
+            screenPrice={screenPrice}
+            canClose={canClose(trade)}
+            onSubmit={(qty) => submitMarket(trade, qty)}
+            onClose={() => setMarketModalFor(null)}
+            isPending={closeM.isPending}
+            error={closeM.isError ? closeM.error : null}
+          />
+        ) : null;
+      })()}
 
       {confirm && <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />}
     </div>

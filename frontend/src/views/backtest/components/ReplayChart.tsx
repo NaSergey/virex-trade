@@ -31,6 +31,8 @@ export interface Level {
   draggable: boolean;
   /** Результат в USDT, если сработает — не у входа и не у ликвидации. */
   impact?: number | null;
+  /** Чья это сделка — только у уровней открытой позиции (stop/take/entry/liq того трейда). */
+  tradeId?: string;
 }
 
 const LEVEL_COLOR: Record<LevelKind, string> = {
@@ -82,7 +84,7 @@ export const ReplayChart = memo(function ReplayChart({
   levelLabel: (kind: LevelKind) => string;
   /** Подпись кнопки возврата к живому краю — перевод даёт вызывающий, как и остальные подписи. */
   liveLabel: string;
-  onDragLevel?: (kind: LevelKind, price: number, done: boolean) => void;
+  onDragLevel?: (id: string, kind: LevelKind, price: number, done: boolean, tradeId?: string) => void;
   /** Пан подошёл к загруженному краю — время догрузить историю назад. */
   onNeedHistory?: () => void;
   historyLoading?: boolean;
@@ -91,7 +93,7 @@ export const ReplayChart = memo(function ReplayChart({
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [boxW, setBoxW] = useState(0);
-  const [drag, setDrag] = useState<LevelKind | null>(null);
+  const [drag, setDrag] = useState<{ id: string; kind: LevelKind; tradeId?: string } | null>(null);
   // Курсор — единственная подсказка, что фон вообще можно тащить: без неё
   // рабочий пан на глаз неотличим от графика, прибитого к живому краю.
   const [grabbing, setGrabbing] = useState(false);
@@ -242,7 +244,7 @@ export const ReplayChart = memo(function ReplayChart({
     return ((clientX - r.left) / r.width) * W;
   };
 
-  const startDrag = (kind: LevelKind) => (e: PointerEvent<SVGRectElement>) => {
+  const startDrag = (level: Level) => (e: PointerEvent<SVGRectElement>) => {
     // Не пускаем событие к фоновому пану — иначе на одном клике начались бы
     // сразу оба жеста. preventDefault — иначе браузер начинает своё выделение
     // текста рядом с курсором вместо перетаскивания уровня.
@@ -251,7 +253,7 @@ export const ReplayChart = memo(function ReplayChart({
     svgRef.current?.setPointerCapture(e.pointerId);
     frozen.current = { lo, hi };
     dragPointerId.current = e.pointerId;
-    setDrag(kind);
+    setDrag({ id: level.id, kind: level.kind, tradeId: level.tradeId });
   };
 
   const startPan = (e: PointerEvent<SVGSVGElement>) => {
@@ -282,7 +284,7 @@ export const ReplayChart = memo(function ReplayChart({
     if (drag && onDragLevel && e.pointerId === dragPointerId.current) {
       const p = priceAt(svgY(e.clientY));
       lastDrag.current = p;
-      onDragLevel(drag, p, false);
+      onDragLevel(drag.id, drag.kind, p, false, drag.tradeId);
       return;
     }
     if (pointersRef.current.has(e.pointerId)) pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -320,7 +322,7 @@ export const ReplayChart = memo(function ReplayChart({
     if (remaining.length < 2) pinchRef.current = null;
     if (remaining.length === 0) setGrabbing(false);
     if (drag && e.pointerId === dragPointerId.current) {
-      if (onDragLevel && lastDrag.current != null) onDragLevel(drag, lastDrag.current, true);
+      if (onDragLevel && lastDrag.current != null) onDragLevel(drag.id, drag.kind, lastDrag.current, true, drag.tradeId);
       setDrag(null);
       frozen.current = null;
       lastDrag.current = null;
@@ -418,7 +420,7 @@ export const ReplayChart = memo(function ReplayChart({
                 width={PW}
                 height={px(16)}
                 fill="transparent"
-                onPointerDown={startDrag(l.kind)}
+                onPointerDown={startDrag(l)}
               />
             )}
           </g>
