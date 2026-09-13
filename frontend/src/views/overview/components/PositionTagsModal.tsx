@@ -1,9 +1,8 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useSetPositionTags } from '@/entities/tag';
+import { TagsDialog, useSetPositionTags } from '@/entities/tag';
 import { formatMoney } from '@/shared/lib/utils/format';
-import { TagsDialog } from './TagsDialog';
 
 /**
  * Разметка ОТКРЫТОЙ позиции с «Обзора». Теги висят на паре символ+направление,

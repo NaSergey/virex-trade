@@ -1,14 +1,19 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import { Pencil, Tag as TagIcon, Target, Zap } from 'lucide-react';
+import { Tags } from '@/entities/tag';
 import { useLocaleControl } from '@/shared/i18n';
 import { Button } from '@/shared/ui/Button';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import { Money } from '@/shared/ui/Money';
+import { Tooltip } from '@/shared/ui/Tooltip';
 import { durationUnitLabels, formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
 import type { BacktestCloseOrder, BacktestTrade } from '../api/types';
 import { liquidationPrice, toScreen, unrealizedPnl } from '../lib/money';
+
+const ICON_SIZE = 14;
 
 interface Row {
   trade: BacktestTrade;
@@ -33,8 +38,14 @@ function fmtSimAge(entryTime: string, cursor: number, units: { d: string; h: str
  * живут здесь, а не в `OrderPanel`: панель ордера никогда не смотрит на то, что уже
  * открыто, а эта таблица — как раз про то, что уже открыто. Колонки — по образцу
  * `views/overview/components/OpenPositions.tsx`, кроме того, чему в бектесте физически
- * неоткуда взяться (символ сессии один, «Диапазон входа» и теги на открытой сделке —
- * см. спеку).
+ * неоткуда взяться (символ сессии один, «Диапазон входа» — это live market-context с
+ * отдельного эндпоинта, для бектеста источника нет).
+ *
+ * Теги — как в обзоре: разметить сетап можно, пока сделка ещё открыта и мысль ещё
+ * свежая, не только постфактум в истории (`SessionTrades`). В отличие от обзора,
+ * у открытой сделки бектеста уже есть настоящий `tradeId` (она такая же строка в БД,
+ * что и закрытая) — отдельный live-запрос по символу+направлению не нужен, теги читаются
+ * прямо с `trade.tags`.
  */
 export function OpenPositionsPanel({
   trades,
@@ -46,6 +57,7 @@ export function OpenPositionsPanel({
   onMarket,
   onCancelOrder,
   onChangeLevels,
+  onTags,
 }: {
   trades: BacktestTrade[];
   scale: number;
@@ -58,6 +70,7 @@ export function OpenPositionsPanel({
   onMarket: (trade: BacktestTrade) => void;
   onCancelOrder: (orderId: string) => void;
   onChangeLevels: (trade: BacktestTrade) => void;
+  onTags: (trade: BacktestTrade) => void;
 }) {
   const t = useTranslations('backtest');
   const { locale } = useLocaleControl();
@@ -129,18 +142,38 @@ export function OpenPositionsPanel({
       render: (r) => (price != null ? <Money value={unrealizedPnl(r.trade.direction, r.trade.entryPrice, price, r.remaining)} large /> : '—'),
     },
     {
+      key: 'tags',
+      header: t('colTags'),
+      cellClassName: 'cell-tags',
+      render: (r) => (
+        <Tags tags={r.trade.tags}>
+          <Tooltip text={t('addTag')}>
+            <Button variant="add" tight aria-label={t('addTag')} onClick={() => onTags(r.trade)}>
+              <TagIcon size={ICON_SIZE} />
+            </Button>
+          </Tooltip>
+        </Tags>
+      ),
+    },
+    {
       key: 'actions',
       render: (r) => (
         <span className="row-actions">
-          <Button tight onClick={() => onChangeLevels(r.trade)}>
-            {t('changeLevels')}
-          </Button>
-          <Button tight onClick={() => onLimit(r.trade)}>
-            {t('limitClose')}
-          </Button>
-          <Button tight variant="risk" onClick={() => onMarket(r.trade)}>
-            {t('marketClose')}
-          </Button>
+          <Tooltip text={t('changeLevels')}>
+            <Button tight aria-label={t('changeLevels')} onClick={() => onChangeLevels(r.trade)}>
+              <Pencil size={ICON_SIZE} />
+            </Button>
+          </Tooltip>
+          <Tooltip text={t('limitClose')}>
+            <Button tight aria-label={t('limitClose')} onClick={() => onLimit(r.trade)}>
+              <Target size={ICON_SIZE} />
+            </Button>
+          </Tooltip>
+          <Tooltip text={t('marketClose')}>
+            <Button tight variant="risk" aria-label={t('marketClose')} onClick={() => onMarket(r.trade)}>
+              <Zap size={ICON_SIZE} />
+            </Button>
+          </Tooltip>
         </span>
       ),
     },

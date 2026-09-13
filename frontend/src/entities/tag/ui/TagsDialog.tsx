@@ -5,14 +5,14 @@ import { useTranslations } from 'next-intl';
 import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader } from '@/shared/ui/dialog';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { useIdSet } from '@/shared/lib/hooks/useIdSet';
-import { TagPicker, useTags } from '@/entities/tag';
+import { useTags } from '../api/hooks';
+import { TagPicker } from './TagPicker';
 
 /**
- * Разметка тегами — один диалог на закрытую сделку и на открытую позицию.
- *
- * Разница между ними только в том, к чему крепится набор (сделка / пара
- * символ+направление) и что об этом сказано в подзаголовке; всё остальное —
- * тот же выбор из тех же тегов, поэтому это один компонент, а не два похожих.
+ * Разметка тегами — один диалог на любую привязку (закрытая сделка обзора,
+ * открытая позиция обзора, сделка бектеста): разница только в том, к чему
+ * крепится набор и что об этом сказано в подзаголовке/note — всё остальное
+ * тот же выбор из тех же тегов, поэтому один компонент, а не несколько похожих.
  */
 export function TagsDialog({
   title,
@@ -35,7 +35,6 @@ export function TagsDialog({
   onSave: (tagIds: string[]) => void;
   onClose: () => void;
 }) {
-  const t = useTranslations('overview');
   const tc = useTranslations('common');
   const { data: tagsData } = useTags();
   const { selected, toggle, ids } = useIdSet(initialTagIds);
@@ -49,7 +48,7 @@ export function TagsDialog({
           {note && <p className="foot">{note}</p>}
           <ErrorNote
             error={error}
-            fallback={t('saveTagsFailed')}
+            fallback={tc('saveTagsFailed')}
             style={{ marginTop: 'var(--s2)' }}
           />
         </DialogBody>

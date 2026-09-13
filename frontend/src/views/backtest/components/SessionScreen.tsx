@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useTags } from '@/entities/tag';
+import { TagsDialog, useTags } from '@/entities/tag';
 import { useLocaleControl } from '@/shared/i18n';
 import { Button } from '@/shared/ui/Button';
 import { ConfirmDialog, type ConfirmRequest } from '@/shared/ui/ConfirmDialog';
@@ -11,6 +11,7 @@ import { SectionHead } from '@/shared/ui/SectionHead';
 import { Seg, type SegOption } from '@/shared/ui/Seg';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import { Wrap } from '@/shared/ui/Wrap';
+import { formatPriceGrouped } from '@/shared/lib/utils/format';
 import {
   useAddToTrade,
   useBacktestSession,
@@ -117,6 +118,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   const [limitModalFor, setLimitModalFor] = useState<string | null>(null);
   const [marketModalFor, setMarketModalFor] = useState<string | null>(null);
   const [levelsModalFor, setLevelsModalFor] = useState<string | null>(null);
+  const [tagsModalFor, setTagsModalFor] = useState<string | null>(null);
   const [tab, setTab] = useState<'open' | 'history'>('open');
 
   const screenPrice = replay.price != null ? toScreen(replay.price, scale) : null;
@@ -512,6 +514,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
           onMarket={(trade) => setMarketModalFor(trade.id)}
           onCancelOrder={(id) => cancelOrderM.mutate(id)}
           onChangeLevels={(trade) => setLevelsModalFor(trade.id)}
+          onTags={(trade) => setTagsModalFor(trade.id)}
         />
       ) : (
         <SessionTrades
@@ -564,6 +567,20 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
             onClose={() => setMarketModalFor(null)}
             isPending={closeM.isPending}
             error={closeM.isError ? closeM.error : null}
+          />
+        ) : null;
+      })()}
+      {tagsModalFor != null && (() => {
+        const trade = openTrades.find((x) => x.id === tagsModalFor);
+        return trade ? (
+          <TagsDialog
+            title={t('positionTagsTitle')}
+            subtitle={`${t(`direction.${trade.direction}`)} · ${formatPriceGrouped(toScreen(trade.entryPrice, scale))}`}
+            initialTagIds={trade.tags.map((g) => g.id)}
+            isPending={tagsM.isPending}
+            error={tagsM.error}
+            onSave={(tagIds) => tagsM.mutate({ tradeId: trade.id, tagIds }, { onSuccess: () => setTagsModalFor(null) })}
+            onClose={() => setTagsModalFor(null)}
           />
         ) : null;
       })()}

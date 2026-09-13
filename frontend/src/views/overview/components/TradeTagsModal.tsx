@@ -1,11 +1,10 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useSetTradeTags } from '@/entities/tag';
+import { TagsDialog, useSetTradeTags } from '@/entities/tag';
 import type { Trade } from '@/entities/trade';
 import { formatMoney } from '@/shared/lib/utils/format';
 import { useLocaleControl } from '@/shared/i18n';
-import { TagsDialog } from './TagsDialog';
 
 /**
  * Разметка закрытой сделки прямо из журнала. Набор заменяется целиком, поэтому
