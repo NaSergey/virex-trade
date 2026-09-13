@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchCandles, saveCursor } from '../api/hooks';
 import type { BacktestCloseOrder, BacktestTrade, SessionDetail } from '../api/types';
-import { advanceTo } from '../lib/advance';
+import { advanceTo, type OpenPosition } from '../lib/advance';
 import {
   DAY,
   MINUTE,
@@ -98,8 +98,8 @@ export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, 
   const endedRef = useRef(false);
   /** Сделки, чьё закрытие уже отправлено: пока сессия не перечитана, второй раз их не закрываем. */
   const closing = useRef(new Set<string>());
-  const openRef = useRef<BacktestTrade | null>(null);
-  openRef.current = detail.trades.find((x) => x.exitTime == null) ?? null;
+  const openTradesRef = useRef<BacktestTrade[]>([]);
+  openTradesRef.current = detail.trades.filter((x) => x.exitTime == null);
   const closeOrdersRef = useRef<BacktestCloseOrder[]>([]);
   closeOrdersRef.current = detail.closeOrders;
   const onExitRef = useRef(onExit);
@@ -211,25 +211,32 @@ export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, 
       try {
         const from = cursorRef.current;
         await ensureMinutes(target + LOOKAHEAD_MS);
-        const open = openRef.current;
-        const position =
-          open && !closing.current.has(open.id)
-            ? { direction: open.direction, stopLoss: open.stopLoss, takeProfit: open.takeProfit, entryTime: Date.parse(open.entryTime) }
-            : null;
-        const { reach, complete, exit } = advanceTo({
+        const openTrades = openTradesRef.current.filter((t) => !closing.current.has(t.id));
+        const positions: OpenPosition[] = openTrades.map((t) => ({
+          tradeId: t.id,
+          direction: t.direction,
+          stopLoss: t.stopLoss,
+          takeProfit: t.takeProfit,
+          entryTime: Date.parse(t.entryTime),
+        }));
+        const { reach, complete, exits } = advanceTo({
           from,
           target,
           minutes: minutesRef.current,
           loadedUntil: loadedUntil(minutesRef.current),
-          position,
-          closeOrders: closeOrdersRef.current.map((o): CloseOrder => ({ id: o.id, price: o.price, qty: o.qty })),
+          positions,
+          closeOrders: closeOrdersRef.current.map((o): CloseOrder => ({ id: o.id, price: o.price, qty: o.qty, tradeId: o.tradeId })),
         });
         if (reach > from) {
-          if (exit && open) {
-            closing.current.add(open.id);
-            // Сработал уровень — автопрокрутка встаёт, чтобы исход не проскочил мимо глаз.
+          if (exits.length > 0) {
+            // Сработал хоть один уровень — автопрокрутка встаёт, чтобы исход не проскочил мимо глаз.
             setSpeed(null);
-            onExitRef.current(open, exit);
+            for (const exit of exits) {
+              const trade = openTrades.find((t) => t.id === exit.tradeId);
+              if (!trade) continue;
+              closing.current.add(trade.id);
+              onExitRef.current(trade, exit);
+            }
           }
           cursorRef.current = reach;
           setCursor(reach);

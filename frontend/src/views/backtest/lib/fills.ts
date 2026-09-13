@@ -22,6 +22,7 @@ export interface CloseOrder {
   id: string;
   price: number;
   qty: number;
+  tradeId: string;
 }
 
 export interface Exit {

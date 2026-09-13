@@ -9,13 +9,13 @@ const mins = (from: number, n: number, price = 100) =>
 
 describe('advanceTo', () => {
   it('доходит до target, когда минутки загружены дальше', () => {
-    const r = advanceTo({ from: at(0), target: at(5), minutes: mins(at(0), 10), loadedUntil: at(10), position: null });
-    expect(r).toEqual({ reach: at(5), complete: true, exit: null });
+    const r = advanceTo({ from: at(0), target: at(5), minutes: mins(at(0), 10), loadedUntil: at(10), positions: [] });
+    expect(r).toEqual({ reach: at(5), complete: true, exits: [] });
   });
 
   it('останавливается на загруженном крае, если он раньше target', () => {
-    const r = advanceTo({ from: at(0), target: at(5), minutes: mins(at(0), 3), loadedUntil: at(3), position: null });
-    expect(r).toEqual({ reach: at(3), complete: false, exit: null });
+    const r = advanceTo({ from: at(0), target: at(5), minutes: mins(at(0), 3), loadedUntil: at(3), positions: [] });
+    expect(r).toEqual({ reach: at(3), complete: false, exits: [] });
   });
 
   it('без прогресса (from === target) — срабатывание не проверяется', () => {
@@ -24,12 +24,12 @@ describe('advanceTo', () => {
       target: at(5),
       minutes: mins(at(0), 10),
       loadedUntil: at(10),
-      position: { direction: 'long', stopLoss: 90, takeProfit: null, entryTime: at(0) },
+      positions: [{ tradeId: 'a', direction: 'long', stopLoss: 90, takeProfit: null, entryTime: at(0) }],
     });
-    expect(r.exit).toBeNull();
+    expect(r.exits).toEqual([]);
   });
 
-  it('стоп сработал внутри окна — exit возвращается', () => {
+  it('стоп сработал внутри окна — exit возвращается с id сделки', () => {
     const minutes = mins(at(0), 5, 100);
     minutes[2] = { ...minutes[2], l: 89 };
     const r = advanceTo({
@@ -37,15 +37,64 @@ describe('advanceTo', () => {
       target: at(5),
       minutes,
       loadedUntil: at(5),
-      position: { direction: 'long', stopLoss: 90, takeProfit: null, entryTime: at(0) },
+      positions: [{ tradeId: 'a', direction: 'long', stopLoss: 90, takeProfit: null, entryTime: at(0) }],
     });
-    expect(r.exit).toEqual({ reason: 'stop', price: 90, time: at(3) });
+    expect(r.exits).toEqual([{ reason: 'stop', price: 90, time: at(3), tradeId: 'a' }]);
   });
 
-  it('позиции нет — срабатывания не бывает, даже если цена его коснулась', () => {
+  it('позиций нет — срабатывания не бывает, даже если цена его коснулась', () => {
     const minutes = mins(at(0), 5, 100);
     minutes[2] = { ...minutes[2], l: 1 };
-    const r = advanceTo({ from: at(0), target: at(5), minutes, loadedUntil: at(5), position: null });
-    expect(r.exit).toBeNull();
+    const r = advanceTo({ from: at(0), target: at(5), minutes, loadedUntil: at(5), positions: [] });
+    expect(r.exits).toEqual([]);
+  });
+
+  it('две открытые позиции — обе проверяются в одном проходе', () => {
+    const minutes = mins(at(0), 5, 100);
+    minutes[2] = { ...minutes[2], l: 89, h: 111 }; // и стоп лонга, и стоп шорта в одной минутке
+    const r = advanceTo({
+      from: at(0),
+      target: at(5),
+      minutes,
+      loadedUntil: at(5),
+      positions: [
+        { tradeId: 'long1', direction: 'long', stopLoss: 90, takeProfit: null, entryTime: at(0) },
+        { tradeId: 'short1', direction: 'short', stopLoss: 110, takeProfit: null, entryTime: at(0) },
+      ],
+    });
+    expect(r.exits).toEqual([
+      { reason: 'stop', price: 90, time: at(3), tradeId: 'long1' },
+      { reason: 'stop', price: 110, time: at(3), tradeId: 'short1' },
+    ]);
+  });
+
+  it('срабатывает только одна из двух позиций', () => {
+    const minutes = mins(at(0), 5, 100);
+    minutes[2] = { ...minutes[2], l: 89 };
+    const r = advanceTo({
+      from: at(0),
+      target: at(5),
+      minutes,
+      loadedUntil: at(5),
+      positions: [
+        { tradeId: 'long1', direction: 'long', stopLoss: 90, takeProfit: null, entryTime: at(0) },
+        { tradeId: 'short1', direction: 'short', stopLoss: 200, takeProfit: null, entryTime: at(0) },
+      ],
+    });
+    expect(r.exits).toEqual([{ reason: 'stop', price: 90, time: at(3), tradeId: 'long1' }]);
+  });
+
+  it('лимит-ордер на закрытие фильтруется по своей сделке', () => {
+    const minutes = mins(at(0), 3, 100);
+    const r = advanceTo({
+      from: at(0),
+      target: at(3),
+      minutes,
+      loadedUntil: at(3),
+      positions: [{ tradeId: 'long1', direction: 'long', stopLoss: 50, takeProfit: null, entryTime: at(0) }],
+      // Ордер на другую сделку не должен сработать здесь, даже если цена его задела.
+      closeOrders: [{ id: 'o1', price: 100, qty: 5, tradeId: 'other-trade' }],
+    });
+    expect(r.exits).toEqual([]);
   });
 });
