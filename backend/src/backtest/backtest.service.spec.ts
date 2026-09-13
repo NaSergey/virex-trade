@@ -309,7 +309,7 @@ describe('BacktestService — сделки', () => {
     expect(prisma.backtestTrade.create).not.toHaveBeenCalled();
   });
 
-  it('не открывает вторую сделку, пока есть открытая', async () => {
+  it('не открывает вторую сделку той же стороны, пока она уже открыта', async () => {
     const { service, prisma } = makeService();
     prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
     prisma.backtestTrade.count.mockResolvedValue(1);
@@ -318,7 +318,25 @@ describe('BacktestService — сделки', () => {
 
     expect(err).toBeInstanceOf(ConflictException);
     expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_OPEN_TRADE' });
+    expect(prisma.backtestTrade.count).toHaveBeenCalledWith({
+      where: { sessionId: 's1', exitTime: null, direction: 'long' },
+    });
     expect(prisma.backtestTrade.create).not.toHaveBeenCalled();
+  });
+
+  it('открывает противоположную сторону, даже если одна уже открыта — хедж', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+    // В БД лежит одна открытая long — count с фильтром direction:'short' её не находит.
+    prisma.backtestTrade.count.mockImplementation(({ where }: { where: { direction?: string } }) =>
+      Promise.resolve(where.direction === 'short' ? 0 : 1),
+    );
+
+    await service.openTrade('u1', 's1', { ...OPEN, direction: 'short', stopLoss: 102 });
+
+    expect(prisma.backtestTrade.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ direction: 'short' }) }),
+    );
   });
 
   it('стоп лонга выше входа — отказ', async () => {

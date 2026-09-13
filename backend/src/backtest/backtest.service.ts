@@ -204,7 +204,7 @@ export class BacktestService {
       // строки, и создавать сделку в уже завершённой сессии нельзя.
       const bumped = await this.bumpCursor(tx, sessionId, input.entryTime);
       if (bumped === 0) throw sessionFinished();
-      const open = await tx.backtestTrade.count({ where: { sessionId, exitTime: null } });
+      const open = await tx.backtestTrade.count({ where: { sessionId, exitTime: null, direction: input.direction } });
       if (open > 0) throw new ConflictException({ message: 'Открытая сделка уже есть', code: 'BACKTEST_OPEN_TRADE' });
       // Депозит — под замком: закрытие прошлой сделки могло поменять его после чтения выше.
       const fresh = await tx.backtestSession.findUnique({ where: { id: sessionId }, select: { balance: true } });
