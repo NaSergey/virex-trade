@@ -787,6 +787,7 @@
     "takeSide": "The take-profit is on the wrong side of the price.",
     "tradesTitle": "Session trades",
     "noTrades": "No trades yet",
+    "colClosed": "Closed",
     "colDir": "Side",
     "colEntry": "Entry",
     "colExit": "Exit",
