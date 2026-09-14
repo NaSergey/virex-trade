@@ -244,9 +244,14 @@ export class BacktestService {
       // сдвинет, но замок и проверку status='active' даёт.
       const bumped = await this.bumpCursor(tx, id, s.cursorTime);
       if (bumped === 0) throw sessionFinished();
-      // Позицию закрывает браузер (он знает цену момента), сервер только проверяет.
-      const open = await tx.backtestTrade.count({ where: { sessionId: id, exitTime: null } });
-      if (open > 0) throw new ConflictException({ message: 'Сначала закройте открытую сделку', code: 'BACKTEST_OPEN_TRADE' });
+      if (isSynthOutdated(s)) {
+        // Цены момента у такой сессии больше нет — закрыть по рынку браузеру нечем.
+        await this.closeAtEntry(tx, id, s.cursorTime);
+      } else {
+        // Позицию закрывает браузер (он знает цену момента), сервер только проверяет.
+        const open = await tx.backtestTrade.count({ where: { sessionId: id, exitTime: null } });
+        if (open > 0) throw new ConflictException({ message: 'Сначала закройте открытую сделку', code: 'BACKTEST_OPEN_TRADE' });
+      }
       const session = await tx.backtestSession.update({
         where: { id },
         data: { status: 'finished', finishedAt: new Date() },
@@ -533,11 +538,15 @@ export class BacktestService {
     return { success: true as const };
   }
 
-  async stats(userId: string) {
+  /**
+   * Сделки тренажёра и реальной истории не смешиваются: генератор сам содержит
+   * тренды и отбои, и результат тега на нём — о генераторе, а не о рынке.
+   */
+  async stats(userId: string, source: DataSource = 'real') {
     const [sessions, trades] = await Promise.all([
-      this.prisma.backtestSession.count({ where: { userId } }),
+      this.prisma.backtestSession.count({ where: { userId, dataSource: source } }),
       this.prisma.backtestTrade.findMany({
-        where: { session: { userId }, exitTime: { not: null } },
+        where: { session: { userId, dataSource: source }, exitTime: { not: null } },
         include: TAGS,
       }),
     ]);
@@ -564,6 +573,47 @@ export class BacktestService {
         .map(({ tag, rows }) => ({ tag, ...summarize(rows) }))
         .sort((a, b) => b.trades - a.trades || a.tag.name.localeCompare(b.tag.name)),
     };
+  }
+
+  /**
+   * Закрывает открытый остаток по цене входа: движение ноль, комиссия по обычной
+   * формуле. Любая другая цена была бы выдуманной, а удалить сделку нельзя — её
+   * частичные закрытия уже в депозите.
+   */
+  protected async closeAtEntry(tx: Prisma.TransactionClient, sessionId: string, time: Date) {
+    const open = await tx.backtestTrade.findMany({ where: { sessionId, exitTime: null } });
+    for (const trade of open) {
+      const qty = trade.qty - trade.closedQty;
+      if (qty > QTY_EPS) {
+        const { fee, pnl } = tradeResult({
+          direction: trade.direction as Direction,
+          entryPrice: trade.entryPrice,
+          exitPrice: trade.entryPrice,
+          qty,
+          riskUsdt: trade.riskUsdt,
+        });
+        await tx.backtestTradeExit.create({
+          data: { tradeId: trade.id, qty, price: trade.entryPrice, time, reason: 'finish', fee, pnl },
+        });
+        await tx.backtestSession.update({ where: { id: sessionId }, data: { balance: { increment: pnl } } });
+      }
+      const exits = await tx.backtestTradeExit.findMany({ where: { tradeId: trade.id } });
+      const totalFee = exits.reduce((a, e) => a + e.fee, 0);
+      const totalPnl = exits.reduce((a, e) => a + e.pnl, 0);
+      await tx.backtestTrade.update({
+        where: { id: trade.id },
+        data: {
+          closedQty: trade.qty,
+          exitTime: time,
+          exitPrice: trade.entryPrice,
+          exitReason: 'finish',
+          fee: totalFee,
+          pnl: totalPnl,
+          r: totalPnl / trade.riskUsdt,
+        },
+      });
+    }
+    await tx.backtestCloseOrder.deleteMany({ where: { trade: { sessionId } } });
   }
 
   protected async ownedTrade(userId: string, id: string) {

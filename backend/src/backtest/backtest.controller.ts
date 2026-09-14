@@ -100,7 +100,7 @@ export class BacktestController {
   }
 
   @Get('stats')
-  stats(@CurrentUser('userId') userId: string) {
-    return this.backtest.stats(userId);
+  stats(@CurrentUser('userId') userId: string, @Query('source') source?: string) {
+    return this.backtest.stats(userId, source === 'synthetic' ? 'synthetic' : 'real');
   }
 }
