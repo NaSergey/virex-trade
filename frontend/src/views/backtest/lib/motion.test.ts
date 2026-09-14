@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { anchorTimeAt, glidePrice, indexAtOrAfter, resolveWindow, zoomStep } from './motion';
+import {
+  anchorTimeAt,
+  frameAtTime,
+  glidePrice,
+  indexAtOrAfter,
+  liveAnchorAt,
+  niceStep,
+  priceTicks,
+  resolveWindow,
+  zoomStep,
+} from './motion';
 
 describe('glidePrice', () => {
   it('концы точно совпадают с open и close', () => {
@@ -94,7 +104,9 @@ describe('zoomStep', () => {
     // вокруг той же точки.
     const r = zoomStep(cs, 20, 10, 0.5, 0.5, bounds);
     expect(r.count).toBe(5);
-    expect(r.anchorTime).toBe(23 * 60_000);
+    // 25 - 0.5*5 = 22.5: позиция кадра дробная и не округляется, иначе каждый
+    // щелчок колеса дёргал бы картинку ещё и на полсвечи вбок.
+    expect(r.anchorTime).toBe(22.5 * 60_000);
   });
 
   it('не откатывает уже оттянутый от края кадр обратно в живой режим', () => {
@@ -127,5 +139,87 @@ describe('zoomStep', () => {
     const r = zoomStep(short, 5, 5, 1, 2, bounds);
     expect(r.count).toBe(10);
     expect(r.anchorTime).toBeNull();
+  });
+});
+
+describe('дробная позиция кадра', () => {
+  const cs = Array.from({ length: 50 }, (_, i) => ({ t: i * 60_000 }));
+
+  it('frameAtTime отдаёт долю свечи, а не целый индекс', () => {
+    expect(frameAtTime(cs, 22 * 60_000 + 30_000)).toBe(22.5);
+  });
+
+  it('позиция → время → позиция не теряет долю (внутри, слева и справа от данных)', () => {
+    for (const f of [-4.25, 0, 0.4, 22.5, 47.75]) {
+      expect(frameAtTime(cs, anchorTimeAt(cs, f) as number)).toBeCloseTo(f, 9);
+    }
+  });
+
+  it('пропуск бакета: доля берётся между соседями, а не делением на общий шаг', () => {
+    // Между свечами 20 и 21 в истории дыра шириной в три бакета.
+    const gap = [...cs.slice(0, 21), ...cs.slice(21).map((c) => ({ t: c.t + 3 * 60_000 }))];
+    const mid = anchorTimeAt(gap, 20.5) as number;
+    expect(mid).toBe(22 * 60_000);
+    expect(frameAtTime(gap, mid)).toBe(20.5);
+  });
+
+  it('resolveWindow при дробном кадре берёт крайние свечи целиком', () => {
+    const r = resolveWindow(cs, { count: 10, anchorTime: 22.5 * 60_000 }, { minCount: 5, maxCount: 100 });
+    expect(r.frameStart).toBe(22.5);
+    expect(r.startIdx).toBe(22);
+    expect(r.endIdx).toBe(33);
+    expect(r.live).toBe(false);
+  });
+
+  it('liveAnchorAt: у самого края — живой режим, дальше — якорь', () => {
+    expect(liveAnchorAt(cs, 40.1, 10)).toBeNull();
+    expect(liveAnchorAt(cs, 39, 10)).toBe(39 * 60_000);
+  });
+});
+
+describe('niceStep', () => {
+  it('округляет вверх до ближайшего 1/2/5×10^n', () => {
+    expect(niceStep(0.9)).toBe(1);
+    expect(niceStep(1)).toBe(1);
+    expect(niceStep(1.1)).toBe(2);
+    expect(niceStep(2)).toBe(2);
+    expect(niceStep(3)).toBe(5);
+    expect(niceStep(5)).toBe(5);
+    expect(niceStep(7)).toBe(10);
+    expect(niceStep(120)).toBe(200);
+    expect(niceStep(450)).toBe(500);
+  });
+
+  it('неположительный вход не роняет счёт', () => {
+    expect(niceStep(0)).toBe(1);
+    expect(niceStep(-5)).toBe(1);
+  });
+});
+
+describe('priceTicks', () => {
+  it('линии стоят на круглых числах с шагом niceStep', () => {
+    expect(priceTicks(72680, 83420, 900)).toEqual([73000, 74000, 75000, 76000, 77000, 78000, 79000, 80000, 81000, 82000, 83000]);
+  });
+
+  it('более узкий диапазон — более мелкий шаг, линий физически помещается больше', () => {
+    // Тот же порядок цены, что и выше, но диапазон в разы уже — при
+    // одинаковом minGap (в цене) шаг обязан стать мельче, а линий — больше.
+    expect(priceTicks(79100, 80100, 150)).toEqual([79200, 79400, 79600, 79800, 80000]);
+  });
+
+  it('вырожденный диапазон — пустой список, а не бесконечный цикл', () => {
+    expect(priceTicks(100, 100, 10)).toEqual([]);
+    expect(priceTicks(100, 200, 0)).toEqual([]);
+  });
+
+  it('соседние вызовы с почти тем же lo дают то же число для той же линии', () => {
+    // На этом строится React-ключ линии сетки в ReplayChart: соседние кадры
+    // вертикального пана обязаны давать побитово одинаковое значение, иначе
+    // линия пересоздавалась бы, а не просто сдвигалась по y.
+    const a = priceTicks(79987.3, 81234.5, 150);
+    const b = priceTicks(79987.9, 81234.9, 150);
+    expect(a).toContain(80000);
+    expect(b).toContain(80000);
+    expect(a[a.indexOf(80000)]).toBe(b[b.indexOf(80000)]);
   });
 });

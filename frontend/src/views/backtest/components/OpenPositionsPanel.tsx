@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { Pencil, Tag as TagIcon, Target, Zap } from 'lucide-react';
+import { Pencil, Plus, Tag as TagIcon, Target, Zap } from 'lucide-react';
 import { Tags } from '@/entities/tag';
 import { useLocaleControl } from '@/shared/i18n';
 import { Button } from '@/shared/ui/Button';
@@ -53,6 +53,8 @@ export function OpenPositionsPanel({
   price,
   cursor,
   closeOrders,
+  onAdd,
+  onLeverage,
   onLimit,
   onMarket,
   onCancelOrder,
@@ -66,6 +68,9 @@ export function OpenPositionsPanel({
   /** Момент симуляции — для «В позиции». */
   cursor: number;
   closeOrders: BacktestCloseOrder[];
+  onAdd: (trade: BacktestTrade) => void;
+  /** Плечо открытых позиций — общее на сессию, меняется у всех разом. */
+  onLeverage: (trade: BacktestTrade) => void;
   onLimit: (trade: BacktestTrade) => void;
   onMarket: (trade: BacktestTrade) => void;
   onCancelOrder: (orderId: string) => void;
@@ -118,7 +123,13 @@ export function OpenPositionsPanel({
       header: t('leverageLabel'),
       align: 'right',
       cellClassName: 'n',
-      render: (r) => `${r.trade.leverage.toFixed(0)}×`,
+      render: (r) => (
+        <Tooltip text={t('leverageOpenHint')}>
+          <Button variant="bare" tight className="cue" aria-label={t('leverageLabel')} onClick={() => onLeverage(r.trade)}>
+            {r.trade.leverage.toFixed(0)}×
+          </Button>
+        </Tooltip>
+      ),
     },
     {
       key: 'liq',
@@ -159,6 +170,11 @@ export function OpenPositionsPanel({
       key: 'actions',
       render: (r) => (
         <span className="row-actions">
+          <Tooltip text={t('addToPosition')}>
+            <Button tight aria-label={t('addToPosition')} onClick={() => onAdd(r.trade)}>
+              <Plus size={ICON_SIZE} />
+            </Button>
+          </Tooltip>
           <Tooltip text={t('changeLevels')}>
             <Button tight aria-label={t('changeLevels')} onClick={() => onChangeLevels(r.trade)}>
               <Pencil size={ICON_SIZE} />

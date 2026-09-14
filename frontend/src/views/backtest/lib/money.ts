@@ -53,10 +53,19 @@ export const formatR = (r: number) => `${r >= 0 ? '+' : '−'}${Math.abs(r).toFi
 export const toInput = (v: number) => String(Number(v.toPrecision(8)));
 
 /** Цена стопа/тейка, выставленная программно (слайдер, зеркалирование, синхронизация
- * с сервером) — округлена до десятых: точнее для входа/выхода в бэктесте не нужно, а
- * лишние знаки при быстром драге только рябят на глаз. Руками напечатанное число это
- * не трогает — оно остаётся как есть, см. `setStopText` в OrderPanel. */
-export const toInputPrice = (v: number) => v.toFixed(1);
+ * с сервером) — округлена не до фиксированного знака, а до шести значащих цифр.
+ * У настоящей цены BTC (пять-шесть разрядов до запятой) это те же «до десятых», что
+ * и раньше: лишние знаки при быстром драге по-прежнему не рябят на глаз. Но у скрытой
+ * цены (`priceScale` сессии, режим hidePrice) число нарочно сжато сервером в диапазон
+ * 100–1000 (`pickPriceScale`), и фиксированная десятая там режет ползунки стопа/тейка:
+ * рядом с нулём (см. `curvedSliderPos`/`SLIDER_CURVE`) один и тот же ход мыши двигает
+ * цену на сотые и тысячные, округление до 0.1 схлопывает это обратно в саму цену —
+ * ползунок визуально замирает точно по центру, сколько его ни тяни. Руками напечатанное
+ * число это не трогает — оно остаётся как есть, см. `setStopText` в OrderPanel. */
+export const toInputPrice = (v: number) => {
+  const integerDigits = Math.floor(Math.log10(v)) + 1;
+  return v.toFixed(Math.max(0, 6 - integerDigits));
+};
 
 export type LevelError = 'stopRequired' | 'stopSide' | 'takeSide';
 
@@ -86,8 +95,8 @@ export function riskAmount(balance: number, riskPct: number): number | null {
 const STOP_PCT = 0.07;
 /** То же самое в процентных пунктах слайдера стопа — ±7. */
 export const STOP_RISK_PCT = STOP_PCT * 100;
-/** Тейк не так рискован ограничивать — размах шире, ±20%. */
-const TAKE_PCT = 0.2;
+/** Тейк не так рискован ограничивать — размах шире, ±10%. */
+const TAKE_PCT = 0.1;
 
 /**
  * Слайдер стопа задаёт сразу направление и дистанцию одним числом: центр —
@@ -139,7 +148,7 @@ export function impliedDirection(
 /**
  * Диапазон слайдера стопа/тейка — по правильную сторону от цены. Стоп зажат
  * ±7%: шире слайдер уже не «риск на сделку», а «половина депозита одним
- * движением». Тейк свободнее, ±20% — далёкий тейк не опасен так, как далёкий
+ * движением». Тейк свободнее, ±10% — далёкий тейк не опасен так, как далёкий
  * стоп.
  *
  * Пока сделка не открыта, направление ещё не выбрано: пользователь вправе
@@ -162,16 +171,73 @@ export function levelSliderRange(
   return belowSide ? { min: lo, max: price } : { min: price, max: hi };
 }
 
+/** Степень дуги ползунков риска/стопа/тейка — см. `curvedSliderPos`. */
+const SLIDER_CURVE = 2;
+
+const clampUnit = (t: number) => Math.min(1, Math.max(0, t));
+
 /**
- * Черновик стопа и тейка после того, как стоп получил новую цену — общая
- * точка для всех трёх мест, откуда стоп можно подвинуть (слайдер, текстовое
- * поле, драг уровня прямо по графику).
+ * Экранная позиция ползунка (−100…100) по уже посчитанному значению — риска,
+ * стопа или тейка. Линейный `<input type="range">` даёт одно и то же
+ * приращение значения на любом участке трека; рабочие значения у всех трёх
+ * ползунков лежат рядом с `zero` (риск обычно в пределах пары процентов,
+ * стоп и тейк — рядом с ценой), а редкий крайний случай — у края диапазона.
+ * Дуга даёт точный подбор там, где им пользуются каждый раз, ценой более
+ * грубого шага у края, который двигают редко.
  *
- * Если новый стоп меняет подразумеваемое направление (`impliedDirection`),
- * уже введённый тейк был по правильную сторону для прежнего направления и
- * стал неверным для нового — зеркалим его через цену: та же дистанция,
- * другая сторона, а не молча оставляем то, что стало противоречить самому
- * стопу.
+ * `zero` — точка без смещения (0% риска, цена для стопа/тейка) — может быть
+ * и краем диапазона (риск; тейк/стоп после выбора стороны сделки), и его
+ * серединой (стоп и тейк, пока сторона ещё не выбрана): считаем расстояние
+ * до зажатой границы отдельно на каждую сторону, поэтому формула одна на
+ * оба случая.
+ */
+export function curvedSliderPos(value: number, min: number, max: number, zero: number, curve = SLIDER_CURVE): number {
+  if (!(value > zero) && !(value < zero)) return 0;
+  const bound = value > zero ? max : min;
+  if (bound === zero) return 0;
+  const t = clampUnit(Math.abs((value - zero) / (bound - zero)));
+  return Math.sign(value - zero) * Math.pow(t, 1 / curve) * 100;
+}
+
+/** Обратное преобразование — значение по позиции ползунка (−100…100), см. `curvedSliderPos`. */
+export function curvedSliderValue(pos: number, min: number, max: number, zero: number, curve = SLIDER_CURVE): number {
+  if (pos === 0) return zero;
+  const bound = pos > 0 ? max : min;
+  const t = Math.pow(clampUnit(Math.abs(pos) / 100), curve);
+  return zero + Math.sign(pos) * t * Math.abs(bound - zero);
+}
+
+/**
+ * Тейк черновика по верную сторону от цены: сторону сделки задаёт стоп
+ * (`impliedDirection`), и тейк лонга обязан быть выше цены, шорта — ниже.
+ * Пока стопа нет, сторону задаёт сам тейк, и подходит любой.
+ *
+ * Это свойство самого черновика при текущей цене, а не результат правки:
+ * черновик хранит цены, а цена прокрутки идёт дальше, поэтому тейк
+ * перестаёт подходить и без единого действия пользователя — достаточно,
+ * чтобы цена прошла за тейк или за стоп. Отсюда проверка там, где черновик
+ * показывается, а не только там, где его правят.
+ */
+export function draftTakeFits(stop: number, take: number, price: number): boolean {
+  const direction = impliedDirection(null, stop, null, price);
+  if (direction == null) return true;
+  return direction === 'long' ? take > price : take < price;
+}
+
+/**
+ * Черновик стопа и тейка после того, как стоп получил новое значение — общая
+ * точка для всех трёх мест, откуда стоп можно подвинуть (слайдер, текстовое
+ * поле, драг уровня прямо по графику). `nextStop` — ровно та строка, что
+ * ляжет в черновик: слайдер и график округляют (`toInputPrice`), поле ввода
+ * передаёт напечатанное как есть.
+ *
+ * Тейк зеркалится через цену (та же дистанция, другая сторона), когда новый
+ * стоп делает неверным тейк, который до этого был верным. Раньше правило
+ * звучало «стоп сменил сторону» — и ломалось двумя путями. Сторона считалась
+ * по сырому числу, а в черновик ложилось округлённое, и у самой цены они
+ * расходились. И тейк, который уже стоял со стопом по одну сторону (цена
+ * прошла за уровень), при каждом перебросе стопа зеркалился вслед за ним и
+ * так и оставался на его стороне.
  *
  * Синхронно и чисто (без стейта, без эффекта): вызывающий обязан применить
  * оба поля одним обновлением состояния, в том же обработчике, что и сам
@@ -180,19 +246,15 @@ export function levelSliderRange(
  */
 export function applyStopChange(
   prev: { stop: string; take: string },
-  newStopScreen: number,
+  nextStop: string,
   screenPrice: number,
   openDirection: Direction | null,
 ): { stop: string; take: string } {
-  const prevStop = Number(prev.stop);
   const prevTake = prev.take.trim() ? Number(prev.take) : null;
-  const prevDirection = impliedDirection(openDirection, prevStop, prevTake, screenPrice);
-  const nextDirection = impliedDirection(openDirection, newStopScreen, prevTake, screenPrice);
-  const stop = toInputPrice(newStopScreen);
-  if (prevDirection != null && nextDirection != null && prevDirection !== nextDirection && prevTake != null) {
-    return { stop, take: toInputPrice(2 * screenPrice - prevTake) };
-  }
-  return { stop, take: prev.take };
+  if (openDirection != null || prevTake == null) return { stop: nextStop, take: prev.take };
+  const breaksTake =
+    draftTakeFits(Number(prev.stop), prevTake, screenPrice) && !draftTakeFits(Number(nextStop), prevTake, screenPrice);
+  return { stop: nextStop, take: breaksTake ? toInputPrice(2 * screenPrice - prevTake) : prev.take };
 }
 
 /**

@@ -7,6 +7,7 @@ import { advanceTo, type OpenPosition } from '../lib/advance';
 import {
   DAY,
   MINUTE,
+  TIMEFRAMES,
   bucketStart,
   currentBucket,
   lastPrice,
@@ -28,9 +29,9 @@ export const HISTORY_CAP_MS = 365 * DAY;
 /** Кусок истории на одну догрузку при пане. */
 const HISTORY_CHUNK = 500;
 /** Момент сохраняется на сервер не чаще, чем раз в столько. */
-const SAVE_DELAY_MS = 3000;
+const SAVE_EVERY_MS = 3000;
 /** Скорости автопрокрутки — шагов в секунду. */
-export const SPEEDS = [1, 4, 16] as const;
+export const SPEEDS = [1, 4, 16, 32] as const;
 
 interface ClosedSet {
   /** До какого момента загружена история этого таймфрейма; дальше свечи собираются из минуток. */
@@ -40,7 +41,10 @@ interface ClosedSet {
 
 export interface Replay {
   cursor: number;
+  /** Выбранный ТФ. */
   tf: number;
+  /** ТФ свечей в `candles` — отстаёт от `tf`, пока история выбранного ещё грузится. */
+  shownTf: number;
   setTf: (tf: number) => void;
   /** В настоящих ценах. */
   candles: Candle[];
@@ -62,7 +66,7 @@ export interface Replay {
   /** Минутки кончились — дальше крутить нечего. */
   ended: boolean;
   error: unknown;
-  /** Сохранить момент сейчас, не дожидаясь задержки. */
+  /** Сохранить момент сейчас, не дожидаясь очередного круга. */
   flush: () => Promise<void>;
 }
 
@@ -129,21 +133,35 @@ export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, 
     ensureMinutes(cursorRef.current + LOOKAHEAD_MS).catch(setError);
   }, [ensureMinutes]);
 
-  // Прошлое выбранного таймфрейма — один раз на таймфрейм; всё, что после
-  // anchor, собирается из минуток, поэтому перегружать при шаге не нужно.
+  // Прошлое таймфрейма — один запрос на таймфрейм; всё, что после anchor, собирается
+  // из минуток, поэтому перегружать при шаге не нужно. Отметка о запросе — в рефе, а
+  // не по наличию в `closed`: запрос в полёте иначе ушёл бы второй раз.
+  const requestedTf = useRef(new Set<number>());
+  const loadClosed = useCallback((t: number) => {
+    if (requestedTf.current.has(t)) return;
+    requestedTf.current.add(t);
+    const anchor = currentBucket(cursorRef.current, t);
+    fetchCandles(t, { to: anchor - 1, limit: CLOSED_LIMIT })
+      .then((candles) => setClosed((prev) => (prev[t] ? prev : { ...prev, [t]: { anchor, candles } })))
+      .catch((e) => {
+        // Снятая отметка — чтобы повторный выбор этого ТФ попробовал снова.
+        requestedTf.current.delete(t);
+        setError(e);
+      });
+  }, []);
+  // Выбранный — первым, и заново при выборе, если прошлый запрос упал.
+  useEffect(() => loadClosed(tf), [tf, loadClosed]);
+  // Остальные — сразу при входе, а не по клику: иначе на каждом первом переключении
+  // график ждал бы сети, и ТФ менялся бы не сразу.
   useEffect(() => {
-    if (closed[tf]) return;
-    const anchor = currentBucket(cursorRef.current, tf);
-    let cancelled = false;
-    fetchCandles(tf, { to: anchor - 1, limit: CLOSED_LIMIT })
-      .then((candles) => {
-        if (!cancelled) setClosed((prev) => ({ ...prev, [tf]: { anchor, candles } }));
-      })
-      .catch(setError);
-    return () => {
-      cancelled = true;
-    };
-  }, [tf, closed]);
+    for (const t of TIMEFRAMES) loadClosed(t);
+  }, [loadClosed]);
+
+  // ТФ свечей на экране: выбранный, как только его история загружена, а до того —
+  // прежний. Иначе график на время запроса пропадал бы целиком. Правится прямо в
+  // рендере (adjust state while rendering), без лишнего кадра со старым ТФ.
+  const [shownTf, setShownTf] = useState(tf);
+  if (shownTf !== tf && closed[tf]) setShownTf(tf);
 
   /** Какие ТФ сейчас догружают историю — на каждый таймфрейм свой флаг, а не один общий:
    * иначе фетч для ТФ=60 в полёте держал бы заблокированным вызов для только что
@@ -158,6 +176,8 @@ export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, 
    * ТФ перед уже загруженными, не дальше года от текущего момента сессии.
    */
   const loadMoreHistory = useCallback(async () => {
+    // Для того ТФ, что на экране: пан упирается в край именно его свечей.
+    const tf = shownTf;
     const set = closed[tf];
     if (!set || historyLoadingRef.current[tf] || historyExhausted.current[tf]) return;
     const earliest = set.candles[0]?.t ?? set.anchor;
@@ -185,15 +205,15 @@ export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, 
       historyLoadingRef.current[tf] = false;
       setHistoryLoading(false);
     }
-  }, [closed, tf]);
+  }, [closed, shownTf]);
 
   const candles = useMemo(() => {
-    const set = closed[tf];
+    const set = closed[shownTf];
     if (!set) return [];
     // Полный загруженный ряд, не только «последние 120»: окно показа теперь
     // выбирает сам ReplayChart (пан и зум), а не хук.
-    return visibleCandles({ closed: set.candles, anchor: set.anchor, minutes, tf, cursor });
-  }, [closed, tf, minutes, cursor]);
+    return visibleCandles({ closed: set.candles, anchor: set.anchor, minutes, tf: shownTf, cursor });
+  }, [closed, shownTf, minutes, cursor]);
 
   const price = useMemo(() => lastPrice(minutes, cursor), [minutes, cursor]);
 
@@ -283,45 +303,86 @@ export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, 
   const tickRef = useRef(tick);
   tickRef.current = tick;
   useEffect(() => {
-    if (!speed) return;
+    if (!speed) {
+      // Доигрывать анимацию формирующейся свечи после паузы не по замыслу
+      // (см. комментарий у Replay.glide) — доигрывала бы до `1000/предыдущая
+      // скорость` мс, и на ×1 пауза выглядела бы так, будто не сработала.
+      setGlide(null);
+      return;
+    }
+    // Первый тик — сразу, а не через `1000/speed`: setInterval всегда ждёт
+    // полный период до первого срабатывания, и при переключении на низкую
+    // скорость (особенно ×1) это читалось бы как секундная задержка отклика
+    // на нажатие, хотя обработчик уже отработал.
+    void tickRef.current(speed);
     const h = setInterval(() => void tickRef.current(speed), 1000 / speed);
     return () => clearInterval(h);
   }, [speed]);
 
-  // Момент сохраняется с задержкой, а не на каждый шаг: автопрокрутка на ×16
+  // Момент сохраняется не чаще раза в SAVE_EVERY_MS: автопрокрутка на ×16
   // дала бы шестнадцать запросов в секунду. Сервер двигает момент только вперёд,
   // так что опоздавшее сохранение ничего не отмотает.
   const saved = useRef(cursor);
-  const flush = useCallback(async () => {
-    const c = cursorRef.current;
-    if (c === saved.current) return;
-    await saveCursor(sessionId, c);
-    saved.current = c;
-  }, [sessionId]);
-
-  useEffect(() => {
-    const h = setTimeout(() => void flush().catch(() => undefined), SAVE_DELAY_MS);
-    return () => clearTimeout(h);
-  }, [cursor, flush]);
-
-  useEffect(
-    () => () => {
+  const flush = useCallback(
+    async (keepalive = false) => {
       const c = cursorRef.current;
-      if (c !== saved.current) void saveCursor(sessionId, c, true).catch(() => undefined);
+      if (c === saved.current) return;
+      // Помечаем отправленным ДО запроса: два сохранения подряд (интервал и
+      // уход со страницы) иначе слали бы один и тот же момент дважды. На
+      // ошибке отметка откатывается — иначе неудачная отправка выглядела бы
+      // как сохранённая, и следующей попытки не случилось бы до нового шага.
+      const prev = saved.current;
+      saved.current = c;
+      try {
+        await saveCursor(sessionId, c, keepalive);
+      } catch (e) {
+        if (saved.current === c) saved.current = prev;
+        throw e;
+      }
     },
     [sessionId],
   );
 
+  // Интервал, а не таймер «через 3 секунды после последнего шага»: тот был
+  // debounce'ом — автопрокрутка двигает момент раз в 1000/speed мс и сбрасывала
+  // его каждым тиком, поэтому пока пользователь крутит, не уходило НИ ОДНОГО
+  // сохранения. Интервал сохраняет по ходу дела; flush сам выходит, когда
+  // момент не менялся, так что на паузе запросов нет.
+  useEffect(() => {
+    const h = setInterval(() => void flush().catch(() => undefined), SAVE_EVERY_MS);
+    return () => clearInterval(h);
+  }, [flush]);
+
+  // Уход со страницы — pagehide, а не только размонтирование: перезагрузка (F5)
+  // и закрытие вкладки эффекты React не чистят, и накопленный с последнего
+  // сохранения кусок прокрутки терялся целиком. keepalive — чтобы браузер довёл
+  // запрос до конца уже после выгрузки страницы. visibilitychange нужен
+  // отдельно: на мобильных вкладку часто убивают из фона, не дав pagehide.
+  useEffect(() => {
+    const onHide = () => void flush(true).catch(() => undefined);
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') onHide();
+    };
+    window.addEventListener('pagehide', onHide);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('pagehide', onHide);
+      document.removeEventListener('visibilitychange', onVisibility);
+      onHide();
+    };
+  }, [flush]);
+
   return {
     cursor,
     tf,
+    shownTf,
     setTf,
     candles,
     glide,
     loadMoreHistory,
     historyLoading,
     price,
-    ready: closed[tf] != null && price != null,
+    ready: closed[shownTf] != null && price != null,
     step,
     speed,
     setSpeed,

@@ -88,7 +88,13 @@ export const useModifyTrade = (id: string) => {
   return useMutation({
     mutationFn: ({ tradeId, ...body }: { tradeId: string; stopLoss?: number; takeProfit?: number | null }) =>
       apiJson<{ trade: BacktestTrade }>(`/api/backtest/trades/${tradeId}`, json('PATCH', body)),
-    onSettled: () => refresh(qc, id),
+    // Перечитку сессии — дожидаемся: колбэки конкретного mutate() срабатывают только
+    // после неё, и экран держит отпущенную по графику линию на месте ровно до прихода
+    // новых уровней, без кадра со старыми (см. pendingLevel в SessionScreen).
+    onSettled: async () => {
+      refresh(qc);
+      await qc.invalidateQueries({ queryKey: sessionKey(id) });
+    },
   });
 };
 

@@ -51,21 +51,58 @@ const stepOf = (candles: { t: number }[]) => (candles.length >= 2 ? candles[1].t
  * свечи, туда, где реальных данных ещё/уже нет) для времени `time`.
  * Экстраполирует постоянным шагом за пределами массива — так же, как
  * `RangeCheckChart` умеет уезжать за края данных индексами.
+ *
+ * Позиция ДРОБНАЯ: 22.5 — кадр, начинающийся ровно посередине свечи 22.
+ * Целая означала бы, что пан двигает график только по свече за раз, а жест
+ * при этом непрерывный: на приближенном участке свеча занимает десятки
+ * единиц холста, и кадр вместо следования за курсором прыгает через неё.
+ * Внутри загруженного участка доля берётся интерполяцией между соседями, а
+ * не делением на общий шаг: в истории бывают пропуски бакетов, и там деление
+ * разъехалось бы с индексом.
  */
 export function frameAtTime(candles: { t: number }[], time: number): number {
-  if (candles.length === 0) return 0;
+  const len = candles.length;
+  if (len === 0) return 0;
   const step = stepOf(candles);
-  if (time < candles[0].t) return step > 0 ? -Math.round((candles[0].t - time) / step) : 0;
-  return indexAtOrAfter(candles, time);
+  if (time <= candles[0].t) return step > 0 ? -(candles[0].t - time) / step : 0;
+  const last = candles[len - 1];
+  if (time >= last.t) return step > 0 ? len - 1 + (time - last.t) / step : len - 1;
+  const i = indexAtOrAfter(candles, time);
+  if (candles[i].t === time) return i;
+  const prev = candles[i - 1];
+  const width = candles[i].t - prev.t;
+  return width > 0 ? i - 1 + (time - prev.t) / width : i - 1;
 }
 
-/** Обратная операция: время якоря для позиции кадра (в т.ч. отрицательной) —
-    пан/пинч используют, чтобы зафиксировать текущую позицию в `ViewState.anchorTime`. */
+/** Обратная операция: время якоря для позиции кадра (дробной и/или
+    отрицательной) — пан/пинч используют, чтобы зафиксировать текущую позицию
+    в `ViewState.anchorTime`. Строго обратна `frameAtTime`: иначе дробный пан
+    терял бы долю свечи на каждом круге «позиция → время → позиция». */
 export function anchorTimeAt(candles: { t: number }[], frameStart: number): number | null {
-  if (candles.length === 0) return null;
-  if (frameStart < 0) return candles[0].t - -frameStart * (stepOf(candles) || 1);
-  if (frameStart < candles.length) return candles[frameStart].t;
-  return candles[candles.length - 1].t;
+  const len = candles.length;
+  if (len === 0) return null;
+  const step = stepOf(candles) || 1;
+  if (frameStart <= 0) return candles[0].t + frameStart * step;
+  if (frameStart >= len - 1) return candles[len - 1].t + (frameStart - (len - 1)) * step;
+  const i = Math.floor(frameStart);
+  return candles[i].t + (frameStart - i) * (candles[i + 1].t - candles[i].t);
+}
+
+/** Насколько близко (в долях свечи) кадр должен подойти к последним свечам,
+    чтобы считаться прижатым к живому краю. Ноль тут не годится: позиция
+    дробная, точное попадание в край жестом практически недостижимо — и
+    график перестал бы возвращаться в живой режим сам. */
+const LIVE_SNAP = 0.25;
+
+/**
+ * Якорь для позиции кадра — но `null` (живой режим), если кадр фактически
+ * стоит вплотную к последним свечам. Общий для пана и зума: решай они это
+ * по-разному, жест, вернувший график к краю, оставлял бы кнопку «→ сейчас»
+ * висеть над живым графиком.
+ */
+export function liveAnchorAt(candles: { t: number }[], frameStart: number, count: number): number | null {
+  const flush = Math.max(0, candles.length - count);
+  return Math.abs(frameStart - flush) < LIVE_SNAP ? null : anchorTimeAt(candles, frameStart);
 }
 
 /**
@@ -123,8 +160,12 @@ export function resolveWindow(
     minFrameStart,
     maxFrameStart,
   );
-  const startIdx = clamp(frameStart, 0, total);
-  const endIdx = clamp(frameStart + count, 0, total);
+  // Кадр стоит дробно, срез массива — нет: берём и свечу, начатую до левого
+  // края, и свечу, начатую до правого. Обе видны краями, поэтому группа
+  // свечей обрезается по ширине поля в самом графике — иначе половинка
+  // вылезала бы на полосу цены справа.
+  const startIdx = clamp(Math.floor(frameStart), 0, total);
+  const endIdx = clamp(Math.ceil(frameStart + count), 0, total);
   return { frameStart, startIdx, endIdx, count, live };
 }
 
@@ -142,6 +183,51 @@ export function resolveWindow(
  * случайная прокрутка колеса/тачпада после пана отдёргивала кадр обратно к
  * живому краю — пан отодвигал свечи, а следующий же зум откатывал назад.
  */
+/**
+ * «Круглый» шаг сетки цены — ближайшее сверху число вида 1/2/5×10^n. Тот же
+ * принцип, что у любой биржевой шкалы: подписи стоят на числах, которые
+ * глаз читает мгновенно (1000, 2000, 5000, …), а не на «диапазон поделили на
+ * пять» — тот шаг был произвольной дробью и менялся на КАЖДЫЙ пиксель
+ * ручного зума цены, хотя сами линии сетки визуально не сдвигались.
+ */
+export function niceStep(raw: number): number {
+  if (!(raw > 0)) return 1;
+  const exp = Math.floor(Math.log10(raw));
+  const base = 10 ** exp;
+  const frac = raw / base;
+  const niceFrac = frac <= 1 ? 1 : frac <= 2 ? 2 : frac <= 5 ? 5 : 10;
+  return niceFrac * base;
+}
+
+/**
+ * Линии сетки цены на видимый диапазон `[lo, hi]` — круглые числа с шагом
+ * `niceStep`, а не фиксированное их количество: при сужении диапазона (зум)
+ * помещается больше линий, и они обязаны появляться сами, а не растягивать
+ * те же пять на весь кадр. `minGap` — наименьшее расстояние между соседними
+ * линиями В ЦЕНЕ; в экранные пиксели его переводит вызывающий.
+ *
+ * Значения — от `n0 * step`, а не накоплением `+= step`: так соседние вызовы
+ * с почти тем же `lo` (кадр за кадром вертикального пана) дают побитово
+ * одно и то же число для одной и той же линии сетки — на этом строится ключ
+ * элемента в ReplayChart, чтобы React обновлял позицию линии, а не
+ * пересоздавал её каждый кадр.
+ */
+export function priceTicks(lo: number, hi: number, minGap: number): number[] {
+  if (!(hi > lo) || !(minGap > 0)) return [];
+  const step = niceStep(minGap);
+  const n0 = Math.ceil(lo / step);
+  const ticks: number[] = [];
+  // Верхняя граница на число линий — защита от вырожденного вызова, а не
+  // ожидаемый путь: на разумном minGap линий всегда на порядок меньше.
+  const maxTicks = 200;
+  for (let k = 0; k < maxTicks; k++) {
+    const v = (n0 + k) * step;
+    if (v > hi) break;
+    ticks.push(v);
+  }
+  return ticks;
+}
+
 export function zoomStep(
   candles: { t: number }[],
   baseIdx: number,
@@ -154,7 +240,9 @@ export function zoomStep(
   const focalIdx = baseIdx + focalFrac * frameCount;
   const count = clamp(Math.round(frameCount * factor), bounds.minCount, bounds.maxCount);
   const { min: minStart, max: maxStart } = frameBounds(candles, count, edgeMin);
-  const newStart = clamp(Math.round(focalIdx - focalFrac * count), minStart, maxStart);
-  const flush = Math.max(0, candles.length - count);
-  return { count, anchorTime: newStart === flush ? null : anchorTimeAt(candles, newStart) };
+  // Округляется только `count` — свечи либо влезают целиком, либо нет.
+  // Начало кадра не округляется: на щелчке колеса это сдвиг картинки на
+  // полсвечи, а на пинче, где жест непрерывный, — те же рывки, что у пана.
+  const newStart = clamp(focalIdx - focalFrac * count, minStart, maxStart);
+  return { count, anchorTime: liveAnchorAt(candles, newStart, count) };
 }

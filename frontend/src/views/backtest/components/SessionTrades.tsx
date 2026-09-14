@@ -4,7 +4,6 @@ import { useTranslations } from 'next-intl';
 import { TagPicker, type TagItem } from '@/entities/tag';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import { Money } from '@/shared/ui/Money';
-import { SectionHead } from '@/shared/ui/SectionHead';
 import { durationUnitLabels, formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
 import { useLocaleControl } from '@/shared/i18n';
 import type { BacktestTrade } from '../api/types';
@@ -105,7 +104,6 @@ export function SessionTrades({
 
   return (
     <section>
-      <SectionHead title={t('tradesTitle')} />
       <LedgerTable
         columns={columns}
         rows={[...trades].reverse()}

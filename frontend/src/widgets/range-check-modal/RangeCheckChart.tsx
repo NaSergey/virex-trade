@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { RangeCheckResponse } from '@/entities/trade';
 import { useNonPassiveWheel } from '@/shared/lib/hooks/useNonPassiveWheel';
@@ -90,6 +90,9 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
   const { locale } = useLocaleControl();
   const intlLocale = locale === 'en' ? 'en-US' : 'ru-RU';
   const svgRef = useRef<SVGSVGElement>(null);
+  // Двоеточия из useId в url(#...) не годятся — убираем; своего счётчика не
+  // заводим: две модалки подряд получили бы один id.
+  const clipId = `range-plot-${useId().replace(/:/g, '')}`;
   const dragRef = useRef<{ x: number; from: number; to: number } | null>(null);
   const [span, setSpan] = useState<{ from: number; to: number } | null>(null);
   const [cursor, setCursor] = useState<{ i: number; y: number } | null>(null);
@@ -132,7 +135,12 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
   // свечи намертво приклеены к правому краю и приближенный участок нельзя
   // подвинуть в середину. Столько свечей всегда остаётся в кадре:
   const edge = Math.min(3, len);
-  const count = clamp((span?.to ?? len) - (span?.from ?? 0), MIN_VISIBLE, Math.max(MIN_VISIBLE, len));
+  // Свечей в кадре — целое число, а вот НАЧАЛО кадра дробное: 22.5 значит,
+  // что слева видна половина свечи 22. Целое начало означало бы, что сдвиг
+  // ходит только по свече за раз, а жест непрерывный: на приближенном
+  // участке, где свеча шириной под сотню единиц холста, график вместо
+  // следования за курсором прыгает через неё.
+  const count = Math.round(clamp((span?.to ?? len) - (span?.from ?? 0), MIN_VISIBLE, Math.max(MIN_VISIBLE, len)));
   const from = clamp(span?.from ?? 0, edge - count, len - edge);
   const to = from + count;
 
@@ -140,8 +148,10 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
   // иначе при заезде за край оставшиеся растянулись бы на всю ширину.
   const bw = PW / count;
   const cx = (i: number) => (i - from) * bw + bw / 2;
-  const vFrom = Math.max(0, from);
-  const vTo = Math.min(len, to);
+  // Крайние свечи берём целиком: они видны половинками, поэтому поле со
+  // свечами обрезается по ширине (clipPath ниже).
+  const vFrom = Math.max(0, Math.floor(from));
+  const vTo = Math.min(len, Math.ceil(to));
   const visible = candles.slice(vFrom, vTo);
 
   const marks = [data.window.high, data.window.low].filter((v): v is number => v != null);
@@ -188,7 +198,10 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
       const xv = clamp((e.clientX - rect.left) * scale, 0, PW);
       const anchor = from + xv / bw; // свеча под курсором — она и останется на месте
       const next = clamp(Math.round(count * (e.deltaY > 0 ? 1.25 : 0.8)), MIN_VISIBLE, len);
-      const nf = clamp(Math.round(anchor - ((anchor - from) / count) * next), edge - next, len - edge);
+      // Округляется только число свечей: округлённое начало кадра дёргало бы
+      // картинку ещё и на полсвечи вбок и стирало дробное положение, набранное
+      // сдвигом.
+      const nf = clamp(anchor - ((anchor - from) / count) * next, edge - next, len - edge);
       setSpan({ from: nf, to: nf + next });
     },
     [from, to, bw, len],
@@ -211,7 +224,10 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
     const scale = W / rect.width;
     const drag = dragRef.current;
     if (drag) {
-      const shift = Math.round(((drag.x - e.clientX) * scale) / bw);
+      // Сдвиг в долях свечи, без округления: жест непрерывный, и кадр обязан
+      // идти за курсором 1:1, а не копить отставание до полусвечи и отдавать
+      // его скачком.
+      const shift = ((drag.x - e.clientX) * scale) / bw;
       const held = drag.to - drag.from;
       const nf = clamp(drag.from + shift, edge - held, len - edge);
       setSpan({ from: nf, to: nf + held });
@@ -219,7 +235,7 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
     }
     const xv = (e.clientX - rect.left) * scale;
     const yv = (e.clientY - rect.top) * scale;
-    const i = from + Math.floor(xv / bw);
+    const i = Math.floor(from + xv / bw);
     // За краем данных свечи под курсором нет — прицел там не нужен.
     if (xv < 0 || xv > PW || yv < PT - px(6) || yv > h - PB + px(6) || i < vFrom || i >= vTo) setCursor(null);
     else setCursor({ i, y: yv });
@@ -264,7 +280,7 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
     // Кадр умеет заезжать за края данных, поэтому попадания в него мало: свечи
     // с таким номером может просто не быть (а при idx = -1 её и не искали).
     const bar = candles[idx];
-    if (!bar || idx < from || idx >= to) return null;
+    if (!bar || idx < vFrom || idx >= vTo) return null;
     const x = clamp(cx(idx), px(20), PW - px(20));
     const up = side === 'below'; // стрелка смотрит вверх, на свечу
     // Метка не должна вылезти за поле: если свеча прижата к краю, отступ съедается.
@@ -333,31 +349,42 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
         />
       ))}
 
-      {visible.map((c, i) => {
-        const x = cx(vFrom + i);
-        const up = c.close >= c.open;
-        const color = up ? 'var(--color-up)' : 'var(--color-down)';
-        const top = Math.min(y(c.open), y(c.close));
-        return (
-          <g key={c.time}>
-            <line
-              x1={x.toFixed(1)}
-              y1={y(c.high).toFixed(1)}
-              x2={x.toFixed(1)}
-              y2={y(c.low).toFixed(1)}
-              stroke={color}
-              strokeWidth={u.toFixed(2)}
-            />
-            <rect
-              x={(x - bw * 0.28).toFixed(1)}
-              y={top.toFixed(1)}
-              width={Math.max(px(0.8), bw * 0.56).toFixed(1)}
-              height={Math.max(px(1.5), Math.abs(y(c.close) - y(c.open))).toFixed(1)}
-              fill={color}
-            />
-          </g>
-        );
-      })}
+      {/* Кадр стоит дробно, крайние свечи видны половинками — поле со свечами
+          режется по ширине, иначе половинка вылезала бы за него, на поля
+          холста и подписи уровней. */}
+      <defs>
+        <clipPath id={clipId}>
+          <rect x={0} y={0} width={PW} height={h} />
+        </clipPath>
+      </defs>
+
+      <g clipPath={`url(#${clipId})`}>
+        {visible.map((c, i) => {
+          const x = cx(vFrom + i);
+          const up = c.close >= c.open;
+          const color = up ? 'var(--color-up)' : 'var(--color-down)';
+          const top = Math.min(y(c.open), y(c.close));
+          return (
+            <g key={c.time}>
+              <line
+                x1={x.toFixed(1)}
+                y1={y(c.high).toFixed(1)}
+                x2={x.toFixed(1)}
+                y2={y(c.low).toFixed(1)}
+                stroke={color}
+                strokeWidth={u.toFixed(2)}
+              />
+              <rect
+                x={(x - bw * 0.28).toFixed(1)}
+                y={top.toFixed(1)}
+                width={Math.max(px(0.8), bw * 0.56).toFixed(1)}
+                height={Math.max(px(1.5), Math.abs(y(c.close) - y(c.open))).toFixed(1)}
+                fill={color}
+              />
+            </g>
+          );
+        })}
+      </g>
 
       {/* Маркеры сделки — как на любом торговом графике: стрелка стоит СНАРУЖИ
           своей свечи и смотрит на неё, а не сидит на ценовом уровне. */}

@@ -471,8 +471,16 @@
   .asym.terminal { grid-template-columns: minmax(0, 1fr) 360px; }
   /* Тикет ниже — сам законченная панель со своей рамкой; вторая линия рядом
      с ней читалась бы как задвоенная рамка, поэтому дорожку здесь не делит
-     линейка .marg, только её отступ. */
-  .asym.terminal > .marg { border-left: 0; }
+     линейка .marg, только её отступ.
+     Колонка — флекс-столбец, а не просто рамка: тикет и переключатель таблицы
+     под графиком — раздельные блоки одной колонки, тянущейся на всю высоту
+     строки (сетка стрейчит её сама, см. .asym). Переключатель прижат книзу
+     margin-top: auto — вровень с рядом прокрутки слева (шаг, пауза, скорость),
+     а не повисшим сразу под тикетом с пустотой до низа колонки. */
+  .asym.terminal > .marg { border-left: 0; display: flex; flex-direction: column; }
+  .asym.terminal > .marg .view-switch { margin-top: auto; }
+  /* Строка графика — своей высоты, не резиновая: тянется таблица под ней. */
+  .bt-live > .asym.terminal { flex: none; }
   /* Ширину строки внутри сетки держит сама колонка. Оставленный здесь
      max-width лечил бы болезнь, которой нет, и оставлял дыру между концом
      текста и линейкой между дорожками. */
@@ -483,11 +491,13 @@
   .replay-chart { display: block; width: 100%; height: auto; touch-action: none; user-select: none; }
   .replay-chart .lvl-hit { cursor: ns-resize; }
   .replay-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); margin-top: var(--s3); }
-  /* Обёртка даёт координаты для кнопки «→ сейчас», абсолютно позиционированной
-     над графиком — сам SVG остаётся без изменений размеров. */
   .replay-chart-wrap { position: relative; }
-  .replay-live { position: absolute; top: var(--s2); right: var(--s2); background: var(--ground); }
   .order-panel { display: grid; gap: var(--s3); align-content: start; }
+  /* Подписи тикета — на ступень светлее общего .lbl (--ink-2 вместо самого
+     тихого --ink-3): на тесной панели с мелким кеглем самая приглушённая
+     краска системы читалась плохо, а тут именно по подписям (риск, стоп,
+     тейк) идёт основная навигация глазами. */
+  .order-panel .lbl { color: var(--ink-2); }
   .order-actions { display: flex; gap: var(--s2); }
   .order-actions .btn { flex: 1; }
   /* Ползунок значения (Slider из shared/ui) — единственное текущее место
@@ -525,19 +535,45 @@
     border: 1px solid var(--hair);
     background: var(--band);
     padding: 0 var(--s2);
+    margin-top: calc(var(--s2) * -2);
   }
+  .size-preview .kv { padding: var(--s1) 0; }
   .size-preview .kv:last-child { border-bottom: 0; }
+  .size-preview .lbl,
+  .size-preview .kv .n { font-size: 10px; }
   /* Подпись поля (риск, стоп, тейк) с числом сразу справа — процент (и для
      риска сумма в USDT) не отдельной строкой ниже и не рядом со слайдером:
      это одна и та же величина, а не два разных факта. */
   .fld-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s2); }
   .fld-left { display: flex; align-items: baseline; gap: var(--s1); }
   .fld-val { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--ink); white-space: nowrap; }
+  .fld-val.neg { color: var(--loss); }
   /* Экран активной сессии — единственное место продукта без наборной полосы
      (.wrap): терминал занимает всю ширину окна, а не читательскую колонку в
      1360px. Поле у края минимальное — только чтобы кнопки и цифры не липли к
-     самой рамке браузера, не «воздух» страницы-гроссбуха. */
-  .bt-live { padding: 0 var(--s2) var(--s6); }
+     самой рамке браузера, не «воздух» страницы-гроссбуха. Отступ сверху —
+     тот же, что у обычной страницы под липкой шапкой (`.pagehead`): без него
+     первая строка терминала прилипала прямо к границе шапки сайта. */
+  .bt-live {
+    padding: var(--s4) var(--s2) var(--s6);
+    display: flex;
+    flex-direction: column;
+    /* dvh, а не vh — по той же причине, что и у .dlg (адресная строка телефона).
+       Не растягиваем в высоту, когда контента меньше экрана — только не даём
+       ему стать больше: это предел, а не рост. */
+    max-height: calc(100dvh - var(--top-h));
+  }
+  /* Открытые позиции/История сделок — на весь остаток экрана под графиком и
+     тикетом, с прокруткой внутри себя (строк может быть куда больше, чем
+     влезает). Без этого длинная история тянула бы вниз всю страницу, и
+     график с тикетом ордера — то, что нужно видеть, не отрываясь, —
+     оказывались бы выше экрана после самой обычной прокрутки к таблице. */
+  .bt-table {
+    flex: 1;
+    min-height: 160px;
+    overflow-y: auto;
+    margin-top: var(--s4);
+  }
 
   /* ═══════════════ СВОД ПЕРИОДА ═══════════════ */
   /* Только нижняя черта — тот же счёт, что у шапки .ledger: над полосой всегда
@@ -2504,6 +2540,11 @@
     margin-top: var(--s4);
     padding-top: var(--s3);
   }
+  /* На этой ширине .asym.terminal уже одна колонка (график над тикетом) — сама
+     сложенная пара обычно выше экрана, и подгонять под неё ещё и таблицу под
+     низом было бы уже не «умещается», а теснота. Прокрутка страницы, как везде. */
+  .bt-live { display: block; max-height: none; }
+  .bt-table { flex: none; min-height: 0; overflow-y: visible; }
   .an,
   .cmp { grid-template-columns: repeat(2, 1fr); }
   .an > div:nth-child(3) { border-left: 0; }

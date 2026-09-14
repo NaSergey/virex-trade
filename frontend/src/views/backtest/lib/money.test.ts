@@ -3,6 +3,9 @@ import {
   applyStopChange,
   averageIn,
   checkLevels,
+  curvedSliderPos,
+  curvedSliderValue,
+  draftTakeFits,
   formatR,
   fromScreen,
   impliedDirection,
@@ -13,6 +16,7 @@ import {
   riskAmount,
   signedPctFromStop,
   stopFromSignedPct,
+  STOP_RISK_PCT,
   toInput,
   toInputPrice,
   toScreen,
@@ -79,9 +83,13 @@ describe('formatR и toInput', () => {
     expect(toInput(523.456789123)).toBe('523.45679');
   });
 
-  it('цена стопа/тейка округляется до десятых', () => {
+  it('цена стопа/тейка округляется до шести значащих цифр', () => {
+    // Настоящая цена BTC — те же «до десятых», что и раньше.
     expect(toInputPrice(53233.14)).toBe('53233.1');
-    expect(toInputPrice(97)).toBe('97.0');
+    expect(toInputPrice(97)).toBe('97.0000');
+    // Скрытая цена (режим hidePrice, priceScale сжимает её в 100–1000) — точнее,
+    // иначе ползунок стопа/тейка теряет направление рядом с нулём (см. ниже).
+    expect(toInputPrice(313.55555)).toBe('313.556');
   });
 });
 
@@ -162,22 +170,45 @@ describe('impliedDirection', () => {
   });
 });
 
+describe('draftTakeFits', () => {
+  it('стопа нет — сторону задаёт сам тейк, подходит любой', () => {
+    expect(draftTakeFits(0, 95, 100)).toBe(true);
+    expect(draftTakeFits(NaN, 105, 100)).toBe(true);
+  });
+
+  it('стоп ниже цены (лонг) — тейк только выше цены', () => {
+    expect(draftTakeFits(98, 105, 100)).toBe(true);
+    expect(draftTakeFits(98, 99, 100)).toBe(false);
+    expect(draftTakeFits(98, 100, 100)).toBe(false);
+  });
+
+  it('стоп выше цены (шорт) — тейк только ниже цены', () => {
+    expect(draftTakeFits(102, 95, 100)).toBe(true);
+    expect(draftTakeFits(102, 101, 100)).toBe(false);
+  });
+
+  it('цена ушла за тейк — тот же черновик перестаёт подходить без единой правки', () => {
+    expect(draftTakeFits(98, 105, 100)).toBe(true);
+    expect(draftTakeFits(98, 105, 106)).toBe(false);
+  });
+});
+
 describe('applyStopChange', () => {
   it('стоп меняет сторону — тейк зеркалится через цену', () => {
     // Было: лонг (стоп 98, тейк 110). Новый стоп — 103 (выше цены, шорт).
-    const result = applyStopChange({ stop: '98', take: '110' }, 103, 100, null);
+    const result = applyStopChange({ stop: '98', take: '110' }, '103.0', 100, null);
     expect(result.stop).toBe('103.0');
     expect(Number(result.take)).toBeCloseTo(90, 6); // 2*100 - 110
   });
 
   it('сторона не поменялась — тейк не трогаем', () => {
-    const result = applyStopChange({ stop: '98', take: '110' }, 97, 100, null);
+    const result = applyStopChange({ stop: '98', take: '110' }, '97.0', 100, null);
     expect(result.stop).toBe('97.0');
     expect(result.take).toBe('110');
   });
 
   it('тейка ещё нет — мирроить нечего', () => {
-    const result = applyStopChange({ stop: '98', take: '' }, 103, 100, null);
+    const result = applyStopChange({ stop: '98', take: '' }, '103.0', 100, null);
     expect(result.stop).toBe('103.0');
     expect(result.take).toBe('');
   });
@@ -185,25 +216,116 @@ describe('applyStopChange', () => {
   it('открытая сделка — направление её, не стопа', () => {
     // Стоп двигается в пределах той же (открытой) стороны — тейк не зеркалится,
     // даже если голый расчёт по цене показал бы смену стороны.
-    const result = applyStopChange({ stop: '98', take: '110' }, 99, 100, 'long');
+    const result = applyStopChange({ stop: '98', take: '110' }, '99.0', 100, 'long');
     expect(result.take).toBe('110');
+  });
+
+  it('тейк уже по одну сторону со стопом — переброс стопа его за собой не тянет', () => {
+    // Цена ушла за тейк: стоп 98 и тейк 97 оба ниже цены 100. Стоп перебросили выше —
+    // тейк 97 теперь как раз верный для шорта, зеркалить его обратно на сторону стопа нельзя.
+    const result = applyStopChange({ stop: '98', take: '97' }, '103.0', 100, null);
+    expect(result.stop).toBe('103.0');
+    expect(result.take).toBe('97');
+  });
+
+  it('сторону решает ровно то, что ляжет в черновик', () => {
+    // Цена 500000.8 (шесть разрядов — toInputPrice округляет тут до целого). Сырое
+    // 500000.6 ниже цены (лонг, тейк 500002 верный), но в черновик ляжет «500001» —
+    // это уже выше цены (шорт), и тейк 500002 для шорта неверный, зеркалится.
+    const price = 500000.8;
+    expect(toInputPrice(500000.6)).toBe('500001');
+    const rounded = applyStopChange({ stop: '499999', take: '500002' }, toInputPrice(500000.6), price, null);
+    expect(rounded.take).toBe(toInputPrice(2 * price - 500002)); // 499999.6 → «500000»
+    // То же сырое число, напечатанное руками (setStopText не округляет) — сторона не
+    // меняется, зеркалить нечего.
+    const raw = applyStopChange({ stop: '499999', take: '500002' }, '500000.6', price, null);
+    expect(raw.take).toBe('500002');
+  });
+
+  it('из согласованного черновика любой новый стоп даёт согласованный', () => {
+    for (const price of [100, 523.37, 31_500.43]) {
+      const stops = ['', toInputPrice(price * 0.98), toInputPrice(price * 1.02)];
+      const takes = [0.95, 0.99, 1.01, 1.05].map((k) => toInputPrice(price * k));
+      const nextStops = [-5, -1, -0.05, -0.01, 0, 0.01, 0.05, 1, 5].map((pct) => toInputPrice(price * (1 + pct / 100)));
+      for (const stop of stops) {
+        for (const take of takes) {
+          if (!draftTakeFits(Number(stop), Number(take), price)) continue;
+          for (const next of nextStops) {
+            const r = applyStopChange({ stop, take }, next, price, null);
+            expect(draftTakeFits(Number(r.stop), Number(r.take), price), `${price} ${stop}/${take} → ${next}`).toBe(true);
+          }
+        }
+      }
+    }
   });
 });
 
+function expectRangeCloseTo(range: { min: number; max: number }, min: number, max: number) {
+  expect(range.min).toBeCloseTo(min, 9);
+  expect(range.max).toBeCloseTo(max, 9);
+}
+
 describe('levelSliderRange', () => {
   it('направление ещё не выбрано — симметрично вокруг цены, стоп уже тейка', () => {
-    expect(levelSliderRange('stop', 100, null)).toEqual({ min: 93, max: 107 });
-    expect(levelSliderRange('take', 100, null)).toEqual({ min: 80, max: 120 });
+    expectRangeCloseTo(levelSliderRange('stop', 100, null), 93, 107);
+    expectRangeCloseTo(levelSliderRange('take', 100, null), 90, 110);
   });
 
-  it('лонг: стоп снизу (±7%), тейк сверху (±20%)', () => {
-    expect(levelSliderRange('stop', 100, 'long')).toEqual({ min: 93, max: 100 });
-    expect(levelSliderRange('take', 100, 'long')).toEqual({ min: 100, max: 120 });
+  it('лонг: стоп снизу (±7%), тейк сверху (±10%)', () => {
+    expectRangeCloseTo(levelSliderRange('stop', 100, 'long'), 93, 100);
+    expectRangeCloseTo(levelSliderRange('take', 100, 'long'), 100, 110);
   });
 
   it('шорт — зеркально', () => {
-    expect(levelSliderRange('stop', 100, 'short')).toEqual({ min: 100, max: 107 });
-    expect(levelSliderRange('take', 100, 'short')).toEqual({ min: 80, max: 100 });
+    expectRangeCloseTo(levelSliderRange('stop', 100, 'short'), 100, 107);
+    expectRangeCloseTo(levelSliderRange('take', 100, 'short'), 90, 100);
+  });
+});
+
+describe('curvedSliderPos / curvedSliderValue', () => {
+  it('нуль — позиция 0, независимо от того, край это или середина диапазона', () => {
+    expect(curvedSliderPos(0, 0, 10, 0)).toBe(0);
+    expect(curvedSliderPos(100, 90, 110, 100)).toBe(0);
+  });
+
+  it('край диапазона — позиция ±100', () => {
+    expect(curvedSliderPos(10, 0, 10, 0)).toBeCloseTo(100, 9);
+    expect(curvedSliderPos(-7, -7, 7, 0)).toBeCloseTo(-100, 9);
+    expect(curvedSliderPos(110, 90, 110, 100)).toBeCloseTo(100, 9);
+    expect(curvedSliderPos(90, 90, 110, 100)).toBeCloseTo(-100, 9);
+  });
+
+  it('дуга: полпути по позиции — четверть пути по значению (curve=2)', () => {
+    expect(curvedSliderPos(2.5, 0, 10, 0)).toBeCloseTo(50, 9);
+    expect(curvedSliderValue(50, 0, 10, 0)).toBeCloseTo(2.5, 9);
+  });
+
+  it('туда и обратно на асимметричном диапазоне (зеркалит levelSliderRange для шорта)', () => {
+    const [min, max, zero] = [90, 100, 100];
+    for (const pos of [-100, -75, -50, -25, 0]) {
+      expect(curvedSliderPos(curvedSliderValue(pos, min, max, zero), min, max, zero)).toBeCloseTo(pos, 6);
+    }
+  });
+
+  it('регресс: на скрытой цене (100–1000) ползунок стопа не залипает у нуля', () => {
+    // Баг: toInputPrice округлял цену до фиксированной десятой. У обычной цены BTC
+    // (десятки тысяч) это меньше самого мелкого шага дуги и незаметно, но у скрытой
+    // цены (priceScale сжимает её в 100–1000, см. backend pickPriceScale) то же
+    // движение ползунка рядом с нулём даёт сдвиг цены меньше 0.05 — округление
+    // возвращало точно ту же цену, позиция на следующий кадр снова падала в 0, и
+    // ползунок не двигался с места, сколько его ни тяни.
+    for (const price of [100, 313.7, 999]) {
+      for (const pos of [1, 2, 4, 8]) {
+        const pct = curvedSliderValue(pos, -STOP_RISK_PCT, STOP_RISK_PCT, 0);
+        const stopPrice = Number(toInputPrice(stopFromSignedPct(pct, price)));
+        expect(stopPrice, `price=${price} pos=${pos}`).not.toBe(price);
+      }
+    }
+  });
+
+  it('вырожденный диапазон (граница совпадает с нулём) не даёт NaN/Infinity', () => {
+    expect(curvedSliderPos(5, 0, 0, 0)).toBe(0);
+    expect(curvedSliderValue(50, 0, 0, 0)).toBe(0);
   });
 });
 
