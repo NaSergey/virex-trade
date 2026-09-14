@@ -66,6 +66,19 @@ describe('BinanceKlinesClient', () => {
     expect(url).not.toContain('endTime');
   });
 
+  it('хвост запрашивается без startTime — Binance отдаёт последние свечи', async () => {
+    const fetchMock = mockFetch({ body: [row(1_700_000_000_000)] });
+    const { client } = makeClient();
+
+    const candles = await client.fetchRecent('BTCUSDT', 1, 30);
+
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain('interval=1m');
+    expect(url).toContain('limit=30');
+    expect(url).not.toContain('startTime');
+    expect(candles).toHaveLength(1);
+  });
+
   it('на 429 отступает и повторяет, а не теряет страницу', async () => {
     mockFetch({ status: 429 }, { body: [row(1_700_000_000_000)] });
     const { client, sleep } = makeClient();

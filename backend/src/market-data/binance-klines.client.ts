@@ -37,10 +37,22 @@ export class BinanceKlinesClient {
     startTimeMs: number,
     limit = 1000,
   ): Promise<BinanceCandle[]> {
-    const url =
+    return this.request(
       `${BASE_URL}?symbol=${symbol}&interval=${toBinanceInterval(timeframe)}` +
-      `&startTime=${startTimeMs}&limit=${limit}`;
+        `&startTime=${startTimeMs}&limit=${limit}`,
+    );
+  }
 
+  /**
+   * Последние `limit` свечей, включая ещё формирующуюся: без `startTime` Binance
+   * отдаёт хвост. Нужен живому графику и движку эфира турниров, а не синку —
+   * формирующуюся свечу в хранилище писать нельзя (см. `isClosed`).
+   */
+  async fetchRecent(symbol: string, timeframe: number, limit: number): Promise<BinanceCandle[]> {
+    return this.request(`${BASE_URL}?symbol=${symbol}&interval=${toBinanceInterval(timeframe)}&limit=${limit}`);
+  }
+
+  private async request(url: string): Promise<BinanceCandle[]> {
     for (let attempt = 0; ; attempt++) {
       // Умолчания undici — 300 секунд: зависший запрос держал бы флаг
       // занятости синка до пяти минут и съедал бы тик таймера. 15 секунд

@@ -1,6 +1,7 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { parseCandleQuery } from './candle-query';
+import { LiveMarketService } from './live-market.service';
 import { MarketDataService } from './market-data.service';
 
 /**
@@ -10,7 +11,21 @@ import { MarketDataService } from './market-data.service';
 @UseGuards(JwtAuthGuard)
 @Controller('api/market-data')
 export class MarketDataController {
-  constructor(private readonly marketData: MarketDataService) {}
+  constructor(
+    private readonly marketData: MarketDataService,
+    private readonly live: LiveMarketService,
+  ) {}
+
+  /**
+   * Хвост последних минуток для графика турнира в прямом эфире — последняя ещё
+   * формируется. serverTime — чтобы браузер вёл момент по часам сервера: цены и
+   * время сделок эфира ставит сервер.
+   */
+  @Get('live')
+  async getLive() {
+    const { minutes } = await this.live.snapshot();
+    return { serverTime: new Date().toISOString(), minutes };
+  }
 
   @Get('candles')
   async getCandles(
