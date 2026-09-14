@@ -271,6 +271,12 @@ model BacktestSession {
   hidePrice      Boolean
   /// Коэффициент показа цен; 1, если цена не скрыта. В базе цены настоящие.
   priceScale     Float
+  /// Откуда свечи: 'real' — отрезок price_candles, 'synthetic' — рынок строит генератор (backtest/synthetic).
+  dataSource     String    @default("real")
+  /// Зерно генератора; только у synthetic.
+  seed           Int?
+  /// Версия генератора (SYNTH_VERSION), которой построена сессия; только у synthetic.
+  synthVersion   Int?
   status         String    @default("active") // 'active' | 'finished'
   createdAt      DateTime  @default(now())
   finishedAt     DateTime?

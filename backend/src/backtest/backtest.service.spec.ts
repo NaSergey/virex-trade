@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { BacktestService } from './backtest.service';
+import { SYNTH_VERSION } from './synthetic/params';
 
 const DAY = 86_400_000;
 const T0 = Date.UTC(2020, 0, 1);
@@ -54,9 +55,13 @@ function makeService() {
       .fn()
       .mockResolvedValue([{ time: new Date(T0), open: 1, high: 1, low: 1, close: 50_000, volume: 1 }]),
   };
-  const service = new BacktestService(prisma as never, marketData as never);
+  const synthetic = {
+    start: jest.fn().mockReturnValue({ start: T0 + 400 * DAY, price: 60_000 }),
+    getCandles: jest.fn().mockReturnValue([]),
+  };
+  const service = new BacktestService(prisma as never, marketData as never, synthetic as never);
   (service as unknown as { rnd: () => number }).rnd = () => 0;
-  return { service, prisma, marketData };
+  return { service, prisma, marketData, synthetic };
 }
 
 /** Отказ сервиса как значение: проверяем и класс исключения, и код для фронта. */
@@ -80,9 +85,14 @@ const SESSION = {
   hideDate: true,
   hidePrice: false,
   priceScale: 1,
+  dataSource: 'real',
+  seed: null,
+  synthVersion: null,
 };
 
 const INPUT = { startBalance: 10_000, hideDate: true, hidePrice: false };
+
+const SYNTH = { ...SESSION, dataSource: 'synthetic', seed: 77, synthVersion: SYNTH_VERSION, hideDate: true };
 
 describe('BacktestService — сессии', () => {
   it('ставит старт в начало окна и момент сессии туда же', async () => {
@@ -825,5 +835,95 @@ describe('BacktestService — статистика', () => {
     expect(prisma.backtestTrade.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { session: { userId: 'u1' }, exitTime: { not: null } } }),
     );
+  });
+});
+
+describe('BacktestService — тренажёр', () => {
+  it('создаёт synthetic-сессию без хранилища: зерно, версия, старт генератора, дата скрыта всегда', async () => {
+    const { service, prisma, marketData, synthetic } = makeService();
+
+    await service.createSession('u1', { ...INPUT, hideDate: false, dataSource: 'synthetic' });
+
+    expect(marketData.getCoverage).not.toHaveBeenCalled();
+    expect(synthetic.start).toHaveBeenCalledWith(0);
+    expect(prisma.backtestSession.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        dataSource: 'synthetic',
+        seed: 0,
+        synthVersion: SYNTH_VERSION,
+        startTime: new Date(T0 + 400 * DAY),
+        cursorTime: new Date(T0 + 400 * DAY),
+        hideDate: true,
+        priceScale: 1,
+      }),
+    });
+  });
+
+  it('скрытая цена тренажёра — масштаб от цены генератора в точке старта', async () => {
+    const { service, prisma } = makeService();
+
+    await service.createSession('u1', { ...INPUT, hidePrice: true, dataSource: 'synthetic' });
+
+    expect(prisma.backtestSession.create.mock.calls[0][0].data.priceScale).toBeCloseTo(100 / 60_000, 12);
+  });
+
+  it('свечи тренажёра — по зерну сессии, время в миллисекундах', async () => {
+    const { service, prisma, synthetic } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(SYNTH);
+
+    await service.sessionCandles('u1', 's1', { timeframe: 60, to: new Date(T0), limit: 300 });
+
+    expect(synthetic.getCandles).toHaveBeenCalledWith(77, { timeframe: 60, from: undefined, to: T0, limit: 300 });
+  });
+
+  it('свечи чужой сессии — 404', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue({ ...SYNTH, userId: 'u2' });
+
+    const err = await rejection(service.sessionCandles('u1', 's1', { timeframe: 60, limit: 1 }));
+
+    expect(err).toBeInstanceOf(NotFoundException);
+  });
+
+  it('у реальной сессии свечей генератора нет — 400', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+
+    const err = await rejection(service.sessionCandles('u1', 's1', { timeframe: 60, limit: 1 }));
+
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_NOT_SYNTHETIC' });
+  });
+
+  it('сессия прежней версии генератора свечей не получает — 409', async () => {
+    const { service, prisma, synthetic } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue({ ...SYNTH, synthVersion: SYNTH_VERSION - 1 });
+
+    const err = await rejection(service.sessionCandles('u1', 's1', { timeframe: 60, limit: 1 }));
+
+    expect(err).toBeInstanceOf(ConflictException);
+    expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_SYNTH_OUTDATED' });
+    expect(synthetic.getCandles).not.toHaveBeenCalled();
+  });
+
+  it('неизвестный таймфрейм — 400', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(SYNTH);
+
+    const err = await rejection(service.sessionCandles('u1', 's1', { timeframe: 7, limit: 1 }));
+
+    expect(err).toBeInstanceOf(BadRequestException);
+  });
+
+  it('сессия отдаёт признак устаревшей версии генератора', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue({ ...SYNTH, synthVersion: SYNTH_VERSION - 1 });
+    expect((await service.getSession('u1', 's1')).synthOutdated).toBe(true);
+
+    prisma.backtestSession.findUnique.mockResolvedValue(SYNTH);
+    expect((await service.getSession('u1', 's1')).synthOutdated).toBe(false);
+
+    prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+    expect((await service.getSession('u1', 's1')).synthOutdated).toBe(false);
   });
 });
