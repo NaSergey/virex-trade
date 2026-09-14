@@ -103,6 +103,10 @@
      (заглушки, ложе шкалы). Без этого альфа-цвета приходится писать сырым
      rgba(), и при смене темы они остаются от прежней. */
   --ink-rgb: 232 228 220;
+  /* Палитра рисунков на графике сверх прибыли/убытка/сомнения — средние тона,
+     читаются и на тёмной, и на светлой бумаге, поэтому в теме не переопределяются. */
+  --draw-blue: #5b8fd9;
+  --draw-violet: #9a7fd1;
   /* Подложка модального окна: лист под ней должен уйти, но не исчезнуть. */
   --scrim: rgb(0 0 0 / 0.82);
   /* Какой набор системной отрисовки просить у браузера — скроллбары, рамки
@@ -492,6 +496,40 @@
   .replay-chart .lvl-hit { cursor: ns-resize; }
   .replay-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); margin-top: var(--s3); }
   .replay-chart-wrap { position: relative; }
+  /* Рисование: полоса инструментов слева от графика, стиль выделенной фигуры —
+     поверх его левого верхнего угла. */
+  .chart-tools { display: flex; gap: var(--s2); align-items: flex-start; }
+  .chart-tools-main { flex: 1; min-width: 0; position: relative; }
+  .draw-bar { display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--hair); padding-right: var(--s1); }
+  .draw-group { position: relative; display: flex; align-items: center; }
+  .draw-btn,
+  .draw-item,
+  .draw-swatch,
+  .draw-width {
+    display: inline-flex; align-items: center; justify-content: center;
+    background: transparent; border: 1px solid transparent; color: var(--ink-2); cursor: pointer;
+  }
+  .draw-btn { width: 30px; height: 30px; }
+  .draw-btn:hover, .draw-item:hover { color: var(--ink); border-color: var(--hair-2); }
+  .draw-btn.on, .draw-item.on { color: var(--ink); border-color: var(--rule); background: var(--band); }
+  .draw-btn:disabled { opacity: 0.35; cursor: default; border-color: transparent; }
+  .draw-menu {
+    position: absolute; left: 100%; top: 0; z-index: 20; min-width: 190px;
+    display: flex; flex-direction: column; background: var(--ground); border: 1px solid var(--rule); padding: 2px;
+  }
+  .draw-item { justify-content: flex-start; gap: var(--s2); padding: 6px var(--s2); font-size: var(--t-s); white-space: nowrap; }
+  .draw-sep { height: 1px; background: var(--hair); margin: var(--s1) 0; }
+  .draw-style {
+    position: absolute; top: var(--s1); left: var(--s1); z-index: 5;
+    display: flex; align-items: center; gap: 2px; background: var(--ground); border: 1px solid var(--rule); padding: 2px;
+  }
+  .draw-swatch { width: 24px; height: 24px; }
+  .draw-swatch span { width: 12px; height: 12px; display: block; }
+  .draw-swatch.on, .draw-width.on { border-color: var(--ink); }
+  .draw-width { width: 24px; height: 24px; }
+  .draw-width span { width: 14px; display: block; background: var(--ink); }
+  .replay-chart .draw-hit { cursor: move; }
+  .replay-chart .draw-anchor { cursor: pointer; }
   .order-panel { display: grid; gap: var(--s3); align-content: start; }
   /* Подписи тикета — на ступень светлее общего .lbl (--ink-2 вместо самого
      тихого --ink-3): на тесной панели с мелким кеглем самая приглушённая
@@ -2563,6 +2601,11 @@
 }
 
 @media (max-width: 720px) {
+  /* Узкий экран: полоса инструментов — лента над графиком, иначе она отнимает ширину у свечей. */
+  .chart-tools { flex-direction: column; align-items: stretch; }
+  .draw-bar { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--hair); padding: 0 0 var(--s1); }
+  .draw-sep { width: 1px; height: auto; margin: 0 var(--s1); }
+  .draw-menu { left: 0; top: 100%; }
   :root {
     --t-xl: 26px;
     --t-l: 19px;

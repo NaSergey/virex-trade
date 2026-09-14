@@ -3,6 +3,8 @@
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { useNonPassiveWheel } from '@/shared/lib/hooks/useNonPassiveWheel';
 import { formatMoney, formatPriceGrouped } from '@/shared/lib/utils/format';
+import { DrawingLayer } from './drawings/DrawingLayer';
+import { useDrawingGestures, type ChartDrawingProps, type ChartGeo } from './drawings/useDrawingGestures';
 import {
   anchorTimeAt,
   frameAtTime,
@@ -184,6 +186,7 @@ export const ReplayChart = memo(function ReplayChart({
   onNeedHistory,
   historyLoading,
   glide,
+  drawing,
 }: {
   /** ТФ свечей в `candles`, в минутах. */
   timeframe: number;
@@ -200,6 +203,8 @@ export const ReplayChart = memo(function ReplayChart({
   historyLoading?: boolean;
   /** В настоящих для экрана (масштабированных) ценах — минутка, которую сейчас анимируем. */
   glide: { minute: Candle; durationMs: number } | null;
+  /** Рисунки и инструмент панели; без него график без разметки. Ссылка стабильная — см. memo. */
+  drawing?: ChartDrawingProps;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   // Двоеточия из useId в url(#...) не годятся — убираем; своего счётчика не
@@ -559,6 +564,38 @@ export const ReplayChart = memo(function ReplayChart({
     return ((clientX - r.left) / r.width) * W;
   };
 
+  /**
+   * Геометрия для жестов рисования: обработчики событий читают её из рефа, а не
+   * из замыкания рендера, в котором их повесили, — между рендером и событием
+   * успевают пройти пан и зум.
+   */
+  const geoRef = useRef<ChartGeo>(null as unknown as ChartGeo);
+  const draw = useDrawingGestures(drawing, geoRef);
+  const tfMs = timeframe * 60_000;
+  const xOfTime = (t: number) => (frameAtTime(candles, t) - frameStart) * slot + slot / 2;
+  useLayoutEffect(() => {
+    geoRef.current = {
+      svg: svgRef.current,
+      svgX,
+      svgY,
+      timeAt: (x, snap) => {
+        const f = frameStart + (x - slot / 2) / slot;
+        return anchorTimeAt(candles, snap ? Math.round(f) : f) ?? 0;
+      },
+      priceAt,
+      yOf: y,
+      candleAt: (t) => {
+        const i = Math.round(frameAtTime(candles, t));
+        return i >= 0 && i < candles.length ? candles[i] : null;
+      },
+      px,
+      PW,
+      lo,
+      hi,
+      tfMs,
+    };
+  });
+
   const startDrag = (level: Level) => (e: PointerEvent<SVGRectElement>) => {
     // Не пускаем событие к фоновому пану — иначе на одном клике начались бы
     // сразу оба жеста. preventDefault — иначе браузер начинает своё выделение
@@ -573,6 +610,7 @@ export const ReplayChart = memo(function ReplayChart({
   };
 
   const startPan = (e: PointerEvent<SVGSVGElement>) => {
+    if (draw.down(e)) return;
     // Без этого браузер начинает нативное выделение текста (подписи цен и
     // времени внутри SVG) вместо сдвига графика — драг визуально «залипает».
     e.preventDefault();
@@ -722,6 +760,7 @@ export const ReplayChart = memo(function ReplayChart({
    * событий ни пришло, отрисовка — одна на кадр.
    */
   const onMove = (e: PointerEvent<SVGSVGElement>) => {
+    if (draw.move(e)) return;
     // Только указатель, начавший драг уровня — иначе второй палец на фоне (пан)
     // дёргал бы уровень чужим движением.
     if (drag && e.pointerId === dragPointerId.current) levelMoveY.current = e.clientY;
@@ -736,6 +775,7 @@ export const ReplayChart = memo(function ReplayChart({
   };
 
   const endDrag = (e: PointerEvent<SVGSVGElement>) => {
+    if (draw.up(e)) return;
     flushMove();
     priceDragRef.current = null;
     pointersRef.current.delete(e.pointerId);
@@ -849,6 +889,13 @@ export const ReplayChart = memo(function ReplayChart({
   );
   const markerLabels = shownMarkers.length <= MARKER_LABELS_MAX;
 
+  const shownDrawings = drawing
+    ? [
+        ...(draw.override ? drawing.drawings.map((d) => (d.id === draw.override!.id ? draw.override! : d)) : drawing.drawings),
+        ...(draw.preview ? [draw.preview] : []),
+      ]
+    : [];
+
   const timeIdx = shown.length ? [...new Set([0.15, 0.5, 0.85].map((f) => Math.floor(f * (shown.length - 1))))] : [];
 
   return (
@@ -856,13 +903,14 @@ export const ReplayChart = memo(function ReplayChart({
       <svg
         ref={svgRef}
         className="replay-chart"
-        style={{ cursor: grabbing ? 'grabbing' : 'grab' }}
+        style={{ cursor: drawing?.tool ? 'crosshair' : grabbing ? 'grabbing' : 'grab' }}
         viewBox={`0 0 ${W} ${H}`}
         onPointerDown={startPan}
         onPointerMove={onMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
         onDoubleClick={(e) => {
+          if (draw.blocksDoubleClick()) return;
           // Полоса цены — сбрасывает только ручной зум цены, независимо от
           // того, live график или нет: та же граница, что у startPan
           // (svgX > PW), и тот же жест, каким RangeCheckChart сбрасывает span.
@@ -945,6 +993,21 @@ export const ReplayChart = memo(function ReplayChart({
                 />
                 <rect x={animBar.x - bodyW / 2} y={animBar.top} width={bodyW} height={animBar.height} fill={animBar.color} />
               </>
+            )}
+
+            {/* Рисунки — внутри сдвигаемой группы, как свечи: иначе на живом сдвиге
+                окна фигуры отставали бы от свечей, к которым привязаны. Под
+                отметками и уровнями сделок — разметка не закрывает стоп и тейк. */}
+            {drawing && !drawing.hidden && (
+              <DrawingLayer
+                drawings={shownDrawings}
+                selectedId={drawing.selectedId}
+                interactive={!drawing.tool}
+                ruler={draw.ruler}
+                geo={{ xOf: xOfTime, yOf: y, px, PW, top: PT, bottom: H - PB, tfMs, candles }}
+                onShapeDown={draw.startShape}
+                onAnchorDown={draw.startAnchor}
+              />
             )}
 
             {/* Отметки сделок — внутри сдвигаемой группы: они привязаны к своим

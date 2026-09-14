@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { Settings as SettingsIcon } from 'lucide-react';
 import { TagsDialog, useTags } from '@/entities/tag';
+import { useAuth } from '@/features/auth';
 import { useLocaleControl } from '@/shared/i18n';
 import { Button } from '@/shared/ui/Button';
 import { ConfirmDialog, type ConfirmRequest } from '@/shared/ui/ConfirmDialog';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
-import { SectionHead } from '@/shared/ui/SectionHead';
 import { Seg, type SegOption } from '@/shared/ui/Seg';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import { Wrap } from '@/shared/ui/Wrap';
@@ -40,8 +41,11 @@ import {
   toScreen,
 } from '../lib/money';
 import { useDefaultLeverage } from '../model/useDefaultLeverage';
+import { useDrawingTools } from '../model/useDrawingTools';
 import { SPEEDS, useReplay } from '../model/useReplay';
 import { AddToPositionModal } from './AddToPositionModal';
+import { DrawingStyleBar } from './drawings/DrawingStyleBar';
+import { DrawingToolbar } from './drawings/DrawingToolbar';
 import { ChangeLevelsModal } from './ChangeLevelsModal';
 import { LeverageModal } from './LeverageModal';
 import { LimitCloseModal } from './LimitCloseModal';
@@ -111,6 +115,9 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
 
   const closeTrade = (trade: BacktestTrade, time: number, price: number, reason: ExitReason, qty?: number, closeOrderId?: string) =>
     closeM.mutateAsync({ tradeId: trade.id, exitTime: new Date(time).toISOString(), exitPrice: price, reason, qty, closeOrderId });
+
+  const { user } = useAuth();
+  const drawings = useDrawingTools(user?.id ?? 'anon', session.id, scale);
 
   const replay = useReplay(detail, (trade, exit) => {
     void closeTrade(trade, exit.time, exit.price, exit.reason, exit.qty, exit.closeOrderId).catch(() => undefined);
@@ -467,9 +474,38 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
     <div className="bt-live">
       <div className="asym terminal">
         <div>
-          <SectionHead title={t('timeframe')}>
+          {/* Без заголовка «Таймфрейм» — сами кнопки ТФ слева и есть подпись себе.
+              Разметка та же, что у SectionHead (.h2row: линейка снизу, выключка вправо),
+              но без <h2>: он тут просто нечем заполнить. */}
+          <div className="h2row">
             <Seg options={tfOptions} value={replay.tf} onChange={replay.setTf} ariaLabel={t('timeframe')} />
-          </SectionHead>
+            <Button variant="bare" tight aria-label={t('chartSettings')} title={t('chartSettings')}>
+              <SettingsIcon size={16} />
+            </Button>
+          </div>
+          <div className="chart-tools">
+            <DrawingToolbar
+              tool={drawings.tool}
+              onTool={drawings.setTool}
+              magnet={drawings.magnet}
+              onMagnet={drawings.setMagnet}
+              hidden={drawings.hidden}
+              onHidden={drawings.setHidden}
+              canClear={drawings.count > 0}
+              onClear={() =>
+                setConfirm({
+                  title: t('drawings.clearTitle'),
+                  subtitle: t('drawings.clearSubtitle', { n: drawings.count }),
+                  consequences: [t('drawings.clearConsequence')],
+                  word: t('drawings.clearWord'),
+                  onConfirm: drawings.clearAll,
+                })
+              }
+            />
+            <div className="chart-tools-main">
+          {drawings.selected && !drawings.hidden && (
+            <DrawingStyleBar drawing={drawings.selected} onStyle={drawings.restyle} onDelete={drawings.deleteSelected} />
+          )}
           {replay.ready ? (
             <ReplayChart
               // Не key: пересоздание на каждой смене ТФ перерисовывало график с нуля.
@@ -484,10 +520,14 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
               onDragLevel={onDragLevel}
               onNeedHistory={replay.loadMoreHistory}
               historyLoading={replay.historyLoading}
+              drawing={drawings.chart}
             />
           ) : (
             <Skeleton height={380} />
           )}
+            </div>
+          </div>
+          {drawings.saveFailed && <p className="neg">{t('drawings.saveFailed')}</p>}
           <div className="replay-controls">
             <Button variant="solid" onClick={() => void replay.step()} disabled={!replay.ready || replay.ended}>
               {t('step')} ▶

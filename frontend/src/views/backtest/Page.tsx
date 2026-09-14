@@ -1,12 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useAuth } from '@/features/auth';
 import { Wrap } from '@/shared/ui/Wrap';
 import { useBacktestSessions, useBacktestStats } from './api/hooks';
 import { SessionScreen } from './components/SessionScreen';
 import { SessionsList } from './components/SessionsList';
 import { StartSession } from './components/StartSession';
 import { StatsBlock } from './components/StatsBlock';
+import { pruneDrawings } from './lib/drawings/store';
 
 /**
  * Бектест — ручная прокрутка случайного отрезка истории BTC.
@@ -23,6 +25,19 @@ export function BacktestPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const sessions = useBacktestSessions();
   const stats = useBacktestStats();
+  const { user } = useAuth();
+
+  // Рисунки удалённых сессий лежат в localStorage, пока их не убрать: чистим по
+  // свежему списку, только ключи этого пользователя.
+  const list = sessions.data?.sessions;
+  useEffect(() => {
+    if (!list || !user) return;
+    try {
+      pruneDrawings(localStorage, user.id, new Set(list.map((s) => s.id)));
+    } catch {
+      // Хранилище недоступно (приватный режим) — чистить нечего.
+    }
+  }, [list, user]);
 
   if (sessionId) {
     return <SessionScreen id={sessionId} onLeave={() => setSessionId(null)} />;

@@ -25,7 +25,6 @@ const NAV: NavItem[] = [
   { id: 'analytics', labelKey: 'analytics' },
   { id: 'market', labelKey: 'market' },
   { id: 'backtest', labelKey: 'backtest' },
-  { id: 'settings', labelKey: 'settings' },
 ];
 
 /**
@@ -185,6 +184,14 @@ export function TopNav() {
                   освобождает узкую шапку на телефоне. */}
               <KeyValue label={tc('language')} control valueClassName="">
                 <LocaleSwitch />
+              </KeyValue>
+              {/* Настройки — сюда же, рядом с языком: оба пункта про учётную
+                  запись и подключение к ней, а не про работу с журналом,
+                  которой посвящена рейка разделов выше. */}
+              <KeyValue label={t('settings')} control valueClassName="">
+                <Link className="btn bare" href="/settings" onClick={() => setMenuOpen(false)}>
+                  {tc('open')}
+                </Link>
               </KeyValue>
               {/* Обучение здесь, а не в Настройках: туры идут по всем пяти
                   разделам, и вернуть их надо уметь с того раздела, где
