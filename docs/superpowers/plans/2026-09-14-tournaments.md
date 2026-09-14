@@ -32,11 +32,11 @@ next-intl, vitest.
 
 **Files:** Modify `backend/prisma/schema.prisma`.
 
-- [ ] Модели `Tournament`, `TournamentParticipant`; у `BacktestSession` — `tournamentId`,
+- [x] Модели `Tournament`, `TournamentParticipant`; у `BacktestSession` — `tournamentId`,
   `endTime`, `@@unique([tournamentId, userId])`; обратные связи у `User`.
-- [ ] `npx prisma validate`, `npx prisma generate` (остановить `nest watch`, если держит
+- [x] `npx prisma validate`, `npx prisma generate` (остановить `nest watch`, если держит
   движок — EPERM).
-- [ ] Commit.
+- [x] Commit — `04da63a`.
 
 ### Task 2: `checkMinute` на бэкенде
 
@@ -48,9 +48,9 @@ next-intl, vitest.
 `CloseOrder = { id, price, qty }`, `Exit = { reason: 'stop'|'take'|'limit', price, qty?, closeOrderId? }`.
 Время выхода задаёт вызывающий: у отрезка эфира это не закрытие минутки.
 
-- [ ] Тесты — случаи `frontend/.../lib/fills.test.ts` для `checkMinute`.
-- [ ] Реализация — перенос правил без изменений.
-- [ ] `npx jest src/backtest/fills.spec.ts` — PASS. Commit.
+- [x] Тесты — случаи `frontend/.../lib/fills.test.ts` для `checkMinute`.
+- [x] Реализация — перенос правил без изменений.
+- [x] `npx jest src/backtest/fills.spec.ts` — PASS (16). Commit — `75c1083`.
 
 ### Task 3: `LiveMarketService` и `/api/market-data/live`
 
@@ -67,10 +67,13 @@ next-intl, vitest.
   `from`, поверх хвост; только `t < until`; по возрастанию.
 - `GET /api/market-data/live` → `{ serverTime: string; minutes: Candle[] }`.
 
-- [ ] Тесты: второй вызов в пределах кэша не ходит в Binance; параллельные вызовы — один
+- [x] Тесты: второй вызов в пределах кэша не ходит в Binance; параллельные вызовы — один
   запрос; `minutesSince` не ходит в базу, когда `from` внутри хвоста, и хвост замещает
   хранилище по времени; `quote` при ошибке сети — 503 с кодом.
-- [ ] Реализация. PASS. Commit.
+- [x] Реализация. PASS (`src/market-data`: 5 наборов, 40 тестов). Commit — `1d1239b`.
+
+> **Остановлено здесь (2026-09-14)** по просьбе владельца. Состояние и заметки к Tasks 4–11 —
+> `plans/handoffs/HANDOFF_tournaments_2026-09-14.md`.
 
 ### Task 4: Бектест под турниры
 
