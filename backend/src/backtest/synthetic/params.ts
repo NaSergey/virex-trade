@@ -27,19 +27,26 @@ export const ANCHOR_PRICE_MAX = 110_000;
 export const ANCHOR_HALF_LIFE_MIN = 120 * MINUTES_PER_DAY;
 
 /** Базовая суточная волатильность (доля). */
-export const BASE_DAILY_VOL = 0.025;
+export const BASE_DAILY_VOL = 0.018;
 /** Разброс логарифма волатильности в устойчивом состоянии и её память. */
 export const LOG_VOL_SD = 0.45;
 export const LOG_VOL_MEMORY_MIN = MINUTES_PER_DAY;
 /** Логарифм волатильности не уходит от среднего дальше этого. */
 export const LOG_VOL_BAND = 1.5;
-/** Минута с шумом больше SHOCK_Z сигм поднимает волатильность на SHOCK_KICK. */
-export const SHOCK_Z = 4;
-export const SHOCK_KICK = 0.08;
+/**
+ * Минута с шумом больше SHOCK_Z сигм поднимает волатильность на SHOCK_KICK.
+ * Толчки копятся: при памяти в сутки средний сдвиг логарифма волатильности —
+ * «толчков в сутки × SHOCK_KICK», поэтому порог высокий, а толчок малый.
+ */
+export const SHOCK_Z = 5;
+export const SHOCK_KICK = 0.1;
 /** Потолок шума минуты в сигмах: t(4) изредка даёт абсурдные 50σ. */
 export const NOISE_CLAMP = 8;
 /** Выходные тише будней во столько раз. */
 export const WEEKEND_VOL = 0.7;
+/** Внутридневной ритм: прибавка на пике (14:30 UTC) и провал в азиатскую ночь (05:00 UTC). */
+export const HOUR_PEAK = 0.55;
+export const HOUR_TROUGH = 0.35;
 
 export const DURATION_SPREAD = 0.5;
 export const MIN_DURATION_MIN = 20;
@@ -57,13 +64,13 @@ export const FROM_RANGE = { trend: 0.6 };
 export const SQUEEZE_EXIT_KICK = 0.5;
 
 /** Импульс тренда: снос в базовых минутных волатильностях. */
-export const IMPULSE = { medianH: 6, kappaMin: 0.06, kappaMax: 0.14 };
+export const IMPULSE = { medianH: 6, kappaMin: 0.035, kappaMax: 0.08 };
 /** Откат: доля сноса импульса против направления. */
 export const PULLBACK = { medianH: 3, shareMin: 0.5, shareMax: 0.9, volMult: 0.8 };
 
 /** Полуширина коридора — в суточных волатильностях. */
 export const RANGE_WIDTH = { min: 0.8, max: 1.5 };
-export const RANGE_PULL_HALF_LIFE_MIN = 720;
+export const RANGE_PULL_HALF_LIFE_MIN = 1440;
 export const RANGE_EDGE_HALF_LIFE_MIN = 30;
 export const SQUEEZE_PULL_HALF_LIFE_MIN = 360;
 /** Дальше этой доли полуширины от центра выход из коридора идёт в сторону этого края. */
