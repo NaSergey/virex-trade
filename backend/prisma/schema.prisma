@@ -77,6 +77,8 @@ model User {
   balanceSnapshots   BalanceSnapshot[]
   donations          Donation[]
   backtestSessions   BacktestSession[]
+  tournamentsCreated Tournament[]            @relation("TournamentCreator")
+  tournamentEntries  TournamentParticipant[]
 
   @@map("users")
 }
@@ -280,11 +282,59 @@ model BacktestSession {
   status         String    @default("active") // 'active' | 'finished'
   createdAt      DateTime  @default(now())
   finishedAt     DateTime?
+  /// Турнирная сессия: создаётся стартом турнира; в список и статистику бектеста не входит.
+  tournamentId   String?
+  tournament     Tournament? @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  /// Граница сессии: дальше неё ни свечей, ни сделок. Только у турнирных.
+  endTime        DateTime?
 
   trades BacktestTrade[]
 
+  @@unique([tournamentId, userId])
   @@index([userId, status])
   @@map("backtest_sessions")
+}
+
+/// Турнир: от 2 до 10 участников торгуют один график с одинаковым депозитом.
+/// Участник получает обычную BacktestSession с tournamentId. История исполняется
+/// браузером, как бектест; эфир — серверным движком (tournaments/tournament-runner).
+model Tournament {
+  id             String    @id @default(uuid())
+  name           String
+  /// 'history' — один отрезок истории BTC, каждый в своём темпе; 'live' — живой BTC.
+  mode           String
+  /// 'lobby' — набор участников; 'running' — идёт; 'finished' — итоги подведены.
+  status         String    @default("lobby")
+  startBalance   Float
+  /// От старта до конца, минуты: 60, 240, 1440, 4320, 10080.
+  durationMin    Int
+  /// SetNull: удаление аккаунта создателя не должно стирать идущий турнир у остальных.
+  creatorId      String?
+  creator        User?     @relation("TournamentCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+  createdAt      DateTime  @default(now())
+  startedAt      DateTime?
+  endsAt         DateTime?
+  finishedAt     DateTime?
+  /// Эфир: до какого момента движок уже проверил уровни открытых позиций.
+  processedUntil DateTime?
+
+  participants TournamentParticipant[]
+  sessions     BacktestSession[]
+
+  @@index([status, endsAt])
+  @@map("tournaments")
+}
+
+model TournamentParticipant {
+  tournamentId String
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt     DateTime   @default(now())
+
+  @@id([tournamentId, userId])
+  @@index([userId])
+  @@map("tournament_participants")
 }
 
 /// Сделка бектеста. Открытая — это сделка с пустым exitTime; отдельной
