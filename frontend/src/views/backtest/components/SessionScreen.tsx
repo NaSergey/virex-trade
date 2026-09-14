@@ -9,6 +9,7 @@ import { useLocaleControl } from '@/shared/i18n';
 import { Button } from '@/shared/ui/Button';
 import { ConfirmDialog, type ConfirmRequest } from '@/shared/ui/ConfirmDialog';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
+import { SectionHead } from '@/shared/ui/SectionHead';
 import { Seg, type SegOption } from '@/shared/ui/Seg';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import { Wrap } from '@/shared/ui/Wrap';
@@ -85,7 +86,52 @@ export function SessionScreen({ id, onLeave }: { id: string; onLeave: () => void
         <SessionSummary detail={data} onLeave={onLeave} />
       </Wrap>
     );
+  if (data.synthOutdated)
+    return (
+      <Wrap page>
+        <OutdatedSession detail={data} onLeave={onLeave} />
+      </Wrap>
+    );
   return <ActiveSession detail={data} onLeave={onLeave} />;
+}
+
+/**
+ * Тренажёр прежней версии генератора: графика больше нет, торговать не на чем.
+ * Остаётся завершить — открытые сделки сервер сам закроет по цене входа.
+ */
+function OutdatedSession({ detail, onLeave }: { detail: SessionDetail; onLeave: () => void }) {
+  const t = useTranslations('backtest');
+  const finishM = useFinishSession(detail.session.id);
+  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
+  const hasOpen = detail.trades.some((x) => x.exitTime == null);
+
+  return (
+    <>
+      <SectionHead title={t('outdatedTitle')}>
+        <Button tight onClick={onLeave}>
+          {t('backToList')}
+        </Button>
+      </SectionHead>
+      <p>{t('outdatedText')}</p>
+      <Button
+        variant="solid"
+        disabled={finishM.isPending}
+        onClick={() =>
+          setConfirm({
+            title: t('finishTitle'),
+            subtitle: t('finishSubtitle'),
+            consequences: [...(hasOpen ? [t('outdatedOpenTrades')] : []), t('finishRevealSynthetic')],
+            word: t('finishWord'),
+            onConfirm: () => finishM.mutate(),
+          })
+        }
+      >
+        {t('finish')}
+      </Button>
+      <ErrorNote error={finishM.error} fallback={t('actionFailed')} />
+      {confirm && <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />}
+    </>
+  );
 }
 
 function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: () => void }) {
@@ -450,7 +496,10 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
     setConfirm({
       title: t('finishTitle'),
       subtitle: t('finishSubtitle'),
-      consequences: [...(openTrades.length > 0 ? [t('finishOpenTrade')] : []), t('finishReveal')],
+      consequences: [
+        ...(openTrades.length > 0 ? [t('finishOpenTrade')] : []),
+        session.dataSource === 'synthetic' ? t('finishRevealSynthetic') : t('finishReveal'),
+      ],
       word: t('finishWord'),
       onConfirm: () => void finishNow(),
     });
@@ -538,6 +587,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
               onChange={(v) => replay.setSpeed(v || null)}
               ariaLabel={t('speed')}
             />
+            {session.dataSource === 'synthetic' && <span className="muted">{t('syntheticBadge')}</span>}
             <Button tight onClick={() => void leave()}>
               {t('backToList')}
             </Button>

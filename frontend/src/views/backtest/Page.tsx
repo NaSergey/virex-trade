@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/features/auth';
 import { Wrap } from '@/shared/ui/Wrap';
 import { useBacktestSessions, useBacktestStats } from './api/hooks';
+import type { DataSource } from './api/types';
 import { SessionScreen } from './components/SessionScreen';
 import { SessionsList } from './components/SessionsList';
 import { StartSession } from './components/StartSession';
@@ -24,7 +25,8 @@ import { pruneDrawings } from './lib/drawings/store';
 export function BacktestPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const sessions = useBacktestSessions();
-  const stats = useBacktestStats();
+  const [statsSource, setStatsSource] = useState<DataSource>('real');
+  const stats = useBacktestStats(statsSource);
   const { user } = useAuth();
 
   // Рисунки удалённых сессий лежат в localStorage, пока их не убрать: чистим по
@@ -48,7 +50,7 @@ export function BacktestPage() {
       <div className="asym">
         <div>
           <SessionsList sessions={sessions.data?.sessions ?? []} isLoading={sessions.isLoading} onOpen={setSessionId} />
-          <StatsBlock stats={stats.data} isLoading={stats.isLoading} />
+          <StatsBlock stats={stats.data} isLoading={stats.isLoading} source={statsSource} onSource={setStatsSource} />
         </div>
         <div className="marg">
           <StartSession onStarted={setSessionId} />

@@ -20,7 +20,7 @@ import type { CloseOrder, Exit } from '../lib/fills';
 
 /** Сколько минуток держать загруженными впереди момента сессии. */
 const LOOKAHEAD_MS = 3 * DAY;
-/** Потолок `/api/market-data/candles` на один запрос. */
+/** Потолок эндпоинта свечей на один запрос. */
 const CHUNK = 5000;
 /** Сколько закрытых свечей таймфрейма брать в прошлое. */
 const CLOSED_LIMIT = 300;
@@ -81,6 +81,8 @@ export interface Replay {
  */
 export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, exit: Exit) => void): Replay {
   const sessionId = detail.session.id;
+  const dataSource = detail.session.dataSource;
+  const source = useMemo(() => ({ id: sessionId, dataSource }), [sessionId, dataSource]);
   const [cursor, setCursor] = useState(() => Date.parse(detail.session.cursorTime));
   const [tf, setTf] = useState(60);
   const [minutes, setMinutes] = useState<Candle[]>([]);
@@ -115,7 +117,7 @@ export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, 
       if (!loading.current) {
         loading.current = (async () => {
           const from = loadedUntil(minutesRef.current) ?? minutesFrom.current;
-          const chunk = await fetchCandles(1, { from, limit: CHUNK });
+          const chunk = await fetchCandles(source, 1, { from, limit: CHUNK });
           if (chunk.length < CHUNK) exhausted.current = true;
           if (chunk.length > 0) {
             minutesRef.current = [...minutesRef.current, ...chunk];
@@ -127,7 +129,7 @@ export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, 
       }
       await loading.current;
     }
-  }, []);
+  }, [source]);
 
   useEffect(() => {
     ensureMinutes(cursorRef.current + LOOKAHEAD_MS).catch(setError);
@@ -141,14 +143,14 @@ export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, 
     if (requestedTf.current.has(t)) return;
     requestedTf.current.add(t);
     const anchor = currentBucket(cursorRef.current, t);
-    fetchCandles(t, { to: anchor - 1, limit: CLOSED_LIMIT })
+    fetchCandles(source, t, { to: anchor - 1, limit: CLOSED_LIMIT })
       .then((candles) => setClosed((prev) => (prev[t] ? prev : { ...prev, [t]: { anchor, candles } })))
       .catch((e) => {
         // Снятая отметка — чтобы повторный выбор этого ТФ попробовал снова.
         requestedTf.current.delete(t);
         setError(e);
       });
-  }, []);
+  }, [source]);
   // Выбранный — первым, и заново при выборе, если прошлый запрос упал.
   useEffect(() => loadClosed(tf), [tf, loadClosed]);
   // Остальные — сразу при входе, а не по клику: иначе на каждом первом переключении
@@ -189,7 +191,7 @@ export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, 
     historyLoadingRef.current[tf] = true;
     setHistoryLoading(true);
     try {
-      const chunk = await fetchCandles(tf, { to: earliest - 1, limit: HISTORY_CHUNK });
+      const chunk = await fetchCandles(source, tf, { to: earliest - 1, limit: HISTORY_CHUNK });
       const filtered = chunk.filter((c) => c.t >= floor);
       if (chunk.length < HISTORY_CHUNK || filtered.length < chunk.length) historyExhausted.current[tf] = true;
       if (filtered.length > 0) {
@@ -205,7 +207,7 @@ export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, 
       historyLoadingRef.current[tf] = false;
       setHistoryLoading(false);
     }
-  }, [closed, shownTf]);
+  }, [closed, shownTf, source]);
 
   const candles = useMemo(() => {
     const set = closed[shownTf];
