@@ -144,7 +144,43 @@ export class TradesService {
       // показывает не только из каких ордеров сложилась позиция, но и каким был
       // рынок в момент входа. Отдельным запросом на строку это были бы 20
       // запросов на страницу, а данные лежат в связанной таблице 1:1.
-      include: { tags: { include: { tag: true } }, context: true },
+      //
+      // select вместо include: набор полей — TradeRowLike (positions.ts) плюс
+      // то, что реально читает мэппинг ниже. Без него Prisma тянула бы и
+      // `Trade.raw` — самое тяжёлое поле строки, которое здесь не используется
+      // ни разу.
+      select: {
+        id: true,
+        positionId: true,
+        symbol: true,
+        direction: true,
+        qty: true,
+        avgEntryPrice: true,
+        avgExitPrice: true,
+        closedPnl: true,
+        openFee: true,
+        closeFee: true,
+        leverage: true,
+        closedAt: true,
+        openedAt: true,
+        tags: { select: { tagId: true, tag: { select: { id: true, name: true, color: true } } } },
+        context: {
+          select: {
+            ok: true,
+            basis: true,
+            atrPct: true,
+            rsi: true,
+            volRel: true,
+            ema200Above: true,
+            trend4h: true,
+            rangePos1h: true,
+            rangePos4h: true,
+            rangePos1d: true,
+            entryQuality: true,
+            exitQuality: true,
+          },
+        },
+      },
     });
     const positions = collapseToPositions(rows);
     const pageRows = positions.slice((page - 1) * pageSize, page * pageSize);
@@ -426,7 +462,25 @@ export class TradesService {
       await this.prisma.trade.findMany({
         where: this.buildWhere(userId, { days }),
         orderBy: { closedAt: 'asc' },
-        include: { tags: { include: { tag: true } } },
+        // select вместо include — см. комментарий в list().
+        select: {
+          id: true,
+          positionId: true,
+          symbol: true,
+          direction: true,
+          qty: true,
+          avgEntryPrice: true,
+          avgExitPrice: true,
+          closedPnl: true,
+          openFee: true,
+          closeFee: true,
+          leverage: true,
+          closedAt: true,
+          openedAt: true,
+          tags: {
+            select: { tagId: true, tag: { select: { id: true, name: true, color: true, type: true } } },
+          },
+        },
       }),
     );
 
@@ -550,7 +604,23 @@ export class TradesService {
     const trades = collapseToPositions(
       await this.prisma.trade.findMany({
         where: this.buildWhere(userId, { days }),
-        include: { tags: { include: { tag: true } } },
+        // select вместо include — см. комментарий в list().
+        select: {
+          id: true,
+          positionId: true,
+          symbol: true,
+          direction: true,
+          qty: true,
+          avgEntryPrice: true,
+          avgExitPrice: true,
+          closedPnl: true,
+          openFee: true,
+          closeFee: true,
+          leverage: true,
+          closedAt: true,
+          openedAt: true,
+          tags: { select: { tagId: true, tag: { select: { id: true, name: true, color: true } } } },
+        },
       }),
     );
 
@@ -714,6 +784,22 @@ export class TradesService {
     const trades = collapseToPositions(
       await this.prisma.trade.findMany({
         where: this.buildWhere(userId, { days: params.days, tagId: params.tagId }),
+        // select вместо неявного «всё» — см. комментарий в list().
+        select: {
+          id: true,
+          positionId: true,
+          symbol: true,
+          direction: true,
+          qty: true,
+          avgEntryPrice: true,
+          avgExitPrice: true,
+          closedPnl: true,
+          openFee: true,
+          closeFee: true,
+          leverage: true,
+          closedAt: true,
+          openedAt: true,
+        },
       }),
     );
 
@@ -782,7 +868,24 @@ export class TradesService {
       await this.prisma.trade.findMany({
         where: this.buildWhere(userId, params),
         orderBy: { closedAt: 'asc' },
-        include: { context: true },
+        // select вместо include — см. комментарий в list(). Из контекста
+        // читается только качество входа/выхода (avgEntryQuality/avgExitQuality).
+        select: {
+          id: true,
+          positionId: true,
+          symbol: true,
+          direction: true,
+          qty: true,
+          avgEntryPrice: true,
+          avgExitPrice: true,
+          closedPnl: true,
+          openFee: true,
+          closeFee: true,
+          leverage: true,
+          closedAt: true,
+          openedAt: true,
+          context: { select: { entryQuality: true, exitQuality: true } },
+        },
       }),
     );
 
