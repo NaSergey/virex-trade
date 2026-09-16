@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import {
   Injectable,
   Logger,
@@ -166,7 +165,6 @@ export class UsageTrackerService
     ready: MinuteBucket[],
   ): Promise<{ written: number }> {
     const minuteRows = ready.map((b) => ({
-      id: randomUUID(),
       userId: b.userId,
       minute: new Date(b.minuteMs),
       requests: b.requests,
@@ -175,11 +173,11 @@ export class UsageTrackerService
 
     try {
       await this.prisma.$executeRaw`
-        INSERT INTO "user_activity_minutes" (id, "userId", minute, requests, writes)
+        INSERT INTO "user_activity_minutes" ("userId", minute, requests, writes)
         VALUES ${Prisma.join(
           minuteRows.map(
             (r) =>
-              Prisma.sql`(${r.id}, ${r.userId}, ${r.minute}, ${r.requests}, ${r.writes})`,
+              Prisma.sql`(${r.userId}, ${r.minute}, ${r.requests}, ${r.writes})`,
           ),
         )}
         ON CONFLICT ("userId", minute)
@@ -235,17 +233,14 @@ export class UsageTrackerService
     }
 
     if (bySection.size > 0) {
-      const sectionRows = [...bySection.values()].map((r) => ({
-        id: randomUUID(),
-        ...r,
-      }));
+      const sectionRows = [...bySection.values()];
       try {
         await this.prisma.$executeRaw`
-          INSERT INTO "user_section_days" (id, "userId", day, section, requests, writes)
+          INSERT INTO "user_section_days" ("userId", day, section, requests, writes)
           VALUES ${Prisma.join(
             sectionRows.map(
               (r) =>
-                Prisma.sql`(${r.id}, ${r.userId}, ${r.day}, ${r.section}, ${r.requests}, ${r.writes})`,
+                Prisma.sql`(${r.userId}, ${r.day}, ${r.section}, ${r.requests}, ${r.writes})`,
             ),
           )}
           ON CONFLICT ("userId", day, section)

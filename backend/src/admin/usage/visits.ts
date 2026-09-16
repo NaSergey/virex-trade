@@ -19,6 +19,21 @@ export const DAY_MS = 24 * 60 * MINUTE_MS;
  */
 export const VISIT_GAP_MIN = 30;
 
+/**
+ * Срок хранения строк `UserActivityMinute` / `UserSectionDay` (T18,
+ * docs/deploy/user-activity-retention.md). Строки старше сметает
+ * `UsageCleanupService`, а `countReturningUsers` / `queryActiveWeeks`
+ * (usage-queries.ts) сами не заглядывают дальше этого окна — не потому что
+ * отчёт просит именно столько, а потому что за пределами окна строк и так не
+ * останется: смысла сканировать то, чего сметатель уже не оставит, нет.
+ *
+ * 180 дней — с запасом покрывает демо-аккаунт (полгода истории,
+ * `scripts/seed-demo.ts`) и окно ретеншена (`RetentionQueryDto.weeks`,
+ * максимум 26 недель ≈ 182 дня), и достаточно, чтобы ответить на вопрос
+ * «пользуются ли сервисом» без годовой истории поминутных засечек.
+ */
+export const ACTIVITY_RETENTION_DAYS = 180;
+
 /** Начало UTC-минуты, к которой относится момент времени. */
 export function floorToMinute(at: Date): Date {
   return new Date(Math.floor(at.getTime() / MINUTE_MS) * MINUTE_MS);
