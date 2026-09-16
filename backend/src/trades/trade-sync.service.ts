@@ -1,10 +1,19 @@
-import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnApplicationBootstrap,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CredentialsService } from '../credentials/credentials.service';
 import { ExchangeRegistry } from '../exchanges/exchange-registry.service';
 import { ExchangePositionsCacheService } from '../exchanges/exchange-positions-cache.service';
-import { ClosedTrade, ExchangeId, PositionsResult } from '../exchanges/exchange.types';
+import {
+  ClosedTrade,
+  ExchangeId,
+  PositionsResult,
+} from '../exchanges/exchange.types';
 import { TagsService } from '../tags/tags.service';
 import { OpenedPositionInfo } from '../telegram/telegram.service';
 import { TradeAlertsService } from '../notifications/trade-alerts.service';
@@ -48,7 +57,9 @@ export function stopLossOf(raw: string | undefined): number | null {
  * ever sees normalized ClosedTrade/OpenPosition values.
  */
 @Injectable()
-export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy {
+export class TradeSyncService
+  implements OnApplicationBootstrap, OnModuleDestroy
+{
   private readonly logger = new Logger(TradeSyncService.name);
   // Per-user locks, not one global flag: a single shared `syncing` boolean let
   // the background sweep swallow a user's manual re-sync (it returned a
@@ -128,7 +139,9 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
         `syncAll: ${Date.now() - t0} мс, пользователей с активной биржей: ${userCount}`,
       );
       if (measure) {
-        this.logger.log(`[T1] syncAll: ${this.prisma.queryCount} запросов Prisma`);
+        this.logger.log(
+          `[T1] syncAll: ${this.prisma.queryCount} запросов Prisma`,
+        );
       }
     }
   }
@@ -146,7 +159,10 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     return { inserted: await this.runLocked(userId, opts) };
   }
 
-  private async runLocked(userId: string, opts?: { full?: boolean }): Promise<number> {
+  private async runLocked(
+    userId: string,
+    opts?: { full?: boolean },
+  ): Promise<number> {
     this.inFlight.add(userId);
     try {
       return await this.syncUserUnlocked(userId, opts);
@@ -155,7 +171,10 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     }
   }
 
-  private async syncUserUnlocked(userId: string, opts?: { full?: boolean }): Promise<number> {
+  private async syncUserUnlocked(
+    userId: string,
+    opts?: { full?: boolean },
+  ): Promise<number> {
     const active = await this.credentials.getActive(userId);
     if (!active) return 0;
     const { exchange, credentials: creds } = active;
@@ -163,7 +182,9 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
 
     // Backfill depth is per exchange: connecting a second exchange must pull
     // its full history, not the one-week increment the first one is down to.
-    const existing = await this.prisma.trade.count({ where: { userId, exchange } });
+    const existing = await this.prisma.trade.count({
+      where: { userId, exchange },
+    });
     const weeks = opts?.full || existing === 0 ? BACKFILL_WEEKS : 1;
     const now = Date.now();
     // Всё, что вставит этот прогон, отбирается по createdAt позже этой метки —
@@ -182,7 +203,9 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
       throw e;
     }
     if (closed.partial) {
-      this.logger.warn(`closed-trade fetch incomplete for ${exchange}: ${closed.error}`);
+      this.logger.warn(
+        `closed-trade fetch incomplete for ${exchange}: ${closed.error}`,
+      );
     }
     const inserted = await this.persist(userId, exchange, closed.items);
     await this.tradeAlerts.syncOutcome(userId, !closed.partial);
@@ -228,10 +251,21 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     // из них по отдельности при таком же отказе.
     let open: PositionsResult;
     try {
-      // T20 (B4): shares the same 12s cache as /api/exchange/positions — a
-      // poll from this user's browser landing in the same window as this
-      // tick reuses this call's result instead of hitting the exchange again.
-      open = await this.positionsCache.getOpenPositions(userId, exchange, creds);
+      // T20 (B4): same 12s cache class as /api/exchange/positions
+      // (ExchangePositionsCacheService). This actually coalesces with a
+      // browser poll only when both run in the same process — true for the
+      // combined `all`-role deployment (local dev), NOT true in prod's split
+      // api/worker processes (T11), where this service has run its own
+      // separate instance since it has no way to share one across processes.
+      // Still worth going through: it keeps this call's own retry/no-cache-
+      // on-failure behavior consistent with the controller's, and coalesces
+      // this service's own concurrent/rapid calls (e.g. a manual re-sync
+      // landing mid-tick) with the scheduled tick's.
+      open = await this.positionsCache.getOpenPositions(
+        userId,
+        exchange,
+        creds,
+      );
     } catch (e) {
       this.logger.warn(`open positions fetch failed: ${e}`);
       open = { success: false, positions: [] };
@@ -253,7 +287,9 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     try {
       const p = await this.positions.sync(userId, exchange, creds, open, opts);
       if (p.fills > 0 || p.stamped > 0) {
-        this.logger.log(`positions: +${p.fills} fill(s), ${p.stamped} trade(s) grouped into ${p.positions} position(s)`);
+        this.logger.log(
+          `positions: +${p.fills} fill(s), ${p.stamped} trade(s) grouped into ${p.positions} position(s)`,
+        );
       }
       if (p.stamped > 0) {
         // Trade.positionId меняет схлопывание в позиции (collapseToPositions)
@@ -275,7 +311,8 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
       const ctx = await this.tradeContext.computeMissing(userId, {
         hadChanges: inserted > 0 || positionsRegrouped,
       });
-      if (ctx > 0) this.logger.log(`computed market context for ${ctx} trade(s)`);
+      if (ctx > 0)
+        this.logger.log(`computed market context for ${ctx} trade(s)`);
     } catch (e) {
       this.logger.warn(`trade context compute failed: ${e}`);
     }
@@ -331,16 +368,36 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
    * notification with tag buttons (no-op for users without a linked chat, so
    * the first tick after this feature deploys can't flood anyone).
    */
-  private async trackOpenPositions(userId: string, positions: OpenedPositionInfo[]): Promise<void> {
-    const existing = await this.prisma.openPositionSeen.findMany({ where: { userId } });
-    const existingKeys = new Set(existing.map((r) => `${r.symbol}|${r.direction}`));
-    const openKeys = new Set(positions.map((p) => `${p.symbol}|${p.direction}`));
+  private async trackOpenPositions(
+    userId: string,
+    positions: OpenedPositionInfo[],
+  ): Promise<void> {
+    const existing = await this.prisma.openPositionSeen.findMany({
+      where: { userId },
+    });
+    const existingKeys = new Set(
+      existing.map((r) => `${r.symbol}|${r.direction}`),
+    );
+    const openKeys = new Set(
+      positions.map((p) => `${p.symbol}|${p.direction}`),
+    );
 
     for (const p of positions) {
       if (existingKeys.has(`${p.symbol}|${p.direction}`)) continue;
       await this.prisma.openPositionSeen.upsert({
-        where: { userId_symbol_direction: { userId, symbol: p.symbol, direction: p.direction } },
-        create: { userId, symbol: p.symbol, direction: p.direction, stopLoss: stopLossOf(p.stopLoss) },
+        where: {
+          userId_symbol_direction: {
+            userId,
+            symbol: p.symbol,
+            direction: p.direction,
+          },
+        },
+        create: {
+          userId,
+          symbol: p.symbol,
+          direction: p.direction,
+          stopLoss: stopLossOf(p.stopLoss),
+        },
         update: {}, // first-seen time never moves while the position stays open
       });
       // A failed telegram send must never break the sync loop.
@@ -356,9 +413,13 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     // retried on the next tick instead of being lost for the whole position.
     await this.snapshotOpenPositions(userId, positions);
 
-    const stale = existing.filter((r) => !openKeys.has(`${r.symbol}|${r.direction}`));
+    const stale = existing.filter(
+      (r) => !openKeys.has(`${r.symbol}|${r.direction}`),
+    );
     if (stale.length > 0) {
-      await this.prisma.openPositionSeen.deleteMany({ where: { id: { in: stale.map((s) => s.id) } } });
+      await this.prisma.openPositionSeen.deleteMany({
+        where: { id: { in: stale.map((s) => s.id) } },
+      });
     }
   }
 
@@ -373,7 +434,10 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
    * keeps that verdict so we don't re-request candles every single tick for a
    * position that will never produce a snapshot.
    */
-  private async snapshotOpenPositions(userId: string, positions: OpenedPositionInfo[]): Promise<void> {
+  private async snapshotOpenPositions(
+    userId: string,
+    positions: OpenedPositionInfo[],
+  ): Promise<void> {
     const rows = await this.prisma.openPositionSeen.findMany({
       where: { userId, ctxOk: null },
       select: { id: true, symbol: true, direction: true, firstSeenAt: true },
@@ -381,7 +445,10 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     if (rows.length === 0) return;
 
     const priceOf = new Map(
-      positions.map((p) => [`${p.symbol}|${p.direction}`, p.avgPrice ? parseFloat(p.avgPrice) : NaN]),
+      positions.map((p) => [
+        `${p.symbol}|${p.direction}`,
+        p.avgPrice ? parseFloat(p.avgPrice) : NaN,
+      ]),
     );
 
     for (const r of rows) {
@@ -393,7 +460,11 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
         // Anchored at first-seen, not "now": on a restart-triggered catch-up
         // the position may have been open for a while already, and the entry
         // context belongs to when it opened.
-        const snap = await this.tradeContext.snapshotNow(r.symbol, entryPrice, r.firstSeenAt.getTime());
+        const snap = await this.tradeContext.snapshotNow(
+          r.symbol,
+          entryPrice,
+          r.firstSeenAt.getTime(),
+        );
         await this.prisma.openPositionSeen.update({
           where: { id: r.id },
           data: {
@@ -412,9 +483,13 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
             rangePos1d: snap.rangePos1d ?? null,
           },
         });
-        this.logger.log(`entry context computed for open ${r.symbol} ${r.direction}`);
+        this.logger.log(
+          `entry context computed for open ${r.symbol} ${r.direction}`,
+        );
       } catch (e) {
-        this.logger.warn(`entry context failed for ${r.symbol} ${r.direction}: ${e}`);
+        this.logger.warn(
+          `entry context failed for ${r.symbol} ${r.direction}: ${e}`,
+        );
       }
     }
   }
@@ -433,7 +508,9 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
    * второе условие развело бы их при первом же частичном сбое.
    */
   private async fillEntryStamps(userId: string): Promise<number> {
-    const rows = await this.prisma.openPositionSeen.findMany({ where: { userId } });
+    const rows = await this.prisma.openPositionSeen.findMany({
+      where: { userId },
+    });
     let filled = 0;
     for (const r of rows) {
       const res = await this.prisma.trade.updateMany({
@@ -474,7 +551,10 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
       closedAt: t.closedAt,
       raw: t.raw as Prisma.InputJsonValue,
     }));
-    const res = await this.prisma.trade.createMany({ data, skipDuplicates: true });
+    const res = await this.prisma.trade.createMany({
+      data,
+      skipDuplicates: true,
+    });
     return res.count;
   }
 }

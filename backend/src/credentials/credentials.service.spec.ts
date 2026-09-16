@@ -1,7 +1,10 @@
 import { BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CredentialsCryptoService } from './credentials-crypto.service';
-import { CredentialsService } from './credentials.service';
+import {
+  CredentialsService,
+  CREDENTIALS_CACHE_TTL_MS,
+} from './credentials.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const KEY_A = 'a'.repeat(64);
@@ -24,7 +27,10 @@ const connectionRow = (hex: string, exchange = 'bybit') => {
   };
 };
 
-const serviceReading = (hex: string, rows: ReturnType<typeof connectionRow>[]) => {
+const serviceReading = (
+  hex: string,
+  rows: ReturnType<typeof connectionRow>[],
+) => {
   const prisma = {
     exchangeConnection: {
       findMany: jest.fn().mockResolvedValue(rows),
@@ -71,7 +77,9 @@ describe('CredentialsService', () => {
         connectionRow(KEY_A, 'okx'),
       ]);
 
-      expect((await service.list('u1')).map((c) => [c.exchange, c.needsReconnect])).toEqual([
+      expect(
+        (await service.list('u1')).map((c) => [c.exchange, c.needsReconnect]),
+      ).toEqual([
         ['bybit', true],
         ['okx', false],
       ]);
@@ -93,17 +101,24 @@ describe('CredentialsService', () => {
     it('explains an undecryptable connection instead of failing opaquely', async () => {
       const service = serviceReading(KEY_A, [connectionRow(KEY_B)]);
 
-      await expect(service.get('u1', 'bybit')).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.get('u1', 'bybit')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
       await expect(service.get('u1', 'bybit')).rejects.toThrow(/Настройки/);
     });
   });
 
   // T20 (B4): get()/activeExchange() cache their DB read for CREDENTIALS_CACHE_TTL_MS
-  // (60s), and invalidate() must drop that cache immediately — settings.controller.ts
+  // (15s), and invalidate() must drop that cache immediately — settings.controller.ts
   // calls it right after save()/clear()/setActive() so a key change never rides out
-  // the TTL.
+  // the TTL. invalidate() only reaches the process that calls it (see the
+  // "cache survives across process instances" test below), so the TTL is what
+  // actually bounds the worst case for a process that was never told.
   describe('caching + invalidation (T20)', () => {
-    const makePrisma = (rows: ReturnType<typeof connectionRow>[], activeExchange: string | null = 'bybit') => {
+    const makePrisma = (
+      rows: ReturnType<typeof connectionRow>[],
+      activeExchange: string | null = 'bybit',
+    ) => {
       return {
         exchangeConnection: {
           findMany: jest.fn().mockResolvedValue(rows),
@@ -137,7 +152,9 @@ describe('CredentialsService', () => {
       jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
       await service.get('u1', 'bybit');
 
-      jest.spyOn(Date, 'now').mockReturnValue(1_000_000 + 60_000 + 1);
+      jest
+        .spyOn(Date, 'now')
+        .mockReturnValue(1_000_000 + CREDENTIALS_CACHE_TTL_MS + 1);
       await service.get('u1', 'bybit');
 
       expect(prisma.exchangeConnection.findUnique).toHaveBeenCalledTimes(2);
@@ -187,18 +204,32 @@ describe('CredentialsService', () => {
       jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
 
       const before = await service.get('u1', 'bybit');
-      expect(before).toEqual({ apiKey: 'ASSjQYU2q1zf6h28mZ', apiSecret: 'super-secret' });
+      expect(before).toEqual({
+        apiKey: 'ASSjQYU2q1zf6h28mZ',
+        apiSecret: 'super-secret',
+      });
 
       // settings.controller.ts: save() writes the new row, then invalidate().
-      const rowB = { ...rowA, apiKeyEnc: cryptoWith(KEY_A).encrypt('NEWKEY12345') };
-      (prisma.exchangeConnection.findUnique as jest.Mock).mockResolvedValue(rowB);
+      const rowB = {
+        ...rowA,
+        apiKeyEnc: cryptoWith(KEY_A).encrypt('NEWKEY12345'),
+      };
+      (prisma.exchangeConnection.findUnique as jest.Mock).mockResolvedValue(
+        rowB,
+      );
       service.invalidate('u1');
 
       const read1 = await service.get('u1', 'bybit');
       const read2 = await service.get('u1', 'bybit');
 
-      expect(read1).toEqual({ apiKey: 'NEWKEY12345', apiSecret: 'super-secret' });
-      expect(read2).toEqual({ apiKey: 'NEWKEY12345', apiSecret: 'super-secret' });
+      expect(read1).toEqual({
+        apiKey: 'NEWKEY12345',
+        apiSecret: 'super-secret',
+      });
+      expect(read2).toEqual({
+        apiKey: 'NEWKEY12345',
+        apiSecret: 'super-secret',
+      });
     });
 
     it('caches activeExchange() too, and invalidate() drops it', async () => {
@@ -208,7 +239,9 @@ describe('CredentialsService', () => {
 
       expect(await service.activeExchange('u1')).toBe('bybit');
 
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ activeExchange: 'okx' });
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        activeExchange: 'okx',
+      });
       expect(await service.activeExchange('u1')).toBe('bybit'); // still cached
 
       service.invalidate('u1');
@@ -229,6 +262,56 @@ describe('CredentialsService', () => {
       await service.get('u2', 'bybit'); // still cached
 
       expect(prisma.exchangeConnection.findUnique).toHaveBeenCalledTimes(3);
+    });
+
+    // T20 fix (review, Important #1): `api` and `worker` run as separate
+    // processes in prod (T11, backend/src/role.ts) — settings.controller.ts's
+    // invalidate() runs in `api` and reaches only `api`'s own
+    // CredentialsService instance. Modeled here as two independent instances
+    // reading the same underlying "DB": invalidate() on one does not affect
+    // the other, but the other's staleness is bounded by
+    // CREDENTIALS_CACHE_TTL_MS, not indefinite.
+    it('invalidate() on one process instance does not reach another — but that instance still self-corrects once its own TTL elapses', async () => {
+      const rowOld = connectionRow(KEY_A);
+      const prisma = makePrisma([rowOld]);
+      const apiInstance = new CredentialsService(prisma, cryptoWith(KEY_A));
+      const workerInstance = new CredentialsService(prisma, cryptoWith(KEY_A));
+      jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+
+      // Both processes read once, each populating its own independent cache.
+      await apiInstance.get('u1', 'bybit');
+      await workerInstance.get('u1', 'bybit');
+
+      // The key is rotated — the "DB" now serves the new row.
+      const rowNew = {
+        ...rowOld,
+        apiKeyEnc: cryptoWith(KEY_A).encrypt('ROTATED'),
+      };
+      (prisma.exchangeConnection.findUnique as jest.Mock).mockResolvedValue(
+        rowNew,
+      );
+
+      // settings.controller.ts invalidates in the `api` process only.
+      apiInstance.invalidate('u1');
+      expect(await apiInstance.get('u1', 'bybit')).toEqual({
+        apiKey: 'ROTATED',
+        apiSecret: 'super-secret',
+      });
+
+      // `worker` was never told — still serves what it cached before the
+      // rotation, right up until its own TTL runs out.
+      expect(await workerInstance.get('u1', 'bybit')).toEqual({
+        apiKey: 'ASSjQYU2q1zf6h28mZ',
+        apiSecret: 'super-secret',
+      });
+
+      jest
+        .spyOn(Date, 'now')
+        .mockReturnValue(1_000_000 + CREDENTIALS_CACHE_TTL_MS + 1);
+      expect(await workerInstance.get('u1', 'bybit')).toEqual({
+        apiKey: 'ROTATED',
+        apiSecret: 'super-secret',
+      });
     });
   });
 });

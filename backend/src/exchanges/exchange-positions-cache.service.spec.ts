@@ -144,4 +144,94 @@ describe('ExchangePositionsCacheService (T20)', () => {
 
     expect(getOpenPositions).toHaveBeenCalledTimes(2);
   });
+
+  // T20 fix (review, Important #2): rotating the key of an already-active
+  // exchange keeps the same cache key (`${userId}:${exchange}` doesn't
+  // change), so without an explicit invalidate() the old key's snapshot
+  // would keep being served for up to the 12s TTL.
+  describe('invalidate() (T20 fix, Important #2)', () => {
+    it('forces the next call to hit the adapter again, still inside the TTL window', async () => {
+      const getOpenPositions = jest
+        .fn()
+        .mockResolvedValue({ success: true, positions: [] });
+      const { service } = makeService(getOpenPositions);
+      jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+
+      await service.getOpenPositions('u1', 'bybit', creds);
+      expect(getOpenPositions).toHaveBeenCalledTimes(1);
+
+      service.invalidate('u1', 'bybit');
+      await service.getOpenPositions('u1', 'bybit', creds);
+
+      // Time never advanced — only invalidate() explains the second call.
+      expect(getOpenPositions).toHaveBeenCalledTimes(2);
+    });
+
+    it('a key rotation on the active exchange is reflected on the very next call, not after the old snapshot expires', async () => {
+      const oldPositions: PositionsResult = {
+        success: true,
+        positions: [{ symbol: 'BTCUSDT', direction: 'long', size: '1' }],
+      };
+      const newPositions: PositionsResult = {
+        success: true,
+        positions: [{ symbol: 'BTCUSDT', direction: 'long', size: '2' }],
+      };
+      const getOpenPositions = jest
+        .fn()
+        .mockResolvedValueOnce(oldPositions)
+        .mockResolvedValueOnce(newPositions);
+      const { service } = makeService(getOpenPositions);
+      jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+
+      const before = await service.getOpenPositions('u1', 'bybit', creds);
+      expect(before).toEqual(oldPositions);
+
+      // settings.controller.ts: connect() saves the rotated key, then
+      // invalidates both the credentials cache and this one.
+      service.invalidate('u1', 'bybit');
+
+      const after = await service.getOpenPositions('u1', 'bybit', creds);
+      expect(after).toEqual(newPositions);
+    });
+
+    it('only clears the given user+exchange — other keys keep their cached snapshot', async () => {
+      const bybitAdapter = {
+        id: 'bybit',
+        getOpenPositions: jest
+          .fn()
+          .mockResolvedValue({ success: true, positions: [] }),
+      };
+      const okxAdapter = {
+        id: 'okx',
+        getOpenPositions: jest
+          .fn()
+          .mockResolvedValue({ success: true, positions: [] }),
+      };
+      const exchanges = {
+        get: jest.fn((id: string) =>
+          id === 'bybit' ? bybitAdapter : okxAdapter,
+        ),
+      } as unknown as ExchangeRegistry;
+      const service = new ExchangePositionsCacheService(exchanges);
+      jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+
+      await service.getOpenPositions('u1', 'bybit', creds);
+      await service.getOpenPositions('u1', 'okx', creds);
+      await service.getOpenPositions('u2', 'bybit', creds);
+
+      service.invalidate('u1', 'bybit');
+
+      await service.getOpenPositions('u1', 'bybit', creds); // re-fetched
+      await service.getOpenPositions('u1', 'okx', creds); // still cached
+      await service.getOpenPositions('u2', 'bybit', creds); // still cached
+
+      expect(bybitAdapter.getOpenPositions).toHaveBeenCalledTimes(3); // u1 x2 + u2 x1
+      expect(okxAdapter.getOpenPositions).toHaveBeenCalledTimes(1);
+    });
+
+    it('is a no-op when nothing is cached for that key', () => {
+      const { service } = makeService(jest.fn());
+      expect(() => service.invalidate('u1', 'bybit')).not.toThrow();
+    });
+  });
 });

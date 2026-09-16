@@ -16,18 +16,30 @@ import { ExchangeRegistry } from './exchange-registry.service';
  * couple of seconds separating same-user tabs' polls (they don't all start
  * their setInterval at the exact same instant), short enough that a user
  * watching the positions table never sees data staler than about one tick.
+ *
+ * This is a per-process instance (see role.ts / T11): `api` and `worker` run
+ * as separate Node processes in prod, each with its own
+ * ExchangePositionsCacheService, so this dedup is real only for callers that
+ * land in the *same* process — every browser tab against the one `api`
+ * process (the actual duplication B4 named), and, in the combined `all`-role
+ * single-process deployment (local dev), the sync tick too. In the split
+ * prod topology the sync tick's exchange call is not visible to `api`'s
+ * cache or vice versa; that pair can still each make one exchange call in
+ * the same window, bounded to this same 12s TTL rather than compounding.
  */
 const POSITIONS_CACHE_TTL_MS = 12_000;
 
 /**
- * Coalesces getOpenPositions across a user's browser tabs and the
- * background sync tick, exactly the cached()+inflight pattern already used
- * by BybitMarketService for public market data.
+ * Coalesces getOpenPositions across a user's browser tabs (and, in a
+ * combined single-process deployment, the background sync tick too — see the
+ * per-process note above), exactly the cached()+inflight pattern already
+ * used by BybitMarketService for public market data.
  *
  * Keyed `${userId}:${exchange}`, not userId alone: switching the active
  * exchange (settings.controller) lands on a different, empty key rather than
- * serving the previous exchange's cached snapshot under the new one — no
- * separate invalidation hook is needed for that case.
+ * serving the previous exchange's cached snapshot under the new one.
+ * Rotating the key of an exchange that's already connected does need
+ * invalidate() below, though — same key, new credentials.
  */
 @Injectable()
 export class ExchangePositionsCacheService {
@@ -38,6 +50,17 @@ export class ExchangePositionsCacheService {
   private readonly inflight = new Map<string, Promise<PositionsResult>>();
 
   constructor(private readonly exchanges: ExchangeRegistry) {}
+
+  /**
+   * Drops one user+exchange's cached snapshot — call right after that
+   * exchange's key is rotated (settings.controller's connect(), same point
+   * as credentials.invalidate()) so the next read fetches under the new key
+   * instead of serving up to POSITIONS_CACHE_TTL_MS of positions fetched
+   * under the old one. A no-op if nothing is cached for that pair.
+   */
+  invalidate(userId: string, exchange: ExchangeId): void {
+    this.cache.delete(`${userId}:${exchange}`);
+  }
 
   async getOpenPositions(
     userId: string,

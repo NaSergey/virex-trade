@@ -12,7 +12,12 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { CredentialsService } from '../credentials/credentials.service';
 import { ExchangeRegistry } from '../exchanges/exchange-registry.service';
-import { EXCHANGE_CATALOG, exchangeMeta, isExchangeId } from '../exchanges/exchange-catalog';
+import { ExchangePositionsCacheService } from '../exchanges/exchange-positions-cache.service';
+import {
+  EXCHANGE_CATALOG,
+  exchangeMeta,
+  isExchangeId,
+} from '../exchanges/exchange-catalog';
 import { ExchangeId } from '../exchanges/exchange.types';
 import { ConnectExchangeDto } from './dto/connect-exchange.dto';
 
@@ -22,6 +27,7 @@ export class SettingsController {
   constructor(
     private readonly credentials: CredentialsService,
     private readonly exchanges: ExchangeRegistry,
+    private readonly positionsCache: ExchangePositionsCacheService,
   ) {}
 
   /**
@@ -135,9 +141,15 @@ export class SettingsController {
     await this.credentials.save(userId, id, credentials);
     // T20 (B4): drop the cached creds/active-exchange snapshot right now — the
     // activeExchange() read below, and the very next positions/balance poll,
-    // must see this connection instead of whatever was cached up to a minute
-    // ago.
+    // must see this connection instead of whatever was cached up to
+    // CREDENTIALS_CACHE_TTL_MS ago (within this process — see that constant's
+    // comment for the worker-process caveat).
     this.credentials.invalidate(userId);
+    // T20 fix (review, Important #2): connect() also covers rotating the key
+    // of an already-active exchange (not just adding/switching one) — without
+    // this, the positions cache could keep serving a snapshot fetched under
+    // the old key for up to its own TTL.
+    this.positionsCache.invalidate(userId, id);
     return {
       success: true,
       exchange: id,
@@ -147,23 +159,34 @@ export class SettingsController {
   }
 
   @Delete('exchanges/:exchange')
-  async disconnect(@CurrentUser('userId') userId: string, @Param('exchange') exchange: string) {
+  async disconnect(
+    @CurrentUser('userId') userId: string,
+    @Param('exchange') exchange: string,
+  ) {
     const id = this.parseExchange(exchange);
     await this.credentials.clear(userId, id);
     // T20 (B4): same as connect() — the deleted (or reassigned) active
     // exchange must be visible immediately, not after the cache's TTL.
     this.credentials.invalidate(userId);
-    return { success: true, activeExchange: await this.credentials.activeExchange(userId) };
+    this.positionsCache.invalidate(userId, id);
+    return {
+      success: true,
+      activeExchange: await this.credentials.activeExchange(userId),
+    };
   }
 
   /** Switch which connected exchange drives sync, positions and trading. */
   @Put('active-exchange/:exchange')
-  async setActive(@CurrentUser('userId') userId: string, @Param('exchange') exchange: string) {
+  async setActive(
+    @CurrentUser('userId') userId: string,
+    @Param('exchange') exchange: string,
+  ) {
     const id = this.parseExchange(exchange);
     await this.credentials.setActive(userId, id);
     // T20 (B4): the next positions/balance read must resolve to `id`, not the
     // exchange that was active before this call.
     this.credentials.invalidate(userId);
+    this.positionsCache.invalidate(userId, id);
     return { success: true, activeExchange: id };
   }
 
