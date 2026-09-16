@@ -23,6 +23,13 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    # Та же механика, что в docker-compose.prod.yml (см. комментарий там и
+    # находку A9), но вчетверо скромнее: локальная машина делит RAM с IDE,
+    # браузером и другими локальными стеками, а нагрузка на порядки ниже
+    # прод-профиля — держать 2GB под буфер одной базы разработки незачем.
+    command: >
+      postgres -c shared_buffers=512MB -c effective_cache_size=1536MB
+      -c work_mem=4MB -c random_page_cost=1.1 -c max_connections=100
 
   api:
     build: ./backend
@@ -35,7 +42,11 @@ services:
       - ./backend/.env
     # ...and overrides the DB host to the compose service.
     environment:
-      DATABASE_URL: postgresql://virex:virex@db:5432/virex?schema=public
+      # connection_limit/pool_timeout — та же механика, что в
+      # docker-compose.prod.yml (см. комментарий там и находку A9), но
+      # скромнее: один локальный клиент, нагрузки в сотни q/s нет — держать
+      # десяток простаивающих соединений незачем.
+      DATABASE_URL: postgresql://virex:virex@db:5432/virex?schema=public&connection_limit=5&pool_timeout=10
       PORT: "8091"
       FRONTEND_URL: http://localhost:8090
     # Тоже loopback: наружу смотрит только web, а к api он ходит по

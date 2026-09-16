@@ -34,6 +34,18 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    # postgres:16-alpine стартует без единого -c: shared_buffers=128MB,
+    # work_mem=4MB — рассчитано на игрушечный контейнер, а не на ~680 q/s
+    # (A9). shared_buffers ~25% RAM и effective_cache_size ~75% RAM — типовое
+    # правило тюнинга для выделенной под Postgres машины (страница держит
+    # обе половины: буфер Postgres и файловый кэш ОС). random_page_cost=1.1 —
+    # диск SSD, не вращающийся, случайный доступ почти не дороже
+    # последовательного. max_connections=100 — дефолт Postgres, здесь явно,
+    # чтобы значение не разъехалось молча с суммой connection_limit всех
+    # процессов ниже (после Task 11 пересчитать вместе).
+    command: >
+      postgres -c shared_buffers=2GB -c effective_cache_size=6GB
+      -c work_mem=16MB -c random_page_cost=1.1 -c max_connections=100
 
   api:
     build:
@@ -46,7 +58,16 @@ services:
     environment:
       NODE_ENV: production
       PORT: "8091"
-      DATABASE_URL: postgresql://${POSTGRES_USER:-virex}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-virex}?schema=public
+      # connection_limit — под одну роль `api`. Дефолт Prisma без него —
+      # num_cpus*2+1, то есть девять соединений на 4-vCPU при ~680 запросах в
+      # секунду (A9) — гарантированный P2024 под нагрузкой. pool_timeout —
+      # сколько секунд запрос ждёт свободное соединение в очереди перед
+      # ошибкой, вместо мгновенного отказа на всплеске.
+      # Пока в compose один процесс api, 10 соединений — разумный потолок под
+      # него целиком. Task 11 плана разводит api и worker по разным
+      # процессам — после неё connection_limit надо пересчитать под число
+      # одновременно живых процессов, а не оставлять как есть.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-virex}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-virex}?schema=public&connection_limit=10&pool_timeout=20
       # Origin продукта. Отсюда же берётся CORS-origin (main.ts). Схема
       # обязана быть https: кука сессии в production ставится с secure.
       FRONTEND_URL: https://${APP_DOMAIN:?set APP_DOMAIN in .env.prod}
