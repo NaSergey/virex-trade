@@ -170,23 +170,32 @@ export async function countActiveUsers(
  *
  * Главный вопрос владельца («пользуются или нет») в одном числе:
  * зарегистрироваться и посмотреть один раз может кто угодно, вернуться на
- * другой день — только тот, кому сервис зачем-то нужен.
+ * другой день — только тот, кому сервис зачем-то нужен. Считается за весь
+ * жизненный путь аккаунта (см. `lifetimeFunnel` в admin-analytics.service.ts),
+ * поэтому у запроса нет `WHERE` по времени — сюда намеренно не добавлена
+ * нижняя граница по ACTIVITY_RETENTION_DAYS.
  *
- * Считается за весь срок хранения (см. `lifetimeFunnel` в
- * admin-analytics.service.ts — эта ступень пути жизненная, а не за окно
- * отчёта), а не безусловно за всё время: строк старше ACTIVITY_RETENTION_DAYS
- * в таблице и так уже нет (T18), а без нижней границы `GROUP BY` без
- * `WHERE` — seq-скан всей таблицы на каждый показ воронки в админке.
+ * Почему такой границы здесь нет (в отличие от `queryActiveWeeks` ниже):
+ * `UsageCleanupService` (T18) и так не оставляет в таблице строк старше
+ * ACTIVITY_RETENTION_DAYS, то есть после первого прогона сметателя предикат
+ * `minute >= now - ACTIVITY_RETENTION_DAYS` отбирает практически 100% строк
+ * таблицы — никакой реальной селективности не даёт. Хуже: неселективный
+ * диапазонный предикат по индексированной колонке может подтолкнуть
+ * планировщик к index/bitmap scan вместо более дешёвого seq scan на
+ * выборке такого размера — то есть быть медленнее, чем без предиката вовсе.
+ * Реальное закрытие A8 для этого запроса — не WHERE здесь, а то, что сама
+ * таблица теперь физически ограничена сроком хранения (UsageCleanupService),
+ * а не растёт бесконечно: seq scan по таблице в пределах ~180 дней данных —
+ * не та же проблема, что seq scan по таблице, растущей на сотни млн строк в
+ * год без срока жизни.
  */
 export async function countReturningUsers(
   prisma: PrismaService,
 ): Promise<number> {
-  const since = earliestRetained();
   const rows = await prisma.$queryRaw<{ users: number }[]>`
     SELECT COUNT(*)::int AS "users" FROM (
       SELECT "userId"
       FROM "user_activity_minutes"
-      WHERE "minute" >= ${since}
       GROUP BY "userId"
       HAVING COUNT(DISTINCT date_trunc('day', "minute")) >= 2
     ) t

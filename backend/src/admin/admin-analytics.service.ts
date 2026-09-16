@@ -399,10 +399,11 @@ export class AdminAnalyticsService {
    * человек, подключивший ключи полгода назад, ступень прошёл.
    *
    * Исключение — `returnedAnotherDay` (countReturningUsers): её «всё время»
-   * ограничено сроком хранения минут активности, ACTIVITY_RETENTION_DAYS в
-   * usage/visits.ts (T18). За пределами этого окна строк для проверки и так
-   * не остаётся — сметает UsageCleanupService, — поэтому граница ничего не
-   * отбрасывает из того, что реально можно было бы прочитать.
+   * физически ограничено сроком хранения минут активности,
+   * ACTIVITY_RETENTION_DAYS в usage/visits.ts (T18, `UsageCleanupService`
+   * сметает более старые строки) — сам запрос при этом без явного `WHERE` по
+   * времени, добавлять его смысла нет (см. комментарий у countReturningUsers
+   * в usage-queries.ts).
    */
   private async lifetimeFunnel() {
     const [
