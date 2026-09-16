@@ -94,7 +94,7 @@ export function averageQuality(values: Array<number | null | undefined>): number
 }
 
 /** Thin a sparkline series to ≤ max points, always keeping the last one. */
-function thinEquity(points: EquityPoint[], max = 60): EquityPoint[] {
+export function thinEquity(points: EquityPoint[], max = 60): EquityPoint[] {
   if (points.length <= max) return points;
   const stride = Math.ceil(points.length / max);
   const out = points.filter((_, i) => i % stride === 0);
@@ -942,6 +942,8 @@ export class TradesService {
       avgExitQuality: averageQuality(trades.map((t) => t.context?.exitQuality)),
     };
 
-    return { success: true, stats, equity };
+    // Клиент (views/overview/Page.tsx) сводит кривую к 300 точкам через
+    // buildEquityGeometry — всё, что длиннее ~600, он всё равно выбрасывает.
+    return { success: true, stats, equity: thinEquity(equity, 600) };
   }
 }

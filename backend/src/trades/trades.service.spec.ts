@@ -1,4 +1,4 @@
-import { computeSqn, MIN_SQN_POSITIONS } from './trades.service';
+import { computeSqn, MIN_SQN_POSITIONS, thinEquity, EquityPoint } from './trades.service';
 
 describe('computeSqn', () => {
   it('меньше MIN_SQN_POSITIONS сделок — null, независимо от значений', () => {
@@ -27,5 +27,37 @@ describe('computeSqn', () => {
     const pnls = [...Array(15).fill(3), ...Array(15).fill(1)];
     expect(pnls.length).toBe(MIN_SQN_POSITIONS);
     expect(computeSqn(pnls)).not.toBeNull();
+  });
+});
+
+describe('thinEquity', () => {
+  function makeSeries(n: number): EquityPoint[] {
+    return Array.from({ length: n }, (_, i) => ({ time: i + 1, value: i }));
+  }
+
+  it('короче лимита — возвращает как есть, без копирования', () => {
+    const points = makeSeries(600);
+    expect(thinEquity(points, 600)).toBe(points);
+  });
+
+  it('длиннее лимита — прореживает, но сохраняет строгую монотонность времени', () => {
+    const points = makeSeries(5000);
+    const out = thinEquity(points, 600);
+    expect(out.length).toBeLessThanOrEqual(600);
+    for (let i = 1; i < out.length; i++) {
+      expect(out[i].time).toBeGreaterThan(out[i - 1].time);
+    }
+  });
+
+  it('последняя точка исходного ряда всегда сохранена', () => {
+    const points = makeSeries(5000);
+    const out = thinEquity(points, 600);
+    expect(out[out.length - 1]).toEqual(points[points.length - 1]);
+  });
+
+  it('первая точка исходного ряда сохранена (stride делит с индекса 0)', () => {
+    const points = makeSeries(5000);
+    const out = thinEquity(points, 600);
+    expect(out[0]).toEqual(points[0]);
   });
 });
