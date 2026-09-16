@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { BybitAuthService } from './bybit-auth.service';
 
 // Public market data barely changes within a tick, but the bot engines and
@@ -9,10 +9,44 @@ const PRICE_TTL_MS = 3_000;
 const KLINES_TTL_MS = 10_000;
 const SYMBOL_INFO_TTL_MS = 10 * 60_000;
 
+// T22 (B8): entries are only ever overwritten by the next request for the
+// same key, never removed on their own — a symbol/interval nobody asks for
+// again just sits in memory. Keys are finite (symbol × interval), so this
+// isn't a leak, but a periodic sweep is cheap insurance against it growing
+// with stale combinations. Runs in every process holding this cache; unlike
+// the T11 background jobs this isn't gated by role — it's process-local
+// memory, not shared-DB work that duplicate processes would race on.
+const CACHE_SWEEP_INTERVAL_MS = 60_000;
+
 @Injectable()
-export class BybitMarketService extends BybitAuthService {
+export class BybitMarketService
+  extends BybitAuthService
+  implements OnModuleDestroy
+{
   private readonly cache = new Map<string, { exp: number; val: unknown }>();
   private readonly inflight = new Map<string, Promise<unknown>>();
+  private readonly sweepTimer: NodeJS.Timeout = setInterval(
+    () => this.evictExpired(),
+    CACHE_SWEEP_INTERVAL_MS,
+  );
+
+  onModuleDestroy(): void {
+    clearInterval(this.sweepTimer);
+  }
+
+  // Drops cache entries past their TTL. Called periodically by sweepTimer
+  // above; also called directly by tests.
+  evictExpired(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.cache) {
+      if (entry.exp <= now) this.cache.delete(key);
+    }
+  }
+
+  /** Только для тестов/отладки — число записей в кэше сейчас. */
+  get cacheSize(): number {
+    return this.cache.size;
+  }
 
   // Cache + request coalescing: concurrent callers for the same key share one
   // upstream request instead of racing duplicates.
