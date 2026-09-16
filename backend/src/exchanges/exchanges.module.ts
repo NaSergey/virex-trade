@@ -9,6 +9,7 @@ import { GateAdapter } from './adapters/gate.adapter';
 import { BinanceAdapter } from './adapters/binance.adapter';
 import { MexcAdapter } from './adapters/mexc.adapter';
 import { ExchangeRegistry } from './exchange-registry.service';
+import { ExchangePositionsCacheService } from './exchange-positions-cache.service';
 import { ExchangeController } from './exchange.controller';
 
 /**
@@ -28,7 +29,8 @@ import { ExchangeController } from './exchange.controller';
     BinanceAdapter,
     MexcAdapter,
     ExchangeRegistry,
+    ExchangePositionsCacheService,
   ],
-  exports: [ExchangeRegistry],
+  exports: [ExchangeRegistry, ExchangePositionsCacheService],
 })
 export class ExchangesModule {}

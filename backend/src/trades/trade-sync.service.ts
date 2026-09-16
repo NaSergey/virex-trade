@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CredentialsService } from '../credentials/credentials.service';
 import { ExchangeRegistry } from '../exchanges/exchange-registry.service';
+import { ExchangePositionsCacheService } from '../exchanges/exchange-positions-cache.service';
 import { ClosedTrade, ExchangeId, PositionsResult } from '../exchanges/exchange.types';
 import { TagsService } from '../tags/tags.service';
 import { OpenedPositionInfo } from '../telegram/telegram.service';
@@ -66,6 +67,7 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     private readonly tradeContext: TradeContextService,
     private readonly positions: PositionBuilderService,
     private readonly dataVersion: DataVersionService,
+    private readonly positionsCache: ExchangePositionsCacheService,
   ) {}
 
   onApplicationBootstrap() {
@@ -226,7 +228,10 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     // из них по отдельности при таком же отказе.
     let open: PositionsResult;
     try {
-      open = await adapter.getOpenPositions(creds);
+      // T20 (B4): shares the same 12s cache as /api/exchange/positions — a
+      // poll from this user's browser landing in the same window as this
+      // tick reuses this call's result instead of hitting the exchange again.
+      open = await this.positionsCache.getOpenPositions(userId, exchange, creds);
     } catch (e) {
       this.logger.warn(`open positions fetch failed: ${e}`);
       open = { success: false, positions: [] };

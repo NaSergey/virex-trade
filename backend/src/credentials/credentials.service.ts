@@ -16,6 +16,18 @@ export interface ConnectionStatus {
   needsReconnect: boolean;
 }
 
+// T20 (B4): activeExchange() + get() together cost a `user` read, an
+// `exchangeConnection` read and two/three AES decrypts on EVERY call that
+// needs credentials — requireActive()/getActive() run that pair on every
+// positions/balance poll, twice a minute per browser tab times however many
+// tabs a user has open. A short in-memory cache collapses those into one hit
+// per TTL window; correctness on a key change comes from invalidate() below,
+// called by settings.controller.ts right after save/clear/setActive, not
+// from the TTL expiring. 60s (the top of the 30-60s the plan allows) is safe
+// specifically because of that: nothing here can go stale in a way the TTL
+// alone would have to catch.
+const CREDENTIALS_CACHE_TTL_MS = 60_000;
+
 /**
  * Stores and retrieves per-user, per-exchange API credentials.
  *
@@ -27,13 +39,83 @@ export interface ConnectionStatus {
 export class CredentialsService {
   private readonly logger = new Logger(CredentialsService.name);
 
+  // Keyed `${userId}:${exchange}` — a user can hold more than one connection.
+  private readonly credsCache = new Map<string, { exp: number; val: ExchangeCredentials | null }>();
+  private readonly credsInflight = new Map<string, Promise<ExchangeCredentials | null>>();
+  // Keyed by userId alone — one active exchange per user.
+  private readonly activeCache = new Map<string, { exp: number; val: ExchangeId | null }>();
+  private readonly activeInflight = new Map<string, Promise<ExchangeId | null>>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly crypto: CredentialsCryptoService,
   ) {}
 
+  // Cache + request coalescing, same shape as BybitMarketService.cached(): a
+  // key can cache `null` (genuinely "not connected"/"no active exchange") —
+  // only a *thrown* fetcher stays uncached, so a transient DB/decrypt failure
+  // stays retryable on the very next call instead of being pinned for a
+  // minute.
+  private async cached<T>(
+    cache: Map<string, { exp: number; val: T }>,
+    inflight: Map<string, Promise<T>>,
+    key: string,
+    ttlMs: number,
+    fetcher: () => Promise<T>,
+  ): Promise<T> {
+    const hit = cache.get(key);
+    if (hit && hit.exp > Date.now()) return hit.val;
+
+    const running = inflight.get(key);
+    if (running) return running;
+
+    const p = (async () => {
+      try {
+        const val = await fetcher();
+        cache.set(key, { exp: Date.now() + ttlMs, val });
+        return val;
+      } finally {
+        inflight.delete(key);
+      }
+    })();
+    inflight.set(key, p);
+    return p;
+  }
+
+  /**
+   * Drops this user's cached credentials and active-exchange snapshot.
+   *
+   * Must run right after any write that changes what get()/activeExchange()
+   * would return — a saved/cleared connection or a switched active exchange —
+   * so the very next read reflects it instead of the stale value surviving up
+   * to CREDENTIALS_CACHE_TTL_MS. In-flight reads started just before the
+   * write are left to finish; the tiny race between "settings just changed"
+   * and "a read was already mid-flight" is not one a cache can close, and the
+   * next read after that still gets the fresh value.
+   */
+  invalidate(userId: string): void {
+    this.activeCache.delete(userId);
+    const prefix = `${userId}:`;
+    for (const key of this.credsCache.keys()) {
+      if (key.startsWith(prefix)) this.credsCache.delete(key);
+    }
+  }
+
   /** Decrypted credentials for one exchange, or null if it isn't connected. */
   async get(userId: string, exchange: ExchangeId): Promise<ExchangeCredentials | null> {
+    return this.cached(
+      this.credsCache,
+      this.credsInflight,
+      `${userId}:${exchange}`,
+      CREDENTIALS_CACHE_TTL_MS,
+      () => this.fetchCredentials(userId, exchange),
+    );
+  }
+
+  private async fetchCredentials(
+    userId: string,
+    exchange: ExchangeId,
+  ): Promise<ExchangeCredentials | null> {
     const row = await this.prisma.exchangeConnection.findUnique({
       where: { userId_exchange: { userId, exchange } },
     });
@@ -62,6 +144,16 @@ export class CredentialsService {
 
   /** Which exchange this user is currently working with, if any. */
   async activeExchange(userId: string): Promise<ExchangeId | null> {
+    return this.cached(
+      this.activeCache,
+      this.activeInflight,
+      userId,
+      CREDENTIALS_CACHE_TTL_MS,
+      () => this.fetchActiveExchange(userId),
+    );
+  }
+
+  private async fetchActiveExchange(userId: string): Promise<ExchangeId | null> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { activeExchange: true },

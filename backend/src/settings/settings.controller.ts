@@ -133,6 +133,11 @@ export class SettingsController {
     }
 
     await this.credentials.save(userId, id, credentials);
+    // T20 (B4): drop the cached creds/active-exchange snapshot right now — the
+    // activeExchange() read below, and the very next positions/balance poll,
+    // must see this connection instead of whatever was cached up to a minute
+    // ago.
+    this.credentials.invalidate(userId);
     return {
       success: true,
       exchange: id,
@@ -145,6 +150,9 @@ export class SettingsController {
   async disconnect(@CurrentUser('userId') userId: string, @Param('exchange') exchange: string) {
     const id = this.parseExchange(exchange);
     await this.credentials.clear(userId, id);
+    // T20 (B4): same as connect() — the deleted (or reassigned) active
+    // exchange must be visible immediately, not after the cache's TTL.
+    this.credentials.invalidate(userId);
     return { success: true, activeExchange: await this.credentials.activeExchange(userId) };
   }
 
@@ -153,6 +161,9 @@ export class SettingsController {
   async setActive(@CurrentUser('userId') userId: string, @Param('exchange') exchange: string) {
     const id = this.parseExchange(exchange);
     await this.credentials.setActive(userId, id);
+    // T20 (B4): the next positions/balance read must resolve to `id`, not the
+    // exchange that was active before this call.
+    this.credentials.invalidate(userId);
     return { success: true, activeExchange: id };
   }
 

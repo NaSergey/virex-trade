@@ -1,4 +1,5 @@
 import { TradeSyncService } from './trade-sync.service';
+import { ExchangePositionsCacheService } from '../exchanges/exchange-positions-cache.service';
 
 /**
  * T12 (A3): обход `syncAll` идёт с ограничителем параллелизма (не голым
@@ -54,6 +55,10 @@ function makeService(
   } as any;
   const positions = { sync: jest.fn().mockResolvedValue({ fills: 0, positions: 0, stamped: 0 }) } as any;
   const dataVersion = { bump: jest.fn().mockResolvedValue(undefined) } as any;
+  // T20 (B4): real cache/coalescing service wired to the same fake `exchanges`
+  // — this exercises the actual call path syncUserUnlocked now goes through,
+  // not a bypass of it.
+  const positionsCache = new ExchangePositionsCacheService(exchanges);
 
   const service = new TradeSyncService(
     prisma,
@@ -64,6 +69,7 @@ function makeService(
     tradeContext,
     positions,
     dataVersion,
+    positionsCache,
   );
   return { service, prisma, adapter, positions };
 }
