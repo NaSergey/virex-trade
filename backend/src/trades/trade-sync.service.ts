@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CredentialsService } from '../credentials/credentials.service';
 import { ExchangeRegistry } from '../exchanges/exchange-registry.service';
-import { ClosedTrade, ExchangeId } from '../exchanges/exchange.types';
+import { ClosedTrade, ExchangeId, PositionsResult } from '../exchanges/exchange.types';
 import { TagsService } from '../tags/tags.service';
 import { OpenedPositionInfo } from '../telegram/telegram.service';
 import { TradeAlertsService } from '../notifications/trade-alerts.service';
@@ -11,10 +11,16 @@ import { TradeContextService } from './trade-context.service';
 import { PositionBuilderService } from './position-builder.service';
 import { DataVersionService } from '../prisma/data-version.service';
 import { runsBackgroundJobs } from '../role';
+import { runWithConcurrency } from '../common/concurrency';
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const BACKFILL_WEEKS = 26; // first run: import ~6 months of history
 const SYNC_INTERVAL_MS = 60_000; // periodic incremental sync
+// T12 (A3): 8-16 одновременных пользователей помещают обход на 1000
+// подключённых аккаунтов в интервал (~50с при 12 в параллель, 250мс на
+// вызов, 4 вызова на пользователя) — не кладя при этом пул Prisma и сеть
+// тысячей одновременных запросов, как голый Promise.all.
+const SYNC_CONCURRENCY = 12;
 
 /**
  * Стоп с биржи — десятичная строка. Ноль и пустая строка у нескольких бирж
@@ -83,11 +89,12 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     if (this.sweeping) return { inserted: 0 };
     this.sweeping = true;
     // T1 (docs/superpowers/specs/2026-09-16-backend-optimization.md): временный
-    // замер длительности и числа SQL-запросов одного прогона syncAll, за тем
-    // же флагом, что счётчик в PrismaService. Убрать вместе с остальной
-    // измерительной инфраструктурой спеки после приёмки задач группы A.
+    // замер числа SQL-запросов одного прогона syncAll, за тем же флагом, что
+    // счётчик в PrismaService. Убрать вместе с остальной измерительной
+    // инфраструктурой спеки после приёмки задач группы A. Длительность обхода
+    // (T12, ниже) — отдельный, постоянный лог, флагом не прикрыт.
     const measure = Boolean(process.env.PRISMA_LOG_QUERIES);
-    const t0 = measure ? Date.now() : 0;
+    const t0 = Date.now();
     if (measure) this.prisma.resetQueryCount();
     let userCount = 0;
     try {
@@ -97,8 +104,11 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
       });
       userCount = users.length;
       let inserted = 0;
-      for (const u of users) {
-        if (this.inFlight.has(u.id)) continue; // manual re-sync already running
+      // T12 (A3): не более SYNC_CONCURRENCY пользователей одновременно —
+      // последовательный for на 1000 аккаунтов не помещался в минутный
+      // интервал (десять минут на обход, см. бриф).
+      await runWithConcurrency(users, SYNC_CONCURRENCY, async (u) => {
+        if (this.inFlight.has(u.id)) return; // manual re-sync already running
         // One user's failure (revoked keys, an undecryptable credential blob,
         // an exchange outage) must not abort the sweep for everyone behind them.
         try {
@@ -106,15 +116,17 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
         } catch (e) {
           this.logger.warn(`sync failed for user ${u.id}: ${e}`);
         }
-      }
+      });
       return { inserted };
     } finally {
       this.sweeping = false;
+      // T12 (A3): постоянный лог длительности обхода — раньше её было не
+      // видно совсем, а без неё не понять, укладывается ли синк в минуту.
+      this.logger.log(
+        `syncAll: ${Date.now() - t0} мс, пользователей с активной биржей: ${userCount}`,
+      );
       if (measure) {
-        this.logger.log(
-          `[T1] syncAll: ${Date.now() - t0} ms, ${this.prisma.queryCount} запросов Prisma, ` +
-            `пользователей с активной биржей: ${userCount}`,
-        );
+        this.logger.log(`[T1] syncAll: ${this.prisma.queryCount} запросов Prisma`);
       }
     }
   }
@@ -207,12 +219,24 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     } catch (e) {
       this.logger.warn(`openedAt fill failed: ${e}`);
     }
+    // T12 (A3): один запрос открытых позиций на весь тик, не два — раньше
+    // sync() ниже и блок обрезки тегов дальше по функции каждый вызывали
+    // adapter.getOpenPositions(creds) сами по себе. Отказ трактуется как
+    // "нет открытых" в обоих потребителях, ровно как раньше делал каждый
+    // из них по отдельности при таком же отказе.
+    let open: PositionsResult;
+    try {
+      open = await adapter.getOpenPositions(creds);
+    } catch (e) {
+      this.logger.warn(`open positions fetch failed: ${e}`);
+      open = { success: false, positions: [] };
+    }
     // Group the closing orders of one position under a shared positionId, so
     // partial take-profits and averaging in stop counting as separate trades.
     // Runs every tick (not just on inserts): a position that closed in parts
     // only becomes groupable once its final closing fill arrives.
     try {
-      const p = await this.positions.sync(userId, exchange, creds, opts);
+      const p = await this.positions.sync(userId, exchange, creds, open, opts);
       if (p.fills > 0 || p.stamped > 0) {
         this.logger.log(`positions: +${p.fills} fill(s), ${p.stamped} trade(s) grouped into ${p.positions} position(s)`);
       }
@@ -240,8 +264,9 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     // Drop position tags once their position has fully closed, so they don't
     // carry over to the next position opened on the same symbol+direction.
     // The openedAt registry follows the exact same lifecycle.
+    // T12: переиспользует `open`, запрошенный один раз выше — было второе
+    // такое же обращение к бирже в этом же тике.
     try {
-      const open = await adapter.getOpenPositions(creds);
       if (open.success) {
         // Tag prune keeps the historical unfiltered-keys semantics (a 0-size
         // row keeps tags one extra tick, which linkTagsToNewTrades relies on).
