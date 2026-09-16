@@ -5,6 +5,7 @@ import { CredentialsService } from '../credentials/credentials.service';
 import { detectGap, sumFlows } from './balance-chain';
 import { loadFlows } from './flows';
 import { TradeRiskService } from './trade-risk.service';
+import { runsBackgroundJobs } from '../role';
 
 const SNAPSHOT_INTERVAL_MS = 60 * 60 * 1000;
 /**
@@ -51,6 +52,8 @@ export class BalanceSnapshotService implements OnApplicationBootstrap, OnModuleD
   ) {}
 
   onApplicationBootstrap(): void {
+    // T11: фоновый сервис — только роль worker (и дефолтная all).
+    if (!runsBackgroundJobs()) return;
     this.captureAll().catch((e) => this.logger.error('initial balance capture failed', e));
     this.timer = setInterval(() => {
       this.captureAll().catch((e) => this.logger.error('periodic balance capture failed', e));

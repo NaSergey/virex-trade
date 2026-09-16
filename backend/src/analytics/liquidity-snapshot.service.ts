@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { runsBackgroundJobs } from '../role';
 
 const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
 const SNAPSHOT_INTERVAL_MS = 15 * 60_000;
@@ -32,6 +33,8 @@ export class LiquiditySnapshotService implements OnApplicationBootstrap, OnModul
   constructor(private readonly prisma: PrismaService) {}
 
   onApplicationBootstrap() {
+    // T11: фоновый сервис — только роль worker (и дефолтная all).
+    if (!runsBackgroundJobs()) return;
     this.sync().catch((e) => this.logger.error('initial liquidity snapshot failed', e));
     this.timer = setInterval(() => {
       this.sync().catch((e) => this.logger.error('periodic liquidity snapshot failed', e));

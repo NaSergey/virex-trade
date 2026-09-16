@@ -1,15 +1,30 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
+import { ROLE, servesHttp } from './role';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // Без этого SIGTERM (docker stop / деплой) убивает процесс сразу, не
   // дав OnModuleDestroy-хукам отработать — в частности, UsageTrackerService
-  // теряет последний, ещё не сброшенный буфер минут активности молча.
+  // (роль api) теряет последний, ещё не сброшенный буфер минут активности, а
+  // TradeSyncService/TelegramService и остальной фон (роль worker) не
+  // успевают снять свои таймеры и остановить поллинг. Нужен в обеих ролях.
   app.enableShutdownHooks();
+
+  if (!servesHttp()) {
+    // ROLE=worker: ни HTTP, ни `/health` этому процессу не нужны — он не
+    // стоит за healthcheck'ом compose (тот смотрит на `api`). `listen()` сам
+    // вызывает `init()`, если его не позвать явно — а без init() не
+    // сработают OnApplicationBootstrap-хуки, и все девять фоновых сервисов
+    // и telegram-поллинг просто не стартуют. Порт не открываем вовсе — это
+    // и есть "не слушает HTTP", а не просто "на порт никто не приходит".
+    await app.init();
+    Logger.log(`worker started (ROLE=${ROLE})`, 'Bootstrap');
+    return;
+  }
 
   // Дефолт http.Server — 5s keepAliveTimeout. За обратным прокси (Caddy),
   // который держит соединение к api дольше этого срока, это спорадически
@@ -35,13 +50,14 @@ async function bootstrap() {
       },
     }),
   );
-  
+
   // Enable CORS for frontend access
   app.enableCors({
     origin: process.env.FRONTEND_URL || 'http://localhost:3000',
     credentials: true,
   });
-  
+
   await app.listen(process.env.PORT ?? 3000);
+  Logger.log(`api started (ROLE=${ROLE})`, 'Bootstrap');
 }
 bootstrap();

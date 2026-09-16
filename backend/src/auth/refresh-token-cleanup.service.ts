@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { runsBackgroundJobs } from '../role';
 
 const SWEEP_INTERVAL_MS = 60 * 60_000; // hourly
 
@@ -23,6 +24,8 @@ export class RefreshTokenCleanupService implements OnApplicationBootstrap, OnMod
   constructor(private readonly prisma: PrismaService) {}
 
   onApplicationBootstrap() {
+    // T11: фоновый сервис — только роль worker (и дефолтная all).
+    if (!runsBackgroundJobs()) return;
     // Don't block startup; the first sweep clears whatever accumulated while
     // the server was down.
     this.sweep().catch((e) => this.logger.error('initial refresh-token sweep failed', e));

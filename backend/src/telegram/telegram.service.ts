@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DataVersionService } from '../prisma/data-version.service';
 import { PrefsService } from '../notifications/prefs.service';
 import { unpackId } from './ids';
+import { runsBackgroundJobs } from '../role';
 
 const TG_API = 'https://api.telegram.org';
 // Telegram hard limit for callback_data is 64 bytes: "pt|SYMBOL|long|<uuid36>".
@@ -69,6 +70,12 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
   }
 
   onApplicationBootstrap() {
+    // T11: поллинг — тот же фон, что у девяти сервисов, и по той же причине,
+    // что там (устройство, а не соглашение, держит «поллер живёт в одном
+    // окружении»): в роли api он не стартует. sendText/chatIdOf и остальные
+    // методы транспорта остаются доступны через DI в обеих ролях — их вызывают
+    // чекеры уведомлений и контроллер привязки аккаунта.
+    if (!runsBackgroundJobs()) return;
     if (!this.enabled) {
       this.logger.log('TELEGRAM_BOT_TOKEN not set — telegram notifications disabled');
       return;

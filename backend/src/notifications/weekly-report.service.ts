@@ -4,6 +4,7 @@ import { NotifierService } from './notifier.service';
 import { PrefsService } from './prefs.service';
 import { isEnabled } from './prefs';
 import { ReportTrade, buildWeeklyReport, lastWeekRange } from './weekly-report';
+import { runsBackgroundJobs } from '../role';
 
 /** Понедельник, 09:00 UTC = 12:00 МСК. */
 const SEND_WEEKDAY = 1;
@@ -28,6 +29,8 @@ export class WeeklyReportService implements OnApplicationBootstrap, OnModuleDest
   ) {}
 
   onApplicationBootstrap() {
+    // T11: фоновый сервис — только роль worker (и дефолтная all).
+    if (!runsBackgroundJobs()) return;
     this.timer = setInterval(() => {
       this.tick().catch((e) => this.logger.warn(`недельный отчёт не отправлен: ${e}`));
     }, TICK_MS);

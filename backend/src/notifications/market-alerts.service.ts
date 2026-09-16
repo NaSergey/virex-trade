@@ -20,6 +20,7 @@ import {
   spreadRatio,
   weakWeekdays,
 } from './market-metrics';
+import { runsBackgroundJobs } from '../role';
 
 const SYMBOL = 'BTCUSDT';
 const TICK_MS = 5 * 60_000;
@@ -87,6 +88,8 @@ export class MarketAlertsService implements OnApplicationBootstrap, OnModuleDest
   ) {}
 
   onApplicationBootstrap() {
+    // T11: фоновый сервис — только роль worker (и дефолтная all).
+    if (!runsBackgroundJobs()) return;
     this.tick().catch((e) => this.logger.warn(`первый тик рыночных сигналов не прошёл: ${e}`));
     this.timer = setInterval(() => {
       this.tick().catch((e) => this.logger.warn(`тик рыночных сигналов не прошёл: ${e}`));

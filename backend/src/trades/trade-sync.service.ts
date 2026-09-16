@@ -10,6 +10,7 @@ import { TradeAlertsService } from '../notifications/trade-alerts.service';
 import { TradeContextService } from './trade-context.service';
 import { PositionBuilderService } from './position-builder.service';
 import { DataVersionService } from '../prisma/data-version.service';
+import { runsBackgroundJobs } from '../role';
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const BACKFILL_WEEKS = 26; // first run: import ~6 months of history
@@ -62,6 +63,10 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
   ) {}
 
   onApplicationBootstrap() {
+    // T11: этот сервис — один из девяти фоновых, живёт только в роли worker
+    // (и в дефолтной all). В роли api его периодический таймер не стартует —
+    // syncUser() для ручного ресинка остаётся вызываемым через DI как обычно.
+    if (!runsBackgroundJobs()) return;
     // Don't block startup on the network; sync in the background.
     this.syncAll().catch((e) => this.logger.error('initial sync failed', e));
     this.timer = setInterval(() => {

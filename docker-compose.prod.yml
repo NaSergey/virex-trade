@@ -69,16 +69,20 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
+      # T11: роль процесса. `api` — HTTP, без единого setInterval и без
+      # telegram-поллинга (см. backend/src/role.ts). Незнакомое или пустое
+      # значение ROLE трактуется кодом как `all` — здесь ставим явно, чтобы
+      # не зависеть от этого дефолта.
+      ROLE: api
       PORT: "8091"
-      # connection_limit — под одну роль `api`. Дефолт Prisma без него —
+      # connection_limit — под роль `api`. Дефолт Prisma без него —
       # num_cpus*2+1, то есть девять соединений на 4-vCPU при ~680 запросах в
       # секунду (A9) — гарантированный P2024 под нагрузкой. pool_timeout —
       # сколько секунд запрос ждёт свободное соединение в очереди перед
       # ошибкой, вместо мгновенного отказа на всплеске.
-      # Пока в compose один процесс api, 10 соединений — разумный потолок под
-      # него целиком. Task 11 плана разводит api и worker по разным
-      # процессам — после неё connection_limit надо пересчитать под число
-      # одновременно живых процессов, а не оставлять как есть.
+      # После T11 рядом живёт процесс `worker` со своим пулом (см. ниже) —
+      # 10 (api) + 5 (worker) = 15 из max_connections=100 у Postgres, запас
+      # почти на порядок на случай будущего --scale у api.
       DATABASE_URL: postgresql://${POSTGRES_USER:-virex}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-virex}?schema=public&connection_limit=10&pool_timeout=20
       # Origin продукта. Отсюда же берётся CORS-origin (main.ts). Схема
       # обязана быть https: кука сессии в production ставится с secure.
@@ -117,6 +121,59 @@ services:
         limits:
           cpus: "2"
           memory: 1536M
+
+  # T11: девять фоновых сервисов (trade-sync, balance-snapshot, price-sync,
+  # liquidity-snapshot, market-alerts, weekly-report, usage-tracker,
+  # refresh-token-cleanup, tron-watcher) + telegram-поллинг — из того же
+  # образа, что `api`, ролью ROLE=worker.
+  #
+  # ВАЖНО: ровно один процесс этого сервиса, никогда `--scale worker=2` и
+  # никакого второго инстанса руками. Telegram-поллинг (getUpdates) ломается
+  # на двух одновременных поллерах одним токеном — второй получает 409
+  # Conflict, и оба перестают надёжно вычитывать апдейты. До T11 это
+  # держалось соглашением «поллер живёт в одном окружении»; теперь это
+  # обеспечено устройством — контейнер один, и это надо не сломать здесь.
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    # Та же причина, что у `api` (см. комментарий там): PID 1 без tini не
+    # получает дефолтное действие на сигнал после enableShutdownHooks.
+    init: true
+    # Ждём не просто живую БД, а именно готовый `api`: тот раскатывает схему
+    # (`prisma db push`) при старте, а `worker` её не трогает вовсе — иначе
+    # либо гонка на `db push` при одновременном старте обоих контейнеров,
+    # либо дублирование той же команды здесь.
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      ROLE: worker
+      # Меньше, чем у api: фон не обслуживает параллельный HTTP-трафик, а
+      # проходит пользователей последовательно внутри каждого тика. Вместе с
+      # api (10) — 15 из max_connections=100 у Postgres.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-virex}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-virex}?schema=public&connection_limit=5&pool_timeout=20
+      FRONTEND_URL: https://${APP_DOMAIN:?set APP_DOMAIN in .env.prod}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env.prod}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-7}
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:?set CREDENTIALS_ENCRYPTION_KEY in .env.prod}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      DONATION_TRON_ADDRESS: ${DONATION_TRON_ADDRESS:-}
+      TRONGRID_API_KEY: ${TRONGRID_API_KEY:-}
+    # Ни `prisma db push` (это уже сделал `api`), ни сборки — просто сам
+    # процесс. Роль ROLE=worker выше решает, что он не открывает HTTP-порт.
+    command: sh -c "node dist/main"
+    # Нет ни HTTP-порта, ни `/health`: healthcheck на wget сюда не постучится.
+    # Живость видна по логам (`worker started`) и по тому, что фон в БД не
+    # останавливается — заводить отдельный процесс ради проверки не стали.
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 768M
 
   web:
     build:

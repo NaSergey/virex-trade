@@ -37,6 +37,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # T11: единственный сервис `api` в локальном compose — ROLE тут
+    # намеренно не задан, поэтому backend/src/role.ts трактует его как `all`
+    # (HTTP + весь фон, как и до разделения на роли). Явный ROLE=api или
+    # ROLE=worker в backend/.env (см. .env.example) переопределит это через
+    # env_file ниже — отдельного сервиса `worker` тут нет, второй роли
+    # запускать локально вторым compose-сервисом незачем.
     # Loads JWT secrets + other backend config from the existing api env file...
     env_file:
       - ./backend/.env
