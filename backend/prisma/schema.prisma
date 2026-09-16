@@ -153,7 +153,6 @@ model Trade {
   @@index([userId, symbol])
   @@index([userId, closedAt])
   @@index([userId, positionId])
-  @@index([userId, exchange])
   @@map("trades")
 }
 
@@ -188,7 +187,6 @@ model Execution {
 
   @@unique([userId, exchange, execId, orderId])
   @@index([userId, symbol, execTime])
-  @@index([userId, exchange])
   @@map("executions")
 }
 
@@ -618,7 +616,6 @@ model UserActivityMinute {
 
   @@unique([userId, minute])
   @@index([minute])
-  @@index([userId, minute])
   @@map("user_activity_minutes")
 }
 
@@ -656,7 +653,6 @@ model BalanceSnapshot {
   gap      Float?
 
   @@unique([userId, exchange, at])
-  @@index([userId, exchange, at])
   @@map("balance_snapshots")
 }
 
