@@ -52,6 +52,18 @@ services:
       context: ./backend
       dockerfile: Dockerfile.prod
     restart: unless-stopped
+    # Node здесь — PID 1 контейнера (`sh -c "... && node dist/main"` в конце
+    # exec-заменяет шелл собой). У PID 1 в Linux сигналы без обработчика не
+    # получают дефолтное действие — а именно так `enableShutdownHooks` (см.
+    # main.ts) и завершает процесс после cleanup: снимает свои обработчики и
+    # шлёт сигнал себе ещё раз, рассчитывая на дефолтное поведение ОС.
+    # Проверено вручную: `onModuleDestroy` (в т.ч. финальный сброс
+    # `UsageTrackerService`) отрабатывает и без этой строки, но сам процесс
+    # без неё зависает после cleanup и висит до `docker stop`'а по таймауту
+    # — каждый деплой ждал бы полный grace period и гасился SIGKILL. `init`
+    # ставит tini полноценным PID 1, Node становится обычным дочерним
+    # процессом, и та же логика уже реально завершает процесс.
+    init: true
     depends_on:
       db:
         condition: service_healthy
@@ -85,6 +97,26 @@ services:
     # локально. Без --accept-data-loss: команда должна упасть, а не молча
     # удалить колонку с данными живых пользователей.
     command: sh -c "npx prisma db push --skip-generate && node dist/main"
+    # start_period шире обычного retries*interval: `db push` перед стартом
+    # Nest может занять несколько секунд, и без запаса контейнер успевает
+    # получить первый unhealthy ещё до того, как процесс вообще начал
+    # слушать порт. wget — busybox-апплет, в образе он уже есть, ставить
+    # отдельно ничего не нужно.
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8091/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    # Один разогнавшийся процесс не должен выедать память у Postgres на той
+    # же машине (B8) — 4–8 vCPU / 8–16 ГБ, `db` уже держит shared_buffers
+    # 2 ГБ (см. командную строку выше). api — самый нагруженный процесс
+    # (680 q/s из A9), но не самый прожорливый по памяти на запрос.
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1536M
 
   web:
     build:
@@ -95,6 +127,9 @@ services:
         # rewrites запекаются в образ на сборке (см. Dockerfile.prod).
         API_INTERNAL_URL: http://api:8091
     restart: unless-stopped
+    # Та же причина, что у `api` (см. комментарий там): `node server.js` —
+    # PID 1, сигнал без обработчика PID 1 не получает дефолтного действия.
+    init: true
     depends_on:
       - api
     environment:
@@ -107,6 +142,21 @@ services:
     # если 80/443 занят панелью и отдавать их Caddy нельзя.
     ports:
       - "127.0.0.1:8090:8090"
+    # Корень отдаётся статикой лендинга без запроса к api и без куки — тот
+    # же путь, что видит первый посетитель без аккаунта (proxy.ts).
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8090/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    # Next.js standalone-рантайм легче Nest: в основном отдаёт статику и
+    # проксирует страницы, без Prisma-пула и его памяти.
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
 
   # HTTPS-терминатор: сам получает и продлевает сертификат Let's Encrypt.
   # В отдельном профиле — поднимается только с `--profile edge`. Если 80/443
@@ -115,8 +165,12 @@ services:
     image: caddy:2-alpine
     profiles: ["edge"]
     restart: unless-stopped
+    # Caddyfile шлёт /api/* и /auth/* прямо в api (A10, мимо web) — caddy
+    # обязан увидеть оба контейнера в сети compose до старта, иначе первый
+    # запрос на защищённый маршрут ловит DNS-ошибку прокси.
     depends_on:
       - web
+      - api
     environment:
       APP_DOMAIN: ${APP_DOMAIN}
       # Без `:?`: compose подставляет переменные во ВЕСЬ файл до того, как

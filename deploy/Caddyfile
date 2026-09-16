@@ -15,11 +15,25 @@
 {$APP_DOMAIN} {
 	encode zstd gzip
 
-	# Весь трафик уходит в Next: он же отдаёт страницы и он же проксирует
-	# /api/* и /auth/* в backend (rewrites в next.config.ts). Отдельного
-	# правила для API здесь нет намеренно — браузер и backend обязаны жить
-	# на одном origin, иначе кука сессии не доедет до proxy.ts.
-	reverse_proxy web:8090
+	# /api/* и /auth/* идут в api напрямую, минуя Next: тот же origin (тот
+	# же домен, тот же порт наружу), только внутри сети compose запрос
+	# больше не делает лишний хоп через Node-процесс, который в это же
+	# время рендерит страницы (A10). Кука сессии (`refresh_token`,
+	# `path: '/'`) от этого не страдает — origin для браузера один и тот же,
+	# меняется только то, какой контейнер отвечает на префикс.
+	#
+	# `rewrites` в next.config.ts при этом остаются: они нужны локальному
+	# запуску без Caddy (start.bat) и здесь просто не используются — до них
+	# эти пути не доходят.
+	handle /api/* {
+		reverse_proxy api:8091
+	}
+	handle /auth/* {
+		reverse_proxy api:8091
+	}
+	handle {
+		reverse_proxy web:8090
+	}
 
 	log {
 		output file /data/access.log {

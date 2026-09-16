@@ -6,6 +6,21 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Без этого SIGTERM (docker stop / деплой) убивает процесс сразу, не
+  // дав OnModuleDestroy-хукам отработать — в частности, UsageTrackerService
+  // теряет последний, ещё не сброшенный буфер минут активности молча.
+  app.enableShutdownHooks();
+
+  // Дефолт http.Server — 5s keepAliveTimeout. За обратным прокси (Caddy),
+  // который держит соединение к api дольше этого срока, это спорадически
+  // рвёт keep-alive соединение прямо в момент, когда прокси уже отправил
+  // по нему следующий запрос — клиент получает 502. headersTimeout обязан
+  // быть больше keepAliveTimeout (таково требование Node: иначе сервер сам
+  // не запустится) — берём с тем же запасом, что рекомендует сам Node.
+  const httpServer = app.getHttpServer();
+  httpServer.keepAliveTimeout = 65_000;
+  httpServer.headersTimeout = 66_000;
+
   // Parse cookies so the refresh token (HttpOnly cookie) is available.
   app.use(cookieParser());
 
