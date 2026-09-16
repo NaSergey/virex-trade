@@ -13,8 +13,10 @@ import { PositionBuilderService } from './position-builder.service';
 import { LabService } from './lab.service';
 import { HabitsService } from './habits.service';
 import { IndicatorsService } from './indicators.service';
+import { AggregateCacheService } from './aggregate-cache';
 
-// PrismaModule is @Global, so PrismaService is available without importing it.
+// PrismaModule is @Global, so PrismaService (and DataVersionService) are
+// available without importing it.
 @Module({
   imports: [BybitModule, CredentialsModule, ExchangesModule, TagsModule, TelegramModule, NotificationsModule],
   controllers: [TradesController],
@@ -26,6 +28,9 @@ import { IndicatorsService } from './indicators.service';
     LabService,
     HabitsService,
     IndicatorsService,
+    // Один инстанс кэша на модуль — TradesService/LabService/HabitsService
+    // делят один и тот же LRU (T10, A2), а не заводят по кэшу на сервис.
+    AggregateCacheService,
   ],
 })
 export class TradesModule {}

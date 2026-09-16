@@ -33,7 +33,7 @@ const emptyFlags = { tilt: new Set<string>(), overtrade: new Set<string>(), medN
 // this.prisma, поэтому фейковый конструктор безопасен и не тянет за собой
 // поднятие Nest/Prisma ради юнит-теста.
 describe('HabitsService.candidates — kind/params', () => {
-  const service = new HabitsService({} as any);
+  const service = new HabitsService({} as any, {} as any, {} as any);
   const candidates = (rows: Row[] = []) =>
     (service as any).candidates(rows, emptyFlags, null, null) as Array<{
       key: string;
@@ -135,7 +135,7 @@ describe('HabitsService.candidates — kind/params', () => {
 
 describe('HabitsService.evaluate — переносит kind/params в Habit', () => {
   it('kind и params кандидата долетают до итогового Habit', () => {
-    const service = new HabitsService({} as any);
+    const service = new HabitsService({} as any, {} as any, {} as any);
     const rows = [
       ...Array.from({ length: 15 }, (_, i) => makeRow({ id: `s${i}`, direction: 'long', closedPnl: -10 })),
       ...Array.from({ length: 30 }, (_, i) => makeRow({ id: `r${i}`, direction: 'short', closedPnl: 5 })),

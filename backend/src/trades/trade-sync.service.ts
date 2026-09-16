@@ -9,6 +9,7 @@ import { OpenedPositionInfo } from '../telegram/telegram.service';
 import { TradeAlertsService } from '../notifications/trade-alerts.service';
 import { TradeContextService } from './trade-context.service';
 import { PositionBuilderService } from './position-builder.service';
+import { DataVersionService } from '../prisma/data-version.service';
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const BACKFILL_WEEKS = 26; // first run: import ~6 months of history
@@ -57,6 +58,7 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     private readonly tradeAlerts: TradeAlertsService,
     private readonly tradeContext: TradeContextService,
     private readonly positions: PositionBuilderService,
+    private readonly dataVersion: DataVersionService,
   ) {}
 
   onApplicationBootstrap() {
@@ -167,10 +169,18 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     await this.tradeAlerts.syncOutcome(userId, !closed.partial);
     if (inserted > 0) {
       this.logger.log(`synced ${inserted} new trade(s) for user ${userId}`);
+      // T10 (A2): новые строки Trade видят все закэшированные агрегаты
+      // (stats/list/lab/habits/...) — версия должна подняться раньше любого
+      // раннего return ниже, поэтому бампим сразу же, а не в конце функции.
+      await this.dataVersion.bump(userId);
       // New closed trades inherit the entry-reason tags of their position.
       try {
         const linked = await this.tags.linkTagsToNewTrades(userId);
-        if (linked > 0) this.logger.log(`linked ${linked} tag(s) to synced trades`);
+        if (linked > 0) {
+          this.logger.log(`linked ${linked} tag(s) to synced trades`);
+          // Теги на сделке видит statsByTag/statsByTagCombo/list/lab/habits.
+          await this.dataVersion.bump(userId);
+        }
       } catch (e) {
         this.logger.warn(`tag linking failed: ${e}`);
       }
@@ -181,7 +191,12 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     // rows of closed positions.
     try {
       const filled = await this.fillEntryStamps(userId);
-      if (filled > 0) this.logger.log(`stamped openedAt on ${filled} trade(s)`);
+      if (filled > 0) {
+        this.logger.log(`stamped openedAt on ${filled} trade(s)`);
+        // Trade.openedAt/stopLoss видят list/stats/statsByTime (длительность
+        // удержания, час/день входа).
+        await this.dataVersion.bump(userId);
+      }
     } catch (e) {
       this.logger.warn(`openedAt fill failed: ${e}`);
     }
@@ -194,12 +209,21 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
       if (p.fills > 0 || p.stamped > 0) {
         this.logger.log(`positions: +${p.fills} fill(s), ${p.stamped} trade(s) grouped into ${p.positions} position(s)`);
       }
+      if (p.stamped > 0) {
+        // Trade.positionId меняет схлопывание в позиции (collapseToPositions)
+        // — и тем самым totalTrades/winrate/equity ВСЕХ кэшируемых агрегатов.
+        await this.dataVersion.bump(userId);
+      }
     } catch (e) {
       this.logger.warn(`position rebuild failed: ${e}`);
     }
     // Market-context snapshots for trades that don't have one yet (new trades
     // + progressive backfill of history). Must run AFTER fillEntryStamps so the
     // snapshot anchors at the entry time whenever we know it.
+    // (TradeContextService.computeMissing bumps the version itself when it
+    // actually writes rows — entryQuality/exitQuality/trend4h/... feed stats
+    // and lab/habits, and it's the same service on every future caller, not
+    // just this one, so it owns the bump.)
     try {
       const ctx = await this.tradeContext.computeMissing(userId);
       if (ctx > 0) this.logger.log(`computed market context for ${ctx} trade(s)`);

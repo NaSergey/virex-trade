@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { DataVersionService } from '../prisma/data-version.service';
 import { collapseToPositions, fillDelta, positionOpenMs, type PositionSide } from './positions';
+import { AggregateCacheService, cacheKey } from './aggregate-cache';
 
 export interface TradeStats {
   totalTrades: number;
@@ -106,7 +108,31 @@ export function thinEquity(points: EquityPoint[], max = 60): EquityPoint[] {
 
 @Injectable()
 export class TradesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly dataVersion: DataVersionService,
+    private readonly cache: AggregateCacheService,
+  ) {}
+
+  /**
+   * Версия+LRU-кэш агрегатов (A2, T10): чистая функция от (userId, версия
+   * данных, params) — оборачивает `list`/`stats`/`statsByTime`/`statsByTag`/
+   * `statsByTagCombo` ниже. Версия читается один раз в начале — если между
+   * чтением версии и записью в кэш кто-то успел поднять её (новая сделка
+   * пришла синком прямо сейчас), запись уйдёт под уже устаревшим ключом и
+   * просто не будет найдена следующим читателем — это самоисправляющаяся
+   * гонка, не источник неверных данных: значение под ключом всегда посчитано
+   * по данным на момент своего собственного запроса.
+   */
+  private async cached<T>(scope: string, userId: string, params: unknown, compute: () => Promise<T>): Promise<T> {
+    const version = await this.dataVersion.get(userId);
+    const key = cacheKey(scope, userId, version, params);
+    const hit = this.cache.get<T>(key);
+    if (hit !== undefined) return hit;
+    const result = await compute();
+    this.cache.set(key, result);
+    return result;
+  }
 
   private buildWhere(userId: string, f: TradeFilter): Prisma.TradeWhereInput {
     const where: Prisma.TradeWhereInput = { userId };
@@ -131,6 +157,10 @@ export class TradesService {
   }
 
   async list(userId: string, params: TradeFilter & { page?: number; pageSize?: number }) {
+    return this.cached('list', userId, params, () => this.listUncached(userId, params));
+  }
+
+  private async listUncached(userId: string, params: TradeFilter & { page?: number; pageSize?: number }) {
     const where = this.buildWhere(userId, params);
     const pageSize = Math.min(Math.max(params.pageSize ?? 20, 1), 200);
     const page = Math.max(params.page ?? 1, 1);
@@ -458,6 +488,10 @@ export class TradesService {
    * sparkline showing whether the setup still works or is decaying.
    */
   async statsByTag(userId: string, days?: number) {
+    return this.cached('statsByTag', userId, { days }, () => this.statsByTagUncached(userId, days));
+  }
+
+  private async statsByTagUncached(userId: string, days?: number) {
     const trades = collapseToPositions(
       await this.prisma.trade.findMany({
         where: this.buildWhere(userId, { days }),
@@ -601,6 +635,10 @@ export class TradesService {
    * entry point, so hiding it would hide the backlog.
    */
   async statsByTagCombo(userId: string, days?: number) {
+    return this.cached('statsByTagCombo', userId, { days }, () => this.statsByTagComboUncached(userId, days));
+  }
+
+  private async statsByTagComboUncached(userId: string, days?: number) {
     const trades = collapseToPositions(
       await this.prisma.trade.findMany({
         where: this.buildWhere(userId, { days }),
@@ -777,6 +815,10 @@ export class TradesService {
    * land in the user's local clock, not the server's.
    */
   async statsByTime(userId: string, params: { days?: number; tzOffsetMin?: number; tagId?: string }) {
+    return this.cached('statsByTime', userId, params, () => this.statsByTimeUncached(userId, params));
+  }
+
+  private async statsByTimeUncached(userId: string, params: { days?: number; tzOffsetMin?: number; tagId?: string }) {
     // Collapsed to positions like every other stat, so "when do I trade well"
     // counts a scaled-out position once rather than once per partial exit —
     // otherwise the hours a trader habitually takes profit in look busier and
@@ -861,6 +903,13 @@ export class TradesService {
   }
 
   async stats(
+    userId: string,
+    params: TradeFilter,
+  ): Promise<{ success: boolean; stats: TradeStats; equity: EquityPoint[] }> {
+    return this.cached('stats', userId, params, () => this.statsUncached(userId, params));
+  }
+
+  private async statsUncached(
     userId: string,
     params: TradeFilter,
   ): Promise<{ success: boolean; stats: TradeStats; equity: EquityPoint[] }> {

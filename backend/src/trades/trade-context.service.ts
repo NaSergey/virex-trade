@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { DataVersionService } from '../prisma/data-version.service';
 import { BybitMarketService } from '../bybit/services/bybit-market.service';
 import { IndicatorsService, Candle } from './indicators.service';
 import { entryTimeOf } from './positions';
@@ -276,9 +277,20 @@ export class TradeContextService {
     private readonly prisma: PrismaService,
     private readonly market: BybitMarketService,
     private readonly indicators: IndicatorsService,
+    private readonly dataVersion: DataVersionService,
   ) {}
 
-  /** Compute context for up to BATCH_LIMIT context-less trades of the user. */
+  /**
+   * Compute context for up to BATCH_LIMIT context-less trades of the user.
+   *
+   * T10 (A2): бампит версию данных пользователя сама, если реально что-то
+   * записала — entryQuality/exitQuality/trend4h/rangePos-поля/ema200Above и
+   * остальные поля снимка читает `TradesService.stats` (avgEntryQuality/
+   * avgExitQuality), `list`, `LabService`/`HabitsService` (через
+   * `trade-rows.ts`). Бамп живёт здесь, а не у единственного сегодняшнего
+   * вызывающего (`TradeSyncService`), чтобы будущий второй вызывающий не мог
+   * забыть его позвать.
+   */
   async computeMissing(userId: string): Promise<number> {
     await this.dropStale(userId);
 
@@ -315,6 +327,7 @@ export class TradeContextService {
     }
 
     written += await this.computeMissingQuality(userId);
+    if (written > 0) await this.dataVersion.bump(userId);
     return written;
   }
 

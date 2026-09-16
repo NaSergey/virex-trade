@@ -1,4 +1,5 @@
-import { Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Headers, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { TradesService } from './trades.service';
@@ -8,6 +9,9 @@ import { LabService } from './lab.service';
 import { HabitsService } from './habits.service';
 import { CredentialsService } from '../credentials/credentials.service';
 import { ExchangeRegistry } from '../exchanges/exchange-registry.service';
+import { DataVersionService } from '../prisma/data-version.service';
+import { buildEtag } from './aggregate-cache';
+import type { LabFilter } from './lab.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('api/trades')
@@ -20,11 +24,46 @@ export class TradesController {
     private readonly habitsService: HabitsService,
     private readonly credentials: CredentialsService,
     private readonly exchanges: ExchangeRegistry,
+    private readonly dataVersion: DataVersionService,
   ) {}
+
+  /**
+   * A2 (T10): ETag/304 на агрегатах сделок. Версия читается ОДНИМ дешёвым
+   * `SELECT dataVersion` — до вызова тяжёлого сервисного метода, а не после,
+   * так что запрос с совпавшим `If-None-Match` не трогает ни LRU-кэш агрегатов,
+   * ни тем более сам агрегат: единственная работа с базой на этом пути — этот
+   * самый SELECT. `ETag` слабый (`W/"..."`): тело может отличаться до байта
+   * (например, порядок ключей JSON) при той же самой версии данных, а нас
+   * интересует только "данные не менялись".
+   *
+   * `@Res()` без `passthrough` — контроллер сам решает, что уйдёт клиенту
+   * (пустое тело+304 или JSON+200), поэтому автоматическая сериализация
+   * возврата хендлера Nest'ом здесь не нужна и не используется.
+   */
+  private async withEtag<T>(
+    res: Response,
+    userId: string,
+    scope: string,
+    params: unknown,
+    ifNoneMatch: string | undefined,
+    compute: () => Promise<T>,
+  ): Promise<void> {
+    const version = await this.dataVersion.get(userId);
+    const etag = buildEtag(version, params);
+    if (ifNoneMatch === etag) {
+      res.status(304).end();
+      return;
+    }
+    const result = await compute();
+    res.setHeader('ETag', etag);
+    res.status(200).json(result);
+  }
 
   @Get()
   async list(
     @CurrentUser('userId') userId: string,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
+    @Res() res: Response,
     @Query('symbol') symbol?: string,
     @Query('days') days?: string,
     @Query('page') page?: string,
@@ -33,7 +72,7 @@ export class TradesController {
     @Query('combo') combo?: string,
     @Query('hasTags') hasTags?: string,
   ) {
-    return this.tradesService.list(userId, {
+    const params = {
       symbol,
       days: days ? parseInt(days, 10) : undefined,
       page: page ? parseInt(page, 10) : undefined,
@@ -43,21 +82,29 @@ export class TradesController {
       comboTagIds: combo ? combo.split(',').filter(Boolean) : undefined,
       // Contains-all set of a saved combo card, comma-separated ids.
       hasTagIds: hasTags ? hasTags.split(',').filter(Boolean) : undefined,
-    });
+    };
+    await this.withEtag(res, userId, 'list', params, ifNoneMatch, () =>
+      this.tradesService.list(userId, params),
+    );
   }
 
   @Get('stats')
   async stats(
     @CurrentUser('userId') userId: string,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
+    @Res() res: Response,
     @Query('symbol') symbol?: string,
     @Query('days') days?: string,
     @Query('tagId') tagId?: string,
   ) {
-    return this.tradesService.stats(userId, {
+    const params = {
       symbol,
       days: days ? parseInt(days, 10) : undefined,
       tagId: tagId || undefined,
-    });
+    };
+    await this.withEtag(res, userId, 'stats', params, ifNoneMatch, () =>
+      this.tradesService.stats(userId, params),
+    );
   }
 
   // Winrate / PnL by local weekday & hour + hold-duration stats.
@@ -65,27 +112,48 @@ export class TradesController {
   @Get('stats-by-time')
   async statsByTime(
     @CurrentUser('userId') userId: string,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
+    @Res() res: Response,
     @Query('days') days?: string,
     @Query('tz') tz?: string,
     @Query('tagId') tagId?: string,
   ) {
-    return this.tradesService.statsByTime(userId, {
+    const params = {
       days: days ? parseInt(days, 10) : undefined,
       tzOffsetMin: tz != null && tz !== '' ? parseInt(tz, 10) : undefined,
       tagId: tagId || undefined,
-    });
+    };
+    await this.withEtag(res, userId, 'stats-by-time', params, ifNoneMatch, () =>
+      this.tradesService.statsByTime(userId, params),
+    );
   }
 
   // Winrate / PnL grouped by entry-reason tag.
   @Get('stats-by-tag')
-  async statsByTag(@CurrentUser('userId') userId: string, @Query('days') days?: string) {
-    return this.tradesService.statsByTag(userId, days ? parseInt(days, 10) : undefined);
+  async statsByTag(
+    @CurrentUser('userId') userId: string,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
+    @Res() res: Response,
+    @Query('days') days?: string,
+  ) {
+    const d = days ? parseInt(days, 10) : undefined;
+    await this.withEtag(res, userId, 'stats-by-tag', { days: d }, ifNoneMatch, () =>
+      this.tradesService.statsByTag(userId, d),
+    );
   }
 
   // Winrate / PnL grouped by exact tag combination (which combo wins most).
   @Get('stats-by-tag-combo')
-  async statsByTagCombo(@CurrentUser('userId') userId: string, @Query('days') days?: string) {
-    return this.tradesService.statsByTagCombo(userId, days ? parseInt(days, 10) : undefined);
+  async statsByTagCombo(
+    @CurrentUser('userId') userId: string,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
+    @Res() res: Response,
+    @Query('days') days?: string,
+  ) {
+    const d = days ? parseInt(days, 10) : undefined;
+    await this.withEtag(res, userId, 'stats-by-tag-combo', { days: d }, ifNoneMatch, () =>
+      this.tradesService.statsByTagCombo(userId, d),
+    );
   }
 
   // «Выборка»: произвольная комбинация фильтров (теги / время / рыночный
@@ -93,6 +161,8 @@ export class TradesController {
   @Get('lab')
   async lab(
     @CurrentUser('userId') userId: string,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
+    @Res() res: Response,
     @Query('days') days?: string,
     @Query('tz') tz?: string,
     @Query('tags') tags?: string,
@@ -114,7 +184,7 @@ export class TradesController {
       const n = s != null && s !== '' ? parseInt(s, 10) : NaN;
       return Number.isFinite(n) ? n : undefined;
     };
-    return this.labService.query(userId, {
+    const params: LabFilter = {
       days: int(days),
       tzOffsetMin: int(tz),
       tagIds: csv(tags),
@@ -132,7 +202,10 @@ export class TradesController {
       vol: vol === 'high' || vol === 'low' ? vol : undefined,
       rangeTf: rangeTf === '1h' || rangeTf === '4h' || rangeTf === '1d' ? rangeTf : undefined,
       range: range === 'low' || range === 'mid' || range === 'high' ? range : undefined,
-    });
+    };
+    await this.withEtag(res, userId, 'lab', params, ifNoneMatch, () =>
+      this.labService.query(userId, params),
+    );
   }
 
   // «Цена привычек»: обратная «Выборке» — сервис сам перебирает срезы и
@@ -140,6 +213,8 @@ export class TradesController {
   @Get('habits')
   async habits(
     @CurrentUser('userId') userId: string,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
+    @Res() res: Response,
     @Query('days') days?: string,
     @Query('tz') tz?: string,
   ) {
@@ -147,7 +222,11 @@ export class TradesController {
       const n = s != null && s !== '' ? parseInt(s, 10) : NaN;
       return Number.isFinite(n) ? n : undefined;
     };
-    return this.habitsService.scan(userId, int(days), int(tz));
+    const d = int(days);
+    const t = int(tz);
+    await this.withEtag(res, userId, 'habits', { days: d, tz: t }, ifNoneMatch, () =>
+      this.habitsService.scan(userId, d, t),
+    );
   }
 
   // Entry context of the currently open position (computed at open time by

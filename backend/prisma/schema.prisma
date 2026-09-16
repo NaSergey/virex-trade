@@ -18,6 +18,14 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Версия данных пользователя (T10, backend-optimization): растёт при любой
+  // правке того, что видят агрегаты сделок (stats/list/lab/habits/...) — новые
+  // сделки, теги, пересчёт рыночного контекста. Ключ LRU-кэша агрегатов и ETag
+  // строятся по ней, поэтому инкремент атомарный (`SET x = x + 1` в SQL, см.
+  // DataVersionService), не read-modify-write — конкурентные бампы не должны
+  // теряться. См. docs/.../2026-09-16-backend-optimization/task-10-report.md.
+  dataVersion Int @default(0)
+
   // Кто привёл этого пользователя — id из ссылки `/login?mode=register&ref=<id>`.
   // SetNull, а не Cascade: удаление аккаунта пригласившего не должно каскадом
   // утаскивать тех, кого он привёл, — они просто теряют ссылку на источник.

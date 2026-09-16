@@ -122,18 +122,34 @@ async function main() {
       rows.push({ name, ms, queries: prisma.queryCount, info: info(result) });
     };
 
-    await measure(
+    // T10 (A2, docs/superpowers/sdd/2026-09-16-backend-optimization):
+    // каждый агрегат зовём ДВАЖДЫ подряд, теми же параметрами, в одном
+    // процессе — версия данных пользователя между двумя вызовами не
+    // меняется (никто не пишет в БД между ними), поэтому второй вызов —
+    // ровно тот «шестидесятисекундный повторный опрос вкладки» из брифа.
+    // До T10 второй вызов стоил столько же Prisma-запросов, сколько первый;
+    // после — 0 (версия+LRU-кэш в памяти процесса, см. aggregate-cache.ts).
+    const measureTwice = async (
+      name: string,
+      fn: () => Promise<unknown>,
+      info: (r: unknown) => string,
+    ) => {
+      await measure(`${name} (1-й вызов)`, fn, info);
+      await measure(`${name} (2-й, тот же запрос)`, fn, info);
+    };
+
+    await measureTwice(
       'GET /api/trades/stats',
       () => tradesService.stats(user.id, {}),
       (r) =>
         `${(r as { stats: { totalTrades: number } }).stats.totalTrades} сделок`,
     );
-    await measure(
+    await measureTwice(
       'GET /api/trades/stats-by-time',
       () => tradesService.statsByTime(user.id, {}),
       () => '',
     );
-    await measure(
+    await measureTwice(
       'GET /api/trades',
       () => tradesService.list(user.id, { page: 1, pageSize: 20 }),
       (r) => {
@@ -141,13 +157,13 @@ async function main() {
         return `total=${v.total}, страница из ${v.trades.length}`;
       },
     );
-    await measure(
+    await measureTwice(
       'GET /api/trades/lab',
       () => labService.query(user.id, {}),
       (r) =>
         `${(r as { baseline: { trades: number } }).baseline.trades} сделок в базовой выборке`,
     );
-    await measure(
+    await measureTwice(
       'GET /api/trades/habits',
       () => habitsService.scan(user.id),
       (r) => {
