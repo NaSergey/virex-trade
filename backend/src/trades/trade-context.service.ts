@@ -273,6 +273,18 @@ function rangePos(candles: Candle[], window: number, entry: number): number | nu
 export class TradeContextService {
   private readonly logger = new Logger(TradeContextService.name);
 
+  /**
+   * T17 (B3): CTX_VERSION, при которой этот процесс последний раз точно
+   * прогонял dropStale. `null` на старте процесса — не равна ни одному
+   * числу, поэтому самый первый вызов после старта (или после рестарта на
+   * новом деплое с поднятым CTX_VERSION) всегда считает версию «изменившейся»
+   * и прогоняет dropStale целиком, подбирая любой мусор, оставшийся с
+   * прошлой жизни процесса. Процесс-локальная переменная, не поле БД — после
+   * T11 фон гарантированно один процесс, согласовывать несколько инстансов
+   * не нужно.
+   */
+  private lastCtxVersionSeen: number | null = null;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly market: BybitMarketService,
@@ -303,9 +315,29 @@ export class TradeContextService {
    * удалением. Лишний бамп, когда пересчёт следом успешно всё восстановил
    * (`written > 0`), — безобидный лишний пересчёт следующего запроса, а не
    * источник неверных данных (тот же принцип, что и во всей задаче).
+   *
+   * T17 (B3): opts.hadChanges === false — внешний guard ДО всего остального:
+   * синк в этом тике ничего не вставил (ни новых сделок, ни перегруппировки
+   * позиций — см. TradeSyncService). Если при этом CTX_VERSION с прошлого
+   * прохода этого процесса не менялась, весь метод целиком пропускается — ни
+   * dropStale, ни поиск сделок без контекста не делают ни одного запроса к
+   * trade_contexts/trade. Как только флаг говорит «не пропускать» (были
+   * вставки ИЛИ версия менялась), весь путь ниже — dropStale и оба бампа
+   * T10 — отрабатывает ровно как раньше, без изменений в своей логике.
+   * Вызывающие, не передавшие opts (тесты, будущие потребители), всегда
+   * получают полный прогон — по умолчанию пропуска нет.
    */
-  async computeMissing(userId: string): Promise<number> {
+  async computeMissing(userId: string, opts?: { hadChanges: boolean }): Promise<number> {
+    const versionChanged = this.lastCtxVersionSeen !== CTX_VERSION;
+    if (opts?.hadChanges === false && !versionChanged) {
+      return 0;
+    }
+
     const dropped = await this.dropStale(userId);
+    // Отмечаем версию увиденной сразу после успешного dropStale — если он
+    // бросит исключение, версия НЕ считается увиденной, и следующий (даже
+    // пустой) тик повторит полный прогон вместо того, чтобы его пропустить.
+    this.lastCtxVersionSeen = CTX_VERSION;
     if (dropped > 0) await this.dataVersion.bump(userId);
 
     const pending = await this.prisma.trade.findMany({

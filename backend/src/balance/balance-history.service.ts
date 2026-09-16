@@ -8,6 +8,13 @@ export interface BalanceAt {
   source: 'snapshot' | 'derived';
 }
 
+/** Одна строка якоря баланса — то, что читает и передаёт `loadAnchorRows`/`balanceAt`. */
+export interface AnchorRow {
+  at: Date;
+  balance: number;
+  gap: number | null;
+}
+
 /** Непрерывный отрезок ряда: внутри него баланс связан цепочкой сделок. */
 interface Segment {
   anchors: Anchor[];
@@ -18,18 +25,42 @@ export class BalanceHistoryService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
+   * Якоря баланса одного пользователя на одной бирже, отсортированные по
+   * времени.
+   *
+   * Вынесено отдельным методом, чтобы вызывающий с несколькими `balanceAt`
+   * подряд на одного пользователя (`TradeRiskService.computeMissing`) читал
+   * их ОДИН раз и передавал третьим параметром, а не заново на каждую
+   * сделку — см. находку A5: год истории якорей (8760 строк) читался бы на
+   * каждую из сотен несчитанных сделок пользователя.
+   */
+  async loadAnchorRows(userId: string, exchange: string): Promise<AnchorRow[]> {
+    return this.prisma.balanceSnapshot.findMany({
+      where: { userId, exchange },
+      orderBy: { at: 'asc' },
+      select: { at: true, balance: true, gap: true },
+    });
+  }
+
+  /**
    * Баланс в произвольный момент.
    *
    * Null означает «не знаем», и это не то же самое, что ноль: сделка с
    * неизвестным балансом выпадает из проверки правил целиком, а сделка с
    * нулевым балансом нарушила бы любое правило.
+   *
+   * `anchorRows` — опционально уже загруженные `loadAnchorRows()`. Вызывающий
+   * с одним запросом на весь прогон передаёт их сюда; без параметра метод
+   * читает их сам, как раньше — существующие вызывающие (тесты, разовые
+   * places) не ломаются.
    */
-  async balanceAt(userId: string, exchange: string, at: Date): Promise<BalanceAt | null> {
-    const rows = await this.prisma.balanceSnapshot.findMany({
-      where: { userId, exchange },
-      orderBy: { at: 'asc' },
-      select: { at: true, balance: true, gap: true },
-    });
+  async balanceAt(
+    userId: string,
+    exchange: string,
+    at: Date,
+    anchorRows?: AnchorRow[],
+  ): Promise<BalanceAt | null> {
+    const rows = anchorRows ?? (await this.loadAnchorRows(userId, exchange));
     if (rows.length === 0) return null;
 
     const segment = this.segmentFor(rows, at);

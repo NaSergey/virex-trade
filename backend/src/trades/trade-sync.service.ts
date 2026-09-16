@@ -231,6 +231,16 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
       this.logger.warn(`open positions fetch failed: ${e}`);
       open = { success: false, positions: [] };
     }
+    // T17 (B3): сигнал для TradeContextService.computeMissing — были ли в
+    // этом тике изменения, которые могли породить сделки без контекста или
+    // устаревший (basis != 'filled') контекст. `inserted > 0` — новые
+    // закрытые сделки (context: null у них сразу). `positionsRegrouped` —
+    // positionId существующей сделки поменялся (p.stamped > 0 ниже): именно
+    // это условие снимает basis != 'filled' в dropStale (см. её комментарий
+    // «a position is only reconstructed when its last closing fill lands»),
+    // и оно НЕ обязано совпадать с inserted > 0 — фьючерсы, добавленные в уже
+    // открытую позицию, дают новые Execution без нового закрытого Trade.
+    let positionsRegrouped = false;
     // Group the closing orders of one position under a shared positionId, so
     // partial take-profits and averaging in stop counting as separate trades.
     // Runs every tick (not just on inserts): a position that closed in parts
@@ -244,6 +254,7 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
         // Trade.positionId меняет схлопывание в позиции (collapseToPositions)
         // — и тем самым totalTrades/winrate/equity ВСЕХ кэшируемых агрегатов.
         await this.dataVersion.bump(userId);
+        positionsRegrouped = true;
       }
     } catch (e) {
       this.logger.warn(`position rebuild failed: ${e}`);
@@ -256,7 +267,9 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     // and lab/habits, and it's the same service on every future caller, not
     // just this one, so it owns the bump.)
     try {
-      const ctx = await this.tradeContext.computeMissing(userId);
+      const ctx = await this.tradeContext.computeMissing(userId, {
+        hadChanges: inserted > 0 || positionsRegrouped,
+      });
       if (ctx > 0) this.logger.log(`computed market context for ${ctx} trade(s)`);
     } catch (e) {
       this.logger.warn(`trade context compute failed: ${e}`);
