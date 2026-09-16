@@ -193,8 +193,10 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
       const filled = await this.fillEntryStamps(userId);
       if (filled > 0) {
         this.logger.log(`stamped openedAt on ${filled} trade(s)`);
-        // Trade.openedAt/stopLoss видят list/stats/statsByTime (длительность
-        // удержания, час/день входа).
+        // Trade.openedAt видят list/stats/statsByTime (длительность удержания,
+        // час/день входа) — stopLoss в этом же UPDATE кэшируемым эндпоинтам не
+        // виден (его читает только trade-risk.service.ts, вне скоупа кэша), но
+        // бампим всё равно: поле пишется тем же вызовом ради openedAt.
         await this.dataVersion.bump(userId);
       }
     } catch (e) {

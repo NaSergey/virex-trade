@@ -284,15 +284,29 @@ export class TradeContextService {
    * Compute context for up to BATCH_LIMIT context-less trades of the user.
    *
    * T10 (A2): бампит версию данных пользователя сама, если реально что-то
-   * записала — entryQuality/exitQuality/trend4h/rangePos-поля/ema200Above и
+   * изменила — entryQuality/exitQuality/trend4h/rangePos-поля/ema200Above и
    * остальные поля снимка читает `TradesService.stats` (avgEntryQuality/
    * avgExitQuality), `list`, `LabService`/`HabitsService` (через
    * `trade-rows.ts`). Бамп живёт здесь, а не у единственного сегодняшнего
    * вызывающего (`TradeSyncService`), чтобы будущий второй вызывающий не мог
    * забыть его позвать.
+   *
+   * Бампает ДВАЖДЫ, не один раз в конце: `dropStale()` коммитит удаление
+   * старых снимков сразу, а пересчёт ниже идёт через сетевой поход к Bybit
+   * (`await`, реальная пауза event loop) — без бампа сразу после dropStale
+   * окно между «снимок уже удалён» и «снимок пересчитан и записан обратно»
+   * было бы закоммичено в базу, но не отражено в версии, и кэш агрегатов
+   * раздавал бы деградированный контекст ВСЕМ запросам с тем же набором
+   * параметров на весь тик (а не одному клиенту на один момент, как было до
+   * кэша). Если сам пересчёт целиком упадёт (аутаж Bybit, `written === 0`),
+   * первый бамп всё равно случился — кэш не разъедется с уже закоммиченным
+   * удалением. Лишний бамп, когда пересчёт следом успешно всё восстановил
+   * (`written > 0`), — безобидный лишний пересчёт следующего запроса, а не
+   * источник неверных данных (тот же принцип, что и во всей задаче).
    */
   async computeMissing(userId: string): Promise<number> {
-    await this.dropStale(userId);
+    const dropped = await this.dropStale(userId);
+    if (dropped > 0) await this.dataVersion.bump(userId);
 
     const pending = await this.prisma.trade.findMany({
       where: { userId, context: null },
@@ -423,7 +437,7 @@ export class TradeContextService {
    * small and self-healing. Terminates: a recomputed row comes back with
    * basis 'filled' and stops matching.
    */
-  private async dropStale(userId: string): Promise<void> {
+  private async dropStale(userId: string): Promise<number> {
     const stale = await this.prisma.tradeContext.findMany({
       where: {
         trade: { userId },
@@ -435,9 +449,10 @@ export class TradeContextService {
       take: BATCH_LIMIT,
       select: { id: true },
     });
-    if (stale.length === 0) return;
+    if (stale.length === 0) return 0;
     await this.prisma.tradeContext.deleteMany({ where: { id: { in: stale.map((s) => s.id) } } });
     this.logger.log(`recomputing ${stale.length} outdated trade contexts`);
+    return stale.length;
   }
 
   private async computeSymbol(

@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { DataVersionService } from '../prisma/data-version.service';
 import { PrefsService } from '../notifications/prefs.service';
 import { unpackId } from './ids';
 
@@ -60,6 +61,7 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
   constructor(
     private readonly prisma: PrismaService,
     private readonly prefs: PrefsService,
+    private readonly dataVersion: DataVersionService,
   ) {}
 
   get enabled(): boolean {
@@ -283,6 +285,13 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
       } else {
         await this.prisma.tradeTag.create({ data: { tradeId: trade.id, tagId: tag.id } });
       }
+      // T10: та же правка, что TagsService.setTradeTags делает через веб — прямая
+      // правка TradeTag на ЗАКРЫТОЙ сделке, которую видят statsByTag/
+      // statsByTagCombo/list/lab/habits. Этот обработчик — единственный живой
+      // путь записи TradeTag в обход TagsService (кнопки под старыми
+      // сообщениями бота, см. комментарий выше), и без явного бампа здесь
+      // кэш агрегатов разошёлся бы с базой до следующего несвязанного бампа.
+      await this.dataVersion.bump(user.id);
       await answer(existing ? `− ${tag.name}` : `✓ ${tag.name}`);
       return;
     }
