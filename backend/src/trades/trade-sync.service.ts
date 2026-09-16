@@ -75,11 +75,20 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
   async syncAll(opts?: { full?: boolean }): Promise<{ inserted: number }> {
     if (this.sweeping) return { inserted: 0 };
     this.sweeping = true;
+    // T1 (docs/superpowers/specs/2026-09-16-backend-optimization.md): временный
+    // замер длительности и числа SQL-запросов одного прогона syncAll, за тем
+    // же флагом, что счётчик в PrismaService. Убрать вместе с остальной
+    // измерительной инфраструктурой спеки после приёмки задач группы A.
+    const measure = Boolean(process.env.PRISMA_LOG_QUERIES);
+    const t0 = measure ? Date.now() : 0;
+    if (measure) this.prisma.resetQueryCount();
+    let userCount = 0;
     try {
       const users = await this.prisma.user.findMany({
         where: { activeExchange: { not: null } },
         select: { id: true },
       });
+      userCount = users.length;
       let inserted = 0;
       for (const u of users) {
         if (this.inFlight.has(u.id)) continue; // manual re-sync already running
@@ -94,6 +103,12 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
       return { inserted };
     } finally {
       this.sweeping = false;
+      if (measure) {
+        this.logger.log(
+          `[T1] syncAll: ${Date.now() - t0} ms, ${this.prisma.queryCount} запросов Prisma, ` +
+            `пользователей с активной биржей: ${userCount}`,
+        );
+      }
     }
   }
 
