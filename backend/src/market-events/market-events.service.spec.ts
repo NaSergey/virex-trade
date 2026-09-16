@@ -78,4 +78,68 @@ describe('MarketEventsService', () => {
     expect(cell?.samples).toBe(1);
     expect(cell?.avgVolatilityPct).toBeCloseTo(20, 6);
   });
+
+  describe('кэш агрегатов (TTL 1 час, ключ — метрика + days)', () => {
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('getHourlyStats: второй вызов в пределах TTL не читает свечи заново', async () => {
+      const { service, getCandles } = makeService([]);
+
+      await service.getHourlyStats(730);
+      await service.getHourlyStats(730);
+
+      expect(getCandles).toHaveBeenCalledTimes(1);
+    });
+
+    it('getHourlyStats: после протухания TTL свечи читаются заново', async () => {
+      let now = 1_000_000;
+      jest.spyOn(Date, 'now').mockImplementation(() => now);
+      const { service, getCandles } = makeService([]);
+
+      await service.getHourlyStats(730);
+      now += 60 * 60_000 + 1;
+      await service.getHourlyStats(730);
+
+      expect(getCandles).toHaveBeenCalledTimes(2);
+    });
+
+    it('getHourlyStats: разные days кэшируются раздельно', async () => {
+      const { service, getCandles } = makeService([]);
+
+      await service.getHourlyStats(730);
+      await service.getHourlyStats(30);
+
+      expect(getCandles).toHaveBeenCalledTimes(2);
+    });
+
+    it('getWeekdayHourStats: второй вызов в пределах TTL не читает свечи заново (учитывает и опрос market-alerts раз в 5 минут)', async () => {
+      const { service, getCandles } = makeService([]);
+
+      await service.getWeekdayHourStats(730);
+      await service.getWeekdayHourStats(730);
+      await service.getWeekdayHourStats(730);
+
+      expect(getCandles).toHaveBeenCalledTimes(1);
+    });
+
+    it('getCorrelation: второй вызов в пределах TTL не читает свечи заново', async () => {
+      const { service, getCandles } = makeService([]);
+
+      await service.getCorrelation(730);
+      await service.getCorrelation(730);
+
+      expect(getCandles).toHaveBeenCalledTimes(1);
+    });
+
+    it('getHourlyStats и getWeekdayHourStats кэшируются раздельно (разная метрика — общий days)', async () => {
+      const { service, getCandles } = makeService([]);
+
+      await service.getHourlyStats(730);
+      await service.getWeekdayHourStats(730);
+
+      expect(getCandles).toHaveBeenCalledTimes(2);
+    });
+  });
 });

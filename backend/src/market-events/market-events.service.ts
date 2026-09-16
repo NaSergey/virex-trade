@@ -27,12 +27,36 @@ export interface HourlyBucket {
 /** changePct больше не колонка — свечи хранят только OHLCV. */
 const changePct = (c: Candle): number => (c.open > 0 ? ((c.close - c.open) / c.open) * 100 : 0);
 
+// Результат глобальный (BTC один на всех пользователей) и меняется раз в
+// час, когда синк свечей кладёт новую строку — считать чаще незачем.
+// getWeekdayHourStats дополнительно зовётся из market-alerts каждые пять
+// минут, и часовой TTL почти всегда попадает в кэш.
+const AGGREGATE_CACHE_TTL_MS = 60 * 60_000;
+
 @Injectable()
 export class MarketEventsService {
   constructor(private readonly marketData: MarketDataService) {}
 
+  // Ключ — (метрика, days): разные days для одного и того же метода не
+  // должны делить друг с другом закэшированный результат.
+  private readonly aggregateCache = new Map<string, { exp: number; data: unknown }>();
+
+  private async cached<T>(metric: string, days: number, compute: () => Promise<T>): Promise<T> {
+    const key = `${metric}:${days}`;
+    const hit = this.aggregateCache.get(key);
+    if (hit && hit.exp > Date.now()) return hit.data as T;
+
+    const data = await compute();
+    this.aggregateCache.set(key, { exp: Date.now() + AGGREGATE_CACHE_TTL_MS, data });
+    return data;
+  }
+
   /** Weekday win-rate/avg-move breakdown for the «Вероятности» panel. */
   async getCorrelation(days = 730) {
+    return this.cached('correlation', days, () => this.computeCorrelation(days));
+  }
+
+  private async computeCorrelation(days: number) {
     const since = new Date(Date.now() - days * 86_400_000);
     const prices = await this.marketData.getCandles({ timeframe: 1440, from: since });
 
@@ -62,6 +86,10 @@ export class MarketEventsService {
    * sees the net open→close move.
    */
   async getHourlyStats(days = 730) {
+    return this.cached('hourlyStats', days, () => this.computeHourlyStats(days));
+  }
+
+  private async computeHourlyStats(days: number) {
     const since = new Date(Date.now() - days * 86_400_000);
     const candles = await this.marketData.getCandles({ timeframe: 60, from: since });
 
@@ -98,6 +126,10 @@ export class MarketEventsService {
    * отбрасывать, а не считать спокойными.
    */
   async getWeekdayHourStats(days = 730) {
+    return this.cached('weekdayHourStats', days, () => this.computeWeekdayHourStats(days));
+  }
+
+  private async computeWeekdayHourStats(days: number) {
     const since = new Date(Date.now() - days * 86_400_000);
     const candles = await this.marketData.getCandles({ timeframe: 60, from: since });
 
