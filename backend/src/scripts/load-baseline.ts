@@ -8,18 +8,43 @@
  * `lab`, `habits`. Плюс один прогон `TradeSyncService.syncAll` — со счётом
  * запросов и длительностью, тем же механизмом.
  *
- * Ничего не пишет и не меняет: сервисы вызываются напрямую (через
- * @nestjs/testing, без NestFactory) — DI-граф собирается по-настоящему, но
+ * Пять агрегатов выше — чистое чтение (`findMany`). `syncAll` — НЕ чтение:
+ * это тот же боевой метод, что гоняет периодический таймер синка, — он
+ * реально ходит к бирже и пишет `Trade` за каждого пользователя с
+ * подключённой биржей. Скрипт вызывает его только если среди пользователей
+ * базы нет никого с `activeExchange`, кроме demo (см. проверку перед
+ * вызовом ниже) — на любой базе, где такие пользователи есть, `syncAll`
+ * пропускается с предупреждением, а не вызывается вслепую. Поэтому у этого
+ * скрипта нет безусловного контракта «ничего не пишет», как у
+ * `synthetic-market-preview.ts` / `volatile-hour-preview.ts` — он либо не
+ * пишет ничего (типичный случай — demo единственный активный аккаунт),
+ * либо явно отказывается писать.
+ *
+ * Сервисы вызываются напрямую через @nestjs/testing, без NestFactory:
+ * DI-граф собирается по-настоящему (боевые классы), но
  * `moduleRef.compile()` не запускает `onApplicationBootstrap` (в отличие от
  * `app.init()`), поэтому периодический таймер синка, телеграм-поллинг и
- * прочий фон не стартуют — синк вызывается ровно один раз, явно, ниже.
+ * прочий фон не стартуют сами — `syncAll` вызывается ровно один раз, явно.
  *
  * Запуск локально (из backend/, база должна быть поднята и содержать
  * demo@example.com — см. start.bat и src/scripts/seed-demo.ts):
  *   npx ts-node -r tsconfig-paths/register src/scripts/load-baseline.ts
- * На проде — не предназначен (нужен для сравнения "было/стало" в разработке):
- *   docker compose --env-file .env.prod -f docker-compose.prod.yml \
- *     exec api node dist/scripts/load-baseline.js
+ *
+ * Изолированная база для повторяемого замера (не расшаривает Postgres с
+ * другим чекаутом/веткой, где может быть другая версия схемы) — так был
+ * снят исходный baseline T1:
+ *   docker run -d --name perf-baseline-db \
+ *     -e POSTGRES_USER=virex -e POSTGRES_PASSWORD=virex -e POSTGRES_DB=virex \
+ *     -p 127.0.0.1:5544:5432 postgres:16-alpine
+ *   # backend/.env: DATABASE_URL=postgresql://virex:virex@localhost:5544/virex?schema=public
+ *   #               + свои JWT_ACCESS_SECRET / CREDENTIALS_ENCRYPTION_KEY (openssl rand -hex 32)
+ *   npx prisma db push --skip-generate
+ *   npx ts-node -r tsconfig-paths/register src/scripts/seed-demo.ts
+ *
+ * Для прода не предназначен: там `activeExchange` есть у реальных
+ * пользователей, и `syncAll` из этого скрипта откажется что-либо делать
+ * (см. защиту выше) — числа агрегатов собрать можно, а сравнивать с прод-
+ * нагрузкой по методологии этого скрипта не стоит.
  *
  * Числа этого прогона — точка сравнения для всех последующих задач спеки:
  * без базовой линии "стало быстрее" — утверждение без доказательства.
@@ -137,19 +162,39 @@ async function main() {
       },
     );
 
-    // syncAll сам печатает [T1]-лог (длительность + запросы) через свой
-    // логгер — это тот же лог, что появится в консоли настоящего сервера
-    // при периодическом прогоне (раз в 60 с). Дублируем то же число здесь,
-    // одной таблицей с остальным.
-    const activeExchangeUsers = await prisma.user.count({
-      where: { activeExchange: { not: null } },
+    // syncAll — боевой метод: реально ходит к бирже и пишет Trade за каждого
+    // пользователя с activeExchange. Вызывать его вслепую на произвольной
+    // базе значит синкать чужие реальные аккаунты из измерительного
+    // скрипта — недопустимо для "ничего не пишет". Разрешаем вызов только
+    // если единственный активный аккаунт в базе — сам demo (у него
+    // activeExchange всегда null, см. CLAUDE.md, так что в норме таких
+    // пользователей 0); на любой базе, где есть кто-то ещё, — отказываем.
+    const otherActiveExchangeUsers = await prisma.user.findMany({
+      where: { activeExchange: { not: null }, id: { not: user.id } },
+      select: { email: true },
     });
-    await measure(
-      'TradeSyncService.syncAll (один прогон)',
-      () => syncService.syncAll(),
-      (r) =>
-        `inserted=${(r as { inserted: number }).inserted}, активных подключений: ${activeExchangeUsers}`,
-    );
+    if (otherActiveExchangeUsers.length > 0) {
+      rows.push({
+        name: 'TradeSyncService.syncAll (один прогон)',
+        ms: 0,
+        queries: 0,
+        info:
+          `ПРОПУЩЕН — на базе ${otherActiveExchangeUsers.length} пользователь(ей) с ` +
+          `подключённой биржей помимо demo (${otherActiveExchangeUsers.map((u) => u.email).join(', ')}); ` +
+          'syncAll реально ходит к бирже и пишет Trade — не вызываю вслепую',
+      });
+    } else {
+      // syncAll сам печатает [T1]-лог (длительность + запросы) через свой
+      // логгер — это тот же лог, что появится в консоли настоящего сервера
+      // при периодическом прогоне (раз в 60 с). Дублируем то же число здесь,
+      // одной таблицей с остальным.
+      await measure(
+        'TradeSyncService.syncAll (один прогон)',
+        () => syncService.syncAll(),
+        (r) =>
+          `inserted=${(r as { inserted: number }).inserted}, активных подключений: 0`,
+      );
+    }
 
     console.log(`\nБазовая линия — ${DEMO_EMAIL} (userId ${user.id})\n`);
     const nameW = Math.max(...rows.map((r) => r.name.length));
@@ -158,12 +203,13 @@ async function main() {
         `${r.name.padEnd(nameW)}  ${String(r.ms).padStart(5)} мс  ${String(r.queries).padStart(3)} запросов  ${r.info}`,
       );
     }
-    if (activeExchangeUsers === 0) {
+    if (otherActiveExchangeUsers.length === 0) {
       console.log(
-        '\nПользователей с activeExchange нет в этой базе (у demo он намеренно null,\n' +
-          'см. CLAUDE.md) — syncAll выше прошёл цикл по нулю пользователей. Число\n' +
-          'здесь — стоимость самого опроса `user.findMany`, не стоимость синка одного\n' +
-          'аккаунта; она — отдельная оценка в самой спеке (~1 с/пользователь).',
+        '\nПользователей с activeExchange нет в этой базе, кроме demo (у него он\n' +
+          'намеренно null, см. CLAUDE.md) — syncAll выше прошёл цикл по нулю\n' +
+          'пользователей. Число здесь — стоимость самого опроса `user.findMany`, не\n' +
+          'стоимость синка одного аккаунта; она — отдельная оценка в самой спеке\n' +
+          '(~1 с/пользователь).',
       );
     }
   } finally {
