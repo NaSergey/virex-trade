@@ -69,16 +69,31 @@ describe('cacheKey / buildEtag — стабильность параметров
   });
 
   it('ETag слабый и несёт версию открытым текстом', () => {
-    expect(buildEtag(3, { days: 30 })).toMatch(/^W\/"3:[0-9a-f]+"$/);
+    expect(buildEtag('u1', 'stats', 3, { days: 30 })).toMatch(/^W\/"3:[0-9a-f]+"$/);
   });
 
   it('ETag меняется вместе с версией при тех же параметрах', () => {
-    const e1 = buildEtag(1, { days: 30 });
-    const e2 = buildEtag(2, { days: 30 });
+    const e1 = buildEtag('u1', 'stats', 1, { days: 30 });
+    const e2 = buildEtag('u1', 'stats', 2, { days: 30 });
     expect(e1).not.toBe(e2);
   });
 
-  it('ETag не меняется, если и версия, и параметры те же', () => {
-    expect(buildEtag(1, { days: 30, symbol: 'BTCUSDT' })).toBe(buildEtag(1, { days: 30, symbol: 'BTCUSDT' }));
+  it('ETag не меняется, если версия, userId, scope и параметры те же', () => {
+    expect(buildEtag('u1', 'stats', 1, { days: 30, symbol: 'BTCUSDT' })).toBe(
+      buildEtag('u1', 'stats', 1, { days: 30, symbol: 'BTCUSDT' }),
+    );
+  });
+
+  // T-final-review (CRITICAL): регрессия межпользовательской утечки через ETag.
+  it('разные userId с одинаковой версией и одинаковыми params — РАЗНЫЕ ETag', () => {
+    const e1 = buildEtag('demo-user', 'stats', 0, { days: 30 });
+    const e2 = buildEtag('new-user', 'stats', 0, { days: 30 });
+    expect(e1).not.toBe(e2);
+  });
+
+  it('разный scope с одинаковыми userId/версией/params — РАЗНЫЕ ETag', () => {
+    const e1 = buildEtag('u1', 'stats', 1, { days: 30 });
+    const e2 = buildEtag('u1', 'list', 1, { days: 30 });
+    expect(e1).not.toBe(e2);
   });
 });

@@ -39,6 +39,17 @@ export class TradesController {
    * `@Res()` без `passthrough` — контроллер сам решает, что уйдёт клиенту
    * (пустое тело+304 или JSON+200), поэтому автоматическая сериализация
    * возврата хендлера Nest'ом здесь не нужна и не используется.
+   *
+   * T-final-review (CRITICAL): `ETag` несёт `userId`+`scope` (не только
+   * версию+params) — иначе два разных пользователя с одинаковой версией
+   * данных и одинаковыми query-параметрами получали бы один и тот же ETag на
+   * одном URL, и приватный браузерный кэш мог отдать 304 с телом чужого
+   * ответа (см. `buildEtag`). `Cache-Control: private, no-cache` на ОБОИХ
+   * путях (304 и 200) — чтобы поведение не зависело от эвристик конкретного
+   * браузера при отсутствии заголовка: `no-cache` разрешает браузеру
+   * переиспользовать сохранённый ответ ТОЛЬКО после ревалидации по ETag
+   * (то есть заново дойдя до этого самого сравнения), `private` запрещает
+   * общим/прокси-кэшам хранить ответ вовсе.
    */
   private async withEtag<T>(
     res: Response,
@@ -49,7 +60,8 @@ export class TradesController {
     compute: () => Promise<T>,
   ): Promise<void> {
     const version = await this.dataVersion.get(userId);
-    const etag = buildEtag(version, params);
+    const etag = buildEtag(userId, scope, version, params);
+    res.setHeader('Cache-Control', 'private, no-cache');
     if (ifNoneMatch === etag) {
       res.status(304).end();
       return;

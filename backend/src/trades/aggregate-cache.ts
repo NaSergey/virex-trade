@@ -95,12 +95,21 @@ export function cacheKey(scope: string, userId: string, version: number, params:
 }
 
 /**
- * `ETag: W/"<version>:<hash params>"` — слабый (данные логически те же, но
- * сериализация может отличаться до байта) тег ровно из тех же двух
- * составляющих, что и ключ кэша: версия данных + параметры запроса. Не
- * трогает Prisma и не идёт в кэш агрегатов — контроллер строит его из уже
- * прочитанной версии, чтобы сравнить с `If-None-Match` ДО вызова сервиса.
+ * `ETag: W/"<version>:<hash userId+scope+params>"` — слабый (данные логически
+ * те же, но сериализация может отличаться до байта) тег. Версия остаётся
+ * читаемым префиксом (как раньше), а хэш теперь берётся не от голых
+ * `params`, а от `{ userId, scope, params }`.
+ *
+ * T-final-review (CRITICAL): без `userId`/`scope` в хэше два РАЗНЫХ
+ * пользователя с одинаковой версией (например демо-аккаунт и только что
+ * зарегистрированный — оба стартуют с версии 0) и одинаковыми
+ * query-параметрами получали ОДИНАКОВЫЙ ETag на одном и том же URL. `userId`
+ * в путь не попадает (`/api/trades/stats?days=30` не несёт его), значит
+ * приватный браузерный кэш (ответ с `Authorization` — RFC 9111 §3.5 это
+ * разрешает) мог отдать 304 на чужой `If-None-Match` и подставить пользователю
+ * тело ответа ПРЕДЫДУЩЕГО пользователя той же вкладки — ровно путь
+ * «Посмотреть демо» → регистрация в той же вкладке.
  */
-export function buildEtag(version: number, params: unknown): string {
-  return `W/"${version}:${fnv1a(stableStringify(params))}"`;
+export function buildEtag(userId: string, scope: string, version: number, params: unknown): string {
+  return `W/"${version}:${fnv1a(stableStringify({ userId, scope, params }))}"`;
 }

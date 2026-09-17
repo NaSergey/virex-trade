@@ -185,4 +185,43 @@ describe('TradesController — ETag/304 (T10, A2)', () => {
     expect(third.state.headers['ETag']).toMatch(/^W\/"2:[0-9a-f]+"$/);
     expect(third.state.headers['ETag']).not.toBe(staleEtag);
   });
+
+  // T-final-review (CRITICAL): регрессия межпользовательской утечки — демо-аккаунт
+  // и только что зарегистрированный пользователь оба стартуют с dataVersion=0
+  // (TagsService.createDefaults версию не бампит), и без userId в ETag второй
+  // получал бы 304 с телом первого на тот же URL/query.
+  it('одинаковая версия данных и одинаковые params у РАЗНЫХ пользователей — ETag не совпадают, ловля чужого 304 невозможна', async () => {
+    const dataVersion = fakeDataVersion(0);
+    const { controller } = makeController(
+      async (userId: unknown) => ({ success: true, stats: {}, equity: [], userId }),
+      dataVersion,
+    );
+
+    const demo = fakeRes();
+    await controller.stats('demo-user', undefined, demo.res);
+    const demoEtag = demo.state.headers['ETag'];
+
+    const fresh = fakeRes();
+    // Пользователь с тем же If-None-Match, что у демо (например скопированная
+    // сессия/кэш в той же вкладке браузера) — не должен получить 304.
+    await controller.stats('new-user', demoEtag, fresh.res);
+
+    expect(fresh.state.status).toBe(200);
+    expect(fresh.state.json).toEqual({ success: true, stats: {}, equity: [], userId: 'new-user' });
+    expect(fresh.state.headers['ETag']).not.toBe(demoEtag);
+  });
+
+  it('withEtag ставит Cache-Control: private, no-cache и на 200, и на 304', async () => {
+    const dataVersion = fakeDataVersion(1);
+    const { controller } = makeController(async () => ({ success: true, stats: {}, equity: [] }), dataVersion);
+
+    const first = fakeRes();
+    await controller.stats('u1', undefined, first.res);
+    expect(first.state.headers['Cache-Control']).toBe('private, no-cache');
+
+    const second = fakeRes();
+    await controller.stats('u1', first.state.headers['ETag'], second.res);
+    expect(second.state.status).toBe(304);
+    expect(second.state.headers['Cache-Control']).toBe('private, no-cache');
+  });
 });
