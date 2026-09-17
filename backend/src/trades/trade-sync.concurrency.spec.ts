@@ -105,13 +105,15 @@ describe('TradeSyncService.syncAll — T12 параллельный обход',
 
     expect(getOpenPositions).toHaveBeenCalledTimes(1);
     // И тот же результат ушёл параметром в PositionBuilderService.sync, а не
-    // был запрошен им самостоятельно ещё раз.
+    // был запрошен им самостоятельно ещё раз. `hadNewTrades: false` — T-final-
+    // review: этот тик не вставил новых closed-pnl Trade (fetchClosedTrades
+    // вернул пустой items), внешний opts при этом не задан (undefined).
     expect(positions.sync).toHaveBeenCalledWith(
       'u1',
       'bybit',
       { apiKey: 'k', apiSecret: 's' },
       { success: true, positions: [] },
-      undefined,
+      { hadNewTrades: false },
     );
   });
 

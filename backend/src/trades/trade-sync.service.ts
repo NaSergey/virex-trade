@@ -285,7 +285,15 @@ export class TradeSyncService
     // Runs every tick (not just on inserts): a position that closed in parts
     // only becomes groupable once its final closing fill arrives.
     try {
-      const p = await this.positions.sync(userId, exchange, creds, open, opts);
+      // T-final-review (IMPORTANT): `hadNewTrades` — отдельно от внешнего
+      // `opts.full` — говорит PositionBuilderService, что в этом тике
+      // появились новые closed-pnl `Trade` (см. комментарий на условии скипа
+      // в position-builder.service.ts), даже если сама эта пачка фактически
+      // не сдвинула открытый размер ни по одному символу.
+      const p = await this.positions.sync(userId, exchange, creds, open, {
+        ...opts,
+        hadNewTrades: inserted > 0,
+      });
       if (p.fills > 0 || p.stamped > 0) {
         this.logger.log(
           `positions: +${p.fills} fill(s), ${p.stamped} trade(s) grouped into ${p.positions} position(s)`,

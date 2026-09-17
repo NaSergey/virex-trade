@@ -95,7 +95,7 @@ export class PositionBuilderService {
     exchange: ExchangeId,
     creds: ExchangeCredentials,
     openPositions: PositionsResult,
-    opts?: { full?: boolean },
+    opts?: { full?: boolean; hadNewTrades?: boolean },
   ): Promise<{ fills: number; positions: number; stamped: number }> {
     const { count: fills, touched } = await this.fetchAndStoreExecutions(
       userId,
@@ -115,15 +115,33 @@ export class PositionBuilderService {
       // символа граница позиции не могла поменяться — perечитывать executions
       // незачем (см. A4). Сомневаться тут не в чем: `changed` сравнивает
       // именно то же самое `openSizes`, что пошло бы на seed rebuild ниже.
-      if (fills === 0 && changed.size === 0) {
+      //
+      // T-final-review (IMPORTANT): это условие не учитывало, что closed-pnl
+      // запись сделки (`Trade`, даёт `hadNewTrades`) может прийти ПОЗЖЕ, чем
+      // её execution-филл (уже учтён в прошлом тике → `fills === 0` сейчас), а
+      // размер позиции по символу уже давно не менялся (`changed.size === 0`,
+      // закрытие по факту случилось раньше). Тогда `positionId` только что
+      // вставленного `Trade` остаётся `null` навсегда, если по символу больше
+      // нет активности — `hadNewTrades` форсирует rebuild именно в этом случае.
+      if (fills === 0 && changed.size === 0 && !opts?.hadNewTrades) {
         return { fills: 0, positions: 0, stamped: 0 };
       }
       const scope = this.scopeFor(cached, touched, changed);
+      // T-final-review (IMPORTANT): `hadNewTrades` без сигнала от `touched`/
+      // `changed` не говорит, КАКОЙ символ получил новый `Trade` — узкий
+      // `scope` тогда остаётся пустым (`scopeFor` строит его именно из
+      // `touched`/`changed`), и `rebuild` с пустым `scope.symbols` не находит
+      // ничего ни в executions (`OR: []`), ни в trades (`symbol: { in: [] }`)
+      // — сам по себе пропуск early-return тут ничего не чинит. В этом редком
+      // случае (новый Trade пришёл, а фактическая активность по символу нет)
+      // единственный надёжный вариант — полный обход, как при холодном кэше:
+      // мы не знаем, какой символ стамповать, значит проверяем все.
+      const effectiveScope = opts?.hadNewTrades && scope.symbols.length === 0 ? null : scope;
       const { positions, stamped, openTail } = await this.rebuild(
         userId,
         exchange,
         openSizes,
-        scope,
+        effectiveScope,
       );
       this.rebuildCache.set(cacheKey, {
         sizes: openSizes,

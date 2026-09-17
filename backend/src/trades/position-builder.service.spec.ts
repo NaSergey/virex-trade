@@ -292,6 +292,60 @@ describe('PositionBuilderService — T13 инкрементальная пере
     expect(trades[0].positionId).not.toBe(trades[1].positionId);
   });
 
+  // T-final-review (IMPORTANT): closed-pnl `Trade` может прийти позже своего
+  // execution-филла (уже учтён в прошлом тике) — без `hadNewTrades` условие
+  // скипа (`fills === 0 && changed.size === 0`) молча оставляло бы новый
+  // трейд без `positionId` навсегда, если по символу больше нет активности.
+  it('fills=0 и changed пуст, но hadNewTrades=true — перестройка НЕ пропускается', async () => {
+    const { prisma, trades } = makeFakePrisma();
+
+    const openFill = fill('BTCUSDT', 'Buy', 1, 0, min(0), 'open-1');
+    const closeFill = fill('BTCUSDT', 'Sell', 1, 1, min(5), 'close-1');
+
+    const fetchFills = jest
+      .fn()
+      // Тик 1: открытие+закрытие приходят как филлы, но closed-pnl запись
+      // (Trade) для этой сделки ещё не появилась — как если бы она прилетела
+      // с биржи отдельным (более поздним) вызовом.
+      .mockResolvedValueOnce({ success: true, items: [openFill, closeFill] })
+      // Тик 2: новых филлов нет вовсе — только что вставленный closed-pnl Trade.
+      .mockResolvedValueOnce({ success: true, items: [] });
+
+    const service = new PositionBuilderService(prisma, makeExchanges(fetchFills));
+
+    // Тик 1: позиция уже полностью закрыта на бирже (открытых размеров нет),
+    // но соответствующего Trade в БД ещё нет — ничего стемпить не на чем.
+    const r1 = await service.sync('u1', 'bybit', CREDS, openPositions([]));
+    expect(r1.stamped).toBe(0);
+
+    // Между тиками TradeSyncService.persist() вставил closed-pnl Trade для
+    // close-1 — это ровно та вставка, которая на реальном сервисе даёт
+    // `inserted > 0` и transitively `hadNewTrades: true`.
+    trades.push({ id: 't1', userId: 'u1', exchange: 'bybit', symbol: 'BTCUSDT', orderId: 'close-1', positionId: null });
+
+    const findManyCallsBefore = prisma.trade.findMany.mock.calls.length;
+    const r2 = await service.sync('u1', 'bybit', CREDS, openPositions([]), { hadNewTrades: true });
+
+    // Если бы скип сработал, вернулось бы ровно {fills:0, positions:0, stamped:0}
+    // и trade.findMany внутри rebuild не был бы вызван вовсе.
+    expect(prisma.trade.findMany.mock.calls.length).toBeGreaterThan(findManyCallsBefore);
+    expect(trades.find((t) => t.id === 't1')!.positionId).toBe(`BTCUSDT:long:${openFill.execTime.getTime()}`);
+    expect(r2.stamped).toBe(1);
+  });
+
+  it('fills=0 и changed пуст и hadNewTrades не передан (или false) — перестройка по-прежнему пропускается', async () => {
+    const { prisma } = makeFakePrisma();
+    const fetchFills = jest.fn().mockResolvedValue({ success: true, items: [] });
+    const service = new PositionBuilderService(prisma, makeExchanges(fetchFills));
+
+    await service.sync('u1', 'bybit', CREDS, openPositions([]));
+    const callsAfterFirst = prisma.trade.findMany.mock.calls.length;
+
+    const r2 = await service.sync('u1', 'bybit', CREDS, openPositions([]), { hadNewTrades: false });
+    expect(r2).toEqual({ fills: 0, positions: 0, stamped: 0 });
+    expect(prisma.trade.findMany.mock.calls.length).toBe(callsAfterFirst);
+  });
+
   it('full-опция игнорирует кэш и всегда идёт полным обходом', async () => {
     const { prisma } = makeFakePrisma();
     const fetchFills = jest.fn().mockResolvedValue({ success: true, items: [] });
