@@ -120,6 +120,9 @@ export function TradesTable({
   empty,
   sort,
   onSort,
+  formatClosed,
+  chart = true,
+  renderExpanded,
 }: {
   trades: Trade[];
   isLoading?: boolean;
@@ -141,6 +144,25 @@ export function TradesTable({
    */
   sort?: LedgerSort;
   onSort?: (key: string) => void;
+  /**
+   * Как печатать время закрытия. По умолчанию — дата и время местным форматом.
+   * Бектест передаёт своё: пока сессия идёт, настоящая дата отрезка скрыта, и
+   * на её месте стоит день недели с номером дня от старта.
+   */
+  formatClosed?: (iso: string) => string;
+  /**
+   * Цены входа и выхода открывают окно с графиком сделки. Выключается там, где
+   * свечей для него нет: сделка бектеста живёт в симуляции, и биржевого
+   * коридора вокруг её цены не существует.
+   */
+  chart?: boolean;
+  /**
+   * Чем раскрывается строка. По умолчанию — ордерами исполнения и рыночным
+   * контекстом входа (`TradeOrders`). Бектест передаёт свой разбор: филлов
+   * биржи у симулированной сделки нет, а разбирать в ней есть что — стоп,
+   * тейк, риск и то, чем всё кончилось.
+   */
+  renderExpanded?: (trade: Trade) => React.ReactNode;
 }) {
   const t = useTranslations('tradesTable');
   const { locale } = useLocaleControl();
@@ -161,7 +183,7 @@ export function TradesTable({
       header: t('colClosed'),
       cellClassName: 'n',
       sortKey: colSortKey('closedAt'),
-      render: (tr) => <span className="muted">{fmtClosed(tr.closedAt, intlLocale)}</span>,
+      render: (tr) => <span className="muted">{formatClosed ? formatClosed(tr.closedAt) : fmtClosed(tr.closedAt, intlLocale)}</span>,
     },
     { key: 'symbol', header: t('colSymbol'), render: (tr) => <span className="sym">{tr.symbol}</span> },
     {
@@ -176,15 +198,12 @@ export function TradesTable({
       align: 'right',
       cellClassName: 'n',
       sortKey: colSortKey('entry'),
-      render: (tr) => (
-        <PriceCue
-          price={tr.avgEntryPrice}
-          trade={tr}
-          onOpen={setChartTrade}
-          title={t('showOnChartTitle')}
-          tour
-        />
-      ),
+      render: (tr) =>
+        chart ? (
+          <PriceCue price={tr.avgEntryPrice} trade={tr} onOpen={setChartTrade} title={t('showOnChartTitle')} tour />
+        ) : (
+          formatPriceGrouped(tr.avgEntryPrice)
+        ),
     },
     {
       key: 'exit',
@@ -192,9 +211,12 @@ export function TradesTable({
       align: 'right',
       cellClassName: 'n',
       sortKey: colSortKey('exit'),
-      render: (tr) => (
-        <PriceCue price={tr.avgExitPrice} trade={tr} onOpen={setChartTrade} title={t('showOnChartTitle')} />
-      ),
+      render: (tr) =>
+        chart ? (
+          <PriceCue price={tr.avgExitPrice} trade={tr} onOpen={setChartTrade} title={t('showOnChartTitle')} />
+        ) : (
+          formatPriceGrouped(tr.avgExitPrice)
+        ),
     },
     ...(range
       ? [
@@ -279,7 +301,7 @@ export function TradesTable({
         rowKey={(tr) => tr.id}
         isLoading={isLoading}
         skeletonRows={skeletonRows}
-        renderExpanded={(tr) => <TradeOrders trade={tr} onRangeCheck={() => setChartTrade(tr)} />}
+        renderExpanded={renderExpanded ?? ((tr) => <TradeOrders trade={tr} onRangeCheck={() => setChartTrade(tr)} />)}
         sort={sort}
         onSort={onSort}
         empty={

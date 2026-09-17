@@ -13,15 +13,23 @@ import { formatR } from '../lib/money';
 /**
  * Сессии, свежие сверху. Дата в первой колонке — когда сессия создана, а не
  * какой отрезок в ней: отрезок раскрывается только в итоге завершённой.
+ *
+ * Удаление — не альтернатива завершению: сессия, которую не собираются
+ * доигрывать (или доигранная, но неинтересная), пропадает целиком, а не
+ * становится записью в статистике. Кнопки-«крестика» на активной сессии в
+ * терминале намеренно нет — так сессию можно бросить недосмотренной ошибкой
+ * клика; отдельный шаг в списке сессий с подтверждением этого не допускает.
  */
 export function SessionsList({
   sessions,
   isLoading,
   onOpen,
+  onDelete,
 }: {
   sessions: SessionListItem[];
   isLoading: boolean;
   onOpen: (id: string) => void;
+  onDelete: (session: SessionListItem) => void;
 }) {
   const t = useTranslations('backtest');
   const { locale } = useLocaleControl();
@@ -62,15 +70,20 @@ export function SessionsList({
       key: 'action',
       noSkeleton: true,
       render: (s) => (
-        <Button tight onClick={() => onOpen(s.id)}>
-          {s.status === 'active' ? t('continue') : t('open')}
-        </Button>
+        <span className="row-actions">
+          <Button tight onClick={() => onOpen(s.id)}>
+            {s.status === 'active' ? t('continue') : t('open')}
+          </Button>
+          <Button tight variant="risk" onClick={() => onDelete(s)}>
+            {t('deleteSession')}
+          </Button>
+        </span>
       ),
     },
   ];
 
   return (
-    <section>
+    <section data-tour="bt-sessions">
       <SectionHead title={t('sessionsTitle')} />
       <LedgerTable
         columns={columns}

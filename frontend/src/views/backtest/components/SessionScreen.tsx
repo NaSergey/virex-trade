@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Settings as SettingsIcon } from 'lucide-react';
-import { TagsDialog, useTags } from '@/entities/tag';
+import { TagsDialog } from '@/entities/tag';
 import { useAuth } from '@/features/auth';
 import { useLocaleControl } from '@/shared/i18n';
 import { Button } from '@/shared/ui/Button';
@@ -14,7 +14,6 @@ import { Skeleton } from '@/shared/ui/Skeleton';
 import { Wrap } from '@/shared/ui/Wrap';
 import { formatPriceGrouped } from '@/shared/lib/utils/format';
 import {
-  useAddToTrade,
   useBacktestSession,
   useCancelCloseOrder,
   useCloseTrade,
@@ -23,7 +22,6 @@ import {
   useModifyTrade,
   useOpenTrade,
   useSetBacktestTags,
-  useSetLeverage,
 } from '../api/hooks';
 import type { BacktestTrade, Direction, ExitReason, SessionDetail } from '../api/types';
 import { TIMEFRAMES, dayNumber, scaleCandle } from '../lib/candles';
@@ -43,11 +41,9 @@ import {
 import { useDefaultLeverage } from '../model/useDefaultLeverage';
 import { useDrawingTools } from '../model/useDrawingTools';
 import { SPEEDS, useReplay } from '../model/useReplay';
-import { AddToPositionModal } from './AddToPositionModal';
 import { DrawingStyleBar } from './drawings/DrawingStyleBar';
 import { DrawingToolbar } from './drawings/DrawingToolbar';
 import { ChangeLevelsModal } from './ChangeLevelsModal';
-import { LeverageModal } from './LeverageModal';
 import { LimitCloseModal } from './LimitCloseModal';
 import { MarketCloseModal } from './MarketCloseModal';
 import { OpenPositionsPanel } from './OpenPositionsPanel';
@@ -102,16 +98,13 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   // включая тик слайдера риска, который к открытым сделкам отношения не имеет.
   const openTrades = useMemo(() => trades.filter((x) => x.exitTime == null), [trades]);
 
-  const { data: tagsData } = useTags();
   const openM = useOpenTrade(session.id);
-  const addM = useAddToTrade(session.id);
   const modifyM = useModifyTrade(session.id);
   const closeM = useCloseTrade(session.id);
   const createOrderM = useCreateCloseOrder(session.id);
   const cancelOrderM = useCancelCloseOrder(session.id);
   const finishM = useFinishSession(session.id);
   const tagsM = useSetBacktestTags(session.id);
-  const setLeverageM = useSetLeverage(session.id);
 
   const closeTrade = (trade: BacktestTrade, time: number, price: number, reason: ExitReason, qty?: number, closeOrderId?: string) =>
     closeM.mutateAsync({ tradeId: trade.id, exitTime: new Date(time).toISOString(), exitPrice: price, reason, qty, closeOrderId });
@@ -135,9 +128,9 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   const [marketModalFor, setMarketModalFor] = useState<string | null>(null);
   const [levelsModalFor, setLevelsModalFor] = useState<string | null>(null);
   const [tagsModalFor, setTagsModalFor] = useState<string | null>(null);
-  const [addModalFor, setAddModalFor] = useState<string | null>(null);
-  /** Плечо открытых позиций, пока диалог открыт; null — закрыт. */
-  const [leverageEdit, setLeverageEdit] = useState<number | null>(null);
+  /** Теги закрытой сделки из истории — отдельно от tagsModalFor: тот ищет среди
+      openTrades, а история правит сделки, которых там уже нет. */
+  const [historyTagsFor, setHistoryTagsFor] = useState<string | null>(null);
   const [tab, setTab] = useState<'open' | 'history'>('open');
   // Ошибки действий над открытыми позициями — своя строка над таблицей позиций, а не
   // `hint` панели ордера: панель про следующий ордер и чужих отказов не показывает.
@@ -295,13 +288,10 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   // Тем же поводом, что и labelFor выше — стабильная ссылка для memo(ReplayChart).
   const levelLabel = useCallback((kind: LevelKind) => t(`level.${kind}`), [t]);
 
-  // Панель ордера ждёт только своего: открытия и завершения. Правки, доборы и закрытия
-  // уже открытых сделок её не блокируют — вторую сделку в сторону, где позиция ещё
+  // Панель ордера ждёт только своего: открытия. Правки, доборы и закрытия уже
+  // открытых сделок её не блокируют — вторую сделку в сторону, где позиция ещё
   // открыта, сервер не примет сам (BACKTEST_OPEN_TRADE).
   const orderBusy = openM.isPending || finishM.isPending || !replay.ready;
-  // Завершение само закрывает открытые сделки: пока закрытие в полёте или упало,
-  // повторное закрытие той же сделки сервер отверг бы.
-  const finishBusy = orderBusy || closeM.isPending || closeM.isError;
   const canClose = (trade: BacktestTrade) => replay.cursor > Date.parse(trade.entryTime);
 
   const open = (direction: Direction) => {
@@ -333,11 +323,6 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
       // линиями ровно поверх уровней новой позиции, и жест по ним тянул бы черновик.
       onSuccess: () => setDraft((prev) => ({ ...prev, stop: '', take: '' })),
     });
-  };
-
-  const addToPosition = (trade: BacktestTrade, riskPct: number) => {
-    if (replay.price == null) return;
-    addM.mutate({ tradeId: trade.id, entryPrice: replay.price, riskPct }, { onSuccess: () => setAddModalFor(null) });
   };
 
   // Принимает screenPrice параметром, а не читает внешний: onDragLevel ниже зовёт её
@@ -436,25 +421,6 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
     if (replay.ended) void finishRef.current();
   }, [replay.ended]);
 
-  // Плечо открытых позиций правится из таблицы позиций, а не слайдером панели: тот
-  // задаёт плечо следующего ордера и открытых сделок не касается. Сервер держит плечо
-  // общим на все открытые сделки сессии и меняет его у всех разом — отсюда одно значение
-  // и одна отправка, по закрытию диалога, а не на каждое движение слайдера.
-  const openLeverage = openTrades[0]?.leverage ?? null;
-  const commitOpenLeverage = () => {
-    if (leverageEdit != null && leverageEdit !== openLeverage) setLeverageM.mutate(leverageEdit);
-    setLeverageEdit(null);
-  };
-
-  const askFinish = () =>
-    setConfirm({
-      title: t('finishTitle'),
-      subtitle: t('finishSubtitle'),
-      consequences: [...(openTrades.length > 0 ? [t('finishOpenTrade')] : []), t('finishReveal')],
-      word: t('finishWord'),
-      onConfirm: () => void finishNow(),
-    });
-
   const leave = async () => {
     replay.setSpeed(null);
     await replay.flush().catch(() => undefined);
@@ -471,7 +437,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
     // Терминал во всю ширину окна — единственное место продукта без .wrap
     // (см. комментарий у SessionScreen). Итог той же сессии после завершения
     // возвращается в обычную читательскую колонку сам, через SessionScreen.
-    <div className="bt-live">
+    <div className="bt-live px-4">
       <div className="asym terminal">
         <div>
           {/* Без заголовка «Таймфрейм» — сами кнопки ТФ слева и есть подпись себе.
@@ -554,10 +520,8 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
             price={replay.price}
             balance={session.balance}
             disabled={orderBusy}
-            finishDisabled={finishBusy}
             hint={hint}
             onOpen={open}
-            onFinish={askFinish}
             onLeverageCommit={setDefaultLeverage}
           />
           <ErrorNote error={openM.error ?? finishM.error} fallback={t('actionFailed')} />
@@ -587,7 +551,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
 
       <div className="bt-table">
         {tab === 'open' && positionHint && <p className="neg">{positionHint}</p>}
-        {tab === 'open' && <ErrorNote error={modifyM.error ?? setLeverageM.error ?? cancelOrderM.error} fallback={t('actionFailed')} />}
+        {tab === 'open' && <ErrorNote error={modifyM.error ?? cancelOrderM.error} fallback={t('actionFailed')} />}
         {tab === 'open' ? (
           <OpenPositionsPanel
             trades={openTrades}
@@ -595,8 +559,6 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
             price={replay.price}
             cursor={replay.cursor}
             closeOrders={detail.closeOrders}
-            onAdd={(trade) => setAddModalFor(trade.id)}
-            onLeverage={(trade) => setLeverageEdit(trade.leverage)}
             onLimit={(trade) => setLimitModalFor(trade.id)}
             onMarket={(trade) => setMarketModalFor(trade.id)}
             onCancelOrder={(id) => cancelOrderM.mutate(id)}
@@ -608,8 +570,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
             trades={trades}
             scale={scale}
             labelFor={labelFor}
-            tags={tagsData?.tags ?? []}
-            onSetTags={(tradeId, tagIds) => tagsM.mutate({ tradeId, tagIds })}
+            onEditTags={(trade) => setHistoryTagsFor(trade.id)}
           />
         )}
       </div>
@@ -628,24 +589,6 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
           />
         ) : null;
       })()}
-      {addModalFor != null && replay.price != null && (() => {
-        const trade = openTrades.find((x) => x.id === addModalFor);
-        return trade ? (
-          <AddToPositionModal
-            trade={trade}
-            balance={session.balance}
-            price={replay.price}
-            scale={scale}
-            onSubmit={(riskPct) => addToPosition(trade, riskPct)}
-            onClose={() => setAddModalFor(null)}
-            isPending={addM.isPending}
-            error={addM.error}
-          />
-        ) : null;
-      })()}
-      {leverageEdit != null && (
-        <LeverageModal leverage={leverageEdit} subtitle={t('leverageOpenHint')} onChange={setLeverageEdit} onClose={commitOpenLeverage} />
-      )}
       {limitModalFor != null && screenPrice != null && (() => {
         const trade = openTrades.find((x) => x.id === limitModalFor);
         return trade ? (
@@ -687,6 +630,20 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
             error={tagsM.error}
             onSave={(tagIds) => tagsM.mutate({ tradeId: trade.id, tagIds }, { onSuccess: () => setTagsModalFor(null) })}
             onClose={() => setTagsModalFor(null)}
+          />
+        ) : null;
+      })()}
+      {historyTagsFor != null && (() => {
+        const trade = trades.find((x) => x.id === historyTagsFor);
+        return trade ? (
+          <TagsDialog
+            title={t('tradeTagsTitle')}
+            subtitle={`${t(`direction.${trade.direction}`)} · ${formatPriceGrouped(toScreen(trade.entryPrice, scale))}`}
+            initialTagIds={trade.tags.map((g) => g.id)}
+            isPending={tagsM.isPending}
+            error={tagsM.error}
+            onSave={(tagIds) => tagsM.mutate({ tradeId: trade.id, tagIds }, { onSuccess: () => setHistoryTagsFor(null) })}
+            onClose={() => setHistoryTagsFor(null)}
           />
         ) : null;
       })()}

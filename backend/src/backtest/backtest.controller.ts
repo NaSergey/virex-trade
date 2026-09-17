@@ -45,6 +45,11 @@ export class BacktestController {
     return this.backtest.finish(userId, id);
   }
 
+  @Delete('sessions/:id')
+  remove(@CurrentUser('userId') userId: string, @Param('id') id: string) {
+    return this.backtest.deleteSession(userId, id);
+  }
+
   @Post('sessions/:id/trades')
   open(@CurrentUser('userId') userId: string, @Param('id') id: string, @Body() dto: OpenTradeDto) {
     return this.backtest.openTrade(userId, id, { ...dto, entryTime: new Date(dto.entryTime) });

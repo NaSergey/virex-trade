@@ -15,18 +15,51 @@ interface ControlProps {
   full?: boolean;
 }
 
-export interface InputProps extends InputHTMLAttributes<HTMLInputElement>, ControlProps {}
+export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'prefix'>, ControlProps {
+  /**
+   * Единица прямо в поле, у правого края — там, где подпись поля и так уже
+   * названа («Депозит»), а слово в ней снова значило бы то же самое, что
+   * стоит перед глазами при вводе.
+   */
+  suffix?: ReactNode;
+  /**
+   * Подпись поля прямо в нём, у левого края, — там, где отдельной строки-`Field`
+   * над полем нет вовсе (поле само себя называет). `aria-label` в этом случае
+   * ставит вызывающий: видимой подписи для скринридера больше нет.
+   *
+   * Не нативный `prefix` из `InputHTMLAttributes` (устаревший HTML-атрибут,
+   * `string`) — здесь `ReactNode`, поэтому тип переопределён через `Omit`.
+   */
+  prefix?: ReactNode;
+}
 
 /**
  * Единственное поле ввода продукта: `.in` (+ `.full`) и ничего больше.
  * Тип, плейсхолдер и обработчики проходят насквозь — компонент отвечает только
  * за то, чтобы поле выглядело как поле, а не за то, что в нём вводят.
+ *
+ * С `suffix`/`prefix` оборачивается в `.in-adorned`: инпут остаётся тем же
+ * `input` (ref смотрит на него, не на обёртку), а подпись и единица — соседние
+ * `span`, поставленные поверх краёв абсолютным позиционированием.
  */
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { full, className, ...rest },
+  { full, suffix, prefix, className, style, ...rest },
   ref,
 ) {
-  return <input ref={ref} className={cn('in', full && 'full', className)} {...rest} />;
+  if (suffix == null && prefix == null) {
+    return <input ref={ref} className={cn('in', full && 'full', className)} style={style} {...rest} />;
+  }
+  return (
+    <span className={cn('in-adorned', full && 'full')} style={style}>
+      {prefix != null && <span className="in-prefix">{prefix}</span>}
+      <input
+        ref={ref}
+        className={cn('in', prefix != null && 'in-has-prefix', suffix != null && 'in-has-suffix', className)}
+        {...rest}
+      />
+      {suffix != null && <span className="in-suffix">{suffix}</span>}
+    </span>
+  );
 });
 
 export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement>, ControlProps {}

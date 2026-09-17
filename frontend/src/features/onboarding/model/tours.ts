@@ -18,7 +18,7 @@
  * второе, всегда отстающее знание о том, что сейчас на экране.
  */
 
-export type TourId = 'overview' | 'tags' | 'analytics' | 'market' | 'settings';
+export type TourId = 'overview' | 'tags' | 'analytics' | 'market' | 'settings' | 'backtest';
 
 export interface TourStep {
   /**
@@ -116,6 +116,16 @@ export const TOURS: Tour[] = [
       { anchor: '[data-tour="set-form"]', key: 'keys' },
       { anchor: '[data-tour="set-exchange"]', key: 'exchange' },
       { anchor: '[data-tour="set-telegram"]', key: 'telegram' },
+    ],
+  },
+  {
+    id: 'backtest',
+    path: '/backtest',
+    steps: [
+      { key: 'intro' },
+      { anchor: '[data-tour="bt-sessions"]', key: 'sessions' },
+      { anchor: '[data-tour="bt-stats"]', key: 'stats' },
+      { anchor: '[data-tour="bt-start"]', key: 'start' },
     ],
   },
 ];

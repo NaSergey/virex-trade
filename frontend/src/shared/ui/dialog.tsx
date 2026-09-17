@@ -31,8 +31,14 @@ const DialogContent = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     /** Шире дефолтных 520px — для разбора одной сделки со свечами. */
     wide?: boolean;
+    /**
+     * Отдать фокус первому полю внутри — только там, где окно и открывают ради
+     * ввода (набрать слово в подтверждении необратимого). См. ниже, почему это
+     * не умолчание.
+     */
+    autoFocusContent?: boolean;
   }
->(({ className, children, wide = false, ...props }, ref) => (
+>(({ className, children, wide = false, autoFocusContent = false, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -42,6 +48,21 @@ const DialogContent = React.forwardRef<
         wide && 'max-w-[min(94vw,860px)]',
         className,
       )}
+      /**
+       * Фокус при открытии остаётся на самом окне, а не уезжает на первый
+       * интерактивный элемент. Причина конкретная: у половины окон продукта
+       * первым идёт слайдер (`input[type=range]` — плечо, риск, уровни,
+       * объём закрытия), а браузер, фокусируя range, подтягивает его в область
+       * видимости и заодно сбрасывает прокрутку страницы в ноль. На странице
+       * сессии это читалось как «любое окно подбрасывает экран наверх».
+       * Ловушка фокуса и Esc продолжают работать: окно само по себе
+       * фокусируемо (tabIndex=-1 у Radix), с него Tab идёт внутрь окна.
+       */
+      onOpenAutoFocus={(e) => {
+        if (autoFocusContent) return;
+        e.preventDefault();
+        (e.currentTarget as HTMLElement | null)?.focus({ preventScroll: true });
+      }}
       {...props}
     >
       {children}

@@ -67,6 +67,14 @@ export const useFinishSession = (id: string) => {
   });
 };
 
+export const useDeleteSession = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiJson<void>(`/api/backtest/sessions/${id}`, json('DELETE')),
+    onSettled: () => refresh(qc),
+  });
+};
+
 export const useOpenTrade = (id: string) => {
   const qc = useQueryClient();
   return useMutation({

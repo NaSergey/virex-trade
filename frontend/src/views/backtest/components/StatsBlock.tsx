@@ -31,7 +31,7 @@ export function StatsBlock({ stats, isLoading }: { stats?: BacktestStats; isLoad
   ];
 
   return (
-    <section>
+    <section data-tour="bt-stats">
       <SectionHead title={t('statsTitle')} />
       <SummaryCells summary={stats?.overall} sessions={stats?.overall.sessions ?? 0} loading={isLoading} />
       <SectionHead title={t('byTagTitle')} />

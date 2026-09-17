@@ -9,16 +9,13 @@ import {
   type OpenPositionContext,
 } from '@/entities/position';
 import { usePositionTags, Tags } from '@/entities/tag';
-import { Wrap } from '@/shared/ui/Wrap';
 import { Button } from '@/shared/ui/Button';
-import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
-import { SectionHead } from '@/shared/ui/SectionHead';
 import { Seg } from '@/shared/ui/Seg';
-import { Money } from '@/shared/ui/Money';
+import { PositionsTable } from '@/widgets/positions-table';
 import { RangeScale } from './RangeScale';
 import { PositionTagsModal } from './PositionTagsModal';
 import { useRangeTf, useRangeTfOptions, type RangeTfPref } from '../model/useRangeTf';
-import { formatPriceGrouped, formatQty, durationUnitLabels } from '@/shared/lib/utils/format';
+import { durationUnitLabels } from '@/shared/lib/utils/format';
 import { useLocaleControl } from '@/shared/i18n';
 
 interface TaggingTarget {
@@ -116,97 +113,25 @@ export function OpenPositions() {
 
   const totalPnl = positions.reduce((s, p) => s + (parseFloat(p.unrealisedPnl ?? '') || 0), 0);
 
-  const columns: LedgerColumn<ExchangePosition>[] = [
-    { key: 'symbol', header: t('colSymbol'), render: (p) => <span className="sym">{p.symbol}</span> },
-    {
-      key: 'direction',
-      header: t('colDirection'),
-      render: (p) => <span className={`dir${p.direction === 'short' ? ' short' : ''}`}>{p.direction}</span>,
-    },
-    {
-      key: 'size',
-      header: t('colSize'),
-      align: 'right',
-      cellClassName: 'n',
-      // Как и у закрытых сделок — деньгами. Номинал биржа считает сама
-      // (positionValue), пересчитывать его из размера и цены незачем.
-      render: (p) => <span title={t('qtyTitle', { qty: formatQty(p.size) })}>{formatPriceGrouped(p.positionValue)}</span>,
-    },
-    {
-      key: 'entry',
-      header: t('colEntry'),
-      align: 'right',
-      cellClassName: 'n',
-      render: (p) => formatPriceGrouped(p.avgPrice),
-    },
-    {
-      key: 'mark',
-      header: t('colMark'),
-      align: 'right',
-      cellClassName: 'n',
-      render: (p) => formatPriceGrouped(p.markPrice),
-    },
-    {
-      key: 'liq',
-      header: t('colLiq'),
-      align: 'right',
-      cellClassName: 'n neg',
-      render: (p) => (parseFloat(p.liqPrice ?? '') > 0 ? formatPriceGrouped(p.liqPrice) : '—'),
-    },
-    {
-      key: 'age',
-      header: t('colInPosition'),
-      align: 'right',
-      cellClassName: 'n',
-      render: (p) => <AgeCell position={p} />,
-    },
-    {
-      key: 'range',
-      header: t('colRangeEntry'),
-      width: 150,
-      render: (p) => <RangeCell position={p} rangeTf={rangeTf} />,
-    },
-    {
-      key: 'pnl',
-      header: t('colUnrealizedPnl'),
-      align: 'right',
-      cellClassName: 'n',
-      render: (p) => <Money value={parseFloat(p.unrealisedPnl ?? '') || 0} large />,
-    },
-    {
-      key: 'tags',
-      header: t('colTags'),
-      cellClassName: 'cell-tags',
-      render: (p) => <TagsCell position={p} onEdit={setTagging} />,
-    },
-  ];
-
   return (
     <div className="now" data-tour="positions">
-      {/* Полоса рисуется рывком, стоило позициям открыться, — тот же приём
-          «раскрытия», что и у строк заказа в LedgerTable (row-reveal):
-          content-обёртка растёт из малой высоты в свою нужную, а не
-          вскакивает сразу. Играет один раз, на первое появление — React не
-          пересоздаёт узел при обновлении данных внутри. */}
-      <div className="row-reveal">
-        <Wrap>
-          <SectionHead title={t('openPositionsTitle')}>
-            <Seg
-              options={rangeTfOptions}
-              value={rangeTf}
-              onChange={setRangeTf}
-              className="seg-tight"
-              ariaLabel={t('rangeScaleAriaLabel')}
-            />
-            <Money value={totalPnl} unit="USDT" className="n" />
-          </SectionHead>
-          <LedgerTable
-            columns={columns}
-            rows={positions}
-            rowKey={(p) => `${p.symbol}-${p.direction}`}
+      <PositionsTable
+        positions={positions}
+        title={t('openPositionsTitle')}
+        totalPnl={totalPnl}
+        headExtra={
+          <Seg
+            options={rangeTfOptions}
+            value={rangeTf}
+            onChange={setRangeTf}
+            className="seg-tight"
+            ariaLabel={t('rangeScaleAriaLabel')}
           />
-        </Wrap>
-      </div>
+        }
+        renderAge={(p) => <AgeCell position={p} />}
+        renderRange={(p) => <RangeCell position={p} rangeTf={rangeTf} />}
+        renderTags={(p) => <TagsCell position={p} onEdit={setTagging} />}
+      />
 
       {tagging && (
         <PositionTagsModal

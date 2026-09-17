@@ -184,6 +184,17 @@ export class BacktestService {
     });
   }
 
+  /**
+   * Сессию, которую не собираются доигрывать, отменяет удаление — не
+   * `finish`: тот требует закрытую позицию и оставляет сессию в статистике
+   * как сыгранную. Каскад в схеме (`onDelete: Cascade` от сессии к сделкам,
+   * их выходам, ордерам и тегам) снимает необходимость чистить их здесь.
+   */
+  async deleteSession(userId: string, id: string) {
+    await this.ownedSession(userId, id);
+    await this.prisma.backtestSession.delete({ where: { id } });
+  }
+
   async openTrade(userId: string, sessionId: string, input: OpenTradeInput) {
     const s = await this.ownedSession(userId, sessionId);
     if (s.status !== 'active') throw sessionFinished();

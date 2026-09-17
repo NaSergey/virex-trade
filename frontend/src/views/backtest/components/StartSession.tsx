@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/shared/ui/Button';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
-import { Field, FieldGroup, Input } from '@/shared/ui/Field';
+import { FieldGroup, Input } from '@/shared/ui/Field';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { Seg, type SegOption } from '@/shared/ui/Seg';
 import { useCreateSession } from '../api/hooks';
@@ -31,12 +31,22 @@ export function StartSession({ onStarted }: { onStarted: (id: string) => void })
   ];
 
   return (
-    <section>
+    <section data-tour="bt-start">
       <SectionHead title={t('startTitle')} />
-      <p className="muted">{t('startLead')}</p>
-      <Field label={t('deposit')}>
-        {(id) => <Input id={id} full inputMode="decimal" value={deposit} onChange={(e) => setDeposit(e.target.value)} />}
-      </Field>
+      <p className="muted" style={{ fontSize: 'var(--t-m)' }}>{t('startLead')}</p>
+      {/* Без отдельной строки-подписи над полем: «Депозит» встаёт прямо в него,
+          слева, тем же приёмом, что USDT справа, — полю есть чем назвать себя
+          самому. aria-label держит имя для скринридера взамен снятого <label>. */}
+      <Input
+        full
+        prefix={t('deposit')}
+        suffix="USDT"
+        aria-label={t('deposit')}
+        inputMode="decimal"
+        value={deposit}
+        onChange={(e) => setDeposit(e.target.value)}
+        style={{ marginTop: 'var(--s4)', marginBottom: 'var(--s3)' }}
+      />
       <FieldGroup label={t('date')}>
         <Seg options={visibility} value={date} onChange={setDate} ariaLabel={t('date')} />
       </FieldGroup>

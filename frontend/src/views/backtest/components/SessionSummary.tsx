@@ -1,13 +1,15 @@
 'use client';
 
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useTags } from '@/entities/tag';
+import { TagsDialog } from '@/entities/tag';
 import { useLocaleControl } from '@/shared/i18n';
 import { Button } from '@/shared/ui/Button';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { formatPriceGrouped } from '@/shared/lib/utils/format';
 import { useSetBacktestTags } from '../api/hooks';
 import type { SessionDetail } from '../api/types';
+import { toScreen } from '../lib/money';
 import { SessionTrades } from './SessionTrades';
 import { SummaryCells } from './SummaryCells';
 
@@ -21,8 +23,8 @@ export function SessionSummary({ detail, onLeave }: { detail: SessionDetail; onL
   const { locale } = useLocaleControl();
   const intl = locale === 'en' ? 'en-US' : 'ru-RU';
   const { session, trades, summary } = detail;
-  const { data: tagsData } = useTags();
   const setTags = useSetBacktestTags(session.id);
+  const [taggingFor, setTaggingFor] = useState<string | null>(null);
 
   const full = (ms: number) =>
     new Date(ms).toLocaleString(intl, { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -41,13 +43,21 @@ export function SessionSummary({ detail, onLeave }: { detail: SessionDetail; onL
         {t('balanceFromTo', { from: formatPriceGrouped(session.startBalance), to: formatPriceGrouped(session.balance) })}
       </p>
       <SummaryCells summary={summary} maxDrawdownPct={summary.maxDrawdownPct} />
-      <SessionTrades
-        trades={trades}
-        scale={1}
-        labelFor={short}
-        tags={tagsData?.tags ?? []}
-        onSetTags={(tradeId, tagIds) => setTags.mutate({ tradeId, tagIds })}
-      />
+      <SessionTrades trades={trades} scale={1} labelFor={short} onEditTags={(trade) => setTaggingFor(trade.id)} />
+      {taggingFor != null && (() => {
+        const trade = trades.find((x) => x.id === taggingFor);
+        return trade ? (
+          <TagsDialog
+            title={t('tradeTagsTitle')}
+            subtitle={`${t(`direction.${trade.direction}`)} · ${formatPriceGrouped(toScreen(trade.entryPrice, 1))}`}
+            initialTagIds={trade.tags.map((g) => g.id)}
+            isPending={setTags.isPending}
+            error={setTags.error}
+            onSave={(tagIds) => setTags.mutate({ tradeId: trade.id, tagIds }, { onSuccess: () => setTaggingFor(null) })}
+            onClose={() => setTaggingFor(null)}
+          />
+        ) : null;
+      })()}
     </>
   );
 }

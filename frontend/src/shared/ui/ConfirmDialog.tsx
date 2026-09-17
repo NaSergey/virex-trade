@@ -38,7 +38,9 @@ export function ConfirmDialog({ request, onClose }: { request: ConfirmRequest; o
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       {/* Кромка цветом убытка — то единственное, чем окно необратимого
           отличается от обычного диалога ещё до того, как прочитан заголовок. */}
-      <DialogContent className="dlg-risk">
+      {/* Единственное окно, которое открывают ради ввода: фокус сразу в поле
+          слова — здесь это не мешает прокрутке, поле обычное текстовое. */}
+      <DialogContent className="dlg-risk" autoFocusContent>
         <DialogHeader title={request.title} subtitle={request.subtitle} />
         <DialogBody>
           <Field

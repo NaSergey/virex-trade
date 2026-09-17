@@ -1,10 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { useAuth } from '@/features/auth';
+import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader } from '@/shared/ui/dialog';
 import { Wrap } from '@/shared/ui/Wrap';
-import { useBacktestSessions, useBacktestStats } from './api/hooks';
-import { SessionScreen } from './components/SessionScreen';
+import { useBacktestSessions, useBacktestStats, useDeleteSession } from './api/hooks';
+import type { SessionListItem } from './api/types';
 import { SessionsList } from './components/SessionsList';
 import { StartSession } from './components/StartSession';
 import { StatsBlock } from './components/StatsBlock';
@@ -13,19 +16,19 @@ import { pruneDrawings } from './lib/drawings/store';
 /**
  * Бектест — ручная прокрутка случайного отрезка истории BTC.
  *
- * Без открытой сессии: слева сессии и общая статистика, справа — новая сессия.
- * С открытой — экран прокрутки. Какая сессия открыта — состояние страницы, а
- * не адрес: useSearchParams потребовал бы Suspense-границу ради одной
- * переменной, а делиться ссылкой на тренировочную сессию незачем.
- *
- * Обёртку в .wrap здесь не ставим безусловно: активная сессия — терминал во
- * всю ширину окна и сама решает про поля страницы (см. SessionScreen).
+ * Список сессий и общая статистика слева, новая сессия справа. Открытая
+ * сессия — отдельный адрес `/backtest/<id>` (см. `app/(app)/backtest/[id]`),
+ * а не состояние этой страницы: иначе переход по шапке на `/backtest` из
+ * открытой сессии не менял адрес и ничего не происходил.
  */
 export function BacktestPage() {
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const t = useTranslations('backtest');
+  const router = useRouter();
   const sessions = useBacktestSessions();
   const stats = useBacktestStats();
   const { user } = useAuth();
+  const deleteSession = useDeleteSession();
+  const [deleting, setDeleting] = useState<SessionListItem | null>(null);
 
   // Рисунки удалённых сессий лежат в localStorage, пока их не убрать: чистим по
   // свежему списку, только ключи этого пользователя.
@@ -39,21 +42,48 @@ export function BacktestPage() {
     }
   }, [list, user]);
 
-  if (sessionId) {
-    return <SessionScreen id={sessionId} onLeave={() => setSessionId(null)} />;
-  }
+  const openSession = (id: string) => router.push(`/backtest/${id}`);
 
   return (
-    <Wrap page>
+    <Wrap page style={{ paddingTop: 'var(--s4)' }}>
       <div className="asym">
         <div>
-          <SessionsList sessions={sessions.data?.sessions ?? []} isLoading={sessions.isLoading} onOpen={setSessionId} />
+          <SessionsList
+            sessions={sessions.data?.sessions ?? []}
+            isLoading={sessions.isLoading}
+            onOpen={openSession}
+            onDelete={setDeleting}
+          />
           <StatsBlock stats={stats.data} isLoading={stats.isLoading} />
         </div>
         <div className="marg">
-          <StartSession onStarted={setSessionId} />
+          <StartSession onStarted={openSession} />
         </div>
       </div>
+
+      {/* Не «навсегда, наберите слово»: сессия — черновик попытки, а не запись
+          с последствиями для чужих данных, и большинство удаляемых сессий —
+          пустые прогоны без единой сделки. Обычное подтверждение здесь не
+          рефлекс, который стоит гасить, а нормальный вес действия. */}
+      {deleting && (
+        <Dialog open onOpenChange={(v) => !v && setDeleting(null)}>
+          {/* Кромка цветом убытка — тот же приём, что у ConfirmDialog: окно
+              необратимого опознаётся раньше, чем прочитан заголовок. */}
+          <DialogContent className="dlg-risk">
+            <DialogHeader title={t('deleteSessionTitle')} subtitle={t('deleteSessionSubtitle')} />
+            <DialogBody />
+            <DialogActions
+              confirmLabel={t('deleteSession')}
+              confirmVariant="risk"
+              onConfirm={() => {
+                deleteSession.mutate(deleting.id);
+                setDeleting(null);
+              }}
+              onCancel={() => setDeleting(null)}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </Wrap>
   );
 }

@@ -63,10 +63,8 @@ export function OrderPanel({
   price,
   balance,
   disabled,
-  finishDisabled,
   hint,
   onOpen,
-  onFinish,
   onLeverageCommit,
 }: {
   draft: Draft;
@@ -77,11 +75,8 @@ export function OrderPanel({
   balance: number;
   /** Кнопки Лонг/Шорт. */
   disabled: boolean;
-  /** «Завершить сессию» — ждёт ещё и закрытий открытых сделок, см. SessionScreen. */
-  finishDisabled: boolean;
   hint: string | null;
   onOpen: (direction: Direction) => void;
-  onFinish: () => void;
   /** Плечо, выбранное в диалоге, запоминается как значение по умолчанию для
    * следующей сделки (см. useDefaultLeverage) — вызывается закрытием диалога,
    * а не каждым движением слайдера внутри него. */
@@ -253,12 +248,6 @@ export function OrderPanel({
         </Button>
         <Button variant="short" onClick={() => onOpen('short')} disabled={disabled || balance <= 0}>
           {t('short')}
-        </Button>
-      </div>
-
-      <div className="risk-zone">
-        <Button variant="risk" onClick={onFinish} disabled={finishDisabled}>
-          {t('finish')}
         </Button>
       </div>
 

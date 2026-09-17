@@ -1,24 +1,24 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { Pencil, Plus, Tag as TagIcon, Target, Zap } from 'lucide-react';
+import { Pencil, Tag as TagIcon, Target, Zap } from 'lucide-react';
+import type { ExchangePosition } from '@/entities/position';
 import { Tags } from '@/entities/tag';
 import { useLocaleControl } from '@/shared/i18n';
 import { Button } from '@/shared/ui/Button';
 import { EmptyState } from '@/shared/ui/EmptyState';
-import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
-import { Money } from '@/shared/ui/Money';
+import type { LedgerColumn } from '@/shared/ui/LedgerTable';
 import { Tooltip } from '@/shared/ui/Tooltip';
+import { PositionsTable } from '@/widgets/positions-table';
 import { durationUnitLabels, formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
 import type { BacktestCloseOrder, BacktestTrade } from '../api/types';
 import { liquidationPrice, toScreen, unrealizedPnl } from '../lib/money';
 
-const ICON_SIZE = 14;
+/** В полтора раза крупнее прежних 14: по этим кнопкам целятся в терминале. */
+const ICON_SIZE = 21;
 
-interface Row {
-  trade: BacktestTrade;
-  remaining: number;
-}
+/** Сессия идёт по одному инструменту — по BTC (см. StartSession). */
+const SESSION_SYMBOL = 'BTCUSDT';
 
 /** Время в позиции — по симулированному моменту сессии (`cursor`), не по настоящим часам.
  * Тот же приём отказа, что у `fmtAge` в `views/overview/components/OpenPositions.tsx`:
@@ -34,18 +34,17 @@ function fmtSimAge(entryTime: string, cursor: number, units: { d: string; h: str
 }
 
 /**
- * Открытые позиции сессии — до двух, лонг и шорт разом (хедж). Кнопки закрытия/добора
- * живут здесь, а не в `OrderPanel`: панель ордера никогда не смотрит на то, что уже
- * открыто, а эта таблица — как раз про то, что уже открыто. Колонки — по образцу
- * `views/overview/components/OpenPositions.tsx`, кроме того, чему в бектесте физически
- * неоткуда взяться (символ сессии один, «Диапазон входа» — это live market-context с
- * отдельного эндпоинта, для бектеста источника нет).
+ * Открытые позиции сессии — до двух, лонг и шорт разом (хедж).
  *
- * Теги — как в обзоре: разметить сетап можно, пока сделка ещё открыта и мысль ещё
- * свежая, не только постфактум в истории (`SessionTrades`). В отличие от обзора,
- * у открытой сделки бектеста уже есть настоящий `tradeId` (она такая же строка в БД,
- * что и закрытая) — отдельный live-запрос по символу+направлению не нужен, теги читаются
- * прямо с `trade.tags`.
+ * Таблица — та же `PositionsTable`, что рисует «Открытые позиции — сейчас» на
+ * обзоре: сделка сессии переводится в ту же форму (`ExchangePosition`), и
+ * колонки берутся оттуда целиком, а не повторяются здесь. Бектест добавляет
+ * ровно одно — колонку действий: уровни и закрытия. В живой торговле их нет,
+ * потому что позицией там распоряжается биржа.
+ *
+ * «Вход в диапазоне» не передаётся: это снимок живого рынка с отдельного
+ * эндпоинта, и для симулированного момента истории его неоткуда взять —
+ * колонка в таком случае не рисуется вовсе (см. renderRange).
  */
 export function OpenPositionsPanel({
   trades,
@@ -53,8 +52,6 @@ export function OpenPositionsPanel({
   price,
   cursor,
   closeOrders,
-  onAdd,
-  onLeverage,
   onLimit,
   onMarket,
   onCancelOrder,
@@ -68,9 +65,6 @@ export function OpenPositionsPanel({
   /** Момент симуляции — для «В позиции». */
   cursor: number;
   closeOrders: BacktestCloseOrder[];
-  onAdd: (trade: BacktestTrade) => void;
-  /** Плечо открытых позиций — общее на сессию, меняется у всех разом. */
-  onLeverage: (trade: BacktestTrade) => void;
   onLimit: (trade: BacktestTrade) => void;
   onMarket: (trade: BacktestTrade) => void;
   onCancelOrder: (orderId: string) => void;
@@ -85,119 +79,82 @@ export function OpenPositionsPanel({
     return <EmptyState title={t('noOpenPosition')}>{t('noOpenPositionHint')}</EmptyState>;
   }
 
-  const rows: Row[] = trades.map((trade) => ({ trade, remaining: trade.qty - trade.closedQty }));
+  // Ключ строки в PositionsTable — символ и направление: с хеджем этого хватает,
+  // лонг и шорт по одному инструменту у сессии не повторяются.
+  const byKey = new Map<string, BacktestTrade>();
+  const positions: ExchangePosition[] = trades.map((trade) => {
+    const remaining = trade.qty - trade.closedQty;
+    const entry = toScreen(trade.entryPrice, scale);
+    byKey.set(`${SESSION_SYMBOL}-${trade.direction}`, trade);
+    return {
+      symbol: SESSION_SYMBOL,
+      direction: trade.direction,
+      size: String(remaining),
+      avgPrice: String(entry),
+      markPrice: price != null ? String(toScreen(price, scale)) : undefined,
+      positionValue: String(remaining * entry),
+      unrealisedPnl: price != null ? String(unrealizedPnl(trade.direction, trade.entryPrice, price, remaining)) : undefined,
+      leverage: String(trade.leverage),
+      liqPrice: String(toScreen(liquidationPrice(trade.direction, trade.entryPrice, trade.leverage), scale)),
+    };
+  });
+  const tradeOf = (p: ExchangePosition) => byKey.get(`${p.symbol}-${p.direction}`)!;
 
-  const columns: LedgerColumn<Row>[] = [
-    {
-      key: 'dir',
-      header: t('colDir'),
-      render: (r) => <span className={`dir${r.trade.direction === 'short' ? ' short' : ''}`}>{t(`direction.${r.trade.direction}`)}</span>,
-    },
-    {
-      key: 'entry',
-      header: t('colEntry'),
-      align: 'right',
-      cellClassName: 'n',
-      render: (r) => formatPriceGrouped(toScreen(r.trade.entryPrice, scale)),
-    },
-    {
-      key: 'mark',
-      header: t('colMark'),
-      align: 'right',
-      cellClassName: 'n',
-      render: () => (price != null ? formatPriceGrouped(toScreen(price, scale)) : '—'),
-    },
-    {
-      key: 'size',
-      header: t('colSize'),
-      align: 'right',
-      cellClassName: 'n',
-      render: (r) => (
-        <span title={t('qtyTitle', { qty: formatQty(r.remaining) })}>
-          {formatPriceGrouped(r.remaining * toScreen(r.trade.entryPrice, scale))}
-        </span>
-      ),
-    },
-    {
-      key: 'leverage',
-      header: t('leverageLabel'),
-      align: 'right',
-      cellClassName: 'n',
-      render: (r) => (
-        <Tooltip text={t('leverageOpenHint')}>
-          <Button variant="bare" tight className="cue" aria-label={t('leverageLabel')} onClick={() => onLeverage(r.trade)}>
-            {r.trade.leverage.toFixed(0)}×
-          </Button>
-        </Tooltip>
-      ),
-    },
-    {
-      key: 'liq',
-      header: t('liqLabel'),
-      align: 'right',
-      cellClassName: 'n neg',
-      render: (r) => formatPriceGrouped(toScreen(liquidationPrice(r.trade.direction, r.trade.entryPrice, r.trade.leverage), scale)),
-    },
-    {
-      key: 'age',
-      header: t('colInPosition'),
-      align: 'right',
-      cellClassName: 'n',
-      render: (r) => <span className="muted">{fmtSimAge(r.trade.entryTime, cursor, units)}</span>,
-    },
-    {
-      key: 'pnl',
-      header: t('colPnl'),
-      align: 'right',
-      cellClassName: 'n',
-      render: (r) => (price != null ? <Money value={unrealizedPnl(r.trade.direction, r.trade.entryPrice, price, r.remaining)} large /> : '—'),
-    },
-    {
-      key: 'tags',
-      header: t('colTags'),
-      cellClassName: 'cell-tags',
-      render: (r) => (
-        <Tags tags={r.trade.tags}>
-          <Tooltip text={t('addTag')}>
-            <Button variant="add" tight aria-label={t('addTag')} onClick={() => onTags(r.trade)}>
-              <TagIcon size={ICON_SIZE} />
-            </Button>
-          </Tooltip>
-        </Tags>
-      ),
-    },
+  const totalPnl =
+    price != null
+      ? trades.reduce((s, x) => s + unrealizedPnl(x.direction, x.entryPrice, price, x.qty - x.closedQty), 0)
+      : null;
+
+  const actions: LedgerColumn<ExchangePosition>[] = [
     {
       key: 'actions',
-      render: (r) => (
-        <span className="row-actions">
-          <Tooltip text={t('addToPosition')}>
-            <Button tight aria-label={t('addToPosition')} onClick={() => onAdd(r.trade)}>
-              <Plus size={ICON_SIZE} />
-            </Button>
-          </Tooltip>
-          <Tooltip text={t('changeLevels')}>
-            <Button tight aria-label={t('changeLevels')} onClick={() => onChangeLevels(r.trade)}>
-              <Pencil size={ICON_SIZE} />
-            </Button>
-          </Tooltip>
-          <Tooltip text={t('limitClose')}>
-            <Button tight aria-label={t('limitClose')} onClick={() => onLimit(r.trade)}>
-              <Target size={ICON_SIZE} />
-            </Button>
-          </Tooltip>
-          <Tooltip text={t('marketClose')}>
-            <Button tight variant="risk" aria-label={t('marketClose')} onClick={() => onMarket(r.trade)}>
-              <Zap size={ICON_SIZE} />
-            </Button>
-          </Tooltip>
-        </span>
-      ),
+      render: (p) => {
+        const trade = tradeOf(p);
+        return (
+          <span className="row-actions">
+            <Tooltip text={t('changeLevels')}>
+              <Button tight aria-label={t('changeLevels')} onClick={() => onChangeLevels(trade)}>
+                <Pencil size={ICON_SIZE} />
+              </Button>
+            </Tooltip>
+            <Tooltip text={t('limitClose')}>
+              <Button tight aria-label={t('limitClose')} onClick={() => onLimit(trade)}>
+                <Target size={ICON_SIZE} />
+              </Button>
+            </Tooltip>
+            <Tooltip text={t('marketClose')}>
+              <Button tight variant="risk" aria-label={t('marketClose')} onClick={() => onMarket(trade)}>
+                <Zap size={ICON_SIZE} />
+              </Button>
+            </Tooltip>
+          </span>
+        );
+      },
     },
   ];
 
   return (
     <div>
-      <LedgerTable columns={columns} rows={rows} rowKey={(r) => r.trade.id} />
+      <PositionsTable
+        positions={positions}
+        title={t('openPositionsTitle')}
+        totalPnl={totalPnl}
+        renderAge={(p) => <span className="muted">{fmtSimAge(tradeOf(p).entryTime, cursor, units)}</span>}
+        renderTags={(p) => {
+          const trade = tradeOf(p);
+          return (
+            <Tags tags={trade.tags}>
+              <Tooltip text={t('addTag')}>
+                <Button variant="add" tight aria-label={t('addTag')} onClick={() => onTags(trade)}>
+                  <TagIcon size={ICON_SIZE} />
+                </Button>
+              </Tooltip>
+            </Tags>
+          );
+        }}
+        extraColumns={actions}
+        flush
+      />
       {trades.map((trade) => {
         const orders = closeOrders.filter((o) => o.tradeId === trade.id);
         if (orders.length === 0) return null;

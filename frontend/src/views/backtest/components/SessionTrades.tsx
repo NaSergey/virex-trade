@@ -1,130 +1,104 @@
 'use client';
 
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { TagPicker, type TagItem } from '@/entities/tag';
-import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
-import { Money } from '@/shared/ui/Money';
-import { durationUnitLabels, formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
-import { useLocaleControl } from '@/shared/i18n';
+import type { Trade } from '@/entities/trade';
+import { EmptyState } from '@/shared/ui/EmptyState';
+import { Pagination } from '@/shared/ui/Pagination';
+import { SectionHead } from '@/shared/ui/SectionHead';
+import { TradesTable } from '@/widgets/trades-table';
 import type { BacktestTrade } from '../api/types';
-import { formatR, toScreen } from '../lib/money';
+import { toScreen } from '../lib/money';
+import { TradeDetails } from './TradeDetails';
 
-/** Сколько сделка держалась — от входа до закрытия, тем же счётом, что и `fmtHold` в
- * `widgets/trades-table/TradesTable.tsx`, но от полей самой сделки бектеста. */
-function fmtHold(entryTime: string, exitTime: string, units: { d: string; h: string; m: string }): string {
-  const min = Math.floor((Date.parse(exitTime) - Date.parse(entryTime)) / 60_000);
-  if (!Number.isFinite(min) || min < 0) return '—';
-  const d = Math.floor(min / 1440);
-  const h = Math.floor((min % 1440) / 60);
-  const m = String(min % 60).padStart(2, '0');
-  if (d > 0) return `${d} ${units.d} ${h} ${units.h} ${m} ${units.m}`;
-  return h > 0 ? `${h} ${units.h} ${m} ${units.m}` : `${min} ${units.m}`;
+/** Столько же записей на лист, сколько в журнале обзора (см. OverviewPage). */
+const PAGE_SIZE = 10;
+
+/** Сессия идёт по одному инструменту — по BTC (см. StartSession). */
+const SESSION_SYMBOL = 'BTCUSDT';
+
+/**
+ * Сделка сессии в форме журнальной записи. Цены переводятся в показ (`toScreen`):
+ * пока сессия идёт, настоящие цены могут быть скрыты, и таблица обязана
+ * показывать ровно то же, что график рядом.
+ */
+function toTrade(x: BacktestTrade, scale: number): Trade {
+  return {
+    id: x.id,
+    symbol: SESSION_SYMBOL,
+    direction: x.direction,
+    qty: x.qty,
+    avgEntryPrice: toScreen(x.entryPrice, scale),
+    avgExitPrice: x.exitPrice != null ? toScreen(x.exitPrice, scale) : 0,
+    closedPnl: x.pnl ?? 0,
+    openFee: 0,
+    closeFee: x.fee ?? 0,
+    leverage: x.leverage,
+    // Открытая сделка закрытого времени не имеет: колонка «Закрыта» получит
+    // время входа, а «В позиции» посчитается от него же и даст ноль. Врать
+    // датой закрытия нечем — до закрытия её просто нет.
+    closedAt: x.exitTime ?? x.entryTime,
+    openedAt: x.entryTime,
+    parts: 1,
+    tags: x.tags,
+  };
 }
 
 /**
- * Сделки сессии, свежие сверху. Колонки — по образцу «Закрытых сделок» обзора
- * (`TradesTable`): закрыто/вход/выход отдельными колонками, размер в USDT, время в
- * позиции. R и «Выход по» остаются — их даёт только бектест, в живой торговле такого нет.
- * Раскрытие строки — выбор тегов (`TagPicker`), не переезжает на ордера/график из
- * `TradesTable`: график сессии и так всегда на экране.
+ * Сделки сессии — тот же журнал, что «Закрытые сделки» на обзоре: та же
+ * `TradesTable`, те же колонки, тот же разворот листами по {@link PAGE_SIZE}
+ * (там — снаружи через `Pagination`, здесь — своя: сессия приходит целиком, и
+ * ходить за страницей на сервер не за чем). Строка так же раскрывается разбором сделки —
+ * только разбор свой (`TradeDetails`): филлов биржи у симуляции нет, есть план
+ * входа. Не переносится одно — окно с биржевым графиком вокруг цены: свечей
+ * сделки бектеста на бирже не существует.
+ *
+ * Своей таблицы у бектеста больше нет намеренно: пока их было две, колонки
+ * расходились составом и порядком при любой правке одной из них.
  */
 export function SessionTrades({
   trades,
   scale,
   labelFor,
-  tags,
-  onSetTags,
+  onEditTags,
 }: {
   trades: BacktestTrade[];
   /** Масштаб показа; у завершённой сессии — 1, цены раскрыты. */
   scale: number;
   labelFor: (t: number) => string;
-  tags: TagItem[];
-  onSetTags: (tradeId: string, tagIds: string[]) => void;
+  /** Без обработчика тег из таблицы не завести — плашки останутся только на чтение. */
+  onEditTags?: (trade: BacktestTrade) => void;
 }) {
   const t = useTranslations('backtest');
-  const { locale } = useLocaleControl();
-  const units = durationUnitLabels(locale);
-  const price = (p: number) => formatPriceGrouped(toScreen(p, scale));
+  const [page, setPage] = useState(1);
 
-  const columns: LedgerColumn<BacktestTrade>[] = [
-    {
-      key: 'closed',
-      header: t('colClosed'),
-      cellClassName: 'n',
-      render: (x) => <span className="muted">{x.exitTime ? labelFor(Date.parse(x.exitTime)) : '—'}</span>,
-    },
-    { key: 'dir', header: t('colDir'), render: (x) => t(`direction.${x.direction}`) },
-    { key: 'entry', header: t('colEntry'), align: 'right', cellClassName: 'n', render: (x) => price(x.entryPrice) },
-    {
-      key: 'exit',
-      header: t('colExit'),
-      align: 'right',
-      cellClassName: 'n',
-      render: (x) => (x.exitPrice != null ? price(x.exitPrice) : '—'),
-    },
-    {
-      key: 'size',
-      header: t('colSize'),
-      align: 'right',
-      cellClassName: 'n',
-      render: (x) => (
-        <span title={t('qtyTitle', { qty: formatQty(x.qty) })}>{formatPriceGrouped(x.qty * toScreen(x.entryPrice, scale))}</span>
-      ),
-    },
-    {
-      key: 'hold',
-      header: t('colInPosition'),
-      align: 'right',
-      cellClassName: 'n',
-      render: (x) => <span className="muted">{x.exitTime ? fmtHold(x.entryTime, x.exitTime, units) : '—'}</span>,
-    },
-    { key: 'reason', header: t('colReason'), render: (x) => t(`reason.${x.exitReason ?? 'open'}`) },
-    {
-      key: 'r',
-      header: t('colR'),
-      align: 'right',
-      cellClassName: 'n',
-      render: (x) => (x.r != null ? <span className={x.r >= 0 ? 'pos' : 'neg'}>{formatR(x.r)}</span> : '—'),
-    },
-    {
-      key: 'pnl',
-      header: t('colPnl'),
-      align: 'right',
-      cellClassName: 'n',
-      render: (x) => (x.pnl != null ? <Money value={x.pnl} /> : '—'),
-    },
-    {
-      key: 'tags',
-      header: t('colTags'),
-      cellClassName: 'cell-tags',
-      render: (x) => (x.tags.length ? x.tags.map((g) => g.name).join(', ') : <span className="muted">—</span>),
-    },
-  ];
+  // Свежие сверху — как в журнале обзора, где сервер отдаёт сделки тем же порядком.
+  const rows = [...trades].reverse();
+  const lastPage = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const shownPage = Math.min(page, lastPage);
+  const pageRows = rows.slice((shownPage - 1) * PAGE_SIZE, shownPage * PAGE_SIZE);
+  const byId = new Map(trades.map((x) => [x.id, x]));
 
   return (
     <section>
-      <LedgerTable
-        columns={columns}
-        rows={[...trades].reverse()}
-        rowKey={(x) => x.id}
-        empty={t('noTrades')}
-        renderExpanded={(x) => {
-          const selected = new Set(x.tags.map((g) => g.id));
-          return (
-            <TagPicker
-              tags={tags}
-              selected={selected}
-              onToggle={(id) => {
-                const next = new Set(selected);
-                if (next.has(id)) next.delete(id);
-                else next.add(id);
-                onSetTags(x.id, [...next]);
-              }}
-            />
-          );
-        }}
+      <SectionHead title={t('closedTradesTitle')} />
+      <TradesTable
+        trades={pageRows.map((x) => toTrade(x, scale))}
+        formatClosed={(iso) => labelFor(Date.parse(iso))}
+        chart={false}
+        renderExpanded={(tr) => <TradeDetails trade={byId.get(tr.id)!} scale={scale} labelFor={labelFor} />}
+        onEditTags={onEditTags && ((tr) => onEditTags(byId.get(tr.id)!))}
+        empty={<EmptyState title={t('noTrades')} />}
       />
+      {rows.length > 0 && (
+        <Pagination
+          page={shownPage}
+          pageSize={PAGE_SIZE}
+          total={rows.length}
+          onPrev={() => setPage((p) => Math.max(1, p - 1))}
+          onNext={() => setPage((p) => p + 1)}
+        />
+      )}
     </section>
   );
 }
