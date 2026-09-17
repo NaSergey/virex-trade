@@ -176,6 +176,26 @@ docker compose -f docker-compose.prod.yml logs -f api   # старт NestJS бе
 
 ## 5. Обновление кода
 
+**Перед выкладкой ветки с T18 (уже в `main`, если этот раздел читаете после
+её мёржа — проверьте, применяли ли этот шаг раньше) нужен один ручной шаг
+до обычного деплоя.** T18 сменил первичный ключ таблиц
+`user_activity_minutes`/`user_section_days` — на проде это ломающее схему
+изменение: неинтерактивный `prisma db push` при старте `api` откажется его
+применить без `--accept-data-loss`, `api` уйдёт в рестарт-луп (healthcheck
+красный), следом не поднимется `worker` (`depends_on: api: service_healthy`)
+— а поскольку `/auth/*` тоже маршрутизируется в `api` (см. раздел 2), вход в
+продукт целиком ляжет, и без чтения логов причина не очевидна. Точная
+команда и обоснование — `docs/deploy/user-activity-retention.md`, раздел
+«Выкладка на прод требует ручного шага»:
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T db \
+  psql -U virex -d virex -c \
+  "DROP TABLE IF EXISTS user_activity_minutes, user_section_days;"
+```
+
+Дальше — обычный деплой:
+
 ```bash
 git pull
 docker compose --env-file .env.prod -f docker-compose.prod.yml --profile edge up -d --build
