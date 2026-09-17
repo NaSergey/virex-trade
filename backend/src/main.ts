@@ -18,7 +18,7 @@ async function bootstrap() {
     // ROLE=worker: ни HTTP, ни `/health` этому процессу не нужны — он не
     // стоит за healthcheck'ом compose (тот смотрит на `api`). `listen()` сам
     // вызывает `init()`, если его не позвать явно — а без init() не
-    // сработают OnApplicationBootstrap-хуки, и все девять фоновых сервисов
+    // сработают OnApplicationBootstrap-хуки, и все десять фоновых сервисов
     // и telegram-поллинг просто не стартуют. Порт не открываем вовсе — это
     // и есть "не слушает HTTP", а не просто "на порт никто не приходит".
     await app.init();

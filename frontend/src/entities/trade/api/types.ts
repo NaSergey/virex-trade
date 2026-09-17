@@ -2,7 +2,10 @@
 export interface Trade {
   id: string;
   symbol: string;
-  side: 'Buy' | 'Sell';
+  // T2 убрал side/orderId/createdAt из select() бэкенда (/api/trades) — они
+  // опциональны здесь, а не отсутствуют вовсе, т.к. другие ответы (например
+  // раскрытая позиция) исторически могли их нести.
+  side?: 'Buy' | 'Sell';
   direction: 'long' | 'short';
   qty: number;
   avgEntryPrice: number;
@@ -11,10 +14,10 @@ export interface Trade {
   openFee: number;
   closeFee: number;
   leverage: number | null;
-  orderId: string;
+  orderId?: string;
   closedAt: string;
   openedAt: string | null; // approximate entry time (null for pre-feature trades)
-  createdAt: string;
+  createdAt?: string;
   // Из скольких закрывающих ордеров собрана позиция (1 = закрыта разом).
   parts: number;
   tags?: Array<{ id: string; name: string; color: string }>;

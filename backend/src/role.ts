@@ -2,16 +2,23 @@
  * T11 (docs/superpowers/sdd/2026-09-16-backend-optimization): один и тот же
  * образ поднимается в двух ролях, переменной окружения `ROLE`.
  *
- * - `api` — HTTP, без единого `setInterval`, без telegram-поллинга.
- * - `worker` — ровно один процесс: девять фоновых сервисов (trade-sync,
+ * - `api` — HTTP, без телеграм-поллинга и без фоновых БИЗНЕС-циклов (синк,
+ *   уведомления, снапшоты, ...). Не то же самое, что «без единого
+ *   `setInterval`»: после T22 в `api` крутится и собственная гигиена памяти
+ *   (`BybitMarketService.sweepTimer` — чистка просроченных записей
+ *   process-local кэша рыночных данных). Это намеренно НЕ гейтится ролью, в
+ *   отличие от `worker`-сервисов ниже: это память конкретного процесса, а не
+ *   общий ресурс (БД/биржа), который дублирующиеся процессы делили бы и
+ *   гонялись за ним.
+ * - `worker` — ровно один процесс: десять фоновых сервисов (trade-sync,
  *   balance-snapshot, price-sync, liquidity-snapshot, market-alerts,
- *   weekly-report, usage-tracker, refresh-token-cleanup, tron-watcher) +
- *   telegram-поллинг, без HTTP-порта.
+ *   weekly-report, usage-tracker, usage-cleanup, refresh-token-cleanup,
+ *   tron-watcher) + telegram-поллинг, без HTTP-порта.
  * - `all` (дефолт, локальный запуск) — ведёт себя как единый процесс всегда
  *   вёл: и HTTP, и весь фон.
  *
  * Разделение реализовано guard'ом в начале `onApplicationBootstrap()` каждого
- * из девяти сервисов и `TelegramService`, а не условной регистрацией
+ * из десяти сервисов и `TelegramService`, а не условной регистрацией
  * провайдеров в `AppModule`: эти сервисы инжектятся в контроллеры и другие
  * сервисы (например, `TelegramService.sendText` вызывают чекеры уведомлений,
  * `TradeSyncService.syncUser` — контроллер ручного ресинка), поэтому убрать
@@ -33,7 +40,7 @@ function readRole(): Role {
 export const ROLE: Role = readRole();
 
 /**
- * Девять фоновых сервисов и telegram-поллинг стартуют в этой роли.
+ * Десять фоновых сервисов и telegram-поллинг стартуют в этой роли.
  * Вызывается первой строкой в их `onApplicationBootstrap()`.
  */
 export function runsBackgroundJobs(): boolean {
