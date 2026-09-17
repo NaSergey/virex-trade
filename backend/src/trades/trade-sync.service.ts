@@ -1,18 +1,36 @@
-import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnApplicationBootstrap,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CredentialsService } from '../credentials/credentials.service';
 import { ExchangeRegistry } from '../exchanges/exchange-registry.service';
-import { ClosedTrade, ExchangeId } from '../exchanges/exchange.types';
+import { ExchangePositionsCacheService } from '../exchanges/exchange-positions-cache.service';
+import {
+  ClosedTrade,
+  ExchangeId,
+  PositionsResult,
+} from '../exchanges/exchange.types';
 import { TagsService } from '../tags/tags.service';
 import { OpenedPositionInfo } from '../telegram/telegram.service';
 import { TradeAlertsService } from '../notifications/trade-alerts.service';
 import { TradeContextService } from './trade-context.service';
 import { PositionBuilderService } from './position-builder.service';
+import { DataVersionService } from '../prisma/data-version.service';
+import { runsBackgroundJobs } from '../role';
+import { runWithConcurrency } from '../common/concurrency';
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const BACKFILL_WEEKS = 26; // first run: import ~6 months of history
 const SYNC_INTERVAL_MS = 60_000; // periodic incremental sync
+// T12 (A3): 8-16 одновременных пользователей помещают обход на 1000
+// подключённых аккаунтов в интервал (~50с при 12 в параллель, 250мс на
+// вызов, 4 вызова на пользователя) — не кладя при этом пул Prisma и сеть
+// тысячей одновременных запросов, как голый Promise.all.
+const SYNC_CONCURRENCY = 12;
 
 /**
  * Стоп с биржи — десятичная строка. Ноль и пустая строка у нескольких бирж
@@ -39,7 +57,9 @@ export function stopLossOf(raw: string | undefined): number | null {
  * ever sees normalized ClosedTrade/OpenPosition values.
  */
 @Injectable()
-export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy {
+export class TradeSyncService
+  implements OnApplicationBootstrap, OnModuleDestroy
+{
   private readonly logger = new Logger(TradeSyncService.name);
   // Per-user locks, not one global flag: a single shared `syncing` boolean let
   // the background sweep swallow a user's manual re-sync (it returned a
@@ -57,9 +77,15 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     private readonly tradeAlerts: TradeAlertsService,
     private readonly tradeContext: TradeContextService,
     private readonly positions: PositionBuilderService,
+    private readonly dataVersion: DataVersionService,
+    private readonly positionsCache: ExchangePositionsCacheService,
   ) {}
 
   onApplicationBootstrap() {
+    // T11: этот сервис — один из девяти фоновых, живёт только в роли worker
+    // (и в дефолтной all). В роли api его периодический таймер не стартует —
+    // syncUser() для ручного ресинка остаётся вызываемым через DI как обычно.
+    if (!runsBackgroundJobs()) return;
     // Don't block startup on the network; sync in the background.
     this.syncAll().catch((e) => this.logger.error('initial sync failed', e));
     this.timer = setInterval(() => {
@@ -75,14 +101,27 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
   async syncAll(opts?: { full?: boolean }): Promise<{ inserted: number }> {
     if (this.sweeping) return { inserted: 0 };
     this.sweeping = true;
+    // T1 (docs/superpowers/specs/2026-09-16-backend-optimization.md): временный
+    // замер числа SQL-запросов одного прогона syncAll, за тем же флагом, что
+    // счётчик в PrismaService. Убрать вместе с остальной измерительной
+    // инфраструктурой спеки после приёмки задач группы A. Длительность обхода
+    // (T12, ниже) — отдельный, постоянный лог, флагом не прикрыт.
+    const measure = Boolean(process.env.PRISMA_LOG_QUERIES);
+    const t0 = Date.now();
+    if (measure) this.prisma.resetQueryCount();
+    let userCount = 0;
     try {
       const users = await this.prisma.user.findMany({
         where: { activeExchange: { not: null } },
         select: { id: true },
       });
+      userCount = users.length;
       let inserted = 0;
-      for (const u of users) {
-        if (this.inFlight.has(u.id)) continue; // manual re-sync already running
+      // T12 (A3): не более SYNC_CONCURRENCY пользователей одновременно —
+      // последовательный for на 1000 аккаунтов не помещался в минутный
+      // интервал (десять минут на обход, см. бриф).
+      await runWithConcurrency(users, SYNC_CONCURRENCY, async (u) => {
+        if (this.inFlight.has(u.id)) return; // manual re-sync already running
         // One user's failure (revoked keys, an undecryptable credential blob,
         // an exchange outage) must not abort the sweep for everyone behind them.
         try {
@@ -90,10 +129,20 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
         } catch (e) {
           this.logger.warn(`sync failed for user ${u.id}: ${e}`);
         }
-      }
+      });
       return { inserted };
     } finally {
       this.sweeping = false;
+      // T12 (A3): постоянный лог длительности обхода — раньше её было не
+      // видно совсем, а без неё не понять, укладывается ли синк в минуту.
+      this.logger.log(
+        `syncAll: ${Date.now() - t0} мс, пользователей с активной биржей: ${userCount}`,
+      );
+      if (measure) {
+        this.logger.log(
+          `[T1] syncAll: ${this.prisma.queryCount} запросов Prisma`,
+        );
+      }
     }
   }
 
@@ -110,7 +159,10 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     return { inserted: await this.runLocked(userId, opts) };
   }
 
-  private async runLocked(userId: string, opts?: { full?: boolean }): Promise<number> {
+  private async runLocked(
+    userId: string,
+    opts?: { full?: boolean },
+  ): Promise<number> {
     this.inFlight.add(userId);
     try {
       return await this.syncUserUnlocked(userId, opts);
@@ -119,7 +171,10 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     }
   }
 
-  private async syncUserUnlocked(userId: string, opts?: { full?: boolean }): Promise<number> {
+  private async syncUserUnlocked(
+    userId: string,
+    opts?: { full?: boolean },
+  ): Promise<number> {
     const active = await this.credentials.getActive(userId);
     if (!active) return 0;
     const { exchange, credentials: creds } = active;
@@ -127,7 +182,9 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
 
     // Backfill depth is per exchange: connecting a second exchange must pull
     // its full history, not the one-week increment the first one is down to.
-    const existing = await this.prisma.trade.count({ where: { userId, exchange } });
+    const existing = await this.prisma.trade.count({
+      where: { userId, exchange },
+    });
     const weeks = opts?.full || existing === 0 ? BACKFILL_WEEKS : 1;
     const now = Date.now();
     // Всё, что вставит этот прогон, отбирается по createdAt позже этой метки —
@@ -146,16 +203,36 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
       throw e;
     }
     if (closed.partial) {
-      this.logger.warn(`closed-trade fetch incomplete for ${exchange}: ${closed.error}`);
+      this.logger.warn(
+        `closed-trade fetch incomplete for ${exchange}: ${closed.error}`,
+      );
     }
     const inserted = await this.persist(userId, exchange, closed.items);
     await this.tradeAlerts.syncOutcome(userId, !closed.partial);
+    // T-final-review (re-review, IMPORTANT): символы этого тика с новыми
+    // closed-pnl `Trade` — нужны PositionBuilderService.sync ниже, чтобы
+    // расширить область перестройки конкретно на них (см. комментарий у
+    // вызова positions.sync). Берём символы ВСЕГО полученного батча, а не
+    // только реально вставленных строк: `createMany({ skipDuplicates: true })`
+    // в persist() не сообщает, какие именно строки были дублями, а включить
+    // чуть больше символов, чем строго необходимо, безопасно и дёшево — тот
+    // же принцип "scope шире, чем нужно, но никогда не уже", что уже
+    // описан в PositionBuilderService (см. её комментарий класса).
+    const newTradeSymbols = inserted > 0 ? new Set(closed.items.map((t) => t.symbol)) : undefined;
     if (inserted > 0) {
       this.logger.log(`synced ${inserted} new trade(s) for user ${userId}`);
+      // T10 (A2): новые строки Trade видят все закэшированные агрегаты
+      // (stats/list/lab/habits/...) — версия должна подняться раньше любого
+      // раннего return ниже, поэтому бампим сразу же, а не в конце функции.
+      await this.dataVersion.bump(userId);
       // New closed trades inherit the entry-reason tags of their position.
       try {
         const linked = await this.tags.linkTagsToNewTrades(userId);
-        if (linked > 0) this.logger.log(`linked ${linked} tag(s) to synced trades`);
+        if (linked > 0) {
+          this.logger.log(`linked ${linked} tag(s) to synced trades`);
+          // Теги на сделке видит statsByTag/statsByTagCombo/list/lab/habits.
+          await this.dataVersion.bump(userId);
+        }
       } catch (e) {
         this.logger.warn(`tag linking failed: ${e}`);
       }
@@ -166,18 +243,84 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     // rows of closed positions.
     try {
       const filled = await this.fillEntryStamps(userId);
-      if (filled > 0) this.logger.log(`stamped openedAt on ${filled} trade(s)`);
+      if (filled > 0) {
+        this.logger.log(`stamped openedAt on ${filled} trade(s)`);
+        // Trade.openedAt видят list/stats/statsByTime (длительность удержания,
+        // час/день входа) — stopLoss в этом же UPDATE кэшируемым эндпоинтам не
+        // виден (его читает только trade-risk.service.ts, вне скоупа кэша), но
+        // бампим всё равно: поле пишется тем же вызовом ради openedAt.
+        await this.dataVersion.bump(userId);
+      }
     } catch (e) {
       this.logger.warn(`openedAt fill failed: ${e}`);
     }
+    // T12 (A3): один запрос открытых позиций на весь тик, не два — раньше
+    // sync() ниже и блок обрезки тегов дальше по функции каждый вызывали
+    // adapter.getOpenPositions(creds) сами по себе. Отказ трактуется как
+    // "нет открытых" в обоих потребителях, ровно как раньше делал каждый
+    // из них по отдельности при таком же отказе.
+    let open: PositionsResult;
+    try {
+      // T20 (B4): same 12s cache class as /api/exchange/positions
+      // (ExchangePositionsCacheService). This actually coalesces with a
+      // browser poll only when both run in the same process — true for the
+      // combined `all`-role deployment (local dev), NOT true in prod's split
+      // api/worker processes (T11), where this service has run its own
+      // separate instance since it has no way to share one across processes.
+      // Still worth going through: it keeps this call's own retry/no-cache-
+      // on-failure behavior consistent with the controller's, and coalesces
+      // this service's own concurrent/rapid calls (e.g. a manual re-sync
+      // landing mid-tick) with the scheduled tick's.
+      open = await this.positionsCache.getOpenPositions(
+        userId,
+        exchange,
+        creds,
+      );
+    } catch (e) {
+      this.logger.warn(`open positions fetch failed: ${e}`);
+      open = { success: false, positions: [] };
+    }
+    // T17 (B3): сигнал для TradeContextService.computeMissing — были ли в
+    // этом тике изменения, которые могли породить сделки без контекста или
+    // устаревший (basis != 'filled') контекст. `inserted > 0` — новые
+    // закрытые сделки (context: null у них сразу). `positionsRegrouped` —
+    // positionId существующей сделки поменялся (p.stamped > 0 ниже): именно
+    // это условие снимает basis != 'filled' в dropStale (см. её комментарий
+    // «a position is only reconstructed when its last closing fill lands»),
+    // и оно НЕ обязано совпадать с inserted > 0 — фьючерсы, добавленные в уже
+    // открытую позицию, дают новые Execution без нового закрытого Trade.
+    let positionsRegrouped = false;
     // Group the closing orders of one position under a shared positionId, so
     // partial take-profits and averaging in stop counting as separate trades.
     // Runs every tick (not just on inserts): a position that closed in parts
     // only becomes groupable once its final closing fill arrives.
     try {
-      const p = await this.positions.sync(userId, exchange, creds, opts);
+      // T-final-review (re-review, IMPORTANT): `newTradeSymbols` — отдельно от
+      // внешнего `opts.full` — говорит PositionBuilderService, какие символы
+      // этого тика получили новые closed-pnl `Trade` (см. условие скипа и
+      // scopeFor в position-builder.service.ts), даже если сама эта пачка
+      // фактически не сдвинула открытый размер и не дала нового филла по
+      // этому символу. Раньше здесь был голый булев `hadNewTrades` — но без
+      // ИМЕНИ символа PositionBuilderService не мог расширить scope точечно:
+      // в смешанном тике (символ Y даёт обычную touched/changed-активность,
+      // а у символа X только его closed-pnl запись прилетела с опозданием)
+      // scope не пустой (в нём есть Y) — старый fallback «пустой scope + флаг
+      // → полный обход» на такой тик не срабатывал, и X оставался без
+      // перестройки.
+      const p = await this.positions.sync(userId, exchange, creds, open, {
+        ...opts,
+        newTradeSymbols,
+      });
       if (p.fills > 0 || p.stamped > 0) {
-        this.logger.log(`positions: +${p.fills} fill(s), ${p.stamped} trade(s) grouped into ${p.positions} position(s)`);
+        this.logger.log(
+          `positions: +${p.fills} fill(s), ${p.stamped} trade(s) grouped into ${p.positions} position(s)`,
+        );
+      }
+      if (p.stamped > 0) {
+        // Trade.positionId меняет схлопывание в позиции (collapseToPositions)
+        // — и тем самым totalTrades/winrate/equity ВСЕХ кэшируемых агрегатов.
+        await this.dataVersion.bump(userId);
+        positionsRegrouped = true;
       }
     } catch (e) {
       this.logger.warn(`position rebuild failed: ${e}`);
@@ -185,17 +328,25 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     // Market-context snapshots for trades that don't have one yet (new trades
     // + progressive backfill of history). Must run AFTER fillEntryStamps so the
     // snapshot anchors at the entry time whenever we know it.
+    // (TradeContextService.computeMissing bumps the version itself when it
+    // actually writes rows — entryQuality/exitQuality/trend4h/... feed stats
+    // and lab/habits, and it's the same service on every future caller, not
+    // just this one, so it owns the bump.)
     try {
-      const ctx = await this.tradeContext.computeMissing(userId);
-      if (ctx > 0) this.logger.log(`computed market context for ${ctx} trade(s)`);
+      const ctx = await this.tradeContext.computeMissing(userId, {
+        hadChanges: inserted > 0 || positionsRegrouped,
+      });
+      if (ctx > 0)
+        this.logger.log(`computed market context for ${ctx} trade(s)`);
     } catch (e) {
       this.logger.warn(`trade context compute failed: ${e}`);
     }
     // Drop position tags once their position has fully closed, so they don't
     // carry over to the next position opened on the same symbol+direction.
     // The openedAt registry follows the exact same lifecycle.
+    // T12: переиспользует `open`, запрошенный один раз выше — было второе
+    // такое же обращение к бирже в этом же тике.
     try {
-      const open = await adapter.getOpenPositions(creds);
       if (open.success) {
         // Tag prune keeps the historical unfiltered-keys semantics (a 0-size
         // row keeps tags one extra tick, which linkTagsToNewTrades relies on).
@@ -242,16 +393,36 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
    * notification with tag buttons (no-op for users without a linked chat, so
    * the first tick after this feature deploys can't flood anyone).
    */
-  private async trackOpenPositions(userId: string, positions: OpenedPositionInfo[]): Promise<void> {
-    const existing = await this.prisma.openPositionSeen.findMany({ where: { userId } });
-    const existingKeys = new Set(existing.map((r) => `${r.symbol}|${r.direction}`));
-    const openKeys = new Set(positions.map((p) => `${p.symbol}|${p.direction}`));
+  private async trackOpenPositions(
+    userId: string,
+    positions: OpenedPositionInfo[],
+  ): Promise<void> {
+    const existing = await this.prisma.openPositionSeen.findMany({
+      where: { userId },
+    });
+    const existingKeys = new Set(
+      existing.map((r) => `${r.symbol}|${r.direction}`),
+    );
+    const openKeys = new Set(
+      positions.map((p) => `${p.symbol}|${p.direction}`),
+    );
 
     for (const p of positions) {
       if (existingKeys.has(`${p.symbol}|${p.direction}`)) continue;
       await this.prisma.openPositionSeen.upsert({
-        where: { userId_symbol_direction: { userId, symbol: p.symbol, direction: p.direction } },
-        create: { userId, symbol: p.symbol, direction: p.direction, stopLoss: stopLossOf(p.stopLoss) },
+        where: {
+          userId_symbol_direction: {
+            userId,
+            symbol: p.symbol,
+            direction: p.direction,
+          },
+        },
+        create: {
+          userId,
+          symbol: p.symbol,
+          direction: p.direction,
+          stopLoss: stopLossOf(p.stopLoss),
+        },
         update: {}, // first-seen time never moves while the position stays open
       });
       // A failed telegram send must never break the sync loop.
@@ -267,9 +438,13 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     // retried on the next tick instead of being lost for the whole position.
     await this.snapshotOpenPositions(userId, positions);
 
-    const stale = existing.filter((r) => !openKeys.has(`${r.symbol}|${r.direction}`));
+    const stale = existing.filter(
+      (r) => !openKeys.has(`${r.symbol}|${r.direction}`),
+    );
     if (stale.length > 0) {
-      await this.prisma.openPositionSeen.deleteMany({ where: { id: { in: stale.map((s) => s.id) } } });
+      await this.prisma.openPositionSeen.deleteMany({
+        where: { id: { in: stale.map((s) => s.id) } },
+      });
     }
   }
 
@@ -284,7 +459,10 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
    * keeps that verdict so we don't re-request candles every single tick for a
    * position that will never produce a snapshot.
    */
-  private async snapshotOpenPositions(userId: string, positions: OpenedPositionInfo[]): Promise<void> {
+  private async snapshotOpenPositions(
+    userId: string,
+    positions: OpenedPositionInfo[],
+  ): Promise<void> {
     const rows = await this.prisma.openPositionSeen.findMany({
       where: { userId, ctxOk: null },
       select: { id: true, symbol: true, direction: true, firstSeenAt: true },
@@ -292,7 +470,10 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
     if (rows.length === 0) return;
 
     const priceOf = new Map(
-      positions.map((p) => [`${p.symbol}|${p.direction}`, p.avgPrice ? parseFloat(p.avgPrice) : NaN]),
+      positions.map((p) => [
+        `${p.symbol}|${p.direction}`,
+        p.avgPrice ? parseFloat(p.avgPrice) : NaN,
+      ]),
     );
 
     for (const r of rows) {
@@ -304,7 +485,11 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
         // Anchored at first-seen, not "now": on a restart-triggered catch-up
         // the position may have been open for a while already, and the entry
         // context belongs to when it opened.
-        const snap = await this.tradeContext.snapshotNow(r.symbol, entryPrice, r.firstSeenAt.getTime());
+        const snap = await this.tradeContext.snapshotNow(
+          r.symbol,
+          entryPrice,
+          r.firstSeenAt.getTime(),
+        );
         await this.prisma.openPositionSeen.update({
           where: { id: r.id },
           data: {
@@ -323,9 +508,13 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
             rangePos1d: snap.rangePos1d ?? null,
           },
         });
-        this.logger.log(`entry context computed for open ${r.symbol} ${r.direction}`);
+        this.logger.log(
+          `entry context computed for open ${r.symbol} ${r.direction}`,
+        );
       } catch (e) {
-        this.logger.warn(`entry context failed for ${r.symbol} ${r.direction}: ${e}`);
+        this.logger.warn(
+          `entry context failed for ${r.symbol} ${r.direction}: ${e}`,
+        );
       }
     }
   }
@@ -344,7 +533,9 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
    * второе условие развело бы их при первом же частичном сбое.
    */
   private async fillEntryStamps(userId: string): Promise<number> {
-    const rows = await this.prisma.openPositionSeen.findMany({ where: { userId } });
+    const rows = await this.prisma.openPositionSeen.findMany({
+      where: { userId },
+    });
     let filled = 0;
     for (const r of rows) {
       const res = await this.prisma.trade.updateMany({
@@ -385,7 +576,10 @@ export class TradeSyncService implements OnApplicationBootstrap, OnModuleDestroy
       closedAt: t.closedAt,
       raw: t.raw as Prisma.InputJsonValue,
     }));
-    const res = await this.prisma.trade.createMany({ data, skipDuplicates: true });
+    const res = await this.prisma.trade.createMany({
+      data,
+      skipDuplicates: true,
+    });
     return res.count;
   }
 }

@@ -29,7 +29,7 @@ export const HISTORY_CAP_MS = 365 * DAY;
 /** Кусок истории на одну догрузку при пане. */
 const HISTORY_CHUNK = 500;
 /** Момент сохраняется на сервер не чаще, чем раз в столько. */
-const SAVE_EVERY_MS = 3000;
+const SAVE_EVERY_MS = 10000;
 /** Скорости автопрокрутки — шагов в секунду. */
 export const SPEEDS = [1, 4, 16, 32] as const;
 

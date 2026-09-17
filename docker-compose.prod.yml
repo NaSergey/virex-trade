@@ -34,19 +34,56 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    # postgres:16-alpine стартует без единого -c: shared_buffers=128MB,
+    # work_mem=4MB — рассчитано на игрушечный контейнер, а не на ~680 q/s
+    # (A9). shared_buffers ~25% RAM и effective_cache_size ~75% RAM — типовое
+    # правило тюнинга для выделенной под Postgres машины (страница держит
+    # обе половины: буфер Postgres и файловый кэш ОС). random_page_cost=1.1 —
+    # диск SSD, не вращающийся, случайный доступ почти не дороже
+    # последовательного. max_connections=100 — дефолт Postgres, здесь явно,
+    # чтобы значение не разъехалось молча с суммой connection_limit всех
+    # процессов ниже (после Task 11 пересчитать вместе).
+    command: >
+      postgres -c shared_buffers=2GB -c effective_cache_size=6GB
+      -c work_mem=16MB -c random_page_cost=1.1 -c max_connections=100
 
   api:
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
     restart: unless-stopped
+    # Node здесь — PID 1 контейнера (`sh -c "... && node dist/main"` в конце
+    # exec-заменяет шелл собой). У PID 1 в Linux сигналы без обработчика не
+    # получают дефолтное действие — а именно так `enableShutdownHooks` (см.
+    # main.ts) и завершает процесс после cleanup: снимает свои обработчики и
+    # шлёт сигнал себе ещё раз, рассчитывая на дефолтное поведение ОС.
+    # Проверено вручную: `onModuleDestroy` (в т.ч. финальный сброс
+    # `UsageTrackerService`) отрабатывает и без этой строки, но сам процесс
+    # без неё зависает после cleanup и висит до `docker stop`'а по таймауту
+    # — каждый деплой ждал бы полный grace period и гасился SIGKILL. `init`
+    # ставит tini полноценным PID 1, Node становится обычным дочерним
+    # процессом, и та же логика уже реально завершает процесс.
+    init: true
     depends_on:
       db:
         condition: service_healthy
     environment:
       NODE_ENV: production
+      # T11: роль процесса. `api` — HTTP, без единого setInterval и без
+      # telegram-поллинга (см. backend/src/role.ts). Незнакомое или пустое
+      # значение ROLE трактуется кодом как `all` — здесь ставим явно, чтобы
+      # не зависеть от этого дефолта.
+      ROLE: api
       PORT: "8091"
-      DATABASE_URL: postgresql://${POSTGRES_USER:-virex}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-virex}?schema=public
+      # connection_limit — под роль `api`. Дефолт Prisma без него —
+      # num_cpus*2+1, то есть девять соединений на 4-vCPU при ~680 запросах в
+      # секунду (A9) — гарантированный P2024 под нагрузкой. pool_timeout —
+      # сколько секунд запрос ждёт свободное соединение в очереди перед
+      # ошибкой, вместо мгновенного отказа на всплеске.
+      # После T11 рядом живёт процесс `worker` со своим пулом (см. ниже) —
+      # 10 (api) + 5 (worker) = 15 из max_connections=100 у Postgres, запас
+      # почти на порядок на случай будущего --scale у api.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-virex}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-virex}?schema=public&connection_limit=10&pool_timeout=20
       # Origin продукта. Отсюда же берётся CORS-origin (main.ts). Схема
       # обязана быть https: кука сессии в production ставится с secure.
       FRONTEND_URL: https://${APP_DOMAIN:?set APP_DOMAIN in .env.prod}
@@ -64,6 +101,79 @@ services:
     # локально. Без --accept-data-loss: команда должна упасть, а не молча
     # удалить колонку с данными живых пользователей.
     command: sh -c "npx prisma db push --skip-generate && node dist/main"
+    # start_period шире обычного retries*interval: `db push` перед стартом
+    # Nest может занять несколько секунд, и без запаса контейнер успевает
+    # получить первый unhealthy ещё до того, как процесс вообще начал
+    # слушать порт. wget — busybox-апплет, в образе он уже есть, ставить
+    # отдельно ничего не нужно.
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8091/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    # Один разогнавшийся процесс не должен выедать память у Postgres на той
+    # же машине (B8) — 4–8 vCPU / 8–16 ГБ, `db` уже держит shared_buffers
+    # 2 ГБ (см. командную строку выше). api — самый нагруженный процесс
+    # (680 q/s из A9), но не самый прожорливый по памяти на запрос.
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1536M
+
+  # T11: девять фоновых сервисов (trade-sync, balance-snapshot, price-sync,
+  # liquidity-snapshot, market-alerts, weekly-report, usage-tracker,
+  # refresh-token-cleanup, tron-watcher) + telegram-поллинг — из того же
+  # образа, что `api`, ролью ROLE=worker.
+  #
+  # ВАЖНО: ровно один процесс этого сервиса, никогда `--scale worker=2` и
+  # никакого второго инстанса руками. Telegram-поллинг (getUpdates) ломается
+  # на двух одновременных поллерах одним токеном — второй получает 409
+  # Conflict, и оба перестают надёжно вычитывать апдейты. До T11 это
+  # держалось соглашением «поллер живёт в одном окружении»; теперь это
+  # обеспечено устройством — контейнер один, и это надо не сломать здесь.
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    # Та же причина, что у `api` (см. комментарий там): PID 1 без tini не
+    # получает дефолтное действие на сигнал после enableShutdownHooks.
+    init: true
+    # Ждём не просто живую БД, а именно готовый `api`: тот раскатывает схему
+    # (`prisma db push`) при старте, а `worker` её не трогает вовсе — иначе
+    # либо гонка на `db push` при одновременном старте обоих контейнеров,
+    # либо дублирование той же команды здесь.
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      ROLE: worker
+      # Меньше, чем у api: фон не обслуживает параллельный HTTP-трафик, а
+      # проходит пользователей последовательно внутри каждого тика. Вместе с
+      # api (10) — 15 из max_connections=100 у Postgres.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-virex}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-virex}?schema=public&connection_limit=5&pool_timeout=20
+      FRONTEND_URL: https://${APP_DOMAIN:?set APP_DOMAIN in .env.prod}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env.prod}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-7}
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:?set CREDENTIALS_ENCRYPTION_KEY in .env.prod}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      DONATION_TRON_ADDRESS: ${DONATION_TRON_ADDRESS:-}
+      TRONGRID_API_KEY: ${TRONGRID_API_KEY:-}
+    # Ни `prisma db push` (это уже сделал `api`), ни сборки — просто сам
+    # процесс. Роль ROLE=worker выше решает, что он не открывает HTTP-порт.
+    command: sh -c "node dist/main"
+    # Нет ни HTTP-порта, ни `/health`: healthcheck на wget сюда не постучится.
+    # Живость видна по логам (`worker started`) и по тому, что фон в БД не
+    # останавливается — заводить отдельный процесс ради проверки не стали.
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 768M
 
   web:
     build:
@@ -74,6 +184,9 @@ services:
         # rewrites запекаются в образ на сборке (см. Dockerfile.prod).
         API_INTERNAL_URL: http://api:8091
     restart: unless-stopped
+    # Та же причина, что у `api` (см. комментарий там): `node server.js` —
+    # PID 1, сигнал без обработчика PID 1 не получает дефолтного действия.
+    init: true
     depends_on:
       - api
     environment:
@@ -86,6 +199,21 @@ services:
     # если 80/443 занят панелью и отдавать их Caddy нельзя.
     ports:
       - "127.0.0.1:8090:8090"
+    # Корень отдаётся статикой лендинга без запроса к api и без куки — тот
+    # же путь, что видит первый посетитель без аккаунта (proxy.ts).
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8090/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    # Next.js standalone-рантайм легче Nest: в основном отдаёт статику и
+    # проксирует страницы, без Prisma-пула и его памяти.
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
 
   # HTTPS-терминатор: сам получает и продлевает сертификат Let's Encrypt.
   # В отдельном профиле — поднимается только с `--profile edge`. Если 80/443
@@ -94,8 +222,12 @@ services:
     image: caddy:2-alpine
     profiles: ["edge"]
     restart: unless-stopped
+    # Caddyfile шлёт /api/* и /auth/* прямо в api (A10, мимо web) — caddy
+    # обязан увидеть оба контейнера в сети compose до старта, иначе первый
+    # запрос на защищённый маршрут ловит DNS-ошибку прокси.
     depends_on:
       - web
+      - api
     environment:
       APP_DOMAIN: ${APP_DOMAIN}
       # Без `:?`: compose подставляет переменные во ВЕСЬ файл до того, как

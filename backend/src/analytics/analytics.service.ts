@@ -32,6 +32,12 @@ export interface LiquidityHistory {
 const VOLATILITY_BASELINE_DAYS = 7;
 const VOLATILITY_CACHE_TTL_MS = 5 * 60_000;
 
+// TTL из docs/superpowers/specs/2026-09-02-data-warmup-design.md, раздел
+// «Предусловие: кэш внешних данных „Рынка“» — те же величины, что стоят в
+// staleTime на фронте, чтобы кэши не спорили друг с другом.
+const MARKET_CACHE_TTL_MS = 10 * 60_000; // market, fear-greed, cmc20, defi-tvl
+const SENTIMENT_CACHE_TTL_MS = 5 * 60_000; // market-sentiment, liquidity-history
+
 // Верхняя граница строк на один символ — при снимке раз в 15 минут это
 // ~52 дня. Ограничение оберегает ответ и график от неограниченного роста
 // по мере накопления истории; поднять его, когда набежит больше, — вопрос
@@ -49,24 +55,62 @@ export class AnalyticsService {
   constructor(private readonly prisma: PrismaService) {}
 
   private volatilityCache: { exp: number; data: VolatilitySnapshot } | null = null;
+  private marketDataCache: {
+    exp: number;
+    data: { marketCap: number; marketCapChange24h: number };
+  } | null = null;
+  private cmc20Cache: { exp: number; data: { index: number; change24h: number } } | null = null;
+  private fearAndGreedCache: {
+    exp: number;
+    data: { value: number; classification: string };
+  } | null = null;
+  private defiTvlCache: {
+    exp: number;
+    data: { tvl: Array<{ date: number; tvl: number }> };
+  } | null = null;
+  private longShortRatioCache = new Map<
+    string,
+    {
+      exp: number;
+      data: {
+        points: Array<{
+          timestamp: number;
+          buyRatio: number;
+          sellRatio: number;
+          openInterest: number;
+          openInterestUsd: number;
+        }>;
+      };
+    }
+  >();
+  private liquidityHistoryCache = new Map<string, { exp: number; data: LiquidityHistory }>();
 
   async getMarketData(): Promise<{ marketCap: number; marketCapChange24h: number }> {
+    if (this.marketDataCache && this.marketDataCache.exp > Date.now()) {
+      return this.marketDataCache.data;
+    }
     try {
       const response = await fetch('https://api.coingecko.com/api/v3/global');
       if (!response.ok) {
         throw new Error(`CoinGecko responded with status ${response.status}`);
       }
       const json = await response.json();
-      return {
+      const data = {
         marketCap: json.data.total_market_cap.usd,
         marketCapChange24h: json.data.market_cap_change_percentage_24h_usd,
       };
+      this.marketDataCache = { exp: Date.now() + MARKET_CACHE_TTL_MS, data };
+      return data;
     } catch (error) {
+      if (this.marketDataCache) return this.marketDataCache.data;
       throw new HttpException('External API error', HttpStatus.BAD_GATEWAY);
     }
   }
 
   async getCMC20(): Promise<{ index: number; change24h: number }> {
+    if (this.cmc20Cache && this.cmc20Cache.exp > Date.now()) {
+      return this.cmc20Cache.data;
+    }
     try {
       if (process.env.CMC_API_KEY) {
         const response = await fetch(
@@ -88,10 +132,12 @@ export class AnalyticsService {
                 String(item.name ?? '').toLowerCase().includes('crypto 20'),
             ) ?? items[0];
           if (idx) {
-            return {
+            const data = {
               index: idx.score ?? idx.close ?? idx.last ?? 0,
               change24h: idx.percent_change_24h ?? idx.change_24h ?? 0,
             };
+            this.cmc20Cache = { exp: Date.now() + MARKET_CACHE_TTL_MS, data };
+            return data;
           }
         }
         // Index endpoint unavailable on this plan — fall through to CoinGecko
@@ -111,37 +157,52 @@ export class AnalyticsService {
       const change24h =
         coins.reduce((sum, coin) => sum + (coin.price_change_percentage_24h ?? 0), 0) /
         coins.length;
-      return { index: weightedIndex, change24h };
+      const data = { index: weightedIndex, change24h };
+      this.cmc20Cache = { exp: Date.now() + MARKET_CACHE_TTL_MS, data };
+      return data;
     } catch (error) {
+      if (this.cmc20Cache) return this.cmc20Cache.data;
       throw new HttpException('External API error', HttpStatus.BAD_GATEWAY);
     }
   }
 
   async getFearAndGreed(): Promise<{ value: number; classification: string }> {
+    if (this.fearAndGreedCache && this.fearAndGreedCache.exp > Date.now()) {
+      return this.fearAndGreedCache.data;
+    }
     try {
       const response = await fetch('https://api.alternative.me/fng/');
       if (!response.ok) {
         throw new Error(`Alternative.me responded with status ${response.status}`);
       }
       const json = await response.json();
-      return {
+      const data = {
         value: Number(json.data[0].value),
         classification: json.data[0].value_classification,
       };
+      this.fearAndGreedCache = { exp: Date.now() + MARKET_CACHE_TTL_MS, data };
+      return data;
     } catch (error) {
+      if (this.fearAndGreedCache) return this.fearAndGreedCache.data;
       throw new HttpException('External API error', HttpStatus.BAD_GATEWAY);
     }
   }
 
   async getDeFiTVL(): Promise<{ tvl: Array<{ date: number; tvl: number }> }> {
+    if (this.defiTvlCache && this.defiTvlCache.exp > Date.now()) {
+      return this.defiTvlCache.data;
+    }
     try {
       const response = await fetch('https://api.llama.fi/v2/historicalChainTvl');
       if (!response.ok) {
         throw new Error(`DeFiLlama responded with status ${response.status}`);
       }
       const json = await response.json();
-      return { tvl: json as Array<{ date: number; tvl: number }> };
+      const data = { tvl: json as Array<{ date: number; tvl: number }> };
+      this.defiTvlCache = { exp: Date.now() + MARKET_CACHE_TTL_MS, data };
+      return data;
     } catch (error) {
+      if (this.defiTvlCache) return this.defiTvlCache.data;
       throw new HttpException('External API error', HttpStatus.BAD_GATEWAY);
     }
   }
@@ -154,16 +215,26 @@ export class AnalyticsService {
    * накопилось после первого запуска сервиса.
    */
   async getLiquidityHistory(symbol = 'BTCUSDT'): Promise<LiquidityHistory> {
-    const rows = await this.prisma.liquiditySnapshot.findMany({
-      where: { symbol: symbol || 'BTCUSDT' },
-      orderBy: { ts: 'desc' },
-      take: LIQUIDITY_HISTORY_MAX_POINTS,
-    });
-    return {
-      points: rows
-        .reverse()
-        .map((r) => ({ ts: r.ts.getTime(), price: r.price, bidCenter: r.bidCenter, askCenter: r.askCenter })),
-    };
+    const sym = symbol || 'BTCUSDT';
+    const cached = this.liquidityHistoryCache.get(sym);
+    if (cached && cached.exp > Date.now()) return cached.data;
+    try {
+      const rows = await this.prisma.liquiditySnapshot.findMany({
+        where: { symbol: sym },
+        orderBy: { ts: 'desc' },
+        take: LIQUIDITY_HISTORY_MAX_POINTS,
+      });
+      const data: LiquidityHistory = {
+        points: rows
+          .reverse()
+          .map((r) => ({ ts: r.ts.getTime(), price: r.price, bidCenter: r.bidCenter, askCenter: r.askCenter })),
+      };
+      this.liquidityHistoryCache.set(sym, { exp: Date.now() + SENTIMENT_CACHE_TTL_MS, data });
+      return data;
+    } catch (error) {
+      if (cached) return cached.data;
+      throw error;
+    }
   }
 
   async getLongShortRatio(
@@ -177,8 +248,10 @@ export class AnalyticsService {
       openInterestUsd: number;
     }>;
   }> {
+    const sym = symbol || 'BTCUSDT';
+    const cached = this.longShortRatioCache.get(sym);
+    if (cached && cached.exp > Date.now()) return cached.data;
     try {
-      const sym = symbol || 'BTCUSDT';
       const [ratioResp, oiResp, klineResp] = await Promise.all([
         fetch(
           `https://api.bybit.com/v5/market/account-ratio?category=linear&symbol=${encodeURIComponent(sym)}&period=1h&limit=200`,
@@ -234,8 +307,11 @@ export class AnalyticsService {
         })
         .sort((a, b) => a.timestamp - b.timestamp);
 
-      return { points };
+      const data = { points };
+      this.longShortRatioCache.set(sym, { exp: Date.now() + SENTIMENT_CACHE_TTL_MS, data });
+      return data;
     } catch (error) {
+      if (cached) return cached.data;
       throw new HttpException('External API error', HttpStatus.BAD_GATEWAY);
     }
   }

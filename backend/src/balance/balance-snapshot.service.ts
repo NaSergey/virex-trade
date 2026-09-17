@@ -5,8 +5,14 @@ import { CredentialsService } from '../credentials/credentials.service';
 import { detectGap, sumFlows } from './balance-chain';
 import { loadFlows } from './flows';
 import { TradeRiskService } from './trade-risk.service';
+import { runsBackgroundJobs } from '../role';
+import { runWithConcurrency } from '../common/concurrency';
 
 const SNAPSHOT_INTERVAL_MS = 60 * 60 * 1000;
+// T12 (A3): тот же ограничитель и тот же лимит, что у TradeSyncService.syncAll
+// — тот же последовательный паттерн обхода, та же цена на большом числе
+// подключённых аккаунтов.
+const CAPTURE_CONCURRENCY = 12;
 /**
  * Допуск на расхождение якоря с ожиданием по цепочке, в процентах.
  * Выражается в ПРОЦЕНТАХ; формула делит на 100, поэтому константа = 0.5, а не 0.005.
@@ -51,6 +57,8 @@ export class BalanceSnapshotService implements OnApplicationBootstrap, OnModuleD
   ) {}
 
   onApplicationBootstrap(): void {
+    // T11: фоновый сервис — только роль worker (и дефолтная all).
+    if (!runsBackgroundJobs()) return;
     this.captureAll().catch((e) => this.logger.error('initial balance capture failed', e));
     this.timer = setInterval(() => {
       this.captureAll().catch((e) => this.logger.error('periodic balance capture failed', e));
@@ -62,11 +70,15 @@ export class BalanceSnapshotService implements OnApplicationBootstrap, OnModuleD
   }
 
   async captureAll(at = new Date()): Promise<void> {
+    const t0 = Date.now();
     const users = await this.prisma.user.findMany({
       where: { activeExchange: { not: null } },
       select: { id: true },
     });
-    for (const u of users) {
+    // T12 (A3): не более CAPTURE_CONCURRENCY пользователей одновременно —
+    // тот же последовательный обход раз в час на 1000 аккаунтов не
+    // укладывался бы в интервал не хуже, чем ежеминутный синк.
+    await runWithConcurrency(users, CAPTURE_CONCURRENCY, async (u) => {
       // Провал у одного пользователя не должен ронять обход остальных —
       // тот же приём, что в TradeSyncService.syncAll.
       try {
@@ -86,7 +98,12 @@ export class BalanceSnapshotService implements OnApplicationBootstrap, OnModuleD
       } catch (e) {
         this.logger.warn(`risk recompute failed for user ${u.id}: ${e}`);
       }
-    }
+    });
+    // T12 (A3): постоянный лог длительности обхода — без него не видно,
+    // укладывается ли часовой обход балансов в свой интервал.
+    this.logger.log(
+      `captureAll: ${Date.now() - t0} мс, пользователей с активной биржей: ${users.length}`,
+    );
   }
 
   /**

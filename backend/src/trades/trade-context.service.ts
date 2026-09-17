@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { DataVersionService } from '../prisma/data-version.service';
 import { BybitMarketService } from '../bybit/services/bybit-market.service';
 import { IndicatorsService, Candle } from './indicators.service';
 import { entryTimeOf } from './positions';
@@ -272,15 +273,72 @@ function rangePos(candles: Candle[], window: number, entry: number): number | nu
 export class TradeContextService {
   private readonly logger = new Logger(TradeContextService.name);
 
+  /**
+   * T17 (B3): CTX_VERSION, при которой этот процесс последний раз точно
+   * прогонял dropStale. `null` на старте процесса — не равна ни одному
+   * числу, поэтому самый первый вызов после старта (или после рестарта на
+   * новом деплое с поднятым CTX_VERSION) всегда считает версию «изменившейся»
+   * и прогоняет dropStale целиком, подбирая любой мусор, оставшийся с
+   * прошлой жизни процесса. Процесс-локальная переменная, не поле БД — после
+   * T11 фон гарантированно один процесс, согласовывать несколько инстансов
+   * не нужно.
+   */
+  private lastCtxVersionSeen: number | null = null;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly market: BybitMarketService,
     private readonly indicators: IndicatorsService,
+    private readonly dataVersion: DataVersionService,
   ) {}
 
-  /** Compute context for up to BATCH_LIMIT context-less trades of the user. */
-  async computeMissing(userId: string): Promise<number> {
-    await this.dropStale(userId);
+  /**
+   * Compute context for up to BATCH_LIMIT context-less trades of the user.
+   *
+   * T10 (A2): бампит версию данных пользователя сама, если реально что-то
+   * изменила — entryQuality/exitQuality/trend4h/rangePos-поля/ema200Above и
+   * остальные поля снимка читает `TradesService.stats` (avgEntryQuality/
+   * avgExitQuality), `list`, `LabService`/`HabitsService` (через
+   * `trade-rows.ts`). Бамп живёт здесь, а не у единственного сегодняшнего
+   * вызывающего (`TradeSyncService`), чтобы будущий второй вызывающий не мог
+   * забыть его позвать.
+   *
+   * Бампает ДВАЖДЫ, не один раз в конце: `dropStale()` коммитит удаление
+   * старых снимков сразу, а пересчёт ниже идёт через сетевой поход к Bybit
+   * (`await`, реальная пауза event loop) — без бампа сразу после dropStale
+   * окно между «снимок уже удалён» и «снимок пересчитан и записан обратно»
+   * было бы закоммичено в базу, но не отражено в версии, и кэш агрегатов
+   * раздавал бы деградированный контекст ВСЕМ запросам с тем же набором
+   * параметров на весь тик (а не одному клиенту на один момент, как было до
+   * кэша). Если сам пересчёт целиком упадёт (аутаж Bybit, `written === 0`),
+   * первый бамп всё равно случился — кэш не разъедется с уже закоммиченным
+   * удалением. Лишний бамп, когда пересчёт следом успешно всё восстановил
+   * (`written > 0`), — безобидный лишний пересчёт следующего запроса, а не
+   * источник неверных данных (тот же принцип, что и во всей задаче).
+   *
+   * T17 (B3): opts.hadChanges === false — внешний guard ДО всего остального:
+   * синк в этом тике ничего не вставил (ни новых сделок, ни перегруппировки
+   * позиций — см. TradeSyncService). Если при этом CTX_VERSION с прошлого
+   * прохода этого процесса не менялась, весь метод целиком пропускается — ни
+   * dropStale, ни поиск сделок без контекста не делают ни одного запроса к
+   * trade_contexts/trade. Как только флаг говорит «не пропускать» (были
+   * вставки ИЛИ версия менялась), весь путь ниже — dropStale и оба бампа
+   * T10 — отрабатывает ровно как раньше, без изменений в своей логике.
+   * Вызывающие, не передавшие opts (тесты, будущие потребители), всегда
+   * получают полный прогон — по умолчанию пропуска нет.
+   */
+  async computeMissing(userId: string, opts?: { hadChanges: boolean }): Promise<number> {
+    const versionChanged = this.lastCtxVersionSeen !== CTX_VERSION;
+    if (opts?.hadChanges === false && !versionChanged) {
+      return 0;
+    }
+
+    const dropped = await this.dropStale(userId);
+    // Отмечаем версию увиденной сразу после успешного dropStale — если он
+    // бросит исключение, версия НЕ считается увиденной, и следующий (даже
+    // пустой) тик повторит полный прогон вместо того, чтобы его пропустить.
+    this.lastCtxVersionSeen = CTX_VERSION;
+    if (dropped > 0) await this.dataVersion.bump(userId);
 
     const pending = await this.prisma.trade.findMany({
       where: { userId, context: null },
@@ -315,6 +373,7 @@ export class TradeContextService {
     }
 
     written += await this.computeMissingQuality(userId);
+    if (written > 0) await this.dataVersion.bump(userId);
     return written;
   }
 
@@ -410,7 +469,7 @@ export class TradeContextService {
    * small and self-healing. Terminates: a recomputed row comes back with
    * basis 'filled' and stops matching.
    */
-  private async dropStale(userId: string): Promise<void> {
+  private async dropStale(userId: string): Promise<number> {
     const stale = await this.prisma.tradeContext.findMany({
       where: {
         trade: { userId },
@@ -422,9 +481,10 @@ export class TradeContextService {
       take: BATCH_LIMIT,
       select: { id: true },
     });
-    if (stale.length === 0) return;
+    if (stale.length === 0) return 0;
     await this.prisma.tradeContext.deleteMany({ where: { id: { in: stale.map((s) => s.id) } } });
     this.logger.log(`recomputing ${stale.length} outdated trade contexts`);
+    return stale.length;
   }
 
   private async computeSymbol(

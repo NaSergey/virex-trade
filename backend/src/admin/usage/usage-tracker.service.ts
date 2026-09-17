@@ -4,18 +4,32 @@ import {
   OnApplicationBootstrap,
   OnModuleDestroy,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { isTrackedPath, sectionOf } from './sections';
 import { floorToDay, floorToMinute } from './visits';
+import { runsApiJobs } from '../../role';
 
 const FLUSH_INTERVAL_MS = 30_000;
 
 /**
- * Потолок на размер буфера. Упирается в него только патология — БД лежит долго,
- * а трафик идёт, — и тогда лучше потерять статистику посещений, чем память
- * процесса, который обслуживает торговый интерфейс.
+ * Потолок на размер буфера.
+ *
+ * В штатном режиме в буфере лежит только ещё не закрытая минута — flush
+ * каждые {@link FLUSH_INTERVAL_MS} забирает всё, что строго раньше текущей, —
+ * то есть размер буфера ограничен числом одновременно активных
+ * пользователей, а не длительностью простоя БД. Целевой потолок — 1000
+ * онлайн (см. task-15-brief.md), ×3 запаса: текущая минута + разовый всплеск
+ * (вебхуки, ретраи) + рост аудитории без немедленной правки константы.
+ *
+ * Раньше здесь стояло 20 000 — это не «только патология», как гласил старый
+ * комментарий, а ровно 20 минут простоя БД при 1000 онлайн (1000 корзин на
+ * минуту простоя). Столько памяти ради статистики посещений процессу, который
+ * обслуживает торговый интерфейс, держать незачем: при затянувшемся сбое БД
+ * лучше быстро начать терять точность аналитики (см. flush/persistBatch —
+ * потеря уже логируется и не ретраится бесконечно), чем копить буфер часами.
  */
-const MAX_BUFFERED_MINUTES = 20_000;
+const MAX_BUFFERED_MINUTES = 3_000;
 
 interface MinuteBucket {
   userId: string;
@@ -53,6 +67,10 @@ export class UsageTrackerService
   constructor(private readonly prisma: PrismaService) {}
 
   onApplicationBootstrap() {
+    // T11: интерсептор, вызывающий record(), живёт в api (там HTTP-трафик) —
+    // сброс копится там же, а не в worker (см. task-11-brief.md). record()
+    // в роли worker никто не вызовет, но и таймер там заводить незачем.
+    if (!runsApiJobs()) return;
     this.timer = setInterval(() => {
       this.flush().catch((e) => this.logger.error('usage flush failed', e));
     }, FLUSH_INTERVAL_MS);
@@ -129,63 +147,116 @@ export class UsageTrackerService
     if (ready.length === 0) return { written: 0 };
     this.overflowWarned = false;
 
-    let written = 0;
-    let failed = 0;
-    for (const bucket of ready) {
-      try {
-        await this.persist(bucket);
-        written++;
-      } catch (e) {
-        failed++;
-        if (failed === 1)
-          this.logger.warn(`usage minute dropped: ${(e as Error).message}`);
-      }
-    }
-    if (failed > 0) {
-      this.logger.warn(
-        `usage flush lost ${failed} minute(s) of ${ready.length}`,
-      );
-    }
-
-    return { written };
+    return this.persistBatch(ready);
   }
 
-  private async persist(bucket: MinuteBucket) {
-    const minute = new Date(bucket.minuteMs);
-    // День берётся в UTC: сдвиг часового пояса — вопрос чтения отчёта, и
-    // применяется при выборке, а не при записи, иначе смена настройки
-    // переписывала бы историю.
-    const day = floorToDay(minute);
+  /**
+   * Пишет всю пачку минут (500–1000+ корзин при 1000 онлайн) двумя запросами
+   * вместо ~2.5 upsert'а на корзину — построчный вариант держал event loop
+   * секундами на каждом сбросе (B2).
+   *
+   * Обе вставки — `INSERT ... ON CONFLICT DO UPDATE SET x = table.x +
+   * EXCLUDED.x`, точный аналог построчного `upsert` с `increment`: если
+   * строка есть — прибавить, если нет — создать. Значения идут только через
+   * параметры tagged-template (`Prisma.sql`/`Prisma.join`), не конкатенацией
+   * строк.
+   */
+  private async persistBatch(
+    ready: MinuteBucket[],
+  ): Promise<{ written: number }> {
+    const minuteRows = ready.map((b) => ({
+      userId: b.userId,
+      minute: new Date(b.minuteMs),
+      requests: b.requests,
+      writes: b.writes,
+    }));
 
-    await this.prisma.userActivityMinute.upsert({
-      where: { userId_minute: { userId: bucket.userId, minute } },
-      create: {
-        userId: bucket.userId,
-        minute,
-        requests: bucket.requests,
-        writes: bucket.writes,
-      },
-      update: {
-        requests: { increment: bucket.requests },
-        writes: { increment: bucket.writes },
-      },
-    });
-
-    for (const [section, counts] of bucket.sections) {
-      await this.prisma.userSectionDay.upsert({
-        where: { userId_day_section: { userId: bucket.userId, day, section } },
-        create: {
-          userId: bucket.userId,
-          day,
-          section,
-          requests: counts.requests,
-          writes: counts.writes,
-        },
-        update: {
-          requests: { increment: counts.requests },
-          writes: { increment: counts.writes },
-        },
-      });
+    try {
+      await this.prisma.$executeRaw`
+        INSERT INTO "user_activity_minutes" ("userId", minute, requests, writes)
+        VALUES ${Prisma.join(
+          minuteRows.map(
+            (r) =>
+              Prisma.sql`(${r.userId}, ${r.minute}, ${r.requests}, ${r.writes})`,
+          ),
+        )}
+        ON CONFLICT ("userId", minute)
+        DO UPDATE SET
+          requests = "user_activity_minutes".requests + EXCLUDED.requests,
+          writes = "user_activity_minutes".writes + EXCLUDED.writes
+      `;
+    } catch (e) {
+      // Аналитика не стоит того, чтобы ронять процесс: пачка минут теряется
+      // и логируется, а не ретраится бесконечно (буфер под эти корзины уже
+      // очищен в flush() до вызова persistBatch).
+      this.logger.warn(
+        `usage flush lost ${ready.length} minute(s): ${(e as Error).message}`,
+      );
+      return { written: 0 };
     }
+
+    // Несколько корзин (разные минуты) одного пользователя могут попасть в
+    // один и тот же (userId, day, section) — раскладку по разделам сначала
+    // схлопываем в памяти, иначе один INSERT попытался бы дважды обновить ту
+    // же строку по ON CONFLICT, а Postgres это запрещает.
+    const bySection = new Map<
+      string,
+      {
+        userId: string;
+        day: Date;
+        section: string;
+        requests: number;
+        writes: number;
+      }
+    >();
+    for (const b of ready) {
+      // День берётся в UTC: сдвиг часового пояса — вопрос чтения отчёта, и
+      // применяется при выборке, а не при записи, иначе смена настройки
+      // переписывала бы историю.
+      const day = floorToDay(new Date(b.minuteMs));
+      for (const [section, counts] of b.sections) {
+        const key = `${b.userId}|${day.getTime()}|${section}`;
+        const agg = bySection.get(key);
+        if (agg) {
+          agg.requests += counts.requests;
+          agg.writes += counts.writes;
+        } else {
+          bySection.set(key, {
+            userId: b.userId,
+            day,
+            section,
+            requests: counts.requests,
+            writes: counts.writes,
+          });
+        }
+      }
+    }
+
+    if (bySection.size > 0) {
+      const sectionRows = [...bySection.values()];
+      try {
+        await this.prisma.$executeRaw`
+          INSERT INTO "user_section_days" ("userId", day, section, requests, writes)
+          VALUES ${Prisma.join(
+            sectionRows.map(
+              (r) =>
+                Prisma.sql`(${r.userId}, ${r.day}, ${r.section}, ${r.requests}, ${r.writes})`,
+            ),
+          )}
+          ON CONFLICT ("userId", day, section)
+          DO UPDATE SET
+            requests = "user_section_days".requests + EXCLUDED.requests,
+            writes = "user_section_days".writes + EXCLUDED.writes
+        `;
+      } catch (e) {
+        // Минуты уже записаны (запрос выше прошёл) — теряется только разбивка
+        // по разделам, а не факт визита.
+        this.logger.warn(
+          `usage section breakdown lost for this flush: ${(e as Error).message}`,
+        );
+      }
+    }
+
+    return { written: ready.length };
   }
 }

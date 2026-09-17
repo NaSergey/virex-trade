@@ -15,6 +15,7 @@ import {
   TronGridClient,
   TronGridError,
 } from './trongrid.client';
+import { runsBackgroundJobs } from '../../role';
 
 const CURSOR_ID = 'usdt-trc20';
 /**
@@ -71,6 +72,8 @@ export class TronWatcherService
   ) {}
 
   onApplicationBootstrap() {
+    // T11: фоновый сервис — только роль worker (и дефолтная all).
+    if (!runsBackgroundJobs()) return;
     if (!this.config.enabled) {
       this.logger.log(
         'DONATION_TRON_ADDRESS не задан или не проходит проверку — приём донатов выключен',

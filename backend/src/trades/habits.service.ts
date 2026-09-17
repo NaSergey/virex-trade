@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { DataVersionService } from '../prisma/data-version.service';
 import { loadRows, median, SESSIONS, type Row } from './trade-rows';
 import { storedRangePos } from './trade-context.service';
+import { AggregateCacheService, cacheKey } from './aggregate-cache';
 
 /**
  * «Цена привычек» — обратная сторона «Выборки».
@@ -168,15 +170,40 @@ const round = (x: number, d = 2) => Number(x.toFixed(d));
 
 @Injectable()
 export class HabitsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly dataVersion: DataVersionService,
+    private readonly cache: AggregateCacheService,
+  ) {}
 
   /**
    * @param opts.includeAll — вернуть ещё и все срезы, прошедшие пороги выборки,
    * до отсева по значимости. Для отладки и режима «показать всё»; в обычном
    * ответе их быть не должно — это ровно тот список, из которого глаз сам
    * выберет самый красивый шум.
+   *
+   * B7 (T10): самый дорогой эндпоинт продукта — перестановочный тест на
+   * каждый кандидат, сотни мс CPU. Версия+LRU-кэш здесь особенно окупается:
+   * оборачивает результат целиком по (userId, версия данных, days,
+   * tzOffsetMin, opts), так что повторный опрос между изменениями сделок не
+   * трогает вообще ничего тяжелее одного `SELECT dataVersion`.
    */
   async scan(
+    userId: string,
+    days?: number,
+    tzOffsetMin?: number,
+    opts?: { includeAll?: boolean },
+  ) {
+    const version = await this.dataVersion.get(userId);
+    const key = cacheKey('habits', userId, version, { days, tzOffsetMin, opts });
+    const hit = this.cache.get<Awaited<ReturnType<HabitsService['scanUncached']>>>(key);
+    if (hit !== undefined) return hit;
+    const result = await this.scanUncached(userId, days, tzOffsetMin, opts);
+    this.cache.set(key, result);
+    return result;
+  }
+
+  private async scanUncached(
     userId: string,
     days?: number,
     tzOffsetMin?: number,

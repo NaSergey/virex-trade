@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { DataVersionService } from '../prisma/data-version.service';
 import { EquityPoint, wilsonLower } from './trades.service';
 import { isRangeTf, storedRangePos, type RangeTf } from './trade-context.service';
 import { loadRows, SESSIONS, type Row } from './trade-rows';
+import { AggregateCacheService, cacheKey } from './aggregate-cache';
 
 // «Выборка»: произвольная комбинация фильтров по сделкам (теги + рыночный
 // контекст из TradeContext + время) → сводка против базовой линии периода,
@@ -96,9 +98,31 @@ function agg(rows: Row[]): LabAgg {
 
 @Injectable()
 export class LabService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly dataVersion: DataVersionService,
+    private readonly cache: AggregateCacheService,
+  ) {}
 
   async query(userId: string, f: LabFilter) {
+    return this.cached('lab', userId, f, () => this.queryUncached(userId, f));
+  }
+
+  /**
+   * Версия+LRU-кэш агрегата (A2, T10) — тот же приём, что у
+   * `TradesService.cached`: чистая функция от (userId, версия данных, f).
+   */
+  private async cached<T>(scope: string, userId: string, params: unknown, compute: () => Promise<T>): Promise<T> {
+    const version = await this.dataVersion.get(userId);
+    const key = cacheKey(scope, userId, version, params);
+    const hit = this.cache.get<T>(key);
+    if (hit !== undefined) return hit;
+    const result = await compute();
+    this.cache.set(key, result);
+    return result;
+  }
+
+  private async queryUncached(userId: string, f: LabFilter) {
     // Строки, сессии и медианы ATR/объёма — общие с «Ценой привычек», см.
     // trade-rows.ts. Медианы считаются по всему периоду: это стабильная точка
     // отсчёта для «выше/ниже среднего», не зависящая от остальных фильтров.

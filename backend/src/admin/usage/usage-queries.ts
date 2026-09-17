@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { VISIT_GAP_MIN } from './visits';
+import { ACTIVITY_RETENTION_DAYS, DAY_MS, VISIT_GAP_MIN } from './visits';
 
 /**
  * Тяжёлые выборки по минутам активности — сырым SQL.
@@ -43,6 +43,15 @@ function int(value: number): Prisma.Sql {
   if (!Number.isFinite(n))
     throw new Error(`expected a finite number, got ${value}`);
   return Prisma.raw(String(n));
+}
+
+/**
+ * Начало окна, за пределами которого `UsageCleanupService` уже не оставляет
+ * строк (T18). Используется как защитная нижняя граница в запросах без
+ * собственного окна отчёта — не сканировать то, чего заведомо больше нет.
+ */
+function earliestRetained(): Date {
+  return new Date(Date.now() - ACTIVITY_RETENTION_DAYS * DAY_MS);
 }
 
 /** Сдвиг суток под часовой пояс отчёта. */
@@ -161,7 +170,24 @@ export async function countActiveUsers(
  *
  * Главный вопрос владельца («пользуются или нет») в одном числе:
  * зарегистрироваться и посмотреть один раз может кто угодно, вернуться на
- * другой день — только тот, кому сервис зачем-то нужен.
+ * другой день — только тот, кому сервис зачем-то нужен. Считается за весь
+ * жизненный путь аккаунта (см. `lifetimeFunnel` в admin-analytics.service.ts),
+ * поэтому у запроса нет `WHERE` по времени — сюда намеренно не добавлена
+ * нижняя граница по ACTIVITY_RETENTION_DAYS.
+ *
+ * Почему такой границы здесь нет (в отличие от `queryActiveWeeks` ниже):
+ * `UsageCleanupService` (T18) и так не оставляет в таблице строк старше
+ * ACTIVITY_RETENTION_DAYS, то есть после первого прогона сметателя предикат
+ * `minute >= now - ACTIVITY_RETENTION_DAYS` отбирает практически 100% строк
+ * таблицы — никакой реальной селективности не даёт. Хуже: неселективный
+ * диапазонный предикат по индексированной колонке может подтолкнуть
+ * планировщик к index/bitmap scan вместо более дешёвого seq scan на
+ * выборке такого размера — то есть быть медленнее, чем без предиката вовсе.
+ * Реальное закрытие A8 для этого запроса — не WHERE здесь, а то, что сама
+ * таблица теперь физически ограничена сроком хранения (UsageCleanupService),
+ * а не растёт бесконечно: seq scan по таблице в пределах ~180 дней данных —
+ * не та же проблема, что seq scan по таблице, растущей на сотни млн строк в
+ * год без срока жизни.
  */
 export async function countReturningUsers(
   prisma: PrismaService,
@@ -183,17 +209,25 @@ export async function countReturningUsers(
  * Возвращаются только недели, в которые человек заходил, поэтому строк тут
  * столько же, сколько активных недель у всех пользователей вместе — на порядки
  * меньше, чем минут.
+ *
+ * `from` уже приходит ограниченным окном отчёта (`RetentionQueryDto.weeks`,
+ * максимум 26 недель), но нижняя граница дополнительно подрезается сроком
+ * хранения (T18) прямо здесь, в самом запросе — а не только валидацией DTO в
+ * другом файле, от которой эта функция не должна зависеть, чтобы остаться
+ * безопасной для любого будущего вызывающего.
  */
 export async function queryActiveWeeks(
   prisma: PrismaService,
   anchor: Date,
   from: Date,
 ): Promise<{ userId: string; week: number }[]> {
+  const retainedFrom = earliestRetained();
+  const boundedFrom = from < retainedFrom ? retainedFrom : from;
   return prisma.$queryRaw<{ userId: string; week: number }[]>`
     SELECT DISTINCT
       "userId",
       FLOOR(EXTRACT(EPOCH FROM ("minute" - ${anchor})) / 604800)::int AS "week"
     FROM "user_activity_minutes"
-    WHERE "minute" >= ${from}
+    WHERE "minute" >= ${boundedFrom}
   `;
 }

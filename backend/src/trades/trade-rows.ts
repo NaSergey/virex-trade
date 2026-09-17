@@ -90,7 +90,39 @@ export async function loadRows(
     await prisma.trade.findMany({
       where,
       orderBy: { closedAt: 'asc' },
-      include: { tags: { include: { tag: true } }, context: true },
+      // select вместо include: набор полей — TradeRowLike (см. выше в этом
+      // файле) плюс то, что реально читает мэппинг ниже (tags, context).
+      // Без него Prisma тянула бы и `Trade.raw`, которое здесь не читается.
+      select: {
+        id: true,
+        positionId: true,
+        symbol: true,
+        direction: true,
+        qty: true,
+        avgEntryPrice: true,
+        avgExitPrice: true,
+        closedPnl: true,
+        openFee: true,
+        closeFee: true,
+        leverage: true,
+        closedAt: true,
+        openedAt: true,
+        tags: { select: { tagId: true, tag: { select: { id: true, name: true, color: true } } } },
+        context: {
+          select: {
+            ok: true,
+            atrPct: true,
+            volRel: true,
+            ema200Above: true,
+            trend4h: true,
+            rangePos15m: true,
+            rangePos30m: true,
+            rangePos1h: true,
+            rangePos4h: true,
+            rangePos1d: true,
+          },
+        },
+      },
     }),
   );
 

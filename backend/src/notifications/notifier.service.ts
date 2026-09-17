@@ -1,8 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { TelegramService } from '../telegram/telegram.service';
-import { NotificationStateService } from './notification-state.service';
+import {
+  NotificationStateBatch,
+  NotificationStateService,
+} from './notification-state.service';
 import { PrefsService } from './prefs.service';
-import { isEnabled, thresholdOf } from './prefs';
+import { Prefs, isEnabled, thresholdOf } from './prefs';
 import { NotifKey, notifDef } from './registry';
 import { isQuietNow } from './quiet-hours';
 
@@ -27,31 +30,52 @@ export class NotifierService {
     private readonly telegram: TelegramService,
   ) {}
 
-  /** Порог текущего пресета — чекеру, чтобы посчитать условие. */
-  async thresholdFor(userId: string, key: NotifKey): Promise<number | null> {
-    return thresholdOf(await this.prefs.get(userId), key);
+  /**
+   * Порог текущего пресета — чекеру, чтобы посчитать условие.
+   *
+   * `prefs` — необязательный параметр для вызывающих, у которых настройки
+   * уже загружены пачкой на весь тик (MarketAlertsService, `PrefsService.
+   * linkedUsers()`): без него метод сам сходит в БД, как раньше, — для
+   * событийных чекеров (TradeAlertsService), которые вызывают его на одного
+   * пользователя за раз, второй запрос не появляется.
+   */
+  async thresholdFor(
+    userId: string,
+    key: NotifKey,
+    prefs?: Prefs,
+  ): Promise<number | null> {
+    return thresholdOf(prefs ?? (await this.prefs.get(userId)), key);
   }
 
   /**
    * Сигнал с условием: `holds` — держится ли метрика выше порога прямо сейчас.
    * `build` вызывается только если отправка разрешена, чтобы не собирать текст
    * (и не ходить за данными) впустую.
+   *
+   * `prefs` и `stateBatch` — те же уже загруженные данные тика, что и у
+   * `thresholdFor`: `stateBatch` (см. NotificationStateService.beginBatch)
+   * держит состояния фронта/cooldown в памяти и пишет их одним запросом на
+   * flush(), вместо `findUnique`+`upsert` на каждый вызов.
    */
   async maybeSend(
     userId: string,
     key: NotifKey,
     holds: boolean,
     build: () => Outgoing,
+    prefs?: Prefs,
+    stateBatch?: NotificationStateBatch,
   ): Promise<boolean> {
     const def = notifDef(key);
     if (!def) return false;
-    const prefs = await this.prefs.get(userId);
-    if (!isEnabled(prefs, key)) return false;
+    const p = prefs ?? (await this.prefs.get(userId));
+    if (!isEnabled(p, key)) return false;
 
     const now = new Date();
-    const send = await this.state.check(userId, key, holds, def.cooldownMs, now);
+    const send = stateBatch
+      ? stateBatch.check(userId, key, holds, def.cooldownMs, now)
+      : await this.state.check(userId, key, holds, def.cooldownMs, now);
     if (!send) return false;
-    if (prefs.quietHours && !def.ignoresQuietHours && isQuietNow(now)) return false;
+    if (p.quietHours && !def.ignoresQuietHours && isQuietNow(now)) return false;
 
     return this.deliver(userId, build());
   }
@@ -60,15 +84,21 @@ export class NotifierService {
    * Событийный сигнал: событие уже произошло, условия нет. Проверяются
    * включённость, тихие часы и cooldown.
    */
-  async sendEvent(userId: string, key: NotifKey, out: Outgoing): Promise<boolean> {
+  async sendEvent(
+    userId: string,
+    key: NotifKey,
+    out: Outgoing,
+  ): Promise<boolean> {
     const def = notifDef(key);
     if (!def) return false;
     const prefs = await this.prefs.get(userId);
     if (!isEnabled(prefs, key)) return false;
 
     const now = new Date();
-    if (prefs.quietHours && !def.ignoresQuietHours && isQuietNow(now)) return false;
-    if (!(await this.state.canSendEvent(userId, key, def.cooldownMs, now))) return false;
+    if (prefs.quietHours && !def.ignoresQuietHours && isQuietNow(now))
+      return false;
+    if (!(await this.state.canSendEvent(userId, key, def.cooldownMs, now)))
+      return false;
 
     const ok = await this.deliver(userId, out);
     if (ok) await this.state.markSent(userId, key, now);

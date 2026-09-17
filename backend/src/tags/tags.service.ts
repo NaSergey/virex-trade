@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { TagType } from './dto/tags.dto';
 import { PrismaService } from '../prisma/prisma.service';
+import { DataVersionService } from '../prisma/data-version.service';
 
 // Curated palette (matches the chip colors used across the tag UI). Color is
 // always assigned by the server — letting users pick invites everyone
@@ -16,7 +17,10 @@ const PALETTE = ['#6366f1', '#22c55e', '#ef4444', '#f59e0b', '#06b6d4', '#ec4899
  */
 @Injectable()
 export class TagsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly dataVersion: DataVersionService,
+  ) {}
 
   // Prefer a color not already used by this user, so tags stay visually
   // distinct; once the palette is exhausted, fall back to any random pick.
@@ -94,6 +98,11 @@ export class TagsService {
     return res.count;
   }
 
+  // Не бампит версию данных: свежесозданный тег ещё ни на одной сделке, а
+  // кэшируемые агрегаты (statsByTag и т.д.) собирают бакеты только по тегам,
+  // реально присутствующим на сделках — до первой привязки (setTradeTags /
+  // setPositionTags → linkTagsToNewTrades, они бампят сами) его не видно
+  // нигде, что кэшируется.
   async create(userId: string, name: string, type?: string) {
     const trimmed = name.trim();
     if (!trimmed) throw new BadRequestException({ message: 'Пустое имя тега', code: 'TAG_NAME_EMPTY' });
@@ -107,7 +116,12 @@ export class TagsService {
     return { success: true, tag };
   }
 
-  /** Rename and/or re-categorize a tag. Stats keep working — links are by id. */
+  /**
+   * Rename and/or re-categorize a tag. Stats keep working — links are by id.
+   *
+   * T10: бампит версию — имя/тип тега едут в бакет `statsByTag` и в
+   * per-trade `tags` у `list`/`LabService`/`HabitsService`.
+   */
   async update(id: string, userId: string, patch: { name?: string; type?: string }) {
     const tag = await this.prisma.tag.findUnique({ where: { id } });
     if (!tag || tag.userId !== userId) throw new NotFoundException({ message: 'Тег не найден', code: 'TAG_NOT_FOUND' });
@@ -126,6 +140,7 @@ export class TagsService {
     if (patch.type != null) data.type = patch.type;
     if (Object.keys(data).length === 0) return { success: true, tag };
     const updated = await this.prisma.tag.update({ where: { id }, data });
+    await this.dataVersion.bump(userId);
     return { success: true, tag: updated };
   }
 
@@ -134,6 +149,9 @@ export class TagsService {
    * target (duplicates collapse via skipDuplicates), then the source tag is
    * deleted. The history-preserving alternative to delete for accidental
    * near-duplicates ("отскок EMA" vs "EMA bounce").
+   *
+   * T10: бампит версию — перевешивает TradeTag-связи, которые видят
+   * statsByTag/statsByTagCombo/list/lab/habits.
    */
   async merge(userId: string, sourceId: string, intoTagId: string) {
     if (sourceId === intoTagId)
@@ -170,9 +188,11 @@ export class TagsService {
       // Cascade deletes the source's remaining TradeTag/PositionTag rows.
       await tx.tag.delete({ where: { id: sourceId } });
     });
+    await this.dataVersion.bump(userId);
     return { success: true, tag: { id: target.id, name: target.name, color: target.color, type: target.type } };
   }
 
+  /** T10: бампит версию — cascade выкашивает TradeTag/PositionTag этого тега. */
   async remove(id: string, userId: string) {
     const tag = await this.prisma.tag.findUnique({ where: { id } });
     // Same "not found" for wrong owner as for a nonexistent id.
@@ -180,6 +200,7 @@ export class TagsService {
     // Cascades wipe TradeTag/PositionTag rows — past stats lose this tag too.
     // SavedTagCombo rows referencing the tag self-heal on the next stats read.
     await this.prisma.tag.delete({ where: { id } });
+    await this.dataVersion.bump(userId);
     return { success: true };
   }
 
@@ -187,6 +208,9 @@ export class TagsService {
    * Pin a user-composed combination card in «Лучшие комбинации». Unlike the
    * auto-derived exact sets it counts trades CONTAINING all these tags, so
    * it works as a persistent strategy watchlist entry.
+   *
+   * T10: бампит версию — `statsByTagCombo` возвращает `saved`, посчитанный
+   * по строкам `SavedTagCombo` (см. `TradesService.savedComboStats`).
    */
   async createSavedCombo(userId: string, tagIds: string[]) {
     const unique = [...new Set(tagIds)];
@@ -203,6 +227,7 @@ export class TagsService {
     const combo = await this.prisma.savedTagCombo.create({
       data: { userId, tagIds: sorted, key },
     });
+    await this.dataVersion.bump(userId);
     return { success: true, combo };
   }
 
@@ -210,6 +235,12 @@ export class TagsService {
    * Toggle pin state and/or change the tag set of an existing saved combo.
    * Unlike delete, this never removes the row — unpinning a user-created card
    * must not make it disappear (see SavedTagCombo.pinned doc comment).
+   *
+   * T10: бампит версию — см. createSavedCombo. `pinned` сам по себе не читает
+   * ни один кэшируемый агрегат (порядок/пин — дело фронта), но `tagIds`
+   * меняет то, что statsByTagCombo реально считает по этой карточке, а
+   * бампить только «иногда» — источник трудноуловимого бага. Дешевле поднять
+   * всегда, чем разбирать patch на «влияет / не влияет» веткой в этом месте.
    */
   async updateSavedCombo(id: string, userId: string, patch: { tagIds?: string[]; pinned?: boolean }) {
     const combo = await this.prisma.savedTagCombo.findUnique({ where: { id } });
@@ -239,15 +270,20 @@ export class TagsService {
     }
 
     const updated = await this.prisma.savedTagCombo.update({ where: { id }, data });
+    await this.dataVersion.bump(userId);
     return { success: true, combo: updated };
   }
 
-  /** Hard delete — the explicit, deliberate "Удалить" action (not unpin). */
+  /**
+   * Hard delete — the explicit, deliberate "Удалить" action (not unpin).
+   * T10: бампит версию — см. createSavedCombo.
+   */
   async deleteSavedCombo(id: string, userId: string) {
     const combo = await this.prisma.savedTagCombo.findUnique({ where: { id } });
     if (!combo || combo.userId !== userId)
       throw new NotFoundException({ message: 'Комбинация не найдена', code: 'TAG_COMBO_NOT_FOUND' });
     await this.prisma.savedTagCombo.delete({ where: { id } });
+    await this.dataVersion.bump(userId);
     return { success: true };
   }
 
@@ -256,6 +292,9 @@ export class TagsService {
    * Idempotent (upsert) — dismissing twice is a no-op, not a conflict. Uses
    * the same canonical key as TradesService.statsByTagCombo's bucket key so
    * filtering there matches regardless of tag order.
+   *
+   * T10: бампит версию — statsByTagCombo фильтрует комбо-бакеты по
+   * dismissedKeys, значит скрытая карточка меняет сам список `combos`.
    */
   async dismissCombo(userId: string, tagIds: string[]) {
     const key = tagIds.length > 0 ? [...new Set(tagIds)].sort().join('|') : '__untagged__';
@@ -264,6 +303,7 @@ export class TagsService {
       create: { userId, key },
       update: {},
     });
+    await this.dataVersion.bump(userId);
     return { success: true };
   }
 
@@ -288,6 +328,10 @@ export class TagsService {
     };
   }
 
+  // Не бампит версию: PositionTag — теги ОТКРЫТОЙ позиции, которые ещё не
+  // читает ни один кэшируемый агрегат (те строят выборку только по закрытым
+  // Trade/TradeTag). На закрытые сделки этот тег переносит
+  // `linkTagsToNewTrades` при следующем тике синка — она бампит сама.
   /** Replace the tag set of an open position. Empty list clears it. */
   async setPositionTags(userId: string, symbol: string, direction: string, tagIds: string[]) {
     const unique = [...new Set(tagIds)];
@@ -314,6 +358,9 @@ export class TagsService {
    * trade history view for trades that closed before (or without) being
    * tagged via their position (e.g. tagged after the fact, or the position
    * was closed before the tag was set).
+   *
+   * T10: бампит версию — это прямая правка TradeTag на ЗАКРЫТОЙ сделке,
+   * ровно то, что видят statsByTag/statsByTagCombo/list/lab/habits.
    */
   async setTradeTags(userId: string, tradeId: string, tagIds: string[]) {
     const trade = await this.prisma.trade.findUnique({ where: { id: tradeId } });
@@ -331,6 +378,7 @@ export class TagsService {
         ? [this.prisma.tradeTag.createMany({ data: unique.map((tagId) => ({ tradeId, tagId })) })]
         : []),
     ]);
+    await this.dataVersion.bump(userId);
     return { success: true };
   }
 

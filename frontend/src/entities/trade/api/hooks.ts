@@ -99,6 +99,9 @@ export const useTimeStats = (params?: { days?: number; tagId?: string }) =>
     ...LIVE,
   });
 
+// Без refetchInterval: привычки за минуту не меняются, а с версионным
+// кэшем агрегатов на бэкенде (T10) шестидесятисекундный опрос ещё и
+// бессмысленно бьёт по самому дорогому эндпоинту продукта без всякой пользы.
 export const useHabits = (params?: { days?: number }) =>
   useQuery({
     queryKey: ['habits', params?.days ?? 0],
@@ -109,5 +112,6 @@ export const useHabits = (params?: { days?: number }) =>
           tz: new Date().getTimezoneOffset(),
         })}`,
       ),
-    ...LIVE,
+    placeholderData: keepPreviousData,
+    staleTime: LIVE.staleTime,
   });

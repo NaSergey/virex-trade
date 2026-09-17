@@ -2,6 +2,7 @@ import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@ne
 import { PrismaService } from '../prisma/prisma.service';
 import { BinanceKlinesClient } from './binance-klines.client';
 import { SYMBOL, START_MS, SYNC_ORDER, isClosed } from './timeframes';
+import { runsBackgroundJobs } from '../role';
 
 const SYNC_INTERVAL_MS = 15 * 60_000;
 const PAGE_LIMIT = 1000;
@@ -35,6 +36,8 @@ export class PriceSyncService implements OnApplicationBootstrap, OnModuleDestroy
   ) {}
 
   onApplicationBootstrap() {
+    // T11: фоновый сервис — только роль worker (и дефолтная all).
+    if (!runsBackgroundJobs()) return;
     this.sync().catch((e) => this.logger.error('первый прогон синка свечей упал', e));
     this.timer = setInterval(() => {
       this.sync().catch((e) => this.logger.error('периодический синк свечей упал', e));

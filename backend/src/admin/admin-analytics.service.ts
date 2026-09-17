@@ -397,6 +397,13 @@ export class AdminAnalyticsService {
    *
    * Считается за всё время, а не за окно отчёта: это жизненный путь аккаунта, и
    * человек, подключивший ключи полгода назад, ступень прошёл.
+   *
+   * Исключение — `returnedAnotherDay` (countReturningUsers): её «всё время»
+   * физически ограничено сроком хранения минут активности,
+   * ACTIVITY_RETENTION_DAYS в usage/visits.ts (T18, `UsageCleanupService`
+   * сметает более старые строки) — сам запрос при этом без явного `WHERE` по
+   * времени, добавлять его смысла нет (см. комментарий у countReturningUsers
+   * в usage-queries.ts).
    */
   private async lifetimeFunnel() {
     const [

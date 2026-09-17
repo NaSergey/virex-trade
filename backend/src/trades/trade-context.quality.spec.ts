@@ -43,7 +43,7 @@ describe('TradeContextService.computeMissingQuality', () => {
     });
     const market = { getKlinesRange: getKlinesRangeMock } as any;
 
-    const service = new TradeContextService(prisma, market, {} as any);
+    const service = new TradeContextService(prisma, market, {} as any, {} as any);
     const written = await (service as any).computeMissingQuality('u1');
 
     expect(written).toBe(3);
@@ -74,7 +74,7 @@ describe('TradeContextService.computeMissingQuality', () => {
     const getKlinesRangeMock = jest.fn();
     const market = { getKlinesRange: getKlinesRangeMock } as any;
 
-    const service = new TradeContextService(prisma, market, {} as any);
+    const service = new TradeContextService(prisma, market, {} as any, {} as any);
     const written = await (service as any).computeMissingQuality('u1');
 
     expect(written).toBe(0);
@@ -111,7 +111,7 @@ describe('TradeContextService.computeMissingQuality', () => {
       );
     const market = { getKlinesRange: getKlinesRangeMock } as any;
 
-    const service = new TradeContextService(prisma, market, {} as any);
+    const service = new TradeContextService(prisma, market, {} as any, {} as any);
     const written = await (service as any).computeMissingQuality('u1');
 
     expect(written).toBe(2);

@@ -11,18 +11,26 @@
 
 ```
 браузер ──https──▶ Caddy (80/443, сертификат Let's Encrypt)
-                     └──▶ web (Next.js, :8090)
-                            └──▶ api (NestJS, :8091) ──▶ db (Postgres)
+                     ├──▶ /api/*, /auth/* → api (NestJS, :8091) ──▶ db (Postgres)
+                     └──▶ остальное       → web (Next.js, :8090)
 ```
 
 Наружу открыт только Caddy. `web` слушает `127.0.0.1:8090` (снаружи не
-виден), `api` и `db` портов на хосте не занимают вовсе.
+виден), `api` и `db` портов на хосте не занимают вовсе. Caddy различает
+маршруты сам (`deploy/Caddyfile`) — запрос к `/api/*` и `/auth/*` идёт в
+`api` напрямую, минуя `web`, чтобы каждый из 100–150 req/s не гонял лишний
+Node-хоп через Next, который в это же время рендерит страницы.
 
-Почему всё идёт через Next, а не «сайт на web, API на api.домен»: браузер и
+Почему это не «сайт на web, API на api.домен» (два разных домена): браузер и
 backend обязаны быть на одном origin. Кука сессии (`refresh_token`,
 HttpOnly) ставится backend'ом, а проверяет её `frontend/src/proxy.ts` — гейт
 защищённых страниц. На разных доменах эта кука до Next-сервера не доедет, и
-проверять там будет нечего.
+проверять там будет нечего. Один origin здесь — это один домен наружу
+(`APP_DOMAIN`), а не то, какой контейнер отвечает внутри сети: Caddy может
+раздавать разные префиксы разным контейнерам без второго домена.
+`next.config.ts` при этом не трогается — его `rewrites` нужны локальному
+запуску без Caddy (`start.bat`) и просто не используются на проде, где
+`/api/*` и `/auth/*` до Next не доходят вовсе.
 
 ---
 
@@ -155,7 +163,8 @@ curl -sI https://ВАШ.ПОДДОМЕН | grep -iE "^HTTP|x-powered-by"
 Проверка:
 
 ```bash
-curl -I https://app.example.com                 # 200
+curl -I https://app.example.com                 # 200, отдаёт web (Next)
+curl -I https://app.example.com/api/trades       # 401 без куки, но заголовки — от Nest, не от Next
 docker compose -f docker-compose.prod.yml logs -f api   # старт NestJS без ошибок
 ```
 
@@ -166,6 +175,26 @@ docker compose -f docker-compose.prod.yml logs -f api   # старт NestJS бе
 (в варианте B — заголовком `X-Forwarded-Proto`, он есть в примере конфига).
 
 ## 5. Обновление кода
+
+**Перед выкладкой ветки с T18 (уже в `main`, если этот раздел читаете после
+её мёржа — проверьте, применяли ли этот шаг раньше) нужен один ручной шаг
+до обычного деплоя.** T18 сменил первичный ключ таблиц
+`user_activity_minutes`/`user_section_days` — на проде это ломающее схему
+изменение: неинтерактивный `prisma db push` при старте `api` откажется его
+применить без `--accept-data-loss`, `api` уйдёт в рестарт-луп (healthcheck
+красный), следом не поднимется `worker` (`depends_on: api: service_healthy`)
+— а поскольку `/auth/*` тоже маршрутизируется в `api` (см. раздел 2), вход в
+продукт целиком ляжет, и без чтения логов причина не очевидна. Точная
+команда и обоснование — `docs/deploy/user-activity-retention.md`, раздел
+«Выкладка на прод требует ручного шага»:
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T db \
+  psql -U virex -d virex -c \
+  "DROP TABLE IF EXISTS user_activity_minutes, user_section_days;"
+```
+
+Дальше — обычный деплой:
 
 ```bash
 git pull
@@ -200,8 +229,11 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T db \
 
 - **Лимит попыток входа считается по IP, а видит один IP.** `/auth/login` и
   `/auth/register` ограничены 10 попытками в минуту на адрес
-  (`auth.controller.ts`), но до backend'а все запросы доходят от Next-сервера,
-  а не от браузера. То есть лимит фактически общий на всех пользователей.
-  На нынешнем размере аудитории это не мешает, но при росте лечится передачей
-  реального адреса (`X-Forwarded-For`) и `trust proxy` в Nest.
+  (`auth.controller.ts`), но `api` видит не адрес браузера, а адрес
+  ближайшего прокси перед собой — в варианте A (Caddy, `/auth/*` идёт прямо
+  в `api`) это сам Caddy, в варианте B (nginx хоста → `web` → `api`) это
+  `web`. То есть лимит фактически общий на всех пользователей в обоих
+  вариантах. На нынешнем размере аудитории это не мешает, но при росте
+  лечится передачей реального адреса (`X-Forwarded-For`, Caddy и nginx оба
+  его уже проставляют) и `trust proxy` в Nest.
 - **Раздел «Боты» в прод-стек не входит** — его нет в `main`.

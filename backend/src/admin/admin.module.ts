@@ -3,6 +3,7 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AdminAnalyticsController } from './admin-analytics.controller';
 import { AdminAnalyticsService } from './admin-analytics.service';
 import { AdminGuard } from './guards/admin.guard';
+import { UsageCleanupService } from './usage/usage-cleanup.service';
 import { UsageTrackerService } from './usage/usage-tracker.service';
 import { UsageTrackingInterceptor } from './usage/usage-tracking.interceptor';
 
@@ -18,6 +19,7 @@ import { UsageTrackingInterceptor } from './usage/usage-tracking.interceptor';
   providers: [
     AdminAnalyticsService,
     AdminGuard,
+    UsageCleanupService,
     UsageTrackerService,
     { provide: APP_INTERCEPTOR, useClass: UsageTrackingInterceptor },
   ],

@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { DataVersionService } from '../prisma/data-version.service';
 import { collapseToPositions, fillDelta, positionOpenMs, type PositionSide } from './positions';
+import { AggregateCacheService, cacheKey } from './aggregate-cache';
 
 export interface TradeStats {
   totalTrades: number;
@@ -93,20 +95,79 @@ export function averageQuality(values: Array<number | null | undefined>): number
   return Number((present.reduce((a, b) => a + b, 0) / present.length).toFixed(2));
 }
 
-/** Thin a sparkline series to ≤ max points, always keeping the last one. */
-function thinEquity(points: EquityPoint[], max = 60): EquityPoint[] {
+/**
+ * Thin a series to ~max points, always keeping the last one — экстремум-
+ * сохраняющее прореживание, не голый шаг по индексу. Ряд режется на корзины
+ * по `stride` точек, и из каждой корзины берутся точки её минимума И
+ * максимума по `value` (в исходном хронологическом порядке; если минимум и
+ * максимум — одна и та же точка, попадает один раз), а не только каждая
+ * N-я точка.
+ *
+ * T-final-review (IMPORTANT): владелец решил не откатывать прореживание и не
+ * переносить расчёт на сервер отдельно, а сделать сохранение экстремумов
+ * здесь. Простой шаг мог полностью потерять провал/пик, оказавшийся между
+ * двумя сохранёнными точками одной корзины — а именно по результату этой
+ * функции клиент считает «Пик»/«Просадку» на обзоре (см. вызов ниже), так
+ * что провал пропадал бы не только с графика, но и из этих чисел.
+ *
+ * `max` — приблизительный порядок величины итогового размера, не жёсткий
+ * потолок: на корзину теперь может уйти до двух точек вместо одной, итог
+ * может оказаться немного больше `max` — это ожидаемо.
+ */
+export function thinEquity(points: EquityPoint[], max = 60): EquityPoint[] {
   if (points.length <= max) return points;
   const stride = Math.ceil(points.length / max);
-  const out = points.filter((_, i) => i % stride === 0);
-  if (out[out.length - 1]?.time !== points[points.length - 1].time) {
-    out.push(points[points.length - 1]);
+  const out: EquityPoint[] = [];
+  for (let start = 0; start < points.length; start += stride) {
+    const end = Math.min(start + stride, points.length);
+    let minIdx = start;
+    let maxIdx = start;
+    for (let i = start + 1; i < end; i++) {
+      if (points[i].value < points[minIdx].value) minIdx = i;
+      if (points[i].value > points[maxIdx].value) maxIdx = i;
+    }
+    if (minIdx === maxIdx) {
+      out.push(points[minIdx]);
+    } else if (minIdx < maxIdx) {
+      out.push(points[minIdx], points[maxIdx]);
+    } else {
+      out.push(points[maxIdx], points[minIdx]);
+    }
+  }
+  const last = points[points.length - 1];
+  if (out[out.length - 1]?.time !== last.time) {
+    out.push(last);
   }
   return out;
 }
 
 @Injectable()
 export class TradesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly dataVersion: DataVersionService,
+    private readonly cache: AggregateCacheService,
+  ) {}
+
+  /**
+   * Версия+LRU-кэш агрегатов (A2, T10): чистая функция от (userId, версия
+   * данных, params) — оборачивает `list`/`stats`/`statsByTime`/`statsByTag`/
+   * `statsByTagCombo` ниже. Версия читается один раз в начале — если между
+   * чтением версии и записью в кэш кто-то успел поднять её (новая сделка
+   * пришла синком прямо сейчас), запись уйдёт под уже устаревшим ключом и
+   * просто не будет найдена следующим читателем — это самоисправляющаяся
+   * гонка, не источник неверных данных: значение под ключом всегда посчитано
+   * по данным на момент своего собственного запроса.
+   */
+  private async cached<T>(scope: string, userId: string, params: unknown, compute: () => Promise<T>): Promise<T> {
+    const version = await this.dataVersion.get(userId);
+    const key = cacheKey(scope, userId, version, params);
+    const hit = this.cache.get<T>(key);
+    if (hit !== undefined) return hit;
+    const result = await compute();
+    this.cache.set(key, result);
+    return result;
+  }
 
   private buildWhere(userId: string, f: TradeFilter): Prisma.TradeWhereInput {
     const where: Prisma.TradeWhereInput = { userId };
@@ -131,6 +192,10 @@ export class TradesService {
   }
 
   async list(userId: string, params: TradeFilter & { page?: number; pageSize?: number }) {
+    return this.cached('list', userId, params, () => this.listUncached(userId, params));
+  }
+
+  private async listUncached(userId: string, params: TradeFilter & { page?: number; pageSize?: number }) {
     const where = this.buildWhere(userId, params);
     const pageSize = Math.min(Math.max(params.pageSize ?? 20, 1), 200);
     const page = Math.max(params.page ?? 1, 1);
@@ -144,7 +209,43 @@ export class TradesService {
       // показывает не только из каких ордеров сложилась позиция, но и каким был
       // рынок в момент входа. Отдельным запросом на строку это были бы 20
       // запросов на страницу, а данные лежат в связанной таблице 1:1.
-      include: { tags: { include: { tag: true } }, context: true },
+      //
+      // select вместо include: набор полей — TradeRowLike (positions.ts) плюс
+      // то, что реально читает мэппинг ниже. Без него Prisma тянула бы и
+      // `Trade.raw` — самое тяжёлое поле строки, которое здесь не используется
+      // ни разу.
+      select: {
+        id: true,
+        positionId: true,
+        symbol: true,
+        direction: true,
+        qty: true,
+        avgEntryPrice: true,
+        avgExitPrice: true,
+        closedPnl: true,
+        openFee: true,
+        closeFee: true,
+        leverage: true,
+        closedAt: true,
+        openedAt: true,
+        tags: { select: { tagId: true, tag: { select: { id: true, name: true, color: true } } } },
+        context: {
+          select: {
+            ok: true,
+            basis: true,
+            atrPct: true,
+            rsi: true,
+            volRel: true,
+            ema200Above: true,
+            trend4h: true,
+            rangePos1h: true,
+            rangePos4h: true,
+            rangePos1d: true,
+            entryQuality: true,
+            exitQuality: true,
+          },
+        },
+      },
     });
     const positions = collapseToPositions(rows);
     const pageRows = positions.slice((page - 1) * pageSize, page * pageSize);
@@ -422,11 +523,33 @@ export class TradesService {
    * sparkline showing whether the setup still works or is decaying.
    */
   async statsByTag(userId: string, days?: number) {
+    return this.cached('statsByTag', userId, { days }, () => this.statsByTagUncached(userId, days));
+  }
+
+  private async statsByTagUncached(userId: string, days?: number) {
     const trades = collapseToPositions(
       await this.prisma.trade.findMany({
         where: this.buildWhere(userId, { days }),
         orderBy: { closedAt: 'asc' },
-        include: { tags: { include: { tag: true } } },
+        // select вместо include — см. комментарий в list().
+        select: {
+          id: true,
+          positionId: true,
+          symbol: true,
+          direction: true,
+          qty: true,
+          avgEntryPrice: true,
+          avgExitPrice: true,
+          closedPnl: true,
+          openFee: true,
+          closeFee: true,
+          leverage: true,
+          closedAt: true,
+          openedAt: true,
+          tags: {
+            select: { tagId: true, tag: { select: { id: true, name: true, color: true, type: true } } },
+          },
+        },
       }),
     );
 
@@ -547,10 +670,30 @@ export class TradesService {
    * entry point, so hiding it would hide the backlog.
    */
   async statsByTagCombo(userId: string, days?: number) {
+    return this.cached('statsByTagCombo', userId, { days }, () => this.statsByTagComboUncached(userId, days));
+  }
+
+  private async statsByTagComboUncached(userId: string, days?: number) {
     const trades = collapseToPositions(
       await this.prisma.trade.findMany({
         where: this.buildWhere(userId, { days }),
-        include: { tags: { include: { tag: true } } },
+        // select вместо include — см. комментарий в list().
+        select: {
+          id: true,
+          positionId: true,
+          symbol: true,
+          direction: true,
+          qty: true,
+          avgEntryPrice: true,
+          avgExitPrice: true,
+          closedPnl: true,
+          openFee: true,
+          closeFee: true,
+          leverage: true,
+          closedAt: true,
+          openedAt: true,
+          tags: { select: { tagId: true, tag: { select: { id: true, name: true, color: true } } } },
+        },
       }),
     );
 
@@ -707,6 +850,10 @@ export class TradesService {
    * land in the user's local clock, not the server's.
    */
   async statsByTime(userId: string, params: { days?: number; tzOffsetMin?: number; tagId?: string }) {
+    return this.cached('statsByTime', userId, params, () => this.statsByTimeUncached(userId, params));
+  }
+
+  private async statsByTimeUncached(userId: string, params: { days?: number; tzOffsetMin?: number; tagId?: string }) {
     // Collapsed to positions like every other stat, so "when do I trade well"
     // counts a scaled-out position once rather than once per partial exit —
     // otherwise the hours a trader habitually takes profit in look busier and
@@ -714,6 +861,22 @@ export class TradesService {
     const trades = collapseToPositions(
       await this.prisma.trade.findMany({
         where: this.buildWhere(userId, { days: params.days, tagId: params.tagId }),
+        // select вместо неявного «всё» — см. комментарий в list().
+        select: {
+          id: true,
+          positionId: true,
+          symbol: true,
+          direction: true,
+          qty: true,
+          avgEntryPrice: true,
+          avgExitPrice: true,
+          closedPnl: true,
+          openFee: true,
+          closeFee: true,
+          leverage: true,
+          closedAt: true,
+          openedAt: true,
+        },
       }),
     );
 
@@ -778,11 +941,35 @@ export class TradesService {
     userId: string,
     params: TradeFilter,
   ): Promise<{ success: boolean; stats: TradeStats; equity: EquityPoint[] }> {
+    return this.cached('stats', userId, params, () => this.statsUncached(userId, params));
+  }
+
+  private async statsUncached(
+    userId: string,
+    params: TradeFilter,
+  ): Promise<{ success: boolean; stats: TradeStats; equity: EquityPoint[] }> {
     const trades = collapseToPositions(
       await this.prisma.trade.findMany({
         where: this.buildWhere(userId, params),
         orderBy: { closedAt: 'asc' },
-        include: { context: true },
+        // select вместо include — см. комментарий в list(). Из контекста
+        // читается только качество входа/выхода (avgEntryQuality/avgExitQuality).
+        select: {
+          id: true,
+          positionId: true,
+          symbol: true,
+          direction: true,
+          qty: true,
+          avgEntryPrice: true,
+          avgExitPrice: true,
+          closedPnl: true,
+          openFee: true,
+          closeFee: true,
+          leverage: true,
+          closedAt: true,
+          openedAt: true,
+          context: { select: { entryQuality: true, exitQuality: true } },
+        },
       }),
     );
 
@@ -839,6 +1026,13 @@ export class TradesService {
       avgExitQuality: averageQuality(trades.map((t) => t.context?.exitQuality)),
     };
 
-    return { success: true, stats, equity };
+    // Прореживание держит объём ответа/трафика в узде на длинной истории — не
+    // техпотолок рендеринга: `buildEquityGeometry(data, height)` на клиенте
+    // (views/overview/Page.tsx) принимает высоту SVG в пикселях вторым
+    // параметром, а не число точек, и своего прореживания не делает вовсе.
+    // `thinEquity` сохраняет экстремумы (см. её комментарий) — «Пик» и
+    // «Просадка» на обзоре считаются ПО ЭТОМУ результату, и без сохранения
+    // экстремумов провал посередине периода мог бы пропасть из выборки.
+    return { success: true, stats, equity: thinEquity(equity, 600) };
   }
 }

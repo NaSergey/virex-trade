@@ -2,6 +2,19 @@ import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AnalyticsService } from './analytics.service';
 
+// T-final-review (IMPORTANT): `symbol` идёт прямо в ключ `longShortRatioCache`/
+// `liquidityHistoryCache` (analytics.service.ts) БЕЗ проверки формата — сколько
+// угодно различных значений от аутентифицированного пользователя (`?symbol=
+// <мусор>`) означает сколько угодно записей в этих Map, они никогда не
+// вытесняются. Формат тикера — заглавные буквы/цифры разумной длины (реальные
+// примеры по кодовой базе: `BTCUSDT`, `1000PEPEUSDT`); нет отдельного реестра
+// торгуемых пар, который стоило бы сюда тащить — только фильтр формата.
+const SYMBOL_RE = /^[A-Z0-9]{3,20}$/;
+
+function sanitizeSymbol(symbol: string | undefined): string {
+  return symbol && SYMBOL_RE.test(symbol) ? symbol : 'BTCUSDT';
+}
+
 // All analytics endpoints require a valid access token.
 @UseGuards(JwtAuthGuard)
 @Controller('api/analytics')
@@ -30,12 +43,12 @@ export class AnalyticsController {
 
   @Get('liquidity-history')
   async getLiquidityHistory(@Query('symbol') symbol?: string) {
-    return this.analyticsService.getLiquidityHistory(symbol ?? 'BTCUSDT');
+    return this.analyticsService.getLiquidityHistory(sanitizeSymbol(symbol));
   }
 
   @Get('market-sentiment')
   async getMarketSentiment(@Query('symbol') symbol?: string) {
-    return this.analyticsService.getLongShortRatio(symbol ?? 'BTCUSDT');
+    return this.analyticsService.getLongShortRatio(sanitizeSymbol(symbol));
   }
 
   @Get('volatility')

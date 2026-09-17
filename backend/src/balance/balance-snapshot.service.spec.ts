@@ -222,4 +222,48 @@ describe('BalanceSnapshotService.captureAll', () => {
     // Но computeMissing всё равно был вызван
     expect(computeMissingMock).toHaveBeenCalledWith(userId);
   });
+
+  // T12 (A3): тот же ограничитель параллелизма, что у TradeSyncService.syncAll
+  // — часовой обход балансов на большом числе аккаунтов не должен идти
+  // голым последовательным for, но и не должен бить биржу и Prisma без
+  // ограничения.
+  it('обходит пользователей с ограничением параллелизма, не безгранично', async () => {
+    const userIds = Array.from({ length: 25 }, (_, i) => `u${i}`);
+    const prisma = {
+      user: { findMany: jest.fn().mockResolvedValue(userIds.map((id) => ({ id }))) },
+      balanceSnapshot: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue(undefined),
+      },
+      trade: { findMany: jest.fn().mockResolvedValue([]) },
+      fundingFee: { findMany: jest.fn().mockResolvedValue([]) },
+    } as never;
+
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const adapter = {
+      getBalance: jest.fn().mockImplementation(async () => {
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((r) => setTimeout(r, 5));
+        inFlight--;
+        return { success: true, balance: 1000, availableToWithdraw: 1000 };
+      }),
+      getOpenPositions: jest.fn().mockResolvedValue({ success: true, positions: [] }),
+    };
+    const exchanges = { get: () => adapter } as never;
+    const credentials = {
+      getActive: jest
+        .fn()
+        .mockResolvedValue({ exchange: 'bybit', credentials: { apiKey: 'k', apiSecret: 's' } }),
+    } as never;
+    const risk = { computeMissing: jest.fn().mockResolvedValue(0) } as never;
+
+    const service = new BalanceSnapshotService(prisma, exchanges, credentials, risk);
+    await service.captureAll(new Date());
+
+    expect(adapter.getBalance).toHaveBeenCalledTimes(25);
+    expect(maxInFlight).toBeGreaterThan(1);
+    expect(maxInFlight).toBeLessThanOrEqual(16);
+  });
 });

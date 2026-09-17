@@ -18,6 +18,14 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Версия данных пользователя (T10, backend-optimization): растёт при любой
+  // правке того, что видят агрегаты сделок (stats/list/lab/habits/...) — новые
+  // сделки, теги, пересчёт рыночного контекста. Ключ LRU-кэша агрегатов и ETag
+  // строятся по ней, поэтому инкремент атомарный (`SET x = x + 1` в SQL, см.
+  // DataVersionService), не read-modify-write — конкурентные бампы не должны
+  // теряться. См. docs/.../2026-09-16-backend-optimization/task-10-report.md.
+  dataVersion Int @default(0)
+
   // Кто привёл этого пользователя — id из ссылки `/login?mode=register&ref=<id>`.
   // SetNull, а не Cascade: удаление аккаунта пригласившего не должно каскадом
   // утаскивать тех, кого он привёл, — они просто теряют ссылку на источник.
@@ -153,7 +161,6 @@ model Trade {
   @@index([userId, symbol])
   @@index([userId, closedAt])
   @@index([userId, positionId])
-  @@index([userId, exchange])
   @@map("trades")
 }
 
@@ -188,7 +195,6 @@ model Execution {
 
   @@unique([userId, exchange, execId, orderId])
   @@index([userId, symbol, execTime])
-  @@index([userId, exchange])
   @@map("executions")
 }
 
@@ -608,24 +614,37 @@ model RefreshToken {
 // `requests` — все запросы за минуту, `writes` — только изменяющие (не GET).
 // Разница важна: открытая вкладка сама по себе генерирует GET-ы, а write
 // означает, что человек действительно что-то сделал.
+// T18 (docs/superpowers/sdd/2026-09-16-backend-optimization/task-18-brief.md):
+// составной первичный ключ вместо суррогатного `id uuid` — тот же приём и то
+// же обоснование, что у `PriceCandle` (:556). Строка адресуется парой
+// (userId, minute), к самому `id` никто не обращается, а на самой быстрорастущей
+// таблице продукта (до сотен млн строк/год) это минус 37 байт и минус целый
+// индекс на вставку. Владелец согласился на разовую потерю таблицы на проде
+// при выкладке (`prisma db push --accept-data-loss`, данные аналитические и
+// невосстановимые) — см. docs/deploy/user-activity-retention.md.
+// Строки не живут вечно: UsageCleanupService сметает всё старше
+// ACTIVITY_RETENTION_DAYS (usage/visits.ts), поэтому таблица не растёт без
+// границ несмотря на отсутствие срока жизни у самой модели в схеме.
 model UserActivityMinute {
-  id       String   @id @default(uuid())
   userId   String
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   minute   DateTime // UTC, обрезано до минуты
   requests Int      @default(0)
   writes   Int      @default(0)
 
-  @@unique([userId, minute])
+  @@id([userId, minute])
   @@index([minute])
-  @@index([userId, minute])
   @@map("user_activity_minutes")
 }
 
 // Какими разделами пользуются, по дням: сколько обращений и сколько из них
 // были действиями. Времени здесь нет по той же причине, что и выше.
+//
+// T18: составной ключ вместо `id uuid`, тот же приём, что у UserActivityMinute
+// выше — строка адресуется тройкой (userId, day, section), и это же — срез,
+// по которому её ищут. Тоже под сроком жизни ACTIVITY_RETENTION_DAYS
+// (см. UsageCleanupService).
 model UserSectionDay {
-  id       String   @id @default(uuid())
   userId   String
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   day      DateTime // UTC-сутки, 00:00
@@ -633,7 +652,7 @@ model UserSectionDay {
   requests Int      @default(0)
   writes   Int      @default(0)
 
-  @@unique([userId, day, section])
+  @@id([userId, day, section])
   @@index([day])
   @@map("user_section_days")
 }
@@ -656,7 +675,6 @@ model BalanceSnapshot {
   gap      Float?
 
   @@unique([userId, exchange, at])
-  @@index([userId, exchange, at])
   @@map("balance_snapshots")
 }
 

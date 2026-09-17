@@ -8,6 +8,8 @@
  */
 import { PrismaClient } from '@prisma/client';
 import { HabitsService } from '../src/trades/habits.service';
+import { DataVersionService } from '../src/prisma/data-version.service';
+import { AggregateCacheService } from '../src/trades/aggregate-cache';
 import type { PrismaService } from '../src/prisma/prisma.service';
 
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
@@ -20,7 +22,14 @@ const pad = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' 
 
 async function main() {
   const prisma = new PrismaClient();
-  const service = new HabitsService(prisma as unknown as PrismaService);
+  const prismaService = prisma as unknown as PrismaService;
+  // Разовый прогон отчёта, не сервер: одноразовые версия/кэш — каждый вызов
+  // scan() всё равно бьёт в БД (кэшу неоткуда взять предыдущий результат).
+  const service = new HabitsService(
+    prismaService,
+    new DataVersionService(prismaService),
+    new AggregateCacheService(),
+  );
 
   const users = await prisma.user.findMany({
     select: { id: true, email: true, _count: { select: { trades: true } } },

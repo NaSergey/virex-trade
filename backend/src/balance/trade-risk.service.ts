@@ -1,9 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { BalanceHistoryService } from './balance-history.service';
+import { AnchorRow, BalanceHistoryService } from './balance-history.service';
 
 /** Версия набора полей. Растёт, когда меняется формула — строки старой версии пересчитываются. */
 export const RISK_VERSION = 1;
+
+// T14 (A5): тот же паттерн и то же значение, что BATCH_LIMIT в
+// TradeContextService (trade-context.service.ts) — прогон на пользователя
+// с годом непосчитанных сделок не занимает часовой цикл целиком, а
+// прогрессивно добирает остаток на следующих тиках.
+const BATCH_LIMIT = 400;
 
 export interface RiskInput {
   qty: number;
@@ -55,6 +62,12 @@ export class TradeRiskService {
    * а строки устаревшей версии сначала удаляем — иначе новая формула никогда
    * не доедет до уже посчитанных сделок и продукт будет показывать два разных
    * определения риска одновременно.
+   *
+   * T14 (A5): `take: BATCH_LIMIT`, как у TradeContextService — без лимита
+   * пользователь с годом непосчитанных сделок занимал бы часовой обход
+   * целиком; якоря баланса читаются один раз на (пользователя, биржу) перед
+   * циклом, а не заново на каждую сделку через `balanceAt`; запись —
+   * `createMany` одной пачкой, а не по строке на сделку.
    */
   async computeMissing(userId: string): Promise<number> {
     await this.prisma.tradeRisk.deleteMany({
@@ -62,6 +75,7 @@ export class TradeRiskService {
     });
     const trades = await this.prisma.trade.findMany({
       where: { userId, risk: null },
+      take: BATCH_LIMIT,
       select: {
         id: true,
         exchange: true,
@@ -72,31 +86,40 @@ export class TradeRiskService {
         closedAt: true,
       },
     });
+    if (trades.length === 0) return 0;
 
-    let done = 0;
+    // Один запрос якорей на каждую встретившуюся в пачке биржу (обычно одна —
+    // activeExchange у пользователя одна, — но исторические сделки со
+    // сменённой биржи тоже должны получить свой набор якорей), а не по
+    // запросу на сделку.
+    const anchorsByExchange = new Map<string, AnchorRow[]>();
+    for (const exchange of new Set(trades.map((t) => t.exchange))) {
+      anchorsByExchange.set(exchange, await this.history.loadAnchorRows(userId, exchange));
+    }
+
+    const data: Prisma.TradeRiskCreateManyInput[] = [];
     for (const t of trades) {
       // Момент входа, а не закрытия: правило ограничивает решение, принятое
       // на входе, и мерить его балансом, уже изменённым исходом этой самой
       // сделки, значит оценивать решение по его результату.
       const at = t.openedAt ?? t.closedAt;
-      const found = await this.history.balanceAt(userId, t.exchange, at);
+      const found = await this.history.balanceAt(userId, t.exchange, at, anchorsByExchange.get(t.exchange));
       const risk = riskOf(
         { qty: t.qty, avgEntryPrice: t.avgEntryPrice, stopLoss: t.stopLoss },
         found?.balance ?? null,
       );
-      await this.prisma.tradeRisk.create({
-        data: {
-          tradeId: t.id,
-          balanceAtEntry: found?.balance ?? null,
-          balanceSource: found?.source ?? null,
-          exposurePct: risk.exposurePct,
-          plannedRiskPct: risk.plannedRiskPct,
-          ok: risk.ok,
-          riskVersion: RISK_VERSION,
-        },
+      data.push({
+        tradeId: t.id,
+        balanceAtEntry: found?.balance ?? null,
+        balanceSource: found?.source ?? null,
+        exposurePct: risk.exposurePct,
+        plannedRiskPct: risk.plannedRiskPct,
+        ok: risk.ok,
+        riskVersion: RISK_VERSION,
       });
-      done += 1;
     }
-    return done;
+
+    const res = await this.prisma.tradeRisk.createMany({ data });
+    return res.count;
   }
 }
