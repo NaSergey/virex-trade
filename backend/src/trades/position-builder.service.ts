@@ -95,7 +95,7 @@ export class PositionBuilderService {
     exchange: ExchangeId,
     creds: ExchangeCredentials,
     openPositions: PositionsResult,
-    opts?: { full?: boolean; hadNewTrades?: boolean },
+    opts?: { full?: boolean; newTradeSymbols?: Set<string> },
   ): Promise<{ fills: number; positions: number; stamped: number }> {
     const { count: fills, touched } = await this.fetchAndStoreExecutions(
       userId,
@@ -117,31 +117,33 @@ export class PositionBuilderService {
       // именно то же самое `openSizes`, что пошло бы на seed rebuild ниже.
       //
       // T-final-review (IMPORTANT): это условие не учитывало, что closed-pnl
-      // запись сделки (`Trade`, даёт `hadNewTrades`) может прийти ПОЗЖЕ, чем
-      // её execution-филл (уже учтён в прошлом тике → `fills === 0` сейчас), а
-      // размер позиции по символу уже давно не менялся (`changed.size === 0`,
-      // закрытие по факту случилось раньше). Тогда `positionId` только что
-      // вставленного `Trade` остаётся `null` навсегда, если по символу больше
-      // нет активности — `hadNewTrades` форсирует rebuild именно в этом случае.
-      if (fills === 0 && changed.size === 0 && !opts?.hadNewTrades) {
+      // запись сделки (`Trade`, символ есть в `opts.newTradeSymbols`) может
+      // прийти ПОЗЖЕ, чем её execution-филл (уже учтён в прошлом тике →
+      // `fills === 0` сейчас), а размер позиции по символу уже давно не
+      // менялся (`changed.size === 0`, закрытие по факту случилось раньше).
+      // Тогда `positionId` только что вставленного `Trade` остаётся `null`
+      // навсегда, если по символу больше нет активности — непустой
+      // `newTradeSymbols` форсирует rebuild именно в этом случае.
+      if (fills === 0 && changed.size === 0 && !opts?.newTradeSymbols?.size) {
         return { fills: 0, positions: 0, stamped: 0 };
       }
-      const scope = this.scopeFor(cached, touched, changed);
-      // T-final-review (IMPORTANT): `hadNewTrades` без сигнала от `touched`/
-      // `changed` не говорит, КАКОЙ символ получил новый `Trade` — узкий
-      // `scope` тогда остаётся пустым (`scopeFor` строит его именно из
-      // `touched`/`changed`), и `rebuild` с пустым `scope.symbols` не находит
-      // ничего ни в executions (`OR: []`), ни в trades (`symbol: { in: [] }`)
-      // — сам по себе пропуск early-return тут ничего не чинит. В этом редком
-      // случае (новый Trade пришёл, а фактическая активность по символу нет)
-      // единственный надёжный вариант — полный обход, как при холодном кэше:
-      // мы не знаем, какой символ стамповать, значит проверяем все.
-      const effectiveScope = opts?.hadNewTrades && scope.symbols.length === 0 ? null : scope;
+      // T-final-review (re-review, IMPORTANT): `newTradeSymbols` идёт в сам
+      // `scopeFor` третьим источником символов — не отдельным «пустой scope
+      // → полный обход» фолбэком (как было в предыдущем заходе). Тот фолбэк
+      // ловил только случай, когда `newTradeSymbols` был ЕДИНСТВЕННЫМ
+      // сигналом за весь тик; в смешанном тике (другой символ даёт
+      // touched/changed-активность) scope был непустым, и символ из
+      // `newTradeSymbols` в него не попадал. Объединение символов внутри
+      // `scopeFor` закрывает оба случая одним и тем же путём и делает старый
+      // фолбэк структурно недостижимым (если `newTradeSymbols` непуст,
+      // `scope.symbols` не может быть пуст) — поэтому он убран, а не оставлен
+      // мёртвым кодом.
+      const scope = this.scopeFor(cached, touched, changed, opts?.newTradeSymbols);
       const { positions, stamped, openTail } = await this.rebuild(
         userId,
         exchange,
         openSizes,
-        effectiveScope,
+        scope,
       );
       this.rebuildCache.set(cacheKey, {
         sizes: openSizes,
@@ -213,24 +215,34 @@ export class PositionBuilderService {
    * T13: область скопированной перестройки — какие символы трогать и с
    * какого момента времени читать их филлы.
    *
-   * Символы — объединение тех, где появились новые филлы (`touched`), и тех,
+   * Символы — объединение тех, где появились новые филлы (`touched`), тех,
    * где сам открытый размер сдвинулся (`changed`; отдельно от `touched` на
    * случай, когда биржа уже показывает новый размер, а `fetchFills` его ещё
-   * не догнал).
+   * не догнал), и тех, что получили новый closed-pnl `Trade` в этом тике
+   * (`newTradeSymbols` — T-final-review, re-review): closed-pnl запись может
+   * прийти позже своего execution-филла, когда сам филл уже разобран в
+   * прошлом тике и не даёт сигнала ни через `touched`, ни через `changed`.
+   * Без этого источника символ с опоздавшим `Trade`, но без собственной
+   * свежей активности, не попадал бы в scope вовсе — даже если scope в целом
+   * непуст из-за ДРУГОГО символа того же тика (смешанный тик).
    *
    * Порог по времени — свой на каждый символ, через `floorFor`: не единая
    * дата на всех, потому что общая дата либо была бы не строже {@link
    * floorFor} (бесполезна), либо рисковала бы обрезать более старую историю
    * символа, которого просто не было в самой свежей ещё открытой позиции
    * другого символа (см. комментарий класса — там разбор, почему это было бы
-   * некорректно).
+   * некорректно). Символам из `newTradeSymbols` без собственного сигнала
+   * `touched` `floorFor` естественно даёт `null` (вся история символа) или
+   * границу его собственного открытого хвоста — оба варианта безопасны, `null`
+   * просто шире необходимого.
    */
   private scopeFor(
     cached: RebuildCacheEntry,
     touched: Map<string, number>,
     changed: Set<string>,
+    newTradeSymbols?: Set<string>,
   ): { symbols: string[]; floorMsBySymbol: Map<string, number | null> } {
-    const symbols = new Set<string>([...touched.keys(), ...changed]);
+    const symbols = new Set<string>([...touched.keys(), ...changed, ...(newTradeSymbols ?? [])]);
     const floorMsBySymbol = new Map<string, number | null>();
     for (const s of symbols) {
       floorMsBySymbol.set(s, this.floorFor(cached, s, touched.get(s)));

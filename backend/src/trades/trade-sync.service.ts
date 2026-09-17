@@ -209,6 +209,16 @@ export class TradeSyncService
     }
     const inserted = await this.persist(userId, exchange, closed.items);
     await this.tradeAlerts.syncOutcome(userId, !closed.partial);
+    // T-final-review (re-review, IMPORTANT): символы этого тика с новыми
+    // closed-pnl `Trade` — нужны PositionBuilderService.sync ниже, чтобы
+    // расширить область перестройки конкретно на них (см. комментарий у
+    // вызова positions.sync). Берём символы ВСЕГО полученного батча, а не
+    // только реально вставленных строк: `createMany({ skipDuplicates: true })`
+    // в persist() не сообщает, какие именно строки были дублями, а включить
+    // чуть больше символов, чем строго необходимо, безопасно и дёшево — тот
+    // же принцип "scope шире, чем нужно, но никогда не уже", что уже
+    // описан в PositionBuilderService (см. её комментарий класса).
+    const newTradeSymbols = inserted > 0 ? new Set(closed.items.map((t) => t.symbol)) : undefined;
     if (inserted > 0) {
       this.logger.log(`synced ${inserted} new trade(s) for user ${userId}`);
       // T10 (A2): новые строки Trade видят все закэшированные агрегаты
@@ -285,14 +295,21 @@ export class TradeSyncService
     // Runs every tick (not just on inserts): a position that closed in parts
     // only becomes groupable once its final closing fill arrives.
     try {
-      // T-final-review (IMPORTANT): `hadNewTrades` — отдельно от внешнего
-      // `opts.full` — говорит PositionBuilderService, что в этом тике
-      // появились новые closed-pnl `Trade` (см. комментарий на условии скипа
-      // в position-builder.service.ts), даже если сама эта пачка фактически
-      // не сдвинула открытый размер ни по одному символу.
+      // T-final-review (re-review, IMPORTANT): `newTradeSymbols` — отдельно от
+      // внешнего `opts.full` — говорит PositionBuilderService, какие символы
+      // этого тика получили новые closed-pnl `Trade` (см. условие скипа и
+      // scopeFor в position-builder.service.ts), даже если сама эта пачка
+      // фактически не сдвинула открытый размер и не дала нового филла по
+      // этому символу. Раньше здесь был голый булев `hadNewTrades` — но без
+      // ИМЕНИ символа PositionBuilderService не мог расширить scope точечно:
+      // в смешанном тике (символ Y даёт обычную touched/changed-активность,
+      // а у символа X только его closed-pnl запись прилетела с опозданием)
+      // scope не пустой (в нём есть Y) — старый fallback «пустой scope + флаг
+      // → полный обход» на такой тик не срабатывал, и X оставался без
+      // перестройки.
       const p = await this.positions.sync(userId, exchange, creds, open, {
         ...opts,
-        hadNewTrades: inserted > 0,
+        newTradeSymbols,
       });
       if (p.fills > 0 || p.stamped > 0) {
         this.logger.log(

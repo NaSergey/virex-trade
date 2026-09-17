@@ -293,10 +293,10 @@ describe('PositionBuilderService — T13 инкрементальная пере
   });
 
   // T-final-review (IMPORTANT): closed-pnl `Trade` может прийти позже своего
-  // execution-филла (уже учтён в прошлом тике) — без `hadNewTrades` условие
+  // execution-филла (уже учтён в прошлом тике) — без `newTradeSymbols` условие
   // скипа (`fills === 0 && changed.size === 0`) молча оставляло бы новый
   // трейд без `positionId` навсегда, если по символу больше нет активности.
-  it('fills=0 и changed пуст, но hadNewTrades=true — перестройка НЕ пропускается', async () => {
+  it('fills=0 и changed пуст, но newTradeSymbols содержит символ — перестройка НЕ пропускается', async () => {
     const { prisma, trades } = makeFakePrisma();
 
     const openFill = fill('BTCUSDT', 'Buy', 1, 0, min(0), 'open-1');
@@ -320,11 +320,13 @@ describe('PositionBuilderService — T13 инкрементальная пере
 
     // Между тиками TradeSyncService.persist() вставил closed-pnl Trade для
     // close-1 — это ровно та вставка, которая на реальном сервисе даёт
-    // `inserted > 0` и transitively `hadNewTrades: true`.
+    // `inserted > 0` и `newTradeSymbols = {'BTCUSDT'}`.
     trades.push({ id: 't1', userId: 'u1', exchange: 'bybit', symbol: 'BTCUSDT', orderId: 'close-1', positionId: null });
 
     const findManyCallsBefore = prisma.trade.findMany.mock.calls.length;
-    const r2 = await service.sync('u1', 'bybit', CREDS, openPositions([]), { hadNewTrades: true });
+    const r2 = await service.sync('u1', 'bybit', CREDS, openPositions([]), {
+      newTradeSymbols: new Set(['BTCUSDT']),
+    });
 
     // Если бы скип сработал, вернулось бы ровно {fills:0, positions:0, stamped:0}
     // и trade.findMany внутри rebuild не был бы вызван вовсе.
@@ -333,7 +335,7 @@ describe('PositionBuilderService — T13 инкрементальная пере
     expect(r2.stamped).toBe(1);
   });
 
-  it('fills=0 и changed пуст и hadNewTrades не передан (или false) — перестройка по-прежнему пропускается', async () => {
+  it('fills=0 и changed пуст и newTradeSymbols не передан (или пуст) — перестройка по-прежнему пропускается', async () => {
     const { prisma } = makeFakePrisma();
     const fetchFills = jest.fn().mockResolvedValue({ success: true, items: [] });
     const service = new PositionBuilderService(prisma, makeExchanges(fetchFills));
@@ -341,9 +343,65 @@ describe('PositionBuilderService — T13 инкрементальная пере
     await service.sync('u1', 'bybit', CREDS, openPositions([]));
     const callsAfterFirst = prisma.trade.findMany.mock.calls.length;
 
-    const r2 = await service.sync('u1', 'bybit', CREDS, openPositions([]), { hadNewTrades: false });
+    const r2 = await service.sync('u1', 'bybit', CREDS, openPositions([]), { newTradeSymbols: new Set() });
     expect(r2).toEqual({ fills: 0, positions: 0, stamped: 0 });
     expect(prisma.trade.findMany.mock.calls.length).toBe(callsAfterFirst);
+  });
+
+  // T-final-review (re-review, IMPORTANT): регрессия остаточного пробела —
+  // голый булев hadNewTrades не говорил, КАКОЙ символ получил новый Trade.
+  // В смешанном тике, где один символ (ETHUSDT) даёт обычную touched-
+  // активность, а другой (BTCUSDT) — только новый Trade без своей execution-
+  // активности в этом тике, scope от touched/changed непуст (там есть
+  // ETHUSDT), и старый fallback «пустой scope + hadNewTrades → полный обход»
+  // на такой тик не срабатывал: BTCUSDT оставался вне scope, и его новый
+  // Trade — без positionId навсегда.
+  it('смешанный тик: один символ даёт обычную активность, другой — только новый Trade — перестройка обходит ОБА символа', async () => {
+    const { prisma, trades } = makeFakePrisma();
+
+    // BTCUSDT: полностью закрыта в тике 1, closed-pnl Trade придёт с
+    // опозданием в тике 2, без какой-либо новой execution-активности.
+    const btcOpen = fill('BTCUSDT', 'Buy', 1, 0, min(0), 'btc-open');
+    const btcClose = fill('BTCUSDT', 'Sell', 1, 1, min(5), 'btc-close');
+    // ETHUSDT: появляется только в тике 2 — свежий филл, реальная touched-активность.
+    const ethOpen = fill('ETHUSDT', 'Buy', 2, 0, min(10), 'eth-open');
+
+    const fetchFills = jest
+      .fn()
+      .mockResolvedValueOnce({ success: true, items: [btcOpen, btcClose] })
+      .mockResolvedValueOnce({ success: true, items: [ethOpen] });
+
+    const service = new PositionBuilderService(prisma, makeExchanges(fetchFills));
+
+    // Тик 1: BTCUSDT полностью закрыта на бирже, её Trade ещё не вставлен.
+    const r1 = await service.sync('u1', 'bybit', CREDS, openPositions([]));
+    expect(r1.stamped).toBe(0);
+
+    // Между тиками: TradeSyncService.persist() вставил closed-pnl Trade для
+    // btc-close — inserted>0, newTradeSymbols = {'BTCUSDT'}. ETHUSDT в этот
+    // набор не входит: его собственная сделка ещё не закрылась.
+    trades.push({
+      id: 't-btc',
+      userId: 'u1',
+      exchange: 'bybit',
+      symbol: 'BTCUSDT',
+      orderId: 'btc-close',
+      positionId: null,
+    });
+
+    // Тик 2: ETHUSDT открывает новую позицию (touched+changed непусты сами по
+    // себе, без всякого newTradeSymbols) — ровно то, что раньше делало scope
+    // непустым и НЕ триггерило старый пустой-scope-фолбэк.
+    const r2 = await service.sync(
+      'u1',
+      'bybit',
+      CREDS,
+      openPositions([{ symbol: 'ETHUSDT', direction: 'long', size: '2' }]),
+      { newTradeSymbols: new Set(['BTCUSDT']) },
+    );
+
+    expect(trades.find((t) => t.id === 't-btc')!.positionId).toBe(`BTCUSDT:long:${btcOpen.execTime.getTime()}`);
+    expect(r2.stamped).toBe(1); // только t-btc реально поменялся в этом тике
   });
 
   it('full-опция игнорирует кэш и всегда идёт полным обходом', async () => {
