@@ -95,13 +95,48 @@ export function averageQuality(values: Array<number | null | undefined>): number
   return Number((present.reduce((a, b) => a + b, 0) / present.length).toFixed(2));
 }
 
-/** Thin a sparkline series to ≤ max points, always keeping the last one. */
+/**
+ * Thin a series to ~max points, always keeping the last one — экстремум-
+ * сохраняющее прореживание, не голый шаг по индексу. Ряд режется на корзины
+ * по `stride` точек, и из каждой корзины берутся точки её минимума И
+ * максимума по `value` (в исходном хронологическом порядке; если минимум и
+ * максимум — одна и та же точка, попадает один раз), а не только каждая
+ * N-я точка.
+ *
+ * T-final-review (IMPORTANT): владелец решил не откатывать прореживание и не
+ * переносить расчёт на сервер отдельно, а сделать сохранение экстремумов
+ * здесь. Простой шаг мог полностью потерять провал/пик, оказавшийся между
+ * двумя сохранёнными точками одной корзины — а именно по результату этой
+ * функции клиент считает «Пик»/«Просадку» на обзоре (см. вызов ниже), так
+ * что провал пропадал бы не только с графика, но и из этих чисел.
+ *
+ * `max` — приблизительный порядок величины итогового размера, не жёсткий
+ * потолок: на корзину теперь может уйти до двух точек вместо одной, итог
+ * может оказаться немного больше `max` — это ожидаемо.
+ */
 export function thinEquity(points: EquityPoint[], max = 60): EquityPoint[] {
   if (points.length <= max) return points;
   const stride = Math.ceil(points.length / max);
-  const out = points.filter((_, i) => i % stride === 0);
-  if (out[out.length - 1]?.time !== points[points.length - 1].time) {
-    out.push(points[points.length - 1]);
+  const out: EquityPoint[] = [];
+  for (let start = 0; start < points.length; start += stride) {
+    const end = Math.min(start + stride, points.length);
+    let minIdx = start;
+    let maxIdx = start;
+    for (let i = start + 1; i < end; i++) {
+      if (points[i].value < points[minIdx].value) minIdx = i;
+      if (points[i].value > points[maxIdx].value) maxIdx = i;
+    }
+    if (minIdx === maxIdx) {
+      out.push(points[minIdx]);
+    } else if (minIdx < maxIdx) {
+      out.push(points[minIdx], points[maxIdx]);
+    } else {
+      out.push(points[maxIdx], points[minIdx]);
+    }
+  }
+  const last = points[points.length - 1];
+  if (out[out.length - 1]?.time !== last.time) {
+    out.push(last);
   }
   return out;
 }
@@ -991,8 +1026,13 @@ export class TradesService {
       avgExitQuality: averageQuality(trades.map((t) => t.context?.exitQuality)),
     };
 
-    // Клиент (views/overview/Page.tsx) сводит кривую к 300 точкам через
-    // buildEquityGeometry — всё, что длиннее ~600, он всё равно выбрасывает.
+    // Прореживание держит объём ответа/трафика в узде на длинной истории — не
+    // техпотолок рендеринга: `buildEquityGeometry(data, height)` на клиенте
+    // (views/overview/Page.tsx) принимает высоту SVG в пикселях вторым
+    // параметром, а не число точек, и своего прореживания не делает вовсе.
+    // `thinEquity` сохраняет экстремумы (см. её комментарий) — «Пик» и
+    // «Просадка» на обзоре считаются ПО ЭТОМУ результату, и без сохранения
+    // экстремумов провал посередине периода мог бы пропасть из выборки.
     return { success: true, stats, equity: thinEquity(equity, 600) };
   }
 }
