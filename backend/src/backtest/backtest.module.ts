@@ -8,5 +8,8 @@ import { SyntheticMarketService } from './synthetic/synthetic-market.service';
   imports: [MarketDataModule],
   controllers: [BacktestController],
   providers: [BacktestService, SyntheticMarketService],
+  // Сессии турнира — обычные BacktestSession: модуль турниров ходит сюда за
+  // закрытиями движка (`systemClose`) и финалом сессии.
+  exports: [BacktestService],
 })
 export class BacktestModule {}

@@ -4,6 +4,8 @@ import { SYNTH_VERSION } from './synthetic/params';
 
 const DAY = 86_400_000;
 const T0 = Date.UTC(2020, 0, 1);
+/** «Сейчас» для эфирных сессий турнира — время задаёт сервер. */
+const NOW = Date.UTC(2026, 8, 18, 12, 0, 0);
 
 /**
  * Сервис собирается руками с заглушками: тест про то, что уходит в базу и
@@ -68,9 +70,13 @@ function makeService() {
     start: jest.fn().mockReturnValue({ start: T0 + 400 * DAY, price: 60_000 }),
     getCandles: jest.fn().mockReturnValue([]),
   };
-  const service = new BacktestService(prisma as never, marketData as never, synthetic as never);
+  // Живая цена турнира: время и цену эфирной сделки ставит сервер, не браузер.
+  const live = {
+    quote: jest.fn().mockResolvedValue({ time: new Date(NOW), price: 70_000 }),
+  };
+  const service = new BacktestService(prisma as never, marketData as never, synthetic as never, live as never);
   (service as unknown as { rnd: () => number }).rnd = () => 0;
-  return { service, prisma, marketData, synthetic };
+  return { service, prisma, marketData, synthetic, live };
 }
 
 /** Отказ сервиса как значение: проверяем и класс исключения, и код для фронта. */
@@ -842,7 +848,9 @@ describe('BacktestService — статистика', () => {
     await service.stats('u1');
 
     expect(prisma.backtestTrade.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { session: { userId: 'u1', dataSource: 'real' }, exitTime: { not: null } } }),
+      expect.objectContaining({
+        where: { session: { userId: 'u1', dataSource: 'real', tournamentId: null }, exitTime: { not: null } },
+      }),
     );
   });
 });
@@ -971,9 +979,13 @@ describe('BacktestService — тренажёр', () => {
 
     await service.stats('u1', 'synthetic');
 
-    expect(prisma.backtestSession.count).toHaveBeenCalledWith({ where: { userId: 'u1', dataSource: 'synthetic' } });
+    expect(prisma.backtestSession.count).toHaveBeenCalledWith({
+      where: { userId: 'u1', dataSource: 'synthetic', tournamentId: null },
+    });
     expect(prisma.backtestTrade.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { session: { userId: 'u1', dataSource: 'synthetic' }, exitTime: { not: null } } }),
+      expect.objectContaining({
+        where: { session: { userId: 'u1', dataSource: 'synthetic', tournamentId: null }, exitTime: { not: null } },
+      }),
     );
   });
 
@@ -987,5 +999,250 @@ describe('BacktestService — тренажёр', () => {
 
     prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
     expect((await service.getSession('u1', 's1')).synthOutdated).toBe(false);
+  });
+});
+
+/**
+ * Турнирная сессия — та же `BacktestSession`, но цену и время её сделок ставит
+ * сервер: время идёт и у закрытой вкладки, а на кону призовой фонд. Проверяется
+ * граница между «браузер сказал» и «сервер решил».
+ */
+describe('BacktestService — турнирная сессия в эфире', () => {
+  const TOURNAMENT = { id: 'tn1', name: 'Дуэль', mode: 'live', status: 'running', endsAt: new Date(NOW + DAY) };
+  const LIVE_SESSION = {
+    ...SESSION,
+    startTime: new Date(NOW - DAY),
+    cursorTime: new Date(NOW - DAY),
+    tournamentId: 'tn1',
+    endTime: new Date(NOW + DAY),
+    tournament: TOURNAMENT,
+  };
+  const ENDED_SESSION = {
+    ...LIVE_SESSION,
+    endTime: new Date(NOW - 1000),
+    tournament: { ...TOURNAMENT, endsAt: new Date(NOW - 1000) },
+  };
+
+  const openInput = {
+    direction: 'long' as const,
+    // Браузер шлёт своё время и цену — сервер их в эфире не читает.
+    entryTime: new Date(NOW - 10 * DAY),
+    entryPrice: 1,
+    stopLoss: 69_000,
+    riskPct: 1,
+    leverage: 10,
+  };
+
+  const openTradeRow = (over: Record<string, unknown> = {}) => ({
+    id: 't1',
+    sessionId: 's1',
+    direction: 'long',
+    entryTime: new Date(NOW - DAY),
+    entryPrice: 69_000,
+    stopLoss: 68_000,
+    takeProfit: null,
+    riskPct: 1,
+    riskUsdt: 100,
+    qty: 1,
+    closedQty: 0,
+    leverage: 10,
+    exitTime: null,
+    tags: [],
+    entries: [],
+    ...over,
+  });
+
+  beforeEach(() => {
+    jest.useFakeTimers().setSystemTime(new Date(NOW));
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('вход берёт цену и время у сервера, а не у браузера', async () => {
+    const { service, prisma, live } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValueOnce(LIVE_SESSION).mockResolvedValue({ balance: 10_000 });
+
+    await service.openTrade('u1', 's1', openInput);
+
+    expect(live.quote).toHaveBeenCalled();
+    const data = prisma.backtestTrade.create.mock.calls[0][0].data;
+    expect(data.entryPrice).toBe(70_000);
+    expect(data.entryTime).toEqual(new Date(NOW));
+  });
+
+  it('добор тоже идёт по живой цене', async () => {
+    const { service, prisma, live } = makeService();
+    prisma.backtestTrade.findUnique.mockResolvedValue(openTradeRow({ session: LIVE_SESSION }));
+    prisma.backtestSession.findUnique.mockResolvedValue({ balance: 10_000 });
+
+    await service.addToTrade('u1', 't1', { entryTime: new Date(NOW - 5 * DAY), entryPrice: 1, riskPct: 1 });
+
+    expect(live.quote).toHaveBeenCalled();
+    const entry = prisma.backtestTradeEntry.create.mock.calls[0][0].data;
+    expect(entry.price).toBe(70_000);
+    expect(entry.time).toEqual(new Date(NOW));
+  });
+
+  it('выход по стопу из браузера не принимается — стопы исполняет сервер', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestTrade.findUnique.mockResolvedValue(openTradeRow({ session: LIVE_SESSION }));
+
+    const e = await rejection(
+      service.closeTrade('u1', 't1', { exitTime: new Date(NOW), exitPrice: 68_000, reason: 'stop' }),
+    );
+
+    expect(e).toBeInstanceOf(BadRequestException);
+    expect(e.response.code).toBe('TOURNAMENT_LIVE_EXIT');
+  });
+
+  it('ручное закрытие берёт живую цену сервера', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestTrade.findUnique.mockResolvedValue(openTradeRow({ session: LIVE_SESSION }));
+    prisma.backtestSession.update.mockResolvedValue({ balance: 10_100 });
+
+    await service.closeTrade('u1', 't1', { exitTime: new Date(NOW - DAY / 2), exitPrice: 1, reason: 'manual' });
+
+    const exit = prisma.backtestTradeExit.create.mock.calls[0][0].data;
+    expect(exit.price).toBe(70_000);
+    expect(exit.time).toEqual(new Date(NOW));
+  });
+
+  it('после конца турнира сделки не принимаются', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(ENDED_SESSION);
+
+    const e = await rejection(service.openTrade('u1', 's1', openInput));
+
+    expect(e).toBeInstanceOf(ConflictException);
+    expect(e.response.code).toBe('TOURNAMENT_ENDED');
+  });
+
+  it('участник не завершает эфирную сессию сам — она кончается вместе с турниром', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(LIVE_SESSION);
+
+    const e = await rejection(service.finish('u1', 's1'));
+
+    expect(e).toBeInstanceOf(ConflictException);
+    expect(e.response.code).toBe('TOURNAMENT_LIVE_FINISH');
+  });
+
+  it('сохранение момента в эфире ничего не двигает', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(LIVE_SESSION);
+
+    const res = await service.advance('u1', 's1', new Date(NOW + 5 * DAY));
+
+    expect(prisma.$executeRaw).not.toHaveBeenCalled();
+    expect(res.cursorTime).toEqual(LIVE_SESSION.cursorTime);
+  });
+
+  it('сессия отдаёт турнир и границу отдельно от самой сессии', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(LIVE_SESSION);
+
+    const res = await service.getSession('u1', 's1');
+
+    expect(res.tournament).toEqual({
+      id: 'tn1',
+      name: 'Дуэль',
+      mode: 'live',
+      status: 'running',
+      endsAt: TOURNAMENT.endsAt,
+    });
+    expect(res.session.endTime).toEqual(LIVE_SESSION.endTime);
+    // Турнир целиком внутрь сессии не заворачивается — второй копии быть не должно.
+    expect((res.session as Record<string, unknown>).tournament).toBeUndefined();
+  });
+
+  it('список и статистика бектеста не показывают турнирные сессии', async () => {
+    const { service, prisma } = makeService();
+
+    await service.listSessions('u1');
+    expect(prisma.backtestSession.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: 'u1', tournamentId: null } }),
+    );
+
+    await service.stats('u1');
+    expect(prisma.backtestSession.count).toHaveBeenCalledWith({
+      where: { userId: 'u1', dataSource: 'real', tournamentId: null },
+    });
+    expect(prisma.backtestTrade.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { session: { userId: 'u1', dataSource: 'real', tournamentId: null }, exitTime: { not: null } },
+      }),
+    );
+  });
+});
+
+/**
+ * Закрытия, которые делает движок турнира: у них нет владельца в запросе и нет
+ * браузера, который бы их подтвердил.
+ */
+describe('BacktestService — закрытия движком', () => {
+  const OPEN_TRADE = {
+    id: 't1',
+    sessionId: 's1',
+    direction: 'long',
+    entryTime: new Date(NOW - DAY),
+    entryPrice: 69_000,
+    riskUsdt: 100,
+    qty: 1,
+    closedQty: 0,
+    exitTime: null,
+    tags: [],
+    entries: [],
+  };
+
+  it('systemClose закрывает сделку без проверки владельца', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestTrade.findUnique.mockResolvedValue(OPEN_TRADE);
+    prisma.backtestSession.update.mockResolvedValue({ balance: 10_100 });
+
+    const ok = await service.systemClose('t1', {
+      exitTime: new Date(NOW),
+      exitPrice: 70_000,
+      reason: 'stop',
+    });
+
+    expect(ok).toBe(true);
+    const exit = prisma.backtestTradeExit.create.mock.calls[0][0].data;
+    expect(exit).toMatchObject({ tradeId: 't1', price: 70_000, reason: 'stop' });
+  });
+
+  it('проигранный CAS — не ошибка: сделку уже закрыли', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestTrade.findUnique.mockResolvedValue(OPEN_TRADE);
+    prisma.backtestTrade.updateMany.mockResolvedValue({ count: 0 });
+
+    expect(await service.systemClose('t1', { exitTime: new Date(NOW), exitPrice: 70_000, reason: 'stop' })).toBe(false);
+    expect(prisma.backtestTradeExit.create).not.toHaveBeenCalled();
+  });
+
+  it('несуществующая сделка — false, а не исключение', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestTrade.findUnique.mockResolvedValue(null);
+
+    expect(await service.systemClose('нет', { exitTime: new Date(NOW), exitPrice: 1, reason: 'stop' })).toBe(false);
+  });
+
+  it('finishTournamentSession закрывает остаток по цене финала и завершает сессию', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestTrade.findMany.mockResolvedValue([{ ...OPEN_TRADE, qty: 2, closedQty: 0.5 }]);
+    prisma.backtestTradeExit.findMany.mockResolvedValue([{ fee: 1, pnl: 10 }]);
+
+    await service.finishTournamentSession('s1', new Date(NOW), 71_000);
+
+    const exit = prisma.backtestTradeExit.create.mock.calls[0][0].data;
+    expect(exit.qty).toBeCloseTo(1.5);
+    expect(exit.price).toBe(71_000);
+    expect(exit.reason).toBe('finish');
+    // Висящие ордера обеих сортов сняты: исполнять их больше некому.
+    expect(prisma.backtestCloseOrder.deleteMany).toHaveBeenCalled();
+    expect(prisma.backtestEntryOrder.deleteMany).toHaveBeenCalledWith({ where: { sessionId: 's1' } });
+    expect(prisma.backtestSession.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 's1' }, data: expect.objectContaining({ status: 'finished' }) }),
+    );
   });
 });
