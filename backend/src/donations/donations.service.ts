@@ -8,6 +8,9 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma, Donation } from '@prisma/client';
+import { COINS_PER_USDT } from '../coins/coins.config';
+import { CoinsService } from '../coins/coins.service';
+import { coinsForDonation } from './coins-rate';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramService } from '../telegram/telegram.service';
 import {
@@ -67,6 +70,7 @@ export class DonationsService {
     private readonly prisma: PrismaService,
     private readonly telegram: TelegramService,
     private readonly qr: PaymentQrService,
+    private readonly coins: CoinsService,
     @Inject(DONATION_CONFIG) private readonly config: DonationConfig,
   ) {}
 
@@ -108,6 +112,11 @@ export class DonationsService {
       ttlSeconds: Math.floor(this.config.ttlMs / 1000),
       /** Максимум, на который сервер поднимет сумму ради уникального хвоста. */
       maxSurcharge: formatUsdt(MAX_TAIL_UNITS),
+      /**
+       * Сколько монет даёт один USDT. Отдаётся с конфигом, а не зашито во
+       * фронте: курс — решение сервера, и второй его копии быть не должно.
+       */
+      coinsPerUsdt: COINS_PER_USDT,
     };
   }
 
@@ -337,30 +346,50 @@ export class DonationsService {
     const paidAfterExpiry = transfer.blockTimestamp > donation.expiresAt;
 
     try {
-      const res = await this.prisma.donation.updateMany({
-        where: {
-          id: donation.id,
-          transactionHash: null,
-          status: { in: [...CLAIMABLE_STATUSES] },
-          expectedUnits: transfer.valueUnits,
-        },
-        data: {
-          status: 'PAID',
-          transactionHash: transfer.txId,
-          fromAddress: transfer.fromAddress,
-          paidUnits: transfer.valueUnits,
-          transferredAt: transfer.blockTimestamp,
-          detectedAt: new Date(),
-          paidAfterExpiry,
-        },
+      // Отметка «оплачено» и монеты за донат — одна транзакция: донат и есть
+      // единственный способ купить монеты, и состояние «деньги приняты, монет
+      // нет» разобрать потом было бы нечем. Уникальный ключ журнала монет —
+      // третий замок от двойного зачисления, после CAS и хеша транзакции.
+      const claimed = await this.prisma.$transaction(async (tx) => {
+        const res = await tx.donation.updateMany({
+          where: {
+            id: donation.id,
+            transactionHash: null,
+            status: { in: [...CLAIMABLE_STATUSES] },
+            expectedUnits: transfer.valueUnits,
+          },
+          data: {
+            status: 'PAID',
+            transactionHash: transfer.txId,
+            fromAddress: transfer.fromAddress,
+            paidUnits: transfer.valueUnits,
+            transferredAt: transfer.blockTimestamp,
+            detectedAt: new Date(),
+            paidAfterExpiry,
+          },
+        });
+        if (res.count !== 1) return false; // кто-то успел раньше
+
+        // Анонимный донат монет не даёт — начислять их некому.
+        if (donation.userId) {
+          await this.coins.credit(
+            tx,
+            donation.userId,
+            coinsForDonation(donation.requestedUnits),
+            'DONATION',
+            donation.id,
+          );
+        }
+        return true;
       });
-      if (res.count !== 1) return null; // кто-то успел раньше
+      if (!claimed) return null;
     } catch (e) {
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
         e.code === 'P2002'
       ) {
-        // Этот хеш уже засчитан другому интенту — считаем перевод разобранным.
+        // Хеш уже засчитан другому интенту либо монеты за этот донат уже
+        // начислены — в обоих случаях перевод считаем разобранным.
         return null;
       }
       throw e;

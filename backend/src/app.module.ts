@@ -19,6 +19,7 @@ import { BacktestModule } from './backtest/backtest.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
 import { DonationsModule } from './donations/donations.module';
+import { CoinsModule } from './coins/coins.module';
 import { ReferralsModule } from './referrals/referrals.module';
 
 @Module({
@@ -48,6 +49,7 @@ import { ReferralsModule } from './referrals/referrals.module';
     NotificationsModule,
     AdminModule,
     DonationsModule,
+    CoinsModule,
     ReferralsModule,
   ],
   controllers: [AppController],

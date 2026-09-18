@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CoinsModule } from '../coins/coins.module';
 import { TelegramModule } from '../telegram/telegram.module';
 import { DonationsController } from './donations.controller';
 import { DonationsService } from './donations.service';
@@ -19,7 +20,7 @@ import { TronWatcherService } from './tron/tron-watcher.service';
  * PrismaModule глобальный, поэтому здесь не импортируется.
  */
 @Module({
-  imports: [TelegramModule],
+  imports: [TelegramModule, CoinsModule],
   controllers: [DonationsController],
   providers: [
     { provide: DONATION_CONFIG, useFactory: loadDonationConfig },

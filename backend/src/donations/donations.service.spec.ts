@@ -50,18 +50,45 @@ const donationRow = (over: Partial<Record<string, unknown>> = {}) => ({
   ...over,
 });
 
+interface Credit {
+  client: unknown;
+  userId: string;
+  amount: number;
+  kind: string;
+  refId: string;
+}
+
 interface Harness {
   service: DonationsService;
   updateManyArgs: any[];
   deletedLocks: bigint[];
+  credits: Credit[];
+  /** Клиент, который получает колбэк `$transaction`. */
+  txClient: unknown;
 }
 
 const harness = (opts: {
   lock: unknown;
   updateManyResult?: { count: number } | Error;
+  creditError?: Error;
 }): Harness => {
   const updateManyArgs: any[] = [];
   const deletedLocks: bigint[] = [];
+  const credits: Credit[] = [];
+
+  const donation = {
+    updateMany: jest.fn((args: any) => {
+      updateManyArgs.push(args);
+      const result = opts.updateManyResult ?? { count: 1 };
+      return result instanceof Error
+        ? Promise.reject(result)
+        : Promise.resolve(result);
+    }),
+  };
+
+  // Отдельный объект, а не сам prisma: тесты проверяют, что монеты зачисляются
+  // ИМЕННО в транзакции зачёта, а не рядом с ней.
+  const txClient = { donation };
 
   const prisma = {
     donationAmountLock: {
@@ -71,24 +98,26 @@ const harness = (opts: {
         return Promise.resolve({});
       }),
     },
-    donation: {
-      updateMany: jest.fn((args: any) => {
-        updateManyArgs.push(args);
-        const result = opts.updateManyResult ?? { count: 1 };
-        return result instanceof Error
-          ? Promise.reject(result)
-          : Promise.resolve(result);
-      }),
-    },
+    donation,
+    $transaction: jest.fn((fn: any) => fn(txClient)),
+  };
+
+  const coins = {
+    credit: jest.fn((client: unknown, userId: string, amount: number, kind: string, refId: string) => {
+      if (opts.creditError) return Promise.reject(opts.creditError);
+      credits.push({ client, userId, amount, kind, refId });
+      return Promise.resolve();
+    }),
   };
 
   const service = new DonationsService(
     prisma as never,
     { notifyDonationReceived: jest.fn() } as never,
     { buildPayload: () => '', buildDataUrl: async () => null } as never,
+    coins as never,
     CONFIG,
   );
-  return { service, updateManyArgs, deletedLocks };
+  return { service, updateManyArgs, deletedLocks, credits, txClient };
 };
 
 const transfer = (over: Partial<Record<string, unknown>> = {}) =>
@@ -212,5 +241,72 @@ describe('DonationsService.claimByAmount', () => {
     expect(
       await h.service.claimByAmount(transfer({ txId: 'tx-2' })),
     ).toBeNull();
+  });
+});
+
+/**
+ * Донат — единственный способ купить монеты, поэтому зачисление обязано жить в
+ * той же транзакции, что и отметка «оплачено»: иначе существует состояние, где
+ * деньги приняты, а монет нет, и разобрать его потом нечем.
+ */
+describe('DonationsService.claimByAmount — монеты', () => {
+  it('зачисляет монеты по курсу от ЗАПРОШЕННОЙ суммы, а не от суммы с хвостом', async () => {
+    const h = harness({
+      lock: { expectedUnits: 5_004_300n, donation: donationRow() },
+    });
+
+    await h.service.claimByAmount(transfer());
+
+    // 5.00 USDT × 500, а не 5.0043: хвост — служебная добавка ради опознания
+    // платежа, продавать за неё монеты было бы странно.
+    expect(h.credits).toEqual([
+      { client: h.txClient, userId: 'user-a', amount: 2500, kind: 'DONATION', refId: 'don-1' },
+    ]);
+  });
+
+  it('анонимный донат монет не даёт — начислять их некому', async () => {
+    const h = harness({
+      lock: { expectedUnits: 5_004_300n, donation: donationRow({ userId: null }) },
+    });
+
+    const res = await h.service.claimByAmount(transfer());
+
+    expect(res).toEqual({ donationId: 'don-1' });
+    expect(h.credits).toEqual([]);
+  });
+
+  it('проигранный CAS не зачисляет монеты', async () => {
+    const h = harness({
+      lock: { expectedUnits: 5_004_300n, donation: donationRow() },
+      updateManyResult: { count: 0 },
+    });
+
+    expect(await h.service.claimByAmount(transfer())).toBeNull();
+    expect(h.credits).toEqual([]);
+  });
+
+  it('повторный зачёт монет (P2002 журнала) считает перевод уже разобранным', async () => {
+    const p2002 = new Prisma.PrismaClientKnownRequestError('duplicate', {
+      code: 'P2002',
+      clientVersion: 'test',
+    });
+    const h = harness({
+      lock: { expectedUnits: 5_004_300n, donation: donationRow() },
+      creditError: p2002,
+    });
+
+    expect(await h.service.claimByAmount(transfer())).toBeNull();
+    // Слот суммы не освобождается: транзакция откатилась целиком.
+    expect(h.deletedLocks).toEqual([]);
+  });
+
+  it('временная ошибка зачисления не закрывает донат — перевод будет разобран снова', async () => {
+    const h = harness({
+      lock: { expectedUnits: 5_004_300n, donation: donationRow() },
+      creditError: new Error('db down'),
+    });
+
+    await expect(h.service.claimByAmount(transfer())).rejects.toThrow('db down');
+    expect(h.deletedLocks).toEqual([]);
   });
 });

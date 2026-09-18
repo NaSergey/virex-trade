@@ -88,7 +88,47 @@ model User {
   tournamentsCreated Tournament[]            @relation("TournamentCreator")
   tournamentEntries  TournamentParticipant[]
 
+  /// Внутренняя валюта («монеты»): взносы в турниры, призы, покупка донатом.
+  /// Стартовые 1000 — дефолт колонки, а не строка в register: так их получают и
+  /// уже заведённые аккаунты при `db push`, и новый — без шага, который можно
+  /// забыть. Журнал (CoinTransaction) ведётся от этой отметки, поэтому на
+  /// старте он пуст, а баланс уже 1000.
+  coinBalance      Int               @default(1000)
+  coinTransactions CoinTransaction[]
+
   @@map("users")
+}
+
+/// Журнал движения монет — append-only, по строке на событие.
+///
+/// Баланс живёт колонкой на User, а не суммой этих строк: списание взноса —
+/// compare-and-set по колонке (`coinBalance >= n` в том же UPDATE), и без него
+/// два одновременных входа увели бы баланс в минус. Журнал нужен, чтобы «откуда
+/// взялось» имело ответ, и чтобы уникальный ключ не дал начислить одно событие
+/// дважды.
+model CoinTransaction {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Со знаком: покупка и приз — плюс, взнос и добавка в фонд — минус,
+  /// возврат — плюс.
+  delta        Int
+  /// Баланс после этой строки — чтобы историю можно было читать, не пересчитывая.
+  balanceAfter Int
+  /// 'DONATION' | 'TOURNAMENT_FEE' | 'TOURNAMENT_BONUS' | 'TOURNAMENT_REFUND' | 'TOURNAMENT_PRIZE'
+  kind         String
+  /// Откуда строка: id доната; id турнира — добавка в фонд и приз;
+  /// `<id турнира>:<joinedAt в мс>` — взнос и его возврат, то есть одно участие
+  /// (вышел и вошёл снова — новое участие и новая пара строк);
+  /// `<id турнира>:bonus` — возврат добавки при удалении лобби.
+  refId        String
+  createdAt    DateTime @default(now())
+
+  /// Одно событие — одна строка: повторный зачёт того же доната, приза или
+  /// возврата упирается в ключ, а не в аккуратность вызывающего кода.
+  @@unique([userId, kind, refId], map: "coin_tx_once")
+  @@index([userId, createdAt])
+  @@map("coin_transactions")
 }
 
 // One exchange account the user has connected. A user may hold several (one
@@ -308,11 +348,28 @@ model BacktestSession {
 model Tournament {
   id             String    @id @default(uuid())
   name           String
-  /// 'history' — один отрезок истории BTC, каждый в своём темпе; 'live' — живой BTC.
-  mode           String
+  /// Сейчас только 'live' — живой BTC. Колонка оставлена под режим 'history'
+  /// (отрезок истории, каждый в своём темпе), который вынесен из первого этапа:
+  /// второй режим тогда станет значением, а не миграцией.
+  mode           String    @default("live")
   /// 'lobby' — набор участников; 'running' — идёт; 'finished' — итоги подведены.
   status         String    @default("lobby")
+  /// 'public' — виден в общем списке, пока в лобби и есть места, войти может
+  /// любой; 'private' — только по ссылке. Умолчание закрытое: публикация —
+  /// осознанный выбор создателя.
+  visibility     String    @default("private")
   startBalance   Float
+  /// Число мест: 2–10. Два — дуэль.
+  maxPlayers     Int       @default(10)
+  /// Взнос каждого участника в монетах; 0 — бесплатный турнир.
+  entryFee       Int       @default(0)
+  /// Сколько монет создатель кладёт в призовой фонд сверх своего взноса.
+  prizeBonus     Int       @default(0)
+  /// Сколько мест получают приз и как делится фонд: проценты по местам, длина
+  /// массива равна winnersCount, сумма 100, не возрастают. Призовой фонд —
+  /// entryFee × участники + prizeBonus.
+  winnersCount   Int       @default(1)
+  payoutShares   Int[]     @default([100])
   /// От старта до конца, минуты: 60, 240, 1440, 4320, 10080.
   durationMin    Int
   /// SetNull: удаление аккаунта создателя не должно стирать идущий турнир у остальных.
@@ -329,6 +386,8 @@ model Tournament {
   sessions     BacktestSession[]
 
   @@index([status, endsAt])
+  /// Общий список открытых турниров: публичные лобби, новые сверху.
+  @@index([visibility, status, createdAt])
   @@map("tournaments")
 }
 
@@ -338,6 +397,12 @@ model TournamentParticipant {
   userId       String
   user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   joinedAt     DateTime   @default(now())
+  /// Итог турнира — проставляется финалом, один раз. Рейтинг игры считается
+  /// агрегатом по этим колонкам, а не пересчётом сессий.
+  finalEquity  Float?
+  place        Int?
+  /// Выплаченный приз в монетах; 0 у тех, кто не попал в число победителей.
+  prizeWon     Int?
 
   @@id([tournamentId, userId])
   @@index([userId])
