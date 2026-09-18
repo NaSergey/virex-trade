@@ -2,6 +2,9 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import type { BacktestTrade, BacktestTradeEntry, Prisma, Tag } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MarketDataService } from '../market-data/market-data.service';
+import { TIMEFRAMES, isValidTimeframe } from '../market-data/timeframes';
+import { SYNTH_VERSION } from './synthetic/params';
+import { SyntheticMarketService } from './synthetic/synthetic-market.service';
 import {
   MINUTE_MS,
   averageIn,
@@ -18,10 +21,21 @@ import {
   type ExitReason,
 } from './backtest-math';
 
+export type DataSource = 'real' | 'synthetic';
+
 export interface CreateSessionInput {
   startBalance: number;
   hideDate: boolean;
   hidePrice: boolean;
+  /** Не задан — реальная история. */
+  dataSource?: DataSource;
+}
+
+export interface SessionCandlesInput {
+  timeframe: number;
+  from?: Date;
+  to?: Date;
+  limit: number;
 }
 
 export interface OpenTradeInput {
@@ -96,17 +110,29 @@ const noHistory = () =>
 export const sessionFinished = () =>
   new ConflictException({ message: 'Сессия уже завершена', code: 'BACKTEST_SESSION_FINISHED' });
 
+/** Сессия построена прежней версией генератора: её график больше не построить. */
+export const isSynthOutdated = (s: { dataSource: string; synthVersion: number | null }) =>
+  s.dataSource === 'synthetic' && s.synthVersion !== SYNTH_VERSION;
+
+const synthOutdated = () =>
+  new ConflictException({
+    message: 'Генератор рынка обновился — график этой сессии больше не построить',
+    code: 'BACKTEST_SYNTH_OUTDATED',
+  });
+
 @Injectable()
 export class BacktestService {
   constructor(
     protected readonly prisma: PrismaService,
     protected readonly marketData: MarketDataService,
+    protected readonly synthetic: SyntheticMarketService,
   ) {}
 
   /** Вынесено полем, чтобы тесты задавали случай. */
   protected rnd: () => number = Math.random;
 
   async createSession(userId: string, input: CreateSessionInput) {
+    if (input.dataSource === 'synthetic') return this.createSyntheticSession(userId, input);
     const coverage = await this.marketData.getCoverage();
     const win = startWindow(
       coverage.find((c) => c.timeframe === 1440),
@@ -135,6 +161,50 @@ export class BacktestService {
       },
     });
     return { session };
+  }
+
+  protected async createSyntheticSession(userId: string, input: CreateSessionInput) {
+    // Зерно выбирает сервер тем же случаем, что и старт реальной сессии.
+    const seed = Math.floor(this.rnd() * 2 ** 31);
+    const { start, price } = this.synthetic.start(seed);
+    const session = await this.prisma.backtestSession.create({
+      data: {
+        userId,
+        dataSource: 'synthetic',
+        seed,
+        synthVersion: SYNTH_VERSION,
+        startTime: new Date(start),
+        cursorTime: new Date(start),
+        startBalance: input.startBalance,
+        balance: input.startBalance,
+        // Даты у сгенерированного рынка вымышленные — показывать их незачем.
+        hideDate: true,
+        hidePrice: input.hidePrice,
+        priceScale: input.hidePrice ? pickPriceScale(price, this.rnd) : 1,
+        status: 'active',
+      },
+    });
+    return { session };
+  }
+
+  async sessionCandles(userId: string, id: string, q: SessionCandlesInput) {
+    const s = await this.ownedSession(userId, id);
+    if (s.dataSource !== 'synthetic') {
+      throw new BadRequestException({
+        message: 'У этой сессии реальный график, а не сгенерированный',
+        code: 'BACKTEST_NOT_SYNTHETIC',
+      });
+    }
+    if (isSynthOutdated(s)) throw synthOutdated();
+    if (!isValidTimeframe(q.timeframe)) {
+      throw new BadRequestException(`Неизвестный таймфрейм: ${q.timeframe}. Допустимы: ${TIMEFRAMES.join(', ')}`);
+    }
+    return this.synthetic.getCandles(s.seed, {
+      timeframe: q.timeframe,
+      from: q.from?.getTime(),
+      to: q.to?.getTime(),
+      limit: q.limit,
+    });
   }
 
   async listSessions(userId: string) {
@@ -167,6 +237,7 @@ export class BacktestService {
       .sort((a, b) => a.exitTime!.getTime() - b.exitTime!.getTime());
     return {
       session,
+      synthOutdated: isSynthOutdated(session),
       trades: trades.map(tradeView),
       closeOrders,
       entryOrders,
@@ -193,12 +264,19 @@ export class BacktestService {
       // сдвинет, но замок и проверку status='active' даёт.
       const bumped = await this.bumpCursor(tx, id, s.cursorTime);
       if (bumped === 0) throw sessionFinished();
-      // Позицию закрывает браузер (он знает цену момента), сервер только проверяет.
-      const open = await tx.backtestTrade.count({ where: { sessionId: id, exitTime: null } });
-      if (open > 0) throw new ConflictException({ message: 'Сначала закройте открытую сделку', code: 'BACKTEST_OPEN_TRADE' });
-      const pendingEntries = await tx.backtestEntryOrder.count({ where: { sessionId: id } });
-      if (pendingEntries > 0) {
-        throw new ConflictException({ message: 'Сначала отмените ордера сетки', code: 'BACKTEST_ENTRY_ORDERS_PENDING' });
+      if (isSynthOutdated(s)) {
+        // Цены момента у такой сессии больше нет — закрыть по рынку браузеру нечем.
+        await this.closeAtEntry(tx, id, s.cursorTime);
+        // Уровни сетки без цены тоже не сработают никогда — снимаем их вместе с позициями.
+        await tx.backtestEntryOrder.deleteMany({ where: { sessionId: id } });
+      } else {
+        // Позицию закрывает браузер (он знает цену момента), сервер только проверяет.
+        const open = await tx.backtestTrade.count({ where: { sessionId: id, exitTime: null } });
+        if (open > 0) throw new ConflictException({ message: 'Сначала закройте открытую сделку', code: 'BACKTEST_OPEN_TRADE' });
+        const pendingEntries = await tx.backtestEntryOrder.count({ where: { sessionId: id } });
+        if (pendingEntries > 0) {
+          throw new ConflictException({ message: 'Сначала отмените ордера сетки', code: 'BACKTEST_ENTRY_ORDERS_PENDING' });
+        }
       }
       const session = await tx.backtestSession.update({
         where: { id },
@@ -579,11 +657,15 @@ export class BacktestService {
     return { success: true as const };
   }
 
-  async stats(userId: string) {
+  /**
+   * Сделки тренажёра и реальной истории не смешиваются: генератор сам содержит
+   * тренды и отбои, и результат тега на нём — о генераторе, а не о рынке.
+   */
+  async stats(userId: string, source: DataSource = 'real') {
     const [sessions, trades] = await Promise.all([
-      this.prisma.backtestSession.count({ where: { userId } }),
+      this.prisma.backtestSession.count({ where: { userId, dataSource: source } }),
       this.prisma.backtestTrade.findMany({
-        where: { session: { userId }, exitTime: { not: null } },
+        where: { session: { userId, dataSource: source }, exitTime: { not: null } },
         include: TRADE_INCLUDE,
       }),
     ]);
@@ -610,6 +692,47 @@ export class BacktestService {
         .map(({ tag, rows }) => ({ tag, ...summarize(rows) }))
         .sort((a, b) => b.trades - a.trades || a.tag.name.localeCompare(b.tag.name)),
     };
+  }
+
+  /**
+   * Закрывает открытый остаток по цене входа: движение ноль, комиссия по обычной
+   * формуле. Любая другая цена была бы выдуманной, а удалить сделку нельзя — её
+   * частичные закрытия уже в депозите.
+   */
+  protected async closeAtEntry(tx: Prisma.TransactionClient, sessionId: string, time: Date) {
+    const open = await tx.backtestTrade.findMany({ where: { sessionId, exitTime: null } });
+    for (const trade of open) {
+      const qty = trade.qty - trade.closedQty;
+      if (qty > QTY_EPS) {
+        const { fee, pnl } = tradeResult({
+          direction: trade.direction as Direction,
+          entryPrice: trade.entryPrice,
+          exitPrice: trade.entryPrice,
+          qty,
+          riskUsdt: trade.riskUsdt,
+        });
+        await tx.backtestTradeExit.create({
+          data: { tradeId: trade.id, qty, price: trade.entryPrice, time, reason: 'finish', fee, pnl },
+        });
+        await tx.backtestSession.update({ where: { id: sessionId }, data: { balance: { increment: pnl } } });
+      }
+      const exits = await tx.backtestTradeExit.findMany({ where: { tradeId: trade.id } });
+      const totalFee = exits.reduce((a, e) => a + e.fee, 0);
+      const totalPnl = exits.reduce((a, e) => a + e.pnl, 0);
+      await tx.backtestTrade.update({
+        where: { id: trade.id },
+        data: {
+          closedQty: trade.qty,
+          exitTime: time,
+          exitPrice: trade.entryPrice,
+          exitReason: 'finish',
+          fee: totalFee,
+          pnl: totalPnl,
+          r: totalPnl / trade.riskUsdt,
+        },
+      });
+    }
+    await tx.backtestCloseOrder.deleteMany({ where: { trade: { sessionId } } });
   }
 
   protected async ownedTrade(userId: string, id: string) {

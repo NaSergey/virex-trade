@@ -2,13 +2,14 @@
 
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { apiJson, qs } from '@/shared/api/http';
-import { fromApi, type ApiCandle, type Candle } from '../lib/candles';
+import { candlesPath, fromApi, type ApiCandle, type Candle } from '../lib/candles';
 import type {
   BacktestCloseOrder,
   BacktestEntryOrder,
   BacktestSession,
   BacktestStats,
   BacktestTrade,
+  DataSource,
   Direction,
   ExitReason,
   SessionDetail,
@@ -23,10 +24,10 @@ export const useBacktestSessions = () =>
     queryFn: () => apiJson<{ sessions: SessionListItem[] }>('/api/backtest/sessions'),
   });
 
-export const useBacktestStats = () =>
+export const useBacktestStats = (source: DataSource) =>
   useQuery({
-    queryKey: ['backtest', 'stats'],
-    queryFn: () => apiJson<BacktestStats>('/api/backtest/stats'),
+    queryKey: ['backtest', 'stats', source],
+    queryFn: () => apiJson<BacktestStats>(`/api/backtest/stats${qs({ source })}`),
   });
 
 export const useBacktestSession = (id: string) =>
@@ -54,7 +55,7 @@ const json = (method: string, body?: unknown): RequestInit => ({
 export const useCreateSession = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { startBalance: number; hideDate: boolean; hidePrice: boolean }) =>
+    mutationFn: (input: { startBalance: number; hideDate: boolean; hidePrice: boolean; dataSource: DataSource }) =>
       apiJson<{ session: BacktestSession }>('/api/backtest/sessions', json('POST', input)),
     onSettled: () => refresh(qc),
   });
@@ -215,10 +216,14 @@ export const saveCursor = (id: string, cursor: number, keepalive = false) =>
     keepalive,
   });
 
-/** Свечи хранилища. Без from и с limit — последние limit свечей до to, по возрастанию. */
-export async function fetchCandles(tf: number, range: { from?: number; to?: number; limit: number }): Promise<Candle[]> {
+/** Свечи сессии. Без from и с limit — последние limit свечей до to, по возрастанию. */
+export async function fetchCandles(
+  session: { id: string; dataSource: DataSource },
+  tf: number,
+  range: { from?: number; to?: number; limit: number },
+): Promise<Candle[]> {
   const rows = await apiJson<ApiCandle[]>(
-    `/api/market-data/candles${qs({ tf, from: range.from, to: range.to, limit: range.limit })}`,
+    `${candlesPath(session)}${qs({ tf, from: range.from, to: range.to, limit: range.limit })}`,
   );
   return rows.map(fromApi);
 }

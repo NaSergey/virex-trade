@@ -4,6 +4,9 @@ import type { Direction } from '../lib/fills';
 export type { Direction };
 export type ExitReason = 'stop' | 'take' | 'manual' | 'finish' | 'limit';
 
+/** Откуда свечи сессии: отрезок истории BTC или сгенерированный рынок тренажёра. */
+export type DataSource = 'real' | 'synthetic';
+
 /** Как её отдаёт `/api/backtest/sessions*`. Цены везде настоящие, без масштаба показа. */
 export interface BacktestSession {
   id: string;
@@ -14,6 +17,7 @@ export interface BacktestSession {
   hideDate: boolean;
   hidePrice: boolean;
   priceScale: number;
+  dataSource: DataSource;
   status: 'active' | 'finished';
   createdAt: string;
   finishedAt: string | null;
@@ -86,6 +90,8 @@ export interface Summary {
 
 export interface SessionDetail {
   session: BacktestSession;
+  /** Тренажёр прежней версии генератора: графика нет, сессию можно только завершить. */
+  synthOutdated: boolean;
   trades: BacktestTrade[];
   closeOrders: BacktestCloseOrder[];
   entryOrders: BacktestEntryOrder[];

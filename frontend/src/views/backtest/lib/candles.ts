@@ -104,3 +104,7 @@ export function dayNumber(t: number, start: number): number {
   // round, а не floor: переход на летнее время делает сутки на час короче или длиннее.
   return Math.round((b.getTime() - a.getTime()) / DAY) + 1;
 }
+
+/** Откуда брать свечи: реальная сессия — хранилище BTC, тренажёр — генератор этой сессии. */
+export const candlesPath = (s: { id: string; dataSource: 'real' | 'synthetic' }) =>
+  s.dataSource === 'synthetic' ? `/api/backtest/sessions/${s.id}/candles` : '/api/market-data/candles';

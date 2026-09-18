@@ -27,7 +27,8 @@ function fakeRes() {
 function makeController(candles: unknown[] = []) {
   const getCandles = jest.fn().mockResolvedValue(candles);
   const marketData = { getCandles, getCoverage: jest.fn() };
-  const controller = new MarketDataController(marketData as never);
+  // Эфирный хвост в этих тестах не участвует — эндпоинт `live` здесь не проверяется.
+  const controller = new MarketDataController(marketData as never, {} as never);
   return { controller, getCandles };
 }
 

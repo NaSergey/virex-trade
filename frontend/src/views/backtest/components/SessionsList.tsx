@@ -62,9 +62,9 @@ export function SessionsList({
       key: 'blind',
       header: t('colBlind'),
       render: (s) =>
-        [s.hideDate && t('blindDate'), s.hidePrice && t('blindPrice')].filter(Boolean).join(', ') || (
-          <span className="muted">—</span>
-        ),
+        [s.dataSource === 'synthetic' ? t('syntheticTag') : s.hideDate && t('blindDate'), s.hidePrice && t('blindPrice')]
+          .filter(Boolean)
+          .join(', ') || <span className="muted">—</span>,
     },
     {
       key: 'action',

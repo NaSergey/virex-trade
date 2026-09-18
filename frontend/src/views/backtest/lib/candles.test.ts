@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MINUTE,
   aggregate,
+  candlesPath,
   currentBucket,
   dayNumber,
   lastPrice,
@@ -109,5 +110,12 @@ describe('dayNumber', () => {
     expect(dayNumber(new Date(2024, 2, 5, 23, 0).getTime(), start)).toBe(1);
     expect(dayNumber(new Date(2024, 2, 6, 0, 30).getTime(), start)).toBe(2);
     expect(dayNumber(new Date(2024, 2, 12, 9, 0).getTime(), start)).toBe(8);
+  });
+});
+
+describe('candlesPath', () => {
+  it('реальная сессия — хранилище BTC, тренажёр — свечи своей сессии', () => {
+    expect(candlesPath({ id: 's1', dataSource: 'real' })).toBe('/api/market-data/candles');
+    expect(candlesPath({ id: 's1', dataSource: 'synthetic' })).toBe('/api/backtest/sessions/s1/candles');
   });
 });

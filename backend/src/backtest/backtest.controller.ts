@@ -1,6 +1,7 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { parseCandleQuery } from '../market-data/candle-query';
 import { BacktestService } from './backtest.service';
 import {
   AddToTradeDto,
@@ -33,6 +34,19 @@ export class BacktestController {
   @Get('sessions/:id')
   get(@CurrentUser('userId') userId: string, @Param('id') id: string) {
     return this.backtest.getSession(userId, id);
+  }
+
+  // Только у тренажёра: у реальной сессии свечи из /api/market-data/candles.
+  @Get('sessions/:id/candles')
+  candles(
+    @CurrentUser('userId') userId: string,
+    @Param('id') id: string,
+    @Query('tf') tf?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.backtest.sessionCandles(userId, id, parseCandleQuery({ tf, from, to, limit }));
   }
 
   // Момент сессии браузер сохраняет с задержкой; сервер двигает его только вперёд.
@@ -102,7 +116,7 @@ export class BacktestController {
   }
 
   @Get('stats')
-  stats(@CurrentUser('userId') userId: string) {
-    return this.backtest.stats(userId);
+  stats(@CurrentUser('userId') userId: string, @Query('source') source?: string) {
+    return this.backtest.stats(userId, source === 'synthetic' ? 'synthetic' : 'real');
   }
 }

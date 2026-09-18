@@ -15,7 +15,8 @@ import { SummaryCells } from './SummaryCells';
 
 /**
  * После завершения скрытое раскрывается: настоящие даты отрезка и настоящие
- * цены сделок. Теги ставить можно и здесь — разметка не обязана успеть к концу
+ * цены сделок. У тренажёра дат нет — вместо них строка о том, что рынок
+ * сгенерирован. Теги ставить можно и здесь — разметка не обязана успеть к концу
  * сессии.
  */
 export function SessionSummary({ detail, onLeave }: { detail: SessionDetail; onLeave: () => void }) {
@@ -38,7 +39,11 @@ export function SessionSummary({ detail, onLeave }: { detail: SessionDetail; onL
           {t('backToList')}
         </Button>
       </SectionHead>
-      <p>{t('revealed', { from: full(Date.parse(session.startTime)), to: full(Date.parse(session.cursorTime)) })}</p>
+      <p>
+        {session.dataSource === 'synthetic'
+          ? t('syntheticRevealed')
+          : t('revealed', { from: full(Date.parse(session.startTime)), to: full(Date.parse(session.cursorTime)) })}
+      </p>
       <p className="muted">
         {t('balanceFromTo', { from: formatPriceGrouped(session.startBalance), to: formatPriceGrouped(session.balance) })}
       </p>

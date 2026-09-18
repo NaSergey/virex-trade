@@ -7,7 +7,7 @@ import { useAuth } from '@/features/auth';
 import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader } from '@/shared/ui/dialog';
 import { Wrap } from '@/shared/ui/Wrap';
 import { useBacktestSessions, useBacktestStats, useDeleteSession } from './api/hooks';
-import type { SessionListItem } from './api/types';
+import type { DataSource, SessionListItem } from './api/types';
 import { SessionsList } from './components/SessionsList';
 import { StartSession } from './components/StartSession';
 import { StatsBlock } from './components/StatsBlock';
@@ -25,7 +25,8 @@ export function BacktestPage() {
   const t = useTranslations('backtest');
   const router = useRouter();
   const sessions = useBacktestSessions();
-  const stats = useBacktestStats();
+  const [statsSource, setStatsSource] = useState<DataSource>('real');
+  const stats = useBacktestStats(statsSource);
   const { user } = useAuth();
   const deleteSession = useDeleteSession();
   const [deleting, setDeleting] = useState<SessionListItem | null>(null);
@@ -54,7 +55,7 @@ export function BacktestPage() {
             onOpen={openSession}
             onDelete={setDeleting}
           />
-          <StatsBlock stats={stats.data} isLoading={stats.isLoading} />
+          <StatsBlock stats={stats.data} isLoading={stats.isLoading} source={statsSource} onSource={setStatsSource} />
         </div>
         <div className="marg">
           <StartSession onStarted={openSession} />

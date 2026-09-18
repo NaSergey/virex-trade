@@ -25,6 +25,11 @@ export class CreateSessionDto {
 
   @IsBoolean()
   hidePrice: boolean;
+
+  /** Не задан — реальная история. */
+  @IsOptional()
+  @IsIn(['real', 'synthetic'])
+  dataSource?: 'real' | 'synthetic';
 }
 
 export class AdvanceDto {
