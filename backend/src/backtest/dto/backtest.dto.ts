@@ -1,5 +1,6 @@
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsIn,
@@ -58,6 +59,13 @@ export class OpenTradeDto {
   @Min(1)
   @Max(100)
   leverage: number;
+
+  /** Уровень сетки, который эту сделку и породил — сработавшая строка удаляется
+   * тем же запросом, атомарно: раздельные вызовы оставляли бы окно, где сеть
+   * оборвалась между открытием и удалением, и уровень сработал бы повторно. */
+  @IsOptional()
+  @IsString()
+  entryOrderId?: string;
 }
 
 export class ModifyTradeDto {
@@ -72,6 +80,9 @@ export class ModifyTradeDto {
 }
 
 export class AddToTradeDto {
+  @IsISO8601()
+  entryTime: string;
+
   @IsPositive()
   entryPrice: number;
 
@@ -79,6 +90,11 @@ export class AddToTradeDto {
   @Min(0.01)
   @Max(100)
   riskPct: number;
+
+  /** См. OpenTradeDto.entryOrderId — тот же приём атомарного удаления сработавшего уровня. */
+  @IsOptional()
+  @IsString()
+  entryOrderId?: string;
 }
 
 export class SetLeverageDto {
@@ -113,6 +129,36 @@ export class CloseTradeDto {
   @IsOptional()
   @IsString()
   closeOrderId?: string;
+}
+
+export class CreateEntryOrdersDto {
+  @IsIn(['long', 'short'])
+  direction: Direction;
+
+  @IsPositive()
+  stopLoss: number;
+
+  @IsOptional()
+  @IsPositive()
+  takeProfit?: number;
+
+  /** Доля риска на КАЖДЫЙ уровень — общий риск сетки уже поделён на клиенте. */
+  @IsNumber()
+  @Min(0.01)
+  @Max(100)
+  riskPct: number;
+
+  @IsNumber()
+  @Min(1)
+  @Max(100)
+  leverage: number;
+
+  /** Цена каждого уровня сетки, по одной строке на цену. */
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(10)
+  @IsPositive({ each: true })
+  prices: number[];
 }
 
 export class SetBacktestTagsDto {

@@ -5,6 +5,7 @@ import { apiJson, qs } from '@/shared/api/http';
 import { fromApi, type ApiCandle, type Candle } from '../lib/candles';
 import type {
   BacktestCloseOrder,
+  BacktestEntryOrder,
   BacktestSession,
   BacktestStats,
   BacktestTrade,
@@ -86,6 +87,7 @@ export const useOpenTrade = (id: string) => {
       takeProfit?: number;
       riskPct: number;
       leverage: number;
+      entryOrderId?: string;
     }) => apiJson<{ trade: BacktestTrade }>(`/api/backtest/sessions/${id}/trades`, json('POST', input)),
     onSettled: () => refresh(qc, id),
   });
@@ -109,8 +111,16 @@ export const useModifyTrade = (id: string) => {
 export const useAddToTrade = (id: string) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ tradeId, ...body }: { tradeId: string; entryPrice: number; riskPct: number }) =>
-      apiJson<{ trade: BacktestTrade }>(`/api/backtest/trades/${tradeId}/add`, json('POST', body)),
+    mutationFn: ({
+      tradeId,
+      ...body
+    }: {
+      tradeId: string;
+      entryTime: string;
+      entryPrice: number;
+      riskPct: number;
+      entryOrderId?: string;
+    }) => apiJson<{ trade: BacktestTrade }>(`/api/backtest/trades/${tradeId}/add`, json('POST', body)),
     onSettled: () => refresh(qc, id),
   });
 };
@@ -159,6 +169,29 @@ export const useCancelCloseOrder = (id: string) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (orderId: string) => apiJson<{ success: boolean }>(`/api/backtest/close-orders/${orderId}`, json('DELETE')),
+    onSettled: () => refresh(qc, id),
+  });
+};
+
+export const useCreateEntryOrders = (id: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      direction: Direction;
+      stopLoss: number;
+      takeProfit?: number;
+      riskPct: number;
+      leverage: number;
+      prices: number[];
+    }) => apiJson<{ entryOrders: BacktestEntryOrder[] }>(`/api/backtest/sessions/${id}/entry-orders`, json('POST', input)),
+    onSettled: () => refresh(qc, id),
+  });
+};
+
+export const useCancelEntryOrder = (id: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (orderId: string) => apiJson<{ success: boolean }>(`/api/backtest/entry-orders/${orderId}`, json('DELETE')),
     onSettled: () => refresh(qc, id),
   });
 };

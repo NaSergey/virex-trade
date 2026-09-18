@@ -19,6 +19,16 @@ export interface BacktestSession {
   finishedAt: string | null;
 }
 
+/** Одно исполнение на вход — открытие сделки или добор сеткой (см. entries
+ * ниже). entryPrice/entryTime сделки — усреднённый итог; отдельная стрелка на
+ * графике под каждый реальный вход рисуется по этому списку, а не по ним. */
+export interface BacktestTradeEntry {
+  id: string;
+  qty: number;
+  price: number;
+  time: string;
+}
+
 export interface BacktestTrade {
   id: string;
   sessionId: string;
@@ -39,6 +49,8 @@ export interface BacktestTrade {
   pnl: number | null;
   r: number | null;
   tags: TagItem[];
+  /** По времени входа — то же, что задаёт порядок стрелок на графике. */
+  entries: BacktestTradeEntry[];
 }
 
 export interface BacktestCloseOrder {
@@ -46,6 +58,20 @@ export interface BacktestCloseOrder {
   tradeId: string;
   price: number;
   qty: number;
+  createdAt: string;
+}
+
+/** Уровень сетки на вход (Scaled order) — до срабатывания цены сделки ещё нет,
+ * поэтому строка привязана к сессии и направлению, а не к tradeId. */
+export interface BacktestEntryOrder {
+  id: string;
+  sessionId: string;
+  direction: Direction;
+  price: number;
+  riskPct: number;
+  stopLoss: number;
+  takeProfit: number | null;
+  leverage: number;
   createdAt: string;
 }
 
@@ -62,6 +88,7 @@ export interface SessionDetail {
   session: BacktestSession;
   trades: BacktestTrade[];
   closeOrders: BacktestCloseOrder[];
+  entryOrders: BacktestEntryOrder[];
   summary: Summary & { maxDrawdownPct: number };
 }
 

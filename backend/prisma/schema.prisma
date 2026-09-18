@@ -281,7 +281,8 @@ model BacktestSession {
   createdAt      DateTime  @default(now())
   finishedAt     DateTime?
 
-  trades BacktestTrade[]
+  trades      BacktestTrade[]
+  entryOrders BacktestEntryOrder[]
 
   @@index([userId, status])
   @@map("backtest_sessions")
@@ -321,11 +322,30 @@ model BacktestTrade {
   r          Float?
 
   tags        BacktestTradeTag[]
+  entries     BacktestTradeEntry[]
   exits       BacktestTradeExit[]
   closeOrders BacktestCloseOrder[]
 
   @@index([sessionId])
   @@map("backtest_trades")
+}
+
+/// Одно исполнение на вход — открытие сделки (openTrade) или добор сеткой
+/// (addToTrade). Без этой истории entryPrice/entryTime сделки после доборов —
+/// только усреднённый итог, и разметить на графике каждый отдельный вход
+/// было нечем (см. BacktestTradeExit — тот же приём для частичных закрытий).
+model BacktestTradeEntry {
+  id      String        @id @default(uuid())
+  tradeId String
+  trade   BacktestTrade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  qty     Float
+  price   Float
+  time    DateTime
+  /// Порядок вставки — тот же приём, что у BacktestTradeExit.createdAt.
+  createdAt DateTime    @default(now())
+
+  @@index([tradeId])
+  @@map("backtest_trade_entries")
 }
 
 /// Одно частичное или финальное закрытие открытой сделки.
@@ -359,6 +379,27 @@ model BacktestCloseOrder {
 
   @@index([tradeId])
   @@map("backtest_close_orders")
+}
+
+/// Уровень сетки на вход (Scaled order) — висит до касания цены в реплее или
+/// ручной отмены. Привязан к сессии, не к сделке: до первого срабатывания
+/// сделки ещё нет (её создаёт первый исполнившийся уровень, дальше — доборы).
+/// stopLoss/takeProfit/leverage одинаковы у всех уровней одной сетки —
+/// отдельной сущности «сетка» нет, значения просто продублированы по строкам.
+model BacktestEntryOrder {
+  id         String          @id @default(uuid())
+  sessionId  String
+  session    BacktestSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  direction  String // 'long' | 'short'
+  price      Float
+  riskPct    Float
+  stopLoss   Float
+  takeProfit Float?
+  leverage   Float
+  createdAt  DateTime        @default(now())
+
+  @@index([sessionId])
+  @@map("backtest_entry_orders")
 }
 
 /// Теги на сделках бектеста. Устроено как TradeTag, но отдельной таблицей:

@@ -10,12 +10,12 @@ const mins = (from: number, n: number, price = 100) =>
 describe('advanceTo', () => {
   it('доходит до target, когда минутки загружены дальше', () => {
     const r = advanceTo({ from: at(0), target: at(5), minutes: mins(at(0), 10), loadedUntil: at(10), positions: [] });
-    expect(r).toEqual({ reach: at(5), complete: true, exits: [] });
+    expect(r).toEqual({ reach: at(5), complete: true, exits: [], entryFill: null });
   });
 
   it('останавливается на загруженном крае, если он раньше target', () => {
     const r = advanceTo({ from: at(0), target: at(5), minutes: mins(at(0), 3), loadedUntil: at(3), positions: [] });
-    expect(r).toEqual({ reach: at(3), complete: false, exits: [] });
+    expect(r).toEqual({ reach: at(3), complete: false, exits: [], entryFill: null });
   });
 
   it('без прогресса (from === target) — срабатывание не проверяется', () => {
@@ -96,5 +96,58 @@ describe('advanceTo', () => {
       closeOrders: [{ id: 'o1', price: 100, qty: 5, tradeId: 'other-trade' }],
     });
     expect(r.exits).toEqual([]);
+  });
+
+  it('уровень сетки на вход обрывает продвижение точно на своём моменте', () => {
+    const minutes = mins(at(0), 5, 100);
+    minutes[2] = { ...minutes[2], l: 95 };
+    const r = advanceTo({
+      from: at(0),
+      target: at(5),
+      minutes,
+      loadedUntil: at(5),
+      positions: [],
+      entryOrders: [{ id: 'e1', direction: 'long', price: 96 }],
+    });
+    expect(r).toEqual({
+      reach: at(3),
+      complete: true,
+      exits: [],
+      entryFill: { orderId: 'e1', direction: 'long', price: 96, time: at(3) },
+    });
+  });
+
+  it('exit раньше касания сетки — решает exit, уровень сетки ждёт следующего вызова', () => {
+    const minutes = mins(at(0), 5, 100);
+    minutes[1] = { ...minutes[1], l: 89 }; // стоп открытой сделки сработает первым, на at(2)
+    minutes[3] = { ...minutes[3], h: 106 }; // уровень сетки — позже, на at(4); минуте стопа его не видно (h там 101)
+    const r = advanceTo({
+      from: at(0),
+      target: at(5),
+      minutes,
+      loadedUntil: at(5),
+      positions: [{ tradeId: 'long1', direction: 'long', stopLoss: 90, takeProfit: null, entryTime: at(0) }],
+      entryOrders: [{ id: 'e1', direction: 'short', price: 105 }],
+    });
+    expect(r.reach).toEqual(at(2));
+    expect(r.exits).toEqual([{ reason: 'stop', price: 90, time: at(2), tradeId: 'long1' }]);
+    expect(r.entryFill).toBeNull();
+  });
+
+  it('касание сетки раньше exit — решает уровень сетки, exit ждёт следующего вызова', () => {
+    const minutes = mins(at(0), 5, 100);
+    minutes[1] = { ...minutes[1], h: 106 }; // уровень сетки сработает первым, на at(2)
+    minutes[3] = { ...minutes[3], l: 89 }; // стоп открытой сделки — позже, на at(4)
+    const r = advanceTo({
+      from: at(0),
+      target: at(5),
+      minutes,
+      loadedUntil: at(5),
+      positions: [{ tradeId: 'long1', direction: 'long', stopLoss: 90, takeProfit: null, entryTime: at(0) }],
+      entryOrders: [{ id: 'e1', direction: 'short', price: 105 }],
+    });
+    expect(r.reach).toEqual(at(2));
+    expect(r.exits).toEqual([]);
+    expect(r.entryFill).toEqual({ orderId: 'e1', direction: 'short', price: 105, time: at(2) });
   });
 });

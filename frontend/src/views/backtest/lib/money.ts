@@ -23,6 +23,45 @@ export function previewSize(balance: number, riskPct: number, entry: number, sto
   return { riskUsdt, qty, notional, margin: notional / leverage, liqPrice: liquidationPrice(direction, entry, leverage) };
 }
 
+/** N цен уровней сетки, равномерно на отрезке [lower, upper] включительно. N=1 — середина отрезка. */
+export function gridPrices(lower: number, upper: number, count: number): number[] {
+  const n = Math.max(1, Math.round(count));
+  if (n === 1) return [(lower + upper) / 2];
+  const step = (upper - lower) / (n - 1);
+  return Array.from({ length: n }, (_, i) => lower + step * i);
+}
+
+/**
+ * Предпросмотр сетки целиком, если исполнятся все уровни: риск общий,
+ * поровну по уровням (`positionSize`/`previewSize` — та же формула, что на
+ * каждом уровне отдельно посчитает сервер через openTrade/addToTrade).
+ */
+export function previewGrid(
+  balance: number,
+  riskPctTotal: number,
+  prices: number[],
+  stop: number,
+  leverage: number,
+  direction: Direction,
+) {
+  if (prices.length === 0) return null;
+  const riskPerLevel = riskPctTotal / prices.length;
+  let qty = 0;
+  let notional = 0;
+  let riskUsdt = 0;
+  for (const price of prices) {
+    const one = previewSize(balance, riskPerLevel, price, stop, leverage, direction);
+    if (!one) return null;
+    qty += one.qty;
+    notional += one.notional;
+    riskUsdt += one.riskUsdt;
+  }
+  // Средний вход — по объёму, а не простое среднее цен: доли риска равны, а
+  // размер каждого уровня свой (он же риск / расстояние до стопа), и дальние
+  // от стопа уровни весят в позиции меньше.
+  return { qty, notional, riskUsdt, margin: notional / leverage, avgEntry: notional / qty };
+}
+
 /** Ликвидация — упрощённо, без поддерживающей маржи и комиссий: long ниже входа, short выше, на 1/leverage. */
 export function liquidationPrice(direction: Direction, entry: number, leverage: number): number {
   return direction === 'long' ? entry * (1 - 1 / leverage) : entry * (1 + 1 / leverage);
@@ -61,13 +100,13 @@ export const toInput = (v: number) => String(Number(v.toPrecision(8)));
  * рядом с нулём (см. `curvedSliderPos`/`SLIDER_CURVE`) один и тот же ход мыши двигает
  * цену на сотые и тысячные, округление до 0.1 схлопывает это обратно в саму цену —
  * ползунок визуально замирает точно по центру, сколько его ни тяни. Руками напечатанное
- * число это не трогает — оно остаётся как есть, см. `setStopText` в OrderPanel. */
+ * число это не трогает — оно остаётся как есть (поля модалки «Изменить уровни»). */
 export const toInputPrice = (v: number) => {
   const integerDigits = Math.floor(Math.log10(v)) + 1;
   return v.toFixed(Math.max(0, 6 - integerDigits));
 };
 
-export type LevelError = 'stopRequired' | 'stopSide' | 'takeSide';
+export type LevelError = 'stopRequired' | 'stopSide' | 'takeSide' | 'entryRangeRequired' | 'entrySide';
 
 /**
  * Уровни относительно текущей цены (в одних единицах — экранных или
@@ -78,6 +117,38 @@ export function checkLevels(direction: Direction, price: number, stop: number, t
   if (!(stop > 0)) return 'stopRequired';
   if (direction === 'long' ? stop >= price : stop <= price) return 'stopSide';
   if (take != null && (direction === 'long' ? take <= price : take >= price)) return 'takeSide';
+  return null;
+}
+
+/**
+ * То же самое, что `checkLevels`, но для сетки на вход: стоп и тейк обязаны
+ * быть по верную сторону КАЖДОГО уровня сетки, не только текущей цены —
+ * иначе средний вход после доборов мог бы уехать за стоп ещё до того, как
+ * сетка исполнится целиком.
+ */
+export function checkGridLevels(direction: Direction, prices: number[], stop: number, take: number | null): LevelError | null {
+  if (prices.length === 0) return 'entryRangeRequired';
+  if (!(stop > 0)) return 'stopRequired';
+  for (const price of prices) {
+    if (direction === 'long' ? stop >= price : stop <= price) return 'stopSide';
+    if (take != null && (direction === 'long' ? take <= price : take >= price)) return 'takeSide';
+  }
+  return null;
+}
+
+/**
+ * Уровни входа (сетка или одиночный отложенный ордер) — по одну сторону от
+ * текущей цены: лонг покупает ниже неё, шорт продаёт выше. Ползунки верха и
+ * низа крутятся независимо в обе стороны от цены, сторону решает нажатая
+ * кнопка, поэтому сверять её с ценой обязана отправка: `checkGridLevels`
+ * сверяет уровни только со стопом и тейком, и сетка по обе стороны цены
+ * проходила бы целиком. Уровень ровно на цене — уже рынок, не отложенный
+ * ордер. Цена и уровни — в одних единицах, как в `checkLevels`.
+ */
+export function checkEntrySide(direction: Direction, prices: number[], price: number): LevelError | null {
+  for (const p of prices) {
+    if (direction === 'long' ? p >= price : p <= price) return 'entrySide';
+  }
   return null;
 }
 
@@ -255,6 +326,44 @@ export function applyStopChange(
   const breaksTake =
     draftTakeFits(Number(prev.stop), prevTake, screenPrice) && !draftTakeFits(Number(nextStop), prevTake, screenPrice);
   return { stop: nextStop, take: breaksTake ? toInputPrice(2 * screenPrice - prevTake) : prev.take };
+}
+
+/**
+ * Черновик стопа и тейка отложенного ордера после того, как ЕГО ВХОД
+ * получил новую цену. Оба уровня отсчитываются от входа, а не от рыночной
+ * цены (см. комментарий у `lAnchor` в OrderPanel): без этой функции
+ * абсолютная цена, набранная под старый вход, при переносе входа просто
+ * остаётся на месте — не едет вслед за ним и, если вход перепрыгнул через
+ * рыночную цену (сделка перевернулась из лонга в шорт), оказывается вовсе
+ * не по ту сторону.
+ *
+ * Дистанция от входа в процентах переносится на новый вход как есть,
+ * сторона — та, что требует направление входа относительно рыночной цены
+ * (`impliedDirection`), а не сторона, в которой уровень стоял раньше: так
+ * переворот направления переворачивает и уровень вместе с ним, не оставляя
+ * стоп лонга висеть выше входа, ставшего шортовым.
+ */
+export function applyEntryChange(
+  prev: { entry: string; stop: string; take: string },
+  nextEntry: string,
+  screenPrice: number,
+): { entry: string; stop: string; take: string } {
+  const oldEntry = prev.entry.trim() ? Number(prev.entry) : null;
+  const oldAnchor = oldEntry != null && oldEntry > 0 ? oldEntry : screenPrice;
+  const newEntry = Number(nextEntry);
+  const direction = newEntry > 0 ? impliedDirection(null, newEntry, null, screenPrice) : null;
+
+  const moveLevel = (kind: 'stop' | 'take', raw: string): string => {
+    if (!raw.trim() || direction == null) return raw;
+    const value = Number(raw);
+    if (!(value > 0)) return raw;
+    const distPct = Math.abs(signedPctFromStop(value, oldAnchor));
+    const long = direction === 'long';
+    const belowSide = kind === 'stop' ? long : !long;
+    return toInputPrice(stopFromSignedPct(belowSide ? distPct : -distPct, newEntry));
+  };
+
+  return { entry: nextEntry, stop: moveLevel('stop', prev.stop), take: moveLevel('take', prev.take) };
 }
 
 /**

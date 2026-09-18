@@ -26,6 +26,9 @@ function makeService() {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     backtestTradeTag: { deleteMany: jest.fn(), createMany: jest.fn() },
+    backtestTradeEntry: {
+      create: jest.fn(({ data }) => ({ id: 'en1', createdAt: new Date(), ...data })),
+    },
     backtestTradeExit: {
       create: jest.fn(({ data }) => ({ id: 'e1', createdAt: new Date(), ...data })),
       findMany: jest.fn().mockResolvedValue([]),
@@ -36,6 +39,12 @@ function makeService() {
       findUnique: jest.fn(),
       findMany: jest.fn().mockResolvedValue([]),
       delete: jest.fn(),
+    },
+    backtestEntryOrder: {
+      deleteMany: jest.fn(),
+      create: jest.fn(({ data }) => ({ id: 'eo1', createdAt: new Date(), ...data })),
+      findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
     },
     tag: { count: jest.fn() },
     $executeRaw: jest.fn().mockResolvedValue(1),
@@ -645,7 +654,7 @@ describe('BacktestService — сделки', () => {
       });
       prisma.backtestSession.findUnique.mockResolvedValue({ balance: 10_000 });
 
-      await service.addToTrade('u1', 't1', { entryPrice: 110, riskPct: 1 });
+      await service.addToTrade('u1', 't1', { entryTime: new Date(T0 + DAY), entryPrice: 110, riskPct: 1 });
 
       const call = prisma.backtestTrade.updateMany.mock.calls[0][0];
       expect(call.where).toEqual({ id: 't1', exitTime: null });
@@ -658,7 +667,7 @@ describe('BacktestService — сделки', () => {
       const { service, prisma } = makeService();
       prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, exitTime: new Date(T0 + DAY) });
 
-      const err = await rejection(service.addToTrade('u1', 't1', { entryPrice: 110, riskPct: 1 }));
+      const err = await rejection(service.addToTrade('u1', 't1', { entryTime: new Date(T0 + DAY), entryPrice: 110, riskPct: 1 }));
 
       expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_TRADE_CLOSED' });
     });
@@ -676,7 +685,7 @@ describe('BacktestService — сделки', () => {
 
       // riskUsdt_add = 10000*50/100 = 5000, dist = |110-105| = 5, addQty = 1000.
       // newQty = 1020, newEntry = (20*100 + 1000*110)/1020 ≈ 109.8 — выше стопа 105.
-      const err = await rejection(service.addToTrade('u1', 't1', { entryPrice: 110, riskPct: 50 }));
+      const err = await rejection(service.addToTrade('u1', 't1', { entryTime: new Date(T0 + DAY), entryPrice: 110, riskPct: 50 }));
 
       expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_STOP_SIDE' });
     });
@@ -686,7 +695,7 @@ describe('BacktestService — сделки', () => {
       prisma.backtestTrade.findUnique.mockResolvedValue(TRADE);
       prisma.backtestSession.findUnique.mockResolvedValue({ balance: 10 });
 
-      const err = await rejection(service.addToTrade('u1', 't1', { entryPrice: 110, riskPct: 1 }));
+      const err = await rejection(service.addToTrade('u1', 't1', { entryTime: new Date(T0 + DAY), entryPrice: 110, riskPct: 1 }));
 
       expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_MARGIN_EXCEEDS_BALANCE' });
     });

@@ -7,6 +7,7 @@ import {
   AdvanceDto,
   CloseTradeDto,
   CreateCloseOrderDto,
+  CreateEntryOrdersDto,
   CreateSessionDto,
   ModifyTradeDto,
   OpenTradeDto,
@@ -62,7 +63,7 @@ export class BacktestController {
 
   @Post('trades/:id/add')
   add(@CurrentUser('userId') userId: string, @Param('id') id: string, @Body() dto: AddToTradeDto) {
-    return this.backtest.addToTrade(userId, id, dto);
+    return this.backtest.addToTrade(userId, id, { ...dto, entryTime: new Date(dto.entryTime) });
   }
 
   @Patch('sessions/:id/leverage')
@@ -88,6 +89,16 @@ export class BacktestController {
   @Delete('close-orders/:id')
   cancelCloseOrder(@CurrentUser('userId') userId: string, @Param('id') id: string) {
     return this.backtest.cancelCloseOrder(userId, id);
+  }
+
+  @Post('sessions/:id/entry-orders')
+  createEntryOrders(@CurrentUser('userId') userId: string, @Param('id') id: string, @Body() dto: CreateEntryOrdersDto) {
+    return this.backtest.createEntryOrders(userId, id, dto);
+  }
+
+  @Delete('entry-orders/:id')
+  cancelEntryOrder(@CurrentUser('userId') userId: string, @Param('id') id: string) {
+    return this.backtest.cancelEntryOrder(userId, id);
   }
 
   @Get('stats')

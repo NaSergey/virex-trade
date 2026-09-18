@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import type { BacktestTrade, Prisma, Tag } from '@prisma/client';
+import type { BacktestTrade, BacktestTradeEntry, Prisma, Tag } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MarketDataService } from '../market-data/market-data.service';
 import {
@@ -32,6 +32,7 @@ export interface OpenTradeInput {
   takeProfit?: number;
   riskPct: number;
   leverage: number;
+  entryOrderId?: string;
 }
 
 export interface ModifyTradeInput {
@@ -41,8 +42,19 @@ export interface ModifyTradeInput {
 }
 
 export interface AddToTradeInput {
+  entryTime: Date;
   entryPrice: number;
   riskPct: number;
+  entryOrderId?: string;
+}
+
+export interface CreateEntryOrdersInput {
+  direction: Direction;
+  stopLoss: number;
+  takeProfit?: number;
+  riskPct: number;
+  leverage: number;
+  prices: number[];
 }
 
 export interface CloseTradeInput {
@@ -61,13 +73,16 @@ const tradeClosed = () => new ConflictException({ message: 'Сделка уже 
 /** Допуск на накопленную погрешность float-сложений closedQty. */
 const QTY_EPS = 1e-8;
 
-/** Что подтягивать к сделке, чтобы отдать её с тегами. */
-export const TAGS = { tags: { include: { tag: true } } } as const;
+/** Что подтягивать к сделке, чтобы отдать её с тегами и историей входов —
+ * каждое отдельное исполнение (открытие и каждый добор сеткой), а не только
+ * усреднённый итог в entryPrice/entryTime. По времени: разметка на графике
+ * (одна стрелка на исполнение) обязана идти в порядке заполнения. */
+export const TRADE_INCLUDE = { tags: { include: { tag: true } }, entries: { orderBy: { time: 'asc' } } } as const;
 
-type TradeWithTags = BacktestTrade & { tags: { tag: Tag }[] };
+type TradeWithRelations = BacktestTrade & { tags: { tag: Tag }[]; entries: BacktestTradeEntry[] };
 
 /** Сделка наружу: теги плоским списком — так их рисует фронт. */
-export function tradeView(t: TradeWithTags) {
+export function tradeView(t: TradeWithRelations) {
   const { tags, ...rest } = t;
   return { ...rest, tags: tags.map(({ tag }) => ({ id: tag.id, name: tag.name, color: tag.color, type: tag.type })) };
 }
@@ -138,10 +153,14 @@ export class BacktestService {
     const trades = await this.prisma.backtestTrade.findMany({
       where: { sessionId: id },
       orderBy: { entryTime: 'asc' },
-      include: TAGS,
+      include: TRADE_INCLUDE,
     });
     const closeOrders = await this.prisma.backtestCloseOrder.findMany({
       where: { trade: { sessionId: id, exitTime: null } },
+    });
+    const entryOrders = await this.prisma.backtestEntryOrder.findMany({
+      where: { sessionId: id },
+      orderBy: { price: 'asc' },
     });
     const closed = trades
       .filter((t) => t.exitTime != null)
@@ -150,6 +169,7 @@ export class BacktestService {
       session,
       trades: trades.map(tradeView),
       closeOrders,
+      entryOrders,
       summary: {
         ...summarize(closed.map(closedNumbers)),
         maxDrawdownPct: maxDrawdownPct(session.startBalance, closed.map((t) => t.pnl ?? 0)),
@@ -176,6 +196,10 @@ export class BacktestService {
       // Позицию закрывает браузер (он знает цену момента), сервер только проверяет.
       const open = await tx.backtestTrade.count({ where: { sessionId: id, exitTime: null } });
       if (open > 0) throw new ConflictException({ message: 'Сначала закройте открытую сделку', code: 'BACKTEST_OPEN_TRADE' });
+      const pendingEntries = await tx.backtestEntryOrder.count({ where: { sessionId: id } });
+      if (pendingEntries > 0) {
+        throw new ConflictException({ message: 'Сначала отмените ордера сетки', code: 'BACKTEST_ENTRY_ORDERS_PENDING' });
+      }
       const session = await tx.backtestSession.update({
         where: { id },
         data: { status: 'finished', finishedAt: new Date() },
@@ -247,9 +271,19 @@ export class BacktestService {
           riskUsdt,
           qty,
           leverage: input.leverage,
+          // Первое исполнение — сразу вложенным create: у сделки ещё нет id
+          // ни для одного отдельного запроса, а второй запрос тем же id
+          // потребовал бы отдельного круга к базе только ради истории входов.
+          entries: { create: { qty, price: input.entryPrice, time: input.entryTime } },
         },
-        include: TAGS,
+        include: TRADE_INCLUDE,
       });
+      // Тот же приём, что у closeOrderId в closeTrade: удаление сработавшего
+      // уровня сетки — в одной транзакции с открытием, а не вторым запросом,
+      // иначе обрыв сети между ними оставил бы уровень висеть и он сработал бы ещё раз.
+      if (input.entryOrderId) {
+        await tx.backtestEntryOrder.deleteMany({ where: { id: input.entryOrderId, sessionId } });
+      }
       return { trade: tradeView(trade) };
     });
   }
@@ -269,7 +303,7 @@ export class BacktestService {
       if (bumped === 0) throw sessionFinished();
       const result = await tx.backtestTrade.updateMany({ where: { id: tradeId, exitTime: null }, data });
       if (result.count === 0) throw tradeClosed();
-      const updated = await tx.backtestTrade.findUnique({ where: { id: tradeId }, include: TAGS });
+      const updated = await tx.backtestTrade.findUnique({ where: { id: tradeId }, include: TRADE_INCLUDE });
       return { trade: tradeView(updated!) };
     });
   }
@@ -278,9 +312,15 @@ export class BacktestService {
     const trade = await this.ownedTrade(userId, tradeId);
     if (trade.exitTime) throw tradeClosed();
     if (trade.session.status !== 'active') throw sessionFinished();
+    // Добор не может быть раньше открытия — тот же порядок времени, что
+    // closeTrade требует от exitTime относительно entryTime.
+    if (input.entryTime.getTime() < trade.entryTime.getTime()) throw timeInvalid();
 
     return this.prisma.$transaction(async (tx) => {
-      const bumped = await this.bumpCursor(tx, trade.sessionId, trade.session.cursorTime);
+      // Добор — содержательный момент сессии (как открытие и закрытие), а не
+      // просто повторная проверка замка (как у modifyTrade): курсор двигаем
+      // на его время, а не на уже известное trade.session.cursorTime.
+      const bumped = await this.bumpCursor(tx, trade.sessionId, input.entryTime);
       if (bumped === 0) throw sessionFinished();
       const fresh = await tx.backtestSession.findUnique({ where: { id: trade.sessionId }, select: { balance: true } });
 
@@ -312,9 +352,72 @@ export class BacktestService {
         data: { qty: newQty, entryPrice: newEntry, riskUsdt: newRiskUsdt, riskPct: newRiskPct },
       });
       if (result.count === 0) throw tradeClosed();
-      const updated = await tx.backtestTrade.findUnique({ where: { id: tradeId }, include: TAGS });
+      // Своя строка истории на каждый добор — тем же приёмом, что и
+      // BacktestTradeExit у частичных закрытий: без неё entryPrice/entryTime
+      // сделки после доборов — только усреднённый итог, и разметить на
+      // графике каждый отдельный вход сеткой было бы нечем.
+      await tx.backtestTradeEntry.create({ data: { tradeId, qty: addQty, price: input.entryPrice, time: input.entryTime } });
+      // См. openTrade.entryOrderId — тот же атомарный приём для уровня сетки,
+      // который долил уже открытую сделку, а не создал новую.
+      if (input.entryOrderId) {
+        await tx.backtestEntryOrder.deleteMany({ where: { id: input.entryOrderId, sessionId: trade.sessionId } });
+      }
+      const updated = await tx.backtestTrade.findUnique({ where: { id: tradeId }, include: TRADE_INCLUDE });
       return { trade: tradeView(updated!) };
     });
+  }
+
+  /**
+   * Сетка отложенных лимит-ордеров на вход (Scaled order): создаётся одним
+   * пакетом, дальше каждая строка живёт как самостоятельный BacktestEntryOrder
+   * до срабатывания цены в реплее (клиент вызывает openTrade/addToTrade с её
+   * id) или ручной отмены. Общие стоп/тейк/плечо продублированы по всем
+   * строкам — сработает первая, откроет сделку с ними; остальные лягут в неё
+   * же через addToTrade, который смотрит уже на стоп открытой сделки, а не на
+   * значение здесь.
+   */
+  async createEntryOrders(userId: string, sessionId: string, input: CreateEntryOrdersInput) {
+    const s = await this.ownedSession(userId, sessionId);
+    if (s.status !== 'active') throw sessionFinished();
+    for (const price of input.prices) {
+      if (!stopOnRightSide(input.direction, price, input.stopLoss)) {
+        throw new BadRequestException({ message: 'Стоп стоит не по ту сторону от входа', code: 'BACKTEST_STOP_SIDE' });
+      }
+      if (input.takeProfit != null && !takeOnRightSide(input.direction, price, input.takeProfit)) {
+        throw new BadRequestException({ message: 'Тейк стоит не по ту сторону от входа', code: 'BACKTEST_TAKE_SIDE' });
+      }
+    }
+    const open = await this.prisma.backtestTrade.count({ where: { sessionId, exitTime: null, direction: input.direction } });
+    if (open > 0) throw new ConflictException({ message: 'Открытая сделка уже есть', code: 'BACKTEST_OPEN_TRADE' });
+    const pending = await this.prisma.backtestEntryOrder.count({ where: { sessionId, direction: input.direction } });
+    if (pending > 0) {
+      throw new ConflictException({ message: 'Сетка в эту сторону уже стоит', code: 'BACKTEST_ENTRY_ORDERS_EXIST' });
+    }
+    const entryOrders = await this.prisma.$transaction(
+      input.prices.map((price) =>
+        this.prisma.backtestEntryOrder.create({
+          data: {
+            sessionId,
+            direction: input.direction,
+            price,
+            riskPct: input.riskPct,
+            stopLoss: input.stopLoss,
+            takeProfit: input.takeProfit ?? null,
+            leverage: input.leverage,
+          },
+        }),
+      ),
+    );
+    return { entryOrders };
+  }
+
+  async cancelEntryOrder(userId: string, orderId: string) {
+    const order = await this.prisma.backtestEntryOrder.findUnique({ where: { id: orderId }, include: { session: true } });
+    if (!order || order.session.userId !== userId) {
+      throw new NotFoundException({ message: 'Ордер не найден', code: 'BACKTEST_ENTRY_ORDER_NOT_FOUND' });
+    }
+    await this.prisma.backtestEntryOrder.delete({ where: { id: orderId } });
+    return { success: true as const };
   }
 
   async setLeverage(userId: string, sessionId: string, leverage: number) {
@@ -338,7 +441,7 @@ export class BacktestService {
         }
       }
       await tx.backtestTrade.updateMany({ where: { sessionId, exitTime: null }, data: { leverage } });
-      const trades = await tx.backtestTrade.findMany({ where: { sessionId, exitTime: null }, include: TAGS });
+      const trades = await tx.backtestTrade.findMany({ where: { sessionId, exitTime: null }, include: TRADE_INCLUDE });
       return { trades: trades.map(tradeView) };
     });
   }
@@ -374,7 +477,7 @@ export class BacktestService {
     if (trade.exitTime) {
       // Уже закрыта целиком — повтор того же финального запроса не ошибка.
       if (trade.exitTime.getTime() === input.exitTime.getTime() && trade.exitPrice === input.exitPrice) {
-        const same = await this.prisma.backtestTrade.findUnique({ where: { id: tradeId }, include: TAGS });
+        const same = await this.prisma.backtestTrade.findUnique({ where: { id: tradeId }, include: TRADE_INCLUDE });
         return { trade: tradeView(same!), balance: trade.session.balance };
       }
       throw tradeClosed();
@@ -405,7 +508,7 @@ export class BacktestService {
       });
       if (cas.count === 0) {
         // Гонка или потерянный-и-повторённый ответ — разбираемся по последнему exit.
-        const raced = await tx.backtestTrade.findUnique({ where: { id: tradeId }, include: TAGS });
+        const raced = await tx.backtestTrade.findUnique({ where: { id: tradeId }, include: TRADE_INCLUDE });
         if (!raced) throw tradeClosed();
         const exits = await tx.backtestTradeExit.findMany({ where: { tradeId }, orderBy: { createdAt: 'desc' }, take: 1 });
         const last = exits[0];
@@ -448,9 +551,12 @@ export class BacktestService {
           },
         });
         await tx.backtestCloseOrder.deleteMany({ where: { tradeId } });
+        // Сделка закрыта целиком — остаток сетки, что её докармливала, метит в
+        // никуда: у следующей сделки этого направления будут другие стоп/тейк.
+        await tx.backtestEntryOrder.deleteMany({ where: { sessionId: trade.sessionId, direction: trade.direction } });
       }
 
-      const updated = await tx.backtestTrade.findUnique({ where: { id: tradeId }, include: TAGS });
+      const updated = await tx.backtestTrade.findUnique({ where: { id: tradeId }, include: TRADE_INCLUDE });
       return { trade: tradeView(updated!), balance: session.balance };
     });
   }
@@ -478,7 +584,7 @@ export class BacktestService {
       this.prisma.backtestSession.count({ where: { userId } }),
       this.prisma.backtestTrade.findMany({
         where: { session: { userId }, exitTime: { not: null } },
-        include: TAGS,
+        include: TRADE_INCLUDE,
       }),
     ]);
 

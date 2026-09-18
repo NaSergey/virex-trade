@@ -473,21 +473,47 @@
      ввода и кнопки до нечитаемых пропорций. Ширину диктует сам тикет, график
      забирает всё, что осталось. */
   .asym.terminal { grid-template-columns: minmax(0, 1fr) 360px; }
-  /* Тикет ниже — сам законченная панель со своей рамкой; вторая линия рядом
-     с ней читалась бы как задвоенная рамка, поэтому дорожку здесь не делит
-     линейка .marg, только её отступ.
-     Колонка — флекс-столбец, а не просто рамка: тикет и переключатель таблицы
-     под графиком — раздельные блоки одной колонки, тянущейся на всю высоту
-     строки (сетка стрейчит её сама, см. .asym). Переключатель прижат книзу
-     margin-top: auto — вровень с рядом прокрутки слева (шаг, пауза, скорость),
-     а не повисшим сразу под тикетом с пустотой до низа колонки. */
-  .asym.terminal > .marg { border-left: 0; display: flex; flex-direction: column; }
-  .asym.terminal > .marg .view-switch { margin-top: auto; }
-  /* Деления тумблера равные и делят всю ширину колонки: без flex: 1 кнопки
-     держатся своей ширины по тексту, а рамка группы — растянутая родителем
-     флекс-колонкой .marg (align-items: stretch по умолчанию) — оставляет
-     пустую полосу после последней кнопки. Ровно тот же приём, что у .fb .seg. */
-  .asym.terminal > .marg .view-switch button { flex: 1; text-align: center; }
+  /* Тикет — сам законченная панель со своей рамкой; вторая линия рядом с ней
+     читалась бы как задвоенная рамка, поэтому дорожку здесь не делит линейка
+     .marg, только её отступ. */
+  .asym.terminal > .marg { border-left: 0; }
+  /* Строка шага/скорости/переключателя таблицы — на всю ширину терминала
+     (обе колонки грида), а не внутри узкой колонки графика: тикет обычно
+     короче графика по высоте, и место под ним справа иначе просто пустовало
+     бы, пока переключателю в одной только колонке графика было тесно. */
+  .terminal-controls { grid-column: 1 / -1; }
+  /* Терминал — ровно одно окно: график, тикет и кнопки шага/скорости/«к списку»
+     видны вместе и без прокрутки, на любом экране. Высоту график не выбирает
+     сам (раньше она шла от ширины по пропорции 720×380, и на широком мониторе
+     он выталкивал кнопки за нижний край) — он забирает то, что осталось от
+     окна за вычетом шапки и отступов, а кнопки остаются внизу окна.
+     Таблица (открытые позиции / ордера / история) идёт под этим окном обычным
+     потоком: страница прокручивается целиком, а не панелями внутри.
+     min-height — пол для низких окон (горизонтальный телефон): ниже него
+     график схлопнулся бы в полоску, и лучше уж пусть страница прокрутится. */
+  .bt-live { --bt-screen: calc(100dvh - var(--top-h) - 1px - var(--s4) * 2); }
+  .terminal-main { display: contents; }
+  .terminal-chart { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  @media (min-width: 1101px) {
+    .asym.terminal {
+      height: var(--bt-screen);
+      min-height: 440px;
+      grid-template-rows: minmax(0, 1fr) auto;
+    }
+    /* Места на каждый элемент — явно: терминал-main тут display: contents,
+       и без номеров авторазмещение отправило бы тикет под строку кнопок. */
+    .terminal-chart { grid-column: 1; grid-row: 1; }
+    .asym.terminal > .marg { grid-column: 2; grid-row: 1; min-height: 0; overflow-y: auto; }
+    .terminal-controls { grid-row: 2; }
+  }
+  /* Узкое окно: колонки складываются, и тикет уходит под первый экран. Окном
+     остаются график с кнопками — тикет ниже них, а не между ними, иначе
+     кнопки шага уезжали бы за экран вслед за ним. */
+  @media (max-width: 1100px) {
+    .terminal-main { display: flex; flex-direction: column; height: var(--bt-screen); min-height: 440px; }
+    .terminal-chart { flex: 1; }
+    .terminal-controls { flex: none; }
+  }
   /* Ширину строки внутри сетки держит сама колонка. Оставленный здесь
      max-width лечил бы болезнь, которой нет, и оставлял дыру между концом
      текста и линейкой между дорожками. */
@@ -495,14 +521,24 @@
 
   /* ═══════════════ БЕКТЕСТ ═══════════════ */
   /* touch-action: none — иначе на телефоне перетаскивание стопа прокручивало бы страницу. */
-  .replay-chart { display: block; width: 100%; height: auto; touch-action: none; user-select: none; }
+  /* SVG вынут из потока и растянут на коробку обёртки: высоту ему даёт раскладка,
+     а не собственные размеры, поэтому измерение (ReplayChart: box) не может
+     замкнуться на самом себе. */
+  .replay-chart { position: absolute; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; user-select: none; }
   .replay-chart .lvl-hit { cursor: ns-resize; }
   .replay-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); margin-top: var(--s3); }
-  .replay-chart-wrap { position: relative; }
+  /* Переключатель таблицы (Открытые позиции / Ордера / История) — в той же
+     строке, что шаг/скорость/«к списку», прижат к правому краю ВСЕГО терминала
+     (см. .terminal-controls выше, растягивающую эту строку на обе колонки
+     грида). margin-left: auto — без justify-content: space-between у
+     .replay-controls, который раздвинул бы и левые кнопки между собой. */
+  .replay-controls .view-switch { margin-left: auto; }
+  .replay-chart-wrap { position: relative; flex: 1; min-height: 0; }
   /* Рисование: полоса инструментов слева от графика, стиль выделенной фигуры —
-     поверх его левого верхнего угла. */
-  .chart-tools { display: flex; gap: var(--s2); align-items: flex-start; }
-  .chart-tools-main { flex: 1; min-width: 0; position: relative; }
+     поверх его левого верхнего угла. Растянута на всю высоту окна графика
+     (align-items по умолчанию), чтобы и сам график мог её заполнить. */
+  .chart-tools { display: flex; gap: var(--s2); flex: 1; min-height: 0; }
+  .chart-tools-main { flex: 1; min-width: 0; min-height: 0; position: relative; display: flex; flex-direction: column; }
   .draw-bar { display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--hair); padding-right: var(--s1); }
   .draw-group { position: relative; display: flex; align-items: center; }
   .draw-btn,
@@ -538,7 +574,103 @@
      тихого --ink-3): на тесной панели с мелким кеглем самая приглушённая
      краска системы читалась плохо, а тут именно по подписям (риск, стоп,
      тейк) идёт основная навигация глазами. */
-  .order-panel .lbl { color: var(--ink-2); }
+  .order-panel .lbl { color: var(--ink-2); }  /* Плечо и депозит — одна строка над вкладками тикета, плечо слева, депозит
+     справа. Линейка снизу висит на самой строке, а не на вложенном .kv:
+     иначе она обрывалась бы под шириной одного депозита, не доходя до плеча. */
+  .panel-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s2);
+    padding-bottom: var(--s2);
+    border-bottom: 1px solid var(--hair);
+  }
+  .panel-top .kv { padding: 0; border-bottom: 0; }
+  /* Свой список плеча вместо <select>: попап нативного select рисует браузер
+     мимо CSS — ни своих цветов, ни анимации открытия ему не дать никаким
+     классом (см. DrawingToolbar.draw-menu — тот же приём кнопки + абсолютно
+     позиционированного списка). Кнопка — тот же вывернутый вид, что был у
+     прежней плашки плеча (.cue): заливка, а не подчёркнутое поле, иначе
+     список терялся бы среди обычных инпутов панели. */
+  .lev { position: relative; }
+  .lev-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--ink);
+    color: var(--ground);
+    border: 0;
+    padding: 3px var(--s2);
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .lev-btn:hover { opacity: 0.85; }
+  /* На 2px левее зазора .lev-btn (gap: 4px) — со всем зазором стрелка держала
+     от цифры слишком много воздуха. */
+  .lev-caret { margin-left: -2px; }
+  /* Скрыт через opacity/visibility, а не через условный рендер: закрытию
+     тоже нужна анимация, а размонтированный узел её доиграть не успевает.
+     visibility в самой transition — не для плавности (её не бывает у
+     дискретных свойств), а чтобы скрытый список не ловил фокус и не
+     оказался читаем скринридером между анимациями. */
+  .lev-menu {
+    position: absolute;
+    left: 0;
+    top: 100%;
+    margin-top: 4px;
+    z-index: 20;
+    min-width: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--ground);
+    border: 1px solid var(--rule);
+    padding: 2px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-4px) scale(0.98);
+    transform-origin: top left;
+    transition: opacity 140ms ease, transform 140ms ease, visibility 140ms;
+    pointer-events: none;
+  }
+  .lev-menu.open {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+  }
+  .lev-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: 0;
+    color: var(--ink-2);
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    padding: 6px var(--s2);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .lev-item:hover { color: var(--ink); }
+  .lev-item.on { color: var(--ink); background: var(--band); }
+  /* Тип ордера (маркет / ордер / сетка) делит ширину тикета поровну — тот же
+     приём, что у .view-switch ниже графика: без flex: 1 деления держатся
+     ширины своего текста, а рамка группы, растянутая грид-колонкой панели,
+     оставляет пустой хвост после последнего. */
+  .order-tabs button { flex: 1; text-align: center; }
+  /* Мельче общего тумблера — и по высоте, и по кеглю (10px, как в карточках
+     предпросмотра ниже): переключатель типа ордера — служебная полоса над
+     полями, а не главное действие панели. Через .order-panel, чтобы перебить
+     мобильный `.seg button { padding: 10px }`, который объявлен ниже. */
+  .order-panel .order-tabs button {
+    padding: 2px var(--s2);
+    font-size: 10px;
+    line-height: 1.2;
+    letter-spacing: 0.06em;
+  }
   .order-actions { display: flex; gap: var(--s2); }
   .order-actions .btn { flex: 1; }
   /* Ползунок значения (Slider из shared/ui) — единственное текущее место
@@ -582,6 +714,9 @@
   .size-preview .kv:last-child { border-bottom: 0; }
   .size-preview .lbl,
   .size-preview .kv .n { font-size: 10px; }
+  /* Число ордеров сетки — поле в строке карточки, а не отдельный блок: цифра
+     стоит вровень с числами под ней (средняя цена входа), правым краем. */
+  .size-preview .order-count { width: 3em; text-align: right; padding: 0; font-size: 10px; }
   /* Подпись поля (риск, стоп, тейк) с числом сразу справа — процент (и для
      риска сумма в USDT) не отдельной строкой ниже и не рядом со слайдером:
      это одна и та же величина, а не два разных факта. */
@@ -603,12 +738,13 @@
   }
   /* Открытые позиции/История сделок идут обычным потоком под графиком, и
      страница прокручивается целиком, как любая другая.
-     Здесь была попытка вжать терминал ровно в высоту экрана (max-height у
-     .bt-live + flex: 1 и своя прокрутка у таблицы), чтобы график с тикетом
-     всегда оставались перед глазами. Стоило это дороже, чем давало: высоты на
-     таблицу не оставалось, а стоило задать ей пол — контент вылезал за
-     max-height, страница получала «фантомную» прокрутку, и любой диалог
-     (react-remove-scroll) обнулял её, дёргая экран наверх. */
+     В высоту экрана вжат только сам терминал (.asym.terminal выше), а не вся
+     страница. Прежняя попытка вжать в неё всё (max-height у .bt-live + flex: 1
+     и своя прокрутка у таблицы) стоила дороже, чем давала: высоты на таблицу
+     не оставалось, а стоило задать ей пол — контент вылезал за max-height,
+     страница получала «фантомную» прокрутку, и любой диалог
+     (react-remove-scroll) обнулял её, дёргая экран наверх. Поэтому таблицу
+     в этот блок не возвращать: у неё нет своей высоты, она под ним. */
   .bt-table {
     margin-top: var(--s4);
   }
@@ -2007,6 +2143,11 @@
      любого правила таблицы стилей и убивал заодно `margin-left: auto` у
      .skel-r — все заглушки числовых колонок стояли слева. */
   .skel-flush { margin-bottom: 0; }
+  /* Заглушка на всю коробку родителя (position: relative) — холст графика,
+     чья высота приходит из раскладки, а не из числа в пикселях: фиксированные
+     380px не совпадали с настоящим графиком, и при его появлении страница
+     подпрыгивала. Идёт после .skel — перебивает его height и отступ. */
+  .skel-fill { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; }
   /* Заглушка в колонке чисел прижимается вправо: цифры выровнены по правому
      краю, и полоса слева обещала бы не ту колонку, что придёт. */
   .skel-r { margin-left: auto; }
@@ -2650,6 +2791,14 @@
   .draw-bar { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--hair); padding: 0 0 var(--s1); }
   .draw-sep { width: 1px; height: auto; margin: 0 var(--s1); }
   .draw-menu { left: 0; top: 100%; }
+  /* Кнопки шага и скорости — компактнее и в ряд, переключатель таблицы — своей
+     строкой на всю ширину и с прокруткой вбок: три длинные подписи на
+     телефоне не помещаются, а окно терминала (график + кнопки) обязано
+     остаться в высоте экрана, и лишняя строка кнопок стоит графику высоты. */
+  .replay-controls { gap: var(--s2); }
+  .replay-controls .seg button { padding: 8px var(--s2); }
+  .replay-controls .view-switch { flex: 1 0 100%; margin-left: 0; overflow-x: auto; }
+  .replay-controls .view-switch button { flex: 1 0 auto; }
   :root {
     --t-xl: 26px;
     --t-l: 19px;

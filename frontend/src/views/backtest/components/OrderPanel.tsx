@@ -1,22 +1,27 @@
 'use client';
 
-import { useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useTranslations } from 'next-intl';
+import { ChevronDown } from 'lucide-react';
 import { Button } from '@/shared/ui/Button';
 import { Field, Input } from '@/shared/ui/Field';
 import { KeyValue } from '@/shared/ui/Lookup';
+import { Seg } from '@/shared/ui/Seg';
 import { Slider } from '@/shared/ui/Slider';
 import { cn } from '@/shared/lib/utils/css';
 import { fmtPctSigned, formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
 import type { Direction } from '../api/types';
 import {
+  applyEntryChange,
   applyStopChange,
   curvedSliderPos,
   curvedSliderValue,
   draftTakeFits,
   fromScreen,
+  gridPrices,
   impliedDirection,
   levelSliderRange,
+  previewGrid,
   previewSize,
   riskAmount,
   signedPctFromStop,
@@ -26,7 +31,6 @@ import {
   toInputPrice,
   toScreen,
 } from '../lib/money';
-import { LeverageModal } from './LeverageModal';
 
 /** Поля панели — строками, как их набирает человек, и в экранных ценах. */
 export interface Draft {
@@ -36,10 +40,39 @@ export interface Draft {
   leverage: string;
 }
 
+/** Черновик одиночного отложенного ордера на вход: та же сетка из одного
+ * уровня (см. ScaledDraft), поэтому и на сервер уходит тем же запросом. */
+export interface LimitDraft {
+  risk: string;
+  stop: string;
+  take: string;
+  entry: string;
+}
+
+/** Черновик сетки на вход (Scaled order) — риск общий на всю сетку, поровну по
+ * уровням; плечо общее с рыночной вкладкой (см. Draft.leverage), своего нет. */
+export interface ScaledDraft {
+  risk: string;
+  stop: string;
+  take: string;
+  upper: string;
+  lower: string;
+  count: string;
+}
+
+/** Какой тикет открыт. Живёт у родителя: переключение чистит уровни
+ * остальных вкладок, чтобы их линии не оставались на графике. */
+export type OrderTab = 'market' | 'order' | 'scaled';
+
+const MIN_GRID_ORDERS = 1;
+const MAX_GRID_ORDERS = 10;
+
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const MIN_LEVERAGE = 1;
 const MAX_LEVERAGE = 100;
 const MAX_RISK_PCT = 10;
+/** Плечо — фиксированный список значений, не произвольное целое 1—100. */
+const LEVERAGE_OPTIONS = [1, 3, 5, 10, 25, 50, 100];
 
 /**
  * Вход, уровни, риск и плечо — панель никогда не смотрит на то, что уже открыто: сама
@@ -57,34 +90,71 @@ const MAX_RISK_PCT = 10;
  * (`applyStopChange`).
  */
 export function OrderPanel({
+  tab,
+  onTab,
   draft,
   onDraft,
+  limitDraft,
+  onLimitDraft,
+  scaledDraft,
+  onScaledDraft,
   scale,
   price,
   balance,
   disabled,
   hint,
+  limitHint,
+  scaledHint,
   onOpen,
+  onOpenLimit,
+  onOpenScaled,
   onLeverageCommit,
 }: {
+  tab: OrderTab;
+  onTab: (tab: OrderTab) => void;
   draft: Draft;
   onDraft: (d: Draft) => void;
+  limitDraft: LimitDraft;
+  onLimitDraft: (d: LimitDraft) => void;
+  scaledDraft: ScaledDraft;
+  onScaledDraft: (d: ScaledDraft) => void;
   scale: number;
   /** Настоящая цена последней показанной минутки. */
   price: number | null;
   balance: number;
-  /** Кнопки Лонг/Шорт. */
+  /** Кнопки Лонг/Шорт (всех вкладок). */
   disabled: boolean;
   hint: string | null;
+  limitHint: string | null;
+  scaledHint: string | null;
   onOpen: (direction: Direction) => void;
-  /** Плечо, выбранное в диалоге, запоминается как значение по умолчанию для
-   * следующей сделки (см. useDefaultLeverage) — вызывается закрытием диалога,
-   * а не каждым движением слайдера внутри него. */
+  onOpenLimit: (direction: Direction) => void;
+  onOpenScaled: (direction: Direction) => void;
+  /** Плечо, выбранное в списке, запоминается как значение по умолчанию для
+   * следующей сделки (см. useDefaultLeverage) — зовётся сразу же выбором пункта,
+   * дожидаться отдельного подтверждения не у чего, список закрывается сам.
+   * Общее на все вкладки: плечо — настройка сессии, не конкретного ордера
+   * (см. setLeverage на сервере). */
   onLeverageCommit: (leverage: number) => void;
 }) {
   const t = useTranslations('backtest');
-  const set = (key: keyof Draft) => (e: ChangeEvent<HTMLInputElement>) => onDraft({ ...draft, [key]: e.target.value });
+  const setScaled = (key: keyof ScaledDraft) => (e: ChangeEvent<HTMLInputElement>) =>
+    onScaledDraft({ ...scaledDraft, [key]: e.target.value });
+
+  // Свой список вместо <select>: нативный попап меню браузер рисует сам, вне
+  // досягаемости CSS — ни анимации открытия, ни своих цветов у него не будет
+  // никаким классом. Закрытие по клику вне — тем же приёмом, что и у групп
+  // инструментов рисования (DrawingToolbar).
   const [leverageOpen, setLeverageOpen] = useState(false);
+  const leverageRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!leverageOpen) return;
+    const onDown = (e: PointerEvent) => {
+      if (!leverageRef.current?.contains(e.target as Node)) setLeverageOpen(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [leverageOpen]);
 
   const stop = Number(draft.stop);
   const take = draft.take.trim() ? Number(draft.take) : null;
@@ -136,14 +206,17 @@ export function OrderPanel({
     if (screenPrice == null) return;
     onDraft({ ...draft, ...applyStopChange(draft, toInputPrice(newStopScreen), screenPrice, null) });
   };
-  const setStopText = (e: ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value;
+
+  /** Вход отложенного ордера получил новую цену — стоп и тейк переезжают вслед
+   * за ним (`applyEntryChange`), а не остаются висеть на старой абсолютной цене. */
+  const setLimitEntry = (newEntry: string) => {
     if (screenPrice == null) {
-      onDraft({ ...draft, stop: raw });
+      onLimitDraft({ ...limitDraft, entry: newEntry });
       return;
     }
-    onDraft({ ...draft, ...applyStopChange(draft, raw, screenPrice, null) });
+    onLimitDraft({ ...limitDraft, ...applyEntryChange(limitDraft, newEntry, screenPrice) });
   };
+  const setLimitEntryText = (e: ChangeEvent<HTMLInputElement>) => setLimitEntry(e.target.value);
 
   const preview =
     price != null && stop > 0
@@ -151,17 +224,174 @@ export function OrderPanel({
       : null;
   const riskUsd = riskAmount(balance, risk);
 
+  // Одиночный отложенный ордер: то же, что сетка из одного уровня, поэтому
+  // цена входа здесь одна, а не диапазон — сторону она же и задаёт.
+  const lRisk = Number(limitDraft.risk);
+  const lStop = Number(limitDraft.stop);
+  const lTake = limitDraft.take.trim() ? Number(limitDraft.take) : null;
+  const lEntry = limitDraft.entry.trim() ? Number(limitDraft.entry) : null;
+  const lDirection = screenPrice != null ? impliedDirection(null, lEntry ?? 0, null, screenPrice) : null;
+  // Цена входа ходит в обе стороны от текущей — той же механикой, что стоп в
+  // «Маркете» (`stopFromSignedPct`): центр трека — цена, вправо цена входа
+  // ниже (лимит на покупку, лонг), влево выше (лимит на продажу, шорт).
+  // Односторонний диапазон (`levelSliderRange`) тут не годится: у одиночного
+  // ордера нет второго уровня, относительно которого сторона была бы занята.
+  const lEntrySignedPct =
+    screenPrice != null ? clamp(signedPctFromStop(lEntry || screenPrice, screenPrice), -STOP_RISK_PCT, STOP_RISK_PCT) : null;
+  const lEntryPos = lEntrySignedPct != null ? curvedSliderPos(lEntrySignedPct, -STOP_RISK_PCT, STOP_RISK_PCT, 0) : null;
+  /**
+   * Стоп и тейк отложенного ордера отсчитываются от ЕГО цены, а не от текущей:
+   * сделка откроется по ней, ею же меряется риск (|вход − стоп|), и она же
+   * решает, по верную ли сторону стоит уровень (`checkGridLevels`). Со шкалой
+   * от рыночной цены стоп лимитки, стоящей ниже рынка, в ±7% вокруг рынка
+   * просто не попадал бы на верную сторону — его было «не поставить».
+   *
+   * Сторону при этом решать нечем, кроме самой цены ордера: выше рынка — это
+   * продажа (шорт), и стоп идёт ещё выше; ниже рынка — покупка (лонг), и стоп
+   * ниже входа. Поэтому диапазоны обоих уровней односторонние
+   * (`levelSliderRange`), и поставить стоп не по ту сторону нельзя в принципе,
+   * а не «можно, но потом откажет проверка».
+   */
+  const lAnchor = lEntry != null && lEntry > 0 ? lEntry : screenPrice;
+  const lStopRange = lAnchor != null ? levelSliderRange('stop', lAnchor, lDirection) : null;
+  const lStopVal = lStopRange && lAnchor != null ? clamp(lStop || lAnchor, lStopRange.min, lStopRange.max) : null;
+  const lStopPos =
+    lStopRange && lStopVal != null && lAnchor != null ? curvedSliderPos(lStopVal, lStopRange.min, lStopRange.max, lAnchor) : null;
+  const lStopSliderMin = lStopRange && lAnchor != null && lStopRange.min === lAnchor ? 0 : -100;
+  const lStopSliderMax = lStopRange && lAnchor != null && lStopRange.max === lAnchor ? 0 : 100;
+  const lStopPct = lAnchor && lStop > 0 ? ((lStop - lAnchor) / lAnchor) * 100 : null;
+  const lTakeRange = lAnchor != null ? levelSliderRange('take', lAnchor, lDirection) : null;
+  const lTakeSet = lTake != null && lTake > 0;
+  const lTakeVal = lTakeRange && lAnchor != null ? clamp(lTake ?? lAnchor, lTakeRange.min, lTakeRange.max) : null;
+  const lTakePos =
+    lTakeRange && lTakeVal != null && lAnchor != null ? curvedSliderPos(lTakeVal, lTakeRange.min, lTakeRange.max, lAnchor) : null;
+  const lTakeSliderMin = lTakeRange && lAnchor != null && lTakeRange.min === lAnchor ? 0 : -100;
+  const lTakeSliderMax = lTakeRange && lAnchor != null && lTakeRange.max === lAnchor ? 0 : 100;
+  const lTakePct = lAnchor ? (((lTakeSet ? lTake : lAnchor) - lAnchor) / lAnchor) * 100 : null;
+  const lTakeFits = !lTakeSet || lAnchor == null || draftTakeFits(lStop, lTake, lAnchor);
+  // Размер — от цены самого ордера, а не от текущей: исполнится он по ней.
+  const lPreview =
+    lEntry != null && lEntry > 0 && lStop > 0 && lDirection
+      ? previewSize(balance, lRisk, fromScreen(lEntry, scale), fromScreen(lStop, scale), leverage, lDirection)
+      : null;
+
+  // Сетка на вход (Scaled): риск, стоп и тейк — те же поля, что у Market, но
+  // на всю сетку целиком; направление решают Верх/Низ входа тем же приёмом,
+  // что стоп у Market (impliedDirection), а не отдельная кнопка стороны.
+  const sRisk = Number(scaledDraft.risk);
+  const sStop = Number(scaledDraft.stop);
+  const sTake = scaledDraft.take.trim() ? Number(scaledDraft.take) : null;
+  const sCount = clamp(Math.round(Number(scaledDraft.count) || MIN_GRID_ORDERS), MIN_GRID_ORDERS, MAX_GRID_ORDERS);
+  const sUpper = scaledDraft.upper.trim() ? Number(scaledDraft.upper) : null;
+  const sLower = scaledDraft.lower.trim() ? Number(scaledDraft.lower) : null;
+  const sDirection = screenPrice != null ? impliedDirection(null, sLower ?? sUpper ?? 0, sUpper, screenPrice) : null;
+  // Диапазон на оба поля — ВСЕГДА симметричный ±7% вокруг цены, тем же
+  // приёмом, что и у стопа в Market (там слайдер тоже всегда −100…100): каждая
+  // граница крутится в обе стороны от цены независимо от того, куда уже
+  // сдвинута другая. Сужать его по sDirection нельзя — direction сам
+  // считается по уже введённой границе, и узкий с первого же движения
+  // диапазон запирал бы вторую, ещё нетронутую границу в ту же сторону,
+  // хотя вторая может стоять и по другую сторону цены (лесенка входов ниже
+  // цены для лонга, выше — для шорта, но сама эта сторона решается ПОСЛЕ,
+  // не до). Направление, которое эти границы уже задали, сужает только стоп
+  // и тейк сетки ниже — они вторичны по отношению к границам входа, как тейк
+  // вторичен по отношению к стопу в Market.
+  const sRange = screenPrice != null ? levelSliderRange('stop', screenPrice, null) : null;
+  const sUpperVal = sRange ? clamp(sUpper ?? screenPrice!, sRange.min, sRange.max) : null;
+  const sLowerVal = sRange ? clamp(sLower ?? screenPrice!, sRange.min, sRange.max) : null;
+  const sUpperPos =
+    sRange && sUpperVal != null && screenPrice != null ? curvedSliderPos(sUpperVal, sRange.min, sRange.max, screenPrice) : null;
+  const sLowerPos =
+    sRange && sLowerVal != null && screenPrice != null ? curvedSliderPos(sLowerVal, sRange.min, sRange.max, screenPrice) : null;
+  // Средняя точка входа сетки — если исполнятся оба уровня, это и есть цена,
+  // от которой отсчитывается риск: тот же приём, что у screenPrice в Market,
+  // только сама точка не рыночная, а середина верх/низ входа. Общий якорь на
+  // стоп и тейк, не свой у каждого: levelSliderRange сама разводит их по
+  // разные стороны от него (см. belowSide там же).
+  const sAvgEntry = sUpperVal != null && sLowerVal != null ? (sUpperVal + sLowerVal) / 2 : null;
+  const sStopAnchor = sAvgEntry ?? screenPrice;
+  const sTakeAnchor = sAvgEntry ?? screenPrice;
+  const sStopRange = sStopAnchor != null ? levelSliderRange('stop', sStopAnchor, sDirection) : null;
+  const sStopVal = sStopRange && sStopAnchor != null ? clamp(sStop || sStopAnchor, sStopRange.min, sStopRange.max) : null;
+  const sStopPos =
+    sStopRange && sStopVal != null && sStopAnchor != null
+      ? curvedSliderPos(sStopVal, sStopRange.min, sStopRange.max, sStopAnchor)
+      : null;
+  const sStopSliderMin = sStopRange && sStopAnchor != null && sStopRange.min === sStopAnchor ? 0 : -100;
+  const sStopSliderMax = sStopRange && sStopAnchor != null && sStopRange.max === sStopAnchor ? 0 : 100;
+  const sStopPct = sStopAnchor && sStop > 0 ? ((sStop - sStopAnchor) / sStopAnchor) * 100 : null;
+  const sTakeRange = sTakeAnchor != null ? levelSliderRange('take', sTakeAnchor, sDirection) : null;
+  const sTakeSet = sTake != null && sTake > 0;
+  const sTakeVal = sTakeRange && sTakeAnchor != null ? clamp(sTake ?? sTakeAnchor, sTakeRange.min, sTakeRange.max) : null;
+  const sTakePos =
+    sTakeRange && sTakeVal != null && sTakeAnchor != null
+      ? curvedSliderPos(sTakeVal, sTakeRange.min, sTakeRange.max, sTakeAnchor)
+      : null;
+  const sTakeSliderMin = sTakeRange && sTakeAnchor != null && sTakeRange.min === sTakeAnchor ? 0 : -100;
+  const sTakeSliderMax = sTakeRange && sTakeAnchor != null && sTakeRange.max === sTakeAnchor ? 0 : 100;
+  const sTakePct = sTakeAnchor ? (((sTakeSet ? sTake : sTakeAnchor) - sTakeAnchor) / sTakeAnchor) * 100 : null;
+  const sTakeFits = !sTakeSet || sTakeAnchor == null || draftTakeFits(sStop, sTake, sTakeAnchor);
+  // Реальные цены уровней — только для предпросмотра; те же самые пойдут на
+  // сервер при отправке (см. onOpenScaled в SessionScreen).
+  const sPrices =
+    price != null && sUpperVal != null && sLowerVal != null
+      ? gridPrices(Math.min(sLowerVal, sUpperVal), Math.max(sLowerVal, sUpperVal), sCount).map((p) => fromScreen(p, scale))
+      : [];
+  const sPreview =
+    sPrices.length > 0 && sStop > 0 && sDirection
+      ? previewGrid(balance, sRisk, sPrices, fromScreen(sStop, scale), leverage, sDirection)
+      : null;
+
   return (
     <div className="order-panel">
-      <div className="fld-head">
-        <p className="lbl">{t('orderType')}</p>
-        <Button variant="bare" tight className="cue" onClick={() => setLeverageOpen(true)}>
-          {t('leverageLabel')} {leverage.toFixed(0)}×
-        </Button>
+      <div className="panel-top">
+        <div className="lev" ref={leverageRef}>
+          <Button
+            variant="none"
+            className="lev-btn"
+            aria-haspopup="listbox"
+            aria-expanded={leverageOpen}
+            aria-label={t('leverageLabel')}
+            onClick={() => setLeverageOpen((v) => !v)}
+          >
+            {leverage}×<ChevronDown size={12} className="lev-caret" />
+          </Button>
+          <div className={cn('lev-menu', leverageOpen && 'open')} role="listbox" aria-label={t('leverageLabel')}>
+            {LEVERAGE_OPTIONS.map((v) => (
+              <Button
+                key={v}
+                variant="none"
+                role="option"
+                aria-selected={v === leverage}
+                className={cn('lev-item', v === leverage && 'on')}
+                onClick={() => {
+                  setLeverageOpen(false);
+                  onDraft({ ...draft, leverage: toInput(v) });
+                  onLeverageCommit(v);
+                }}
+              >
+                {v}×
+              </Button>
+            ))}
+          </div>
+        </div>
+        <KeyValue label={t('balance')}>{formatPriceGrouped(balance)} USDT</KeyValue>
       </div>
 
-      <KeyValue label={t('balance')}>{formatPriceGrouped(balance)} USDT</KeyValue>
+      <Seg
+        className="order-tabs"
+        options={[
+          { value: 'market' as const, label: t('orderTabMarket') },
+          { value: 'order' as const, label: t('orderTabOrder') },
+          { value: 'scaled' as const, label: t('orderTabScaled') },
+        ]}
+        value={tab}
+        onChange={onTab}
+        ariaLabel={t('orderType')}
+      />
 
+      {tab === 'market' && (
+        <>
       <Field
         label={
           <span className="fld-head">
@@ -193,23 +423,22 @@ export function OrderPanel({
           </span>
         }
       >
-        {(id) => (
-          <>
-            {takeRange && takePos != null && screenPrice != null && (
-              <Slider
-                value={takePos}
-                min={takeSliderMin}
-                max={takeSliderMax}
-                step={0.5}
-                onChange={(pos) =>
-                  onDraft({ ...draft, take: toInputPrice(curvedSliderValue(pos, takeRange.min, takeRange.max, screenPrice)) })
-                }
-                aria-label={t('take')}
-              />
-            )}
-            <Input id={id} full inputMode="decimal" value={draft.take} onChange={set('take')} />
-          </>
-        )}
+        {() =>
+          takeRange &&
+          takePos != null &&
+          screenPrice != null && (
+            <Slider
+              value={takePos}
+              min={takeSliderMin}
+              max={takeSliderMax}
+              step={0.5}
+              onChange={(pos) =>
+                onDraft({ ...draft, take: pos === 0 ? '' : toInputPrice(curvedSliderValue(pos, takeRange.min, takeRange.max, screenPrice)) })
+              }
+              aria-label={t('take')}
+            />
+          )
+        }
       </Field>
       <Field
         label={
@@ -219,21 +448,19 @@ export function OrderPanel({
           </span>
         }
       >
-        {(id) => (
-          <>
-            {screenPrice != null && stopPos != null && (
-              <Slider
-                value={stopPos}
-                min={-100}
-                max={100}
-                step={0.5}
-                onChange={(pos) => setStop(stopFromSignedPct(curvedSliderValue(pos, -STOP_RISK_PCT, STOP_RISK_PCT, 0), screenPrice))}
-                aria-label={t('stop')}
-              />
-            )}
-            <Input id={id} full inputMode="decimal" value={draft.stop} onChange={setStopText} />
-          </>
-        )}
+        {() =>
+          screenPrice != null &&
+          stopPos != null && (
+            <Slider
+              value={stopPos}
+              min={-100}
+              max={100}
+              step={0.5}
+              onChange={(pos) => setStop(stopFromSignedPct(curvedSliderValue(pos, -STOP_RISK_PCT, STOP_RISK_PCT, 0), screenPrice))}
+              aria-label={t('stop')}
+            />
+          )
+        }
       </Field>
 
       <div className="size-preview">
@@ -250,16 +477,278 @@ export function OrderPanel({
           {t('short')}
         </Button>
       </div>
+        </>
+      )}
 
-      {leverageOpen && (
-        <LeverageModal
-          leverage={leverage}
-          onChange={(v) => onDraft({ ...draft, leverage: toInput(v) })}
-          onClose={() => {
-            setLeverageOpen(false);
-            onLeverageCommit(leverage);
-          }}
-        />
+      {tab === 'order' && (
+        <>
+          <Field
+            label={
+              <span className="fld-head">
+                <span className="fld-left">
+                  <span className="fld-val"></span>
+                  <span>{t('risk')} {(lRisk || 0).toFixed(1)}%</span>
+                </span>
+                {riskAmount(balance, lRisk) != null && (
+                  <span className="fld-val">{formatPriceGrouped(riskAmount(balance, lRisk)!)} USDT</span>
+                )}
+              </span>
+            }
+          >
+            {() => (
+              <Slider
+                value={curvedSliderPos(clamp(lRisk || 0, 0, MAX_RISK_PCT), 0, MAX_RISK_PCT, 0)}
+                min={0}
+                max={100}
+                step={0.25}
+                onChange={(pos) => onLimitDraft({ ...limitDraft, risk: toInput(curvedSliderValue(pos, 0, MAX_RISK_PCT, 0)) })}
+                aria-label={t('risk')}
+              />
+            )}
+          </Field>
+
+          <Field
+            label={
+              <span className="fld-head">
+                <span>{t('entryPrice')}</span>
+                {lEntrySignedPct != null && <span className="fld-val">{fmtPctSigned(-lEntrySignedPct)}</span>}
+              </span>
+            }
+          >
+            {(id) => (
+              <>
+                {lEntryPos != null && screenPrice != null && (
+                  <Slider
+                    value={lEntryPos}
+                    min={-100}
+                    max={100}
+                    step={0.5}
+                    onChange={(pos) =>
+                      setLimitEntry(toInputPrice(stopFromSignedPct(curvedSliderValue(pos, -STOP_RISK_PCT, STOP_RISK_PCT, 0), screenPrice)))
+                    }
+                    aria-label={t('entryPrice')}
+                  />
+                )}
+                <Input id={id} full inputMode="decimal" value={limitDraft.entry} onChange={setLimitEntryText} />
+              </>
+            )}
+          </Field>
+
+          <Field
+            label={
+              <span className="fld-head">
+                <span>{t('take')}</span>
+                {lTakePct != null && <span className={cn('fld-val', !lTakeFits && 'neg')}>{fmtPctSigned(lTakePct)}</span>}
+              </span>
+            }
+          >
+            {() =>
+              lTakeRange &&
+              lTakePos != null &&
+              lAnchor != null && (
+                <Slider
+                  value={lTakePos}
+                  min={lTakeSliderMin}
+                  max={lTakeSliderMax}
+                  step={0.5}
+                  onChange={(pos) =>
+                    onLimitDraft({
+                      ...limitDraft,
+                      take: pos === 0 ? '' : toInputPrice(curvedSliderValue(pos, lTakeRange.min, lTakeRange.max, lAnchor)),
+                    })
+                  }
+                  aria-label={t('take')}
+                />
+              )
+            }
+          </Field>
+          <Field
+            label={
+              <span className="fld-head">
+                <span>{t('stop')}</span>
+                {lStopPct != null && <span className="fld-val">{fmtPctSigned(lStopPct)}</span>}
+              </span>
+            }
+          >
+            {() =>
+              lStopRange &&
+              lStopPos != null &&
+              lAnchor != null && (
+                <Slider
+                  value={lStopPos}
+                  min={lStopSliderMin}
+                  max={lStopSliderMax}
+                  step={0.5}
+                  onChange={(pos) =>
+                    onLimitDraft({ ...limitDraft, stop: toInputPrice(curvedSliderValue(pos, lStopRange.min, lStopRange.max, lAnchor)) })
+                  }
+                  aria-label={t('stop')}
+                />
+              )
+            }
+          </Field>
+
+          <div className="size-preview">
+            <KeyValue label={t('sizeCoin')}>{lPreview ? formatQty(Number(lPreview.qty.toFixed(3))) : '—'}</KeyValue>
+            <KeyValue label={t('notionalLabel')}>{lPreview ? `${formatPriceGrouped(lPreview.notional)} USDT` : '—'}</KeyValue>
+          </div>
+          {limitHint && <p className="neg">{limitHint}</p>}
+
+          <div className="order-actions">
+            <Button variant="long" onClick={() => onOpenLimit('long')} disabled={disabled || balance <= 0}>
+              {t('long')}
+            </Button>
+            <Button variant="short" onClick={() => onOpenLimit('short')} disabled={disabled || balance <= 0}>
+              {t('short')}
+            </Button>
+          </div>
+        </>
+      )}
+
+      {tab === 'scaled' && (
+        <>
+          <Field
+            label={
+              <span className="fld-head">
+                <span className="fld-left">
+                  <span className="fld-val"></span>
+                  <span>{t('risk')} {(sRisk || 0).toFixed(1)}%</span>
+                </span>
+                {riskAmount(balance, sRisk) != null && (
+                  <span className="fld-val">{formatPriceGrouped(riskAmount(balance, sRisk)!)} USDT</span>
+                )}
+              </span>
+            }
+          >
+            {() => (
+              <Slider
+                value={curvedSliderPos(clamp(sRisk || 0, 0, MAX_RISK_PCT), 0, MAX_RISK_PCT, 0)}
+                min={0}
+                max={100}
+                step={0.25}
+                onChange={(pos) => onScaledDraft({ ...scaledDraft, risk: toInput(curvedSliderValue(pos, 0, MAX_RISK_PCT, 0)) })}
+                aria-label={t('risk')}
+              />
+            )}
+          </Field>
+
+          <Field label={t('entryUpper')}>
+            {() =>
+              sRange &&
+              sUpperPos != null &&
+              screenPrice != null && (
+                <Slider
+                  value={sUpperPos}
+                  min={-100}
+                  max={100}
+                  step={0.5}
+                  onChange={(pos) =>
+                    onScaledDraft({ ...scaledDraft, upper: toInputPrice(curvedSliderValue(pos, sRange.min, sRange.max, screenPrice)) })
+                  }
+                  aria-label={t('entryUpper')}
+                />
+              )
+            }
+          </Field>
+          <Field label={t('entryLower')}>
+            {() =>
+              sRange &&
+              sLowerPos != null &&
+              screenPrice != null && (
+                <Slider
+                  value={sLowerPos}
+                  min={-100}
+                  max={100}
+                  step={0.5}
+                  onChange={(pos) =>
+                    onScaledDraft({ ...scaledDraft, lower: toInputPrice(curvedSliderValue(pos, sRange.min, sRange.max, screenPrice)) })
+                  }
+                  aria-label={t('entryLower')}
+                />
+              )
+            }
+          </Field>
+          <Field
+            label={
+              <span className="fld-head">
+                <span>{t('take')}</span>
+                {sTakePct != null && <span className={cn('fld-val', !sTakeFits && 'neg')}>{fmtPctSigned(sTakePct)}</span>}
+              </span>
+            }
+          >
+            {() =>
+              sTakeRange &&
+              sTakePos != null &&
+              sTakeAnchor != null && (
+                <Slider
+                  value={sTakePos}
+                  min={sTakeSliderMin}
+                  max={sTakeSliderMax}
+                  step={0.5}
+                  onChange={(pos) =>
+                    onScaledDraft({
+                      ...scaledDraft,
+                      take: pos === 0 ? '' : toInputPrice(curvedSliderValue(pos, sTakeRange.min, sTakeRange.max, sTakeAnchor)),
+                    })
+                  }
+                  aria-label={t('take')}
+                />
+              )
+            }
+          </Field>
+          <Field
+            label={
+              <span className="fld-head">
+                <span>{t('stop')}</span>
+                {sStopPct != null && <span className="fld-val">{fmtPctSigned(sStopPct)}</span>}
+              </span>
+            }
+          >
+            {() =>
+              sStopRange &&
+              sStopPos != null &&
+              sStopAnchor != null && (
+                <Slider
+                  value={sStopPos}
+                  min={sStopSliderMin}
+                  max={sStopSliderMax}
+                  step={0.5}
+                  onChange={(pos) =>
+                    onScaledDraft({ ...scaledDraft, stop: toInputPrice(curvedSliderValue(pos, sStopRange.min, sStopRange.max, sStopAnchor)) })
+                  }
+                  aria-label={t('stop')}
+                />
+              )
+            }
+          </Field>
+
+          <div className="size-preview">
+            <KeyValue label={t('ordersCount')} control valueClassName="">
+              <Input
+                className="order-count"
+                inputMode="numeric"
+                value={scaledDraft.count}
+                onChange={setScaled('count')}
+                aria-label={t('ordersCount')}
+              />
+            </KeyValue>
+            <KeyValue label={t('gridAvgEntry')}>{sAvgEntry != null ? formatPriceGrouped(sAvgEntry) : '—'}</KeyValue>
+          </div>
+          <div className="size-preview">
+            <KeyValue label={t('sizeCoin')}>{sPreview ? formatQty(Number(sPreview.qty.toFixed(3))) : '—'}</KeyValue>
+            <KeyValue label={t('notionalLabel')}>{sPreview ? `${formatPriceGrouped(sPreview.notional)} USDT` : '—'}</KeyValue>
+          </div>
+          {scaledHint && <p className="neg">{scaledHint}</p>}
+
+          <div className="order-actions">
+            <Button variant="long" onClick={() => onOpenScaled('long')} disabled={disabled || balance <= 0}>
+              {t('long')}
+            </Button>
+            <Button variant="short" onClick={() => onOpenScaled('short')} disabled={disabled || balance <= 0}>
+              {t('short')}
+            </Button>
+          </div>
+        </>
       )}
     </div>
   );

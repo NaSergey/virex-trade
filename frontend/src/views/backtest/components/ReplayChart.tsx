@@ -19,7 +19,8 @@ import {
 import type { Candle } from '../lib/candles';
 
 const W = 720;
-const H = 380;
+/** Высота холста до первого замера коробки; дальше её задаёт сама коробка (см. H в компоненте). */
+const DEFAULT_H = 380;
 const PT = 14;
 const PB = 24;
 /** Полоса цены, пока ширину ещё нечем измерить (первый рендер до calibRef) —
@@ -81,7 +82,16 @@ const PRICE_DRAG_PX = 260;
     сами свечи, ради которых график и открыт. */
 const MARKER_LABELS_MAX = 8;
 
-export type LevelKind = 'entry' | 'stop' | 'take' | 'liq' | 'limitClose';
+export type LevelKind =
+  | 'entry'
+  | 'stop'
+  | 'take'
+  | 'liq'
+  | 'limitClose'
+  | 'orderEntry'
+  | 'gridUpper'
+  | 'gridLower'
+  | 'gridPending';
 
 /**
  * Отметка сделки на графике: где вошли и где вышли. Цена своя, а не свечная
@@ -121,6 +131,10 @@ const LEVEL_COLOR: Record<LevelKind, string> = {
   take: 'var(--profit)',
   liq: 'var(--loss)',
   limitClose: 'var(--color-muted)',
+  orderEntry: 'var(--color-fg)',
+  gridUpper: 'var(--color-fg)',
+  gridLower: 'var(--color-fg)',
+  gridPending: 'var(--color-muted)',
 };
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -130,7 +144,7 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
  *
  * Своё SVG, как все графики продукта: библиотеке пришлось бы переопределять
  * цвета, шрифты и рамки по одному свойству. Холст масштабируется целиком,
- * пиксельные мерки переводятся в единицы холста через u = W / boxW.
+ * пиксельные мерки переводятся в единицы холста через u = W / box.w.
  *
  * Окно показа (сколько свечей видно и какие) — состояние самого графика: пан
  * (драг) и зум двигают его напрямую, «живой край» включён по умолчанию и
@@ -211,7 +225,7 @@ export const ReplayChart = memo(function ReplayChart({
   // заводим: два графика на странице получили бы один id и один обрезался бы
   // по чужой области.
   const clipId = `replay-plot-${useId().replace(/:/g, '')}`;
-  const [boxW, setBoxW] = useState(0);
+  const [box, setBox] = useState({ w: 0, h: 0 });
   const [drag, setDrag] = useState<{ id: string; kind: LevelKind; tradeId?: string; price: number } | null>(null);
   // Курсор — единственная подсказка, что фон вообще можно тащить: без неё
   // рабочий пан на глаз неотличим от графика, прибитого к живому краю.
@@ -284,21 +298,29 @@ export const ReplayChart = memo(function ReplayChart({
     autoLo: 0,
     autoHi: 1,
     pw: W - DEFAULT_PR,
+    h: DEFAULT_H,
   });
 
-  // До отрисовки: с boxW = 0 первый кадр шёл бы в масштабе u = 1 — крупные подписи и
+  // До отрисовки: с box.w = 0 первый кадр шёл бы в масштабе u = 1 — крупные подписи и
   // другая ширина полосы цены, и следующим кадром весь график съезжал бы на место.
   useLayoutEffect(() => {
     const el = svgRef.current;
     if (!el) return;
-    setBoxW(el.getBoundingClientRect().width);
-    const ro = new ResizeObserver(([entry]) => setBoxW(entry.contentRect.width));
+    const measure = (w: number, h: number) => setBox((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
+    const r = el.getBoundingClientRect();
+    measure(r.width, r.height);
+    const ro = new ResizeObserver(([entry]) => measure(entry.contentRect.width, entry.contentRect.height));
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
-  const u = boxW > 0 ? W / boxW : 1;
+  const u = box.w > 0 ? W / box.w : 1;
   const px = (n: number) => n * u;
+  // Высота холста — по форме самой коробки, а не константой: график заполняет то, что
+  // ему отдала раскладка (остаток экрана над кнопками шага), и `viewBox` совпадает с
+  // ней по пропорции — без полей по краям и без растяжения текста. Ширина по-прежнему W,
+  // поэтому мерки в пикселях (px) остаются теми же.
+  const H = box.w > 0 && box.h > 0 ? box.h * u : DEFAULT_H;
 
   /**
    * Ширина полосы цены считается по самим цифрам (см. PR ниже), а не
@@ -349,8 +371,9 @@ export const ReplayChart = memo(function ReplayChart({
     // latestRef, а не из замыкания, как и остальные быстро устаревающие поля.
     if (xFrac > latestRef.current.pw / W) {
       const { lo: curLo, hi: curHi, autoLo, autoHi } = latestRef.current;
-      const plotH = H - PT - PB;
-      const yFrac = clamp(((e.clientY - rect.top) / rect.height) * H - PT, 0, plotH) / plotH;
+      const h = latestRef.current.h;
+      const plotH = h - PT - PB;
+      const yFrac = clamp(((e.clientY - rect.top) / rect.height) * h - PT, 0, plotH) / plotH;
       const anchor = curHi - yFrac * (curHi - curLo);
       const autoRange = autoHi - autoLo;
       // Направление развёрнуто относительно горизонтального зума нарочно:
@@ -547,7 +570,7 @@ export const ReplayChart = memo(function ReplayChart({
 
   const slot = count > 0 ? PW / count : PW;
   useEffect(() => {
-    latestRef.current = { frameStart, count, candles, lo, hi, autoLo, autoHi, pw: PW };
+    latestRef.current = { frameStart, count, candles, lo, hi, autoLo, autoHi, pw: PW, h: H };
   });
   // Позиция свечи по её АБСОЛЮТНОМУ индексу в candles — всегда «верная»
   // (без анимационного отставания): сам сдвиг окна визуально доигрывает FLIP
@@ -856,7 +879,7 @@ export const ReplayChart = memo(function ReplayChart({
       }
     }
     return { upWicks, upBodies, downWicks, downBodies };
-  }, [candles, startIdx, endIdx, frameStart, slot, lo, hi, bodyW, u, animT]);
+  }, [candles, startIdx, endIdx, frameStart, slot, lo, hi, bodyW, u, animT, H]);
 
   let animBar: { x: number; wickTop: number; wickBottom: number; top: number; height: number; color: string } | null = null;
   if (anim) {
@@ -1085,8 +1108,15 @@ export const ReplayChart = memo(function ReplayChart({
               <text x={px(4)} y={y(price) - px(4)} fill={LEVEL_COLOR[l.kind]} fontSize={px(10)} fontFamily="var(--font-mono)">
                 {/* Вход и ликвидация подписаны ценой — это точки отсчёта, не
                     результат. Стоп, тейк и лимит-ордер подписаны результатом в
-                    USDT: цену и так видно по линии и высоте над свечами. */}
-                {l.kind === 'entry' || l.kind === 'liq'
+                    USDT: цену и так видно по линии и высоте над свечами. Уровни
+                    сетки на вход — тоже ценой: сделки ещё нет, посчитать
+                    результат не от чего. */}
+                {l.kind === 'entry' ||
+                l.kind === 'liq' ||
+                l.kind === 'orderEntry' ||
+                l.kind === 'gridUpper' ||
+                l.kind === 'gridLower' ||
+                l.kind === 'gridPending'
                   ? `${levelLabel(l.kind)} ${formatPriceGrouped(price)}`
                   : `${levelLabel(l.kind)}${impact != null ? ` ${formatMoney(impact)} USDT` : ''}`}
               </text>

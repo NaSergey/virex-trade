@@ -35,8 +35,23 @@ export interface Exit {
   closeOrderId?: string;
 }
 
+/** Уровень сетки на вход (Scaled order) — до срабатывания цены сделки ещё нет. */
+export interface EntryOrder {
+  id: string;
+  direction: Direction;
+  price: number;
+}
+
+export interface EntryFill {
+  orderId: string;
+  direction: Direction;
+  price: number;
+  /** Закрытие минутки, в которой сработало. */
+  time: number;
+}
+
 /** Ближайший к цене открытия свечи среди кандидатов — тот, кого price достиг бы первым. */
-function closestToOpen(candidates: CloseOrder[], open: number): CloseOrder | null {
+function closestToOpen<T extends { price: number }>(candidates: T[], open: number): T | null {
   if (candidates.length === 0) return null;
   return candidates.reduce((best, o) => (Math.abs(o.price - open) < Math.abs(best.price - open) ? o : best));
 }
@@ -73,6 +88,24 @@ export function findExit(p: Position, minutes: Candle[], from: number, to: numbe
     if (m.t + MINUTE > to) break;
     const exit = checkMinute(p, m, closeOrders);
     if (exit) return exit;
+  }
+  return null;
+}
+
+/**
+ * Первое касание любого уровня сетки на вход среди minutes в [from, to).
+ * Как и у close-ордеров, гэпа нет: уровень либо в диапазоне свечи, либо не
+ * сработал в эту минутку и ждёт следующей. Несколько уровней в одной минутке —
+ * срабатывает ближайший к open, остальные ждут своей минутки (см. checkMinute).
+ */
+export function findEntryFill(orders: EntryOrder[], minutes: Candle[], from: number, to: number): EntryFill | null {
+  if (orders.length === 0) return null;
+  for (const m of minutes) {
+    if (m.t < from) continue;
+    if (m.t + MINUTE > to) break;
+    const touched = orders.filter((o) => o.price <= m.h && o.price >= m.l);
+    const fired = closestToOpen(touched, m.o);
+    if (fired) return { orderId: fired.id, direction: fired.direction, price: fired.price, time: m.t + MINUTE };
   }
   return null;
 }

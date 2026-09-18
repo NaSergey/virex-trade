@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { fetchCandles, saveCursor } from '../api/hooks';
-import type { BacktestCloseOrder, BacktestTrade, SessionDetail } from '../api/types';
+import type { BacktestCloseOrder, BacktestEntryOrder, BacktestTrade, SessionDetail } from '../api/types';
 import { advanceTo, type OpenPosition } from '../lib/advance';
 import {
   DAY,
@@ -16,7 +16,7 @@ import {
   visibleCandles,
   type Candle,
 } from '../lib/candles';
-import type { CloseOrder, Exit } from '../lib/fills';
+import type { CloseOrder, EntryFill, Exit } from '../lib/fills';
 
 /** Сколько минуток держать загруженными впереди момента сессии. */
 const LOOKAHEAD_MS = 3 * DAY;
@@ -79,7 +79,20 @@ export interface Replay {
  * Проверяются уровни, сохранённые на сервере, а не черновик в полях: пока
  * правка не применена, она не действует — так же, как неотправленный ордер.
  */
-export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, exit: Exit) => void): Replay {
+export function useReplay(
+  detail: SessionDetail,
+  onExit: (trade: BacktestTrade, exit: Exit) => void,
+  onEntryFill: (order: BacktestEntryOrder, fill: EntryFill) => void,
+  /**
+   * Открытие, добор, срабатывание уровня сетки или закрытие в полёте — сервер
+   * ещё не ответил, и появившаяся (или закрытая) сделка ещё не в `detail.trades`.
+   * Тик, стартовавший в этом окне, просто не даёт результата (курсор не двигается)
+   * и повторится сам на следующем интервале — автопрокрутка не встаёт, скорость
+   * не трогаем: без этого висящего окна минутки между входом и ответом сервера
+   * не проверились бы на стоп/тейк только что открытой позиции.
+   */
+  pending: boolean,
+): Replay {
   const sessionId = detail.session.id;
   const [cursor, setCursor] = useState(() => Date.parse(detail.session.cursorTime));
   const [tf, setTf] = useState(60);
@@ -94,6 +107,10 @@ export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, 
   const cursorRef = useRef(cursor);
   const tfRef = useRef(tf);
   tfRef.current = tf;
+  const pendingRef = useRef(pending);
+  useLayoutEffect(() => {
+    pendingRef.current = pending;
+  });
   const minutesRef = useRef<Candle[]>([]);
   const minutesFrom = useRef(bucketStart(cursor - MINUTE, 1440));
   const exhausted = useRef(false);
@@ -106,8 +123,15 @@ export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, 
   openTradesRef.current = detail.trades.filter((x) => x.exitTime == null);
   const closeOrdersRef = useRef<BacktestCloseOrder[]>([]);
   closeOrdersRef.current = detail.closeOrders;
+  const entryOrdersRef = useRef<BacktestEntryOrder[]>([]);
+  entryOrdersRef.current = detail.entryOrders;
   const onExitRef = useRef(onExit);
   onExitRef.current = onExit;
+  const onEntryFillRef = useRef(onEntryFill);
+  onEntryFillRef.current = onEntryFill;
+  /** Уровень сетки, чьё срабатывание уже отправлено: как и closing ниже, не даёт
+   * тому же уровню сработать второй раз, пока сессия не перечитана после ответа. */
+  const filling = useRef(new Set<string>());
 
   /** Догружает минутки, пока загруженное не дойдёт до until или история не кончится. */
   const ensureMinutes = useCallback(async (until: number) => {
@@ -225,7 +249,7 @@ export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, 
    */
   const advance = useCallback(
     async (target: number, onLanded?: (from: number, reach: number) => void) => {
-      if (busy.current || endedRef.current) return;
+      if (busy.current || endedRef.current || pendingRef.current) return;
       busy.current = true;
       setError(null);
       try {
@@ -239,23 +263,30 @@ export function useReplay(detail: SessionDetail, onExit: (trade: BacktestTrade, 
           takeProfit: t.takeProfit,
           entryTime: Date.parse(t.entryTime),
         }));
-        const { reach, complete, exits } = advanceTo({
+        const pendingEntryOrders = entryOrdersRef.current.filter((o) => !filling.current.has(o.id));
+        const { reach, complete, exits, entryFill } = advanceTo({
           from,
           target,
           minutes: minutesRef.current,
           loadedUntil: loadedUntil(minutesRef.current),
           positions,
           closeOrders: closeOrdersRef.current.map((o): CloseOrder => ({ id: o.id, price: o.price, qty: o.qty, tradeId: o.tradeId })),
+          entryOrders: pendingEntryOrders.map((o) => ({ id: o.id, direction: o.direction, price: o.price })),
         });
         if (reach > from) {
-          if (exits.length > 0) {
-            // Сработал хоть один уровень — автопрокрутка встаёт, чтобы исход не проскочил мимо глаз.
-            setSpeed(null);
+          if (exits.length > 0 || entryFill) {
             for (const exit of exits) {
               const trade = openTrades.find((t) => t.id === exit.tradeId);
               if (!trade) continue;
               closing.current.add(trade.id);
               onExitRef.current(trade, exit);
+            }
+            if (entryFill) {
+              const order = pendingEntryOrders.find((o) => o.id === entryFill.orderId);
+              if (order) {
+                filling.current.add(order.id);
+                onEntryFillRef.current(order, entryFill);
+              }
             }
           }
           cursorRef.current = reach;

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyEntryChange,
   applyStopChange,
   averageIn,
+  checkEntrySide,
   checkLevels,
   curvedSliderPos,
   curvedSliderValue,
@@ -112,6 +114,34 @@ describe('checkLevels', () => {
   it('без тейка при верном стопе — ошибок нет', () => {
     expect(checkLevels('long', 100, 98, null)).toBeNull();
     expect(checkLevels('short', 100, 102, null)).toBeNull();
+  });
+});
+
+describe('checkEntrySide', () => {
+  // Баг: сетка лонга с верхом выше цены и низом ниже неё отправлялась как есть —
+  // checkGridLevels сверяет со стоп/тейком, но не сами уровни с ценой.
+  it('лонг — все уровни ниже цены', () => {
+    expect(checkEntrySide('long', [98, 96, 94], 100)).toBeNull();
+  });
+
+  it('сетка по обе стороны цены не годится ни лонгу, ни шорту', () => {
+    expect(checkEntrySide('long', [104, 100.5, 97], 100)).toBe('entrySide');
+    expect(checkEntrySide('short', [104, 100.5, 97], 100)).toBe('entrySide');
+  });
+
+  it('шорт — все уровни выше цены', () => {
+    expect(checkEntrySide('short', [102, 104, 106], 100)).toBeNull();
+    expect(checkEntrySide('short', [98, 102], 100)).toBe('entrySide');
+  });
+
+  it('уровень ровно на цене — это уже рынок, а не отложенный ордер', () => {
+    expect(checkEntrySide('long', [100, 98], 100)).toBe('entrySide');
+    expect(checkEntrySide('short', [100, 102], 100)).toBe('entrySide');
+  });
+
+  it('одиночный ордер — тот же случай сетки из одного уровня', () => {
+    expect(checkEntrySide('long', [105], 100)).toBe('entrySide');
+    expect(checkEntrySide('long', [95], 100)).toBeNull();
   });
 });
 
@@ -236,7 +266,7 @@ describe('applyStopChange', () => {
     expect(toInputPrice(500000.6)).toBe('500001');
     const rounded = applyStopChange({ stop: '499999', take: '500002' }, toInputPrice(500000.6), price, null);
     expect(rounded.take).toBe(toInputPrice(2 * price - 500002)); // 499999.6 → «500000»
-    // То же сырое число, напечатанное руками (setStopText не округляет) — сторона не
+    // То же сырое число, напечатанное руками (без toInputPrice) — сторона не
     // меняется, зеркалить нечего.
     const raw = applyStopChange({ stop: '499999', take: '500002' }, '500000.6', price, null);
     expect(raw.take).toBe('500002');
@@ -257,6 +287,35 @@ describe('applyStopChange', () => {
         }
       }
     }
+  });
+});
+
+describe('applyEntryChange', () => {
+  it('вход двинулся глубже в ту же сторону — стоп и тейк переезжают вслед, сохраняя % от входа', () => {
+    // Вход не трогали (пусто → якорь это цена 100), стоп 98 (лонг, −2%), тейк 104 (+4%).
+    const result = applyEntryChange({ entry: '', stop: '98', take: '104' }, '90', 100);
+    expect(result.entry).toBe('90');
+    expect(Number(result.stop)).toBeCloseTo(88.2, 6); // 90 × 0.98
+    expect(Number(result.take)).toBeCloseTo(93.6, 6); // 90 × 1.04
+  });
+
+  it('вход перепрыгнул через цену — сторона стопа переворачивается, а дистанция сохраняется', () => {
+    // Было: вход 90 (лонг), стоп 88.2 (−2% от входа). Новый вход 110 — уже выше цены 100, шорт.
+    const result = applyEntryChange({ entry: '90', stop: '88.2', take: '' }, '110', 100);
+    expect(Number(result.stop)).toBeCloseTo(112.2, 6); // 110 × 1.02 — та же дистанция, но выше входа
+  });
+
+  it('стоп и тейк ещё не трогали — перенос входа их не касается', () => {
+    const result = applyEntryChange({ entry: '95', stop: '', take: '' }, '80', 100);
+    expect(result.stop).toBe('');
+    expect(result.take).toBe('');
+  });
+
+  it('вход стёрли — стороны решить нечем, стоп и тейк остаются как были', () => {
+    const result = applyEntryChange({ entry: '90', stop: '88', take: '92' }, '', 100);
+    expect(result.entry).toBe('');
+    expect(result.stop).toBe('88');
+    expect(result.take).toBe('92');
   });
 });
 

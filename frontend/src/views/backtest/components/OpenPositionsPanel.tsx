@@ -10,8 +10,8 @@ import { EmptyState } from '@/shared/ui/EmptyState';
 import type { LedgerColumn } from '@/shared/ui/LedgerTable';
 import { Tooltip } from '@/shared/ui/Tooltip';
 import { PositionsTable } from '@/widgets/positions-table';
-import { durationUnitLabels, formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
-import type { BacktestCloseOrder, BacktestTrade } from '../api/types';
+import { durationUnitLabels } from '@/shared/lib/utils/format';
+import type { BacktestTrade } from '../api/types';
 import { liquidationPrice, toScreen, unrealizedPnl } from '../lib/money';
 
 /** В полтора раза крупнее прежних 14: по этим кнопкам целятся в терминале. */
@@ -34,7 +34,9 @@ function fmtSimAge(entryTime: string, cursor: number, units: { d: string; h: str
 }
 
 /**
- * Открытые позиции сессии — до двух, лонг и шорт разом (хедж).
+ * Открытые позиции сессии — до двух, лонг и шорт разом (хедж). Ещё не
+ * сработавшие ордера (сетка на вход, лимиты закрытия) сюда не входят — у них
+ * своя вкладка («Ордера», см. OrdersPanel): до срабатывания это не позиция.
  *
  * Таблица — та же `PositionsTable`, что рисует «Открытые позиции — сейчас» на
  * обзоре: сделка сессии переводится в ту же форму (`ExchangePosition`), и
@@ -51,10 +53,8 @@ export function OpenPositionsPanel({
   scale,
   price,
   cursor,
-  closeOrders,
   onLimit,
   onMarket,
-  onCancelOrder,
   onChangeLevels,
   onTags,
 }: {
@@ -64,10 +64,8 @@ export function OpenPositionsPanel({
   price: number | null;
   /** Момент симуляции — для «В позиции». */
   cursor: number;
-  closeOrders: BacktestCloseOrder[];
   onLimit: (trade: BacktestTrade) => void;
   onMarket: (trade: BacktestTrade) => void;
-  onCancelOrder: (orderId: string) => void;
   onChangeLevels: (trade: BacktestTrade) => void;
   onTags: (trade: BacktestTrade) => void;
 }) {
@@ -134,43 +132,25 @@ export function OpenPositionsPanel({
   ];
 
   return (
-    <div>
-      <PositionsTable
-        positions={positions}
-        title={t('openPositionsTitle')}
-        totalPnl={totalPnl}
-        renderAge={(p) => <span className="muted">{fmtSimAge(tradeOf(p).entryTime, cursor, units)}</span>}
-        renderTags={(p) => {
-          const trade = tradeOf(p);
-          return (
-            <Tags tags={trade.tags}>
-              <Tooltip text={t('addTag')}>
-                <Button variant="add" tight aria-label={t('addTag')} onClick={() => onTags(trade)}>
-                  <TagIcon size={ICON_SIZE} />
-                </Button>
-              </Tooltip>
-            </Tags>
-          );
-        }}
-        extraColumns={actions}
-        flush
-      />
-      {trades.map((trade) => {
-        const orders = closeOrders.filter((o) => o.tradeId === trade.id);
-        if (orders.length === 0) return null;
+    <PositionsTable
+      positions={positions}
+      title={t('openPositionsTitle')}
+      totalPnl={totalPnl}
+      renderAge={(p) => <span className="muted">{fmtSimAge(tradeOf(p).entryTime, cursor, units)}</span>}
+      renderTags={(p) => {
+        const trade = tradeOf(p);
         return (
-          <ul className="close-orders" key={trade.id}>
-            {orders.map((o) => (
-              <li key={o.id}>
-                <span>{t('pendingLimitOrder', { qty: formatQty(o.qty), price: formatPriceGrouped(toScreen(o.price, scale)) })}</span>
-                <Button tight onClick={() => onCancelOrder(o.id)}>
-                  {t('cancelOrder')}
-                </Button>
-              </li>
-            ))}
-          </ul>
+          <Tags tags={trade.tags}>
+            <Tooltip text={t('addTag')}>
+              <Button variant="add" tight aria-label={t('addTag')} onClick={() => onTags(trade)}>
+                <TagIcon size={ICON_SIZE} />
+              </Button>
+            </Tooltip>
+          </Tags>
         );
-      })}
-    </div>
+      }}
+      extraColumns={actions}
+      flush
+    />
   );
 }
