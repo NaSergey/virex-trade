@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { BacktestModule } from '../backtest/backtest.module';
 import { CoinsModule } from '../coins/coins.module';
 import { MarketDataModule } from '../market-data/market-data.module';
+import { TournamentRunnerService } from './tournament-runner.service';
 import { TournamentsController } from './tournaments.controller';
 import { TournamentsService } from './tournaments.service';
 
@@ -17,7 +18,7 @@ import { TournamentsService } from './tournaments.service';
 @Module({
   imports: [CoinsModule, MarketDataModule, BacktestModule],
   controllers: [TournamentsController],
-  providers: [TournamentsService],
+  providers: [TournamentsService, TournamentRunnerService],
   exports: [TournamentsService],
 })
 export class TournamentsModule {}
