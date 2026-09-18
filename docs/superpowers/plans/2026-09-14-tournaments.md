@@ -4,22 +4,35 @@
 > владелец попросил сразу перейти к реализации. Поэтому шаги фиксируют файлы, интерфейсы,
 > тест-кейсы и команды, а код пишется прямо в задаче по TDD, без копии в этом документе.
 
-**Goal:** турниры на 2–10 участников на одном графике с одинаковым депозитом, режимы «на
-истории» и «в прямом эфире», лидерборд.
+**Goal:** страница «Турниры» — каталог игр; первая игра — торговый турнир на 2–10 участников
+на одном графике с одинаковым депозитом, только в прямом эфире (реальный BTC), с призовым
+фондом из взносов участников и добавки создателя, несколькими победителями с долями,
+рейтингом игры и **внутренней валютой** (старт 1000, курс 500 за USDT), которая показана в
+шапке и покупается тем же донатом. (Правка 2026-09-18: раньше цель включала режим «на
+истории» и лидерборд турнира — их нет в первом этапе; см. спеку, «Что осознанно не
+делается».)
 
 **Architecture:** участник турнира получает обычную `BacktestSession` с `tournamentId`.
-История исполняется браузером, как бектест. Эфир исполняет серверный `TournamentRunner` по
-живому хвосту минуток из `LiveMarketService`. Терминал переезжает в
-`widgets/backtest-session` и переиспользуется страницей турнира.
+Серверный `TournamentRunner` исполняет уровни по живому хвосту минуток из
+`LiveMarketService`. Терминал переезжает в `widgets/backtest-session` и переиспользуется
+страницей турнира. Валюта — модуль `coins` (баланс на пользователе, журнал `CoinTransaction`);
+зачёт монет за донат идёт в одной транзакции с уже существующим CAS в `claimByAmount`.
 
 **Tech Stack:** NestJS + Prisma + PostgreSQL, jest; Next.js App Router + FSD, react-query,
 next-intl, vitest.
 
 ## Global Constraints
 
-- Участников 2–10; вход только в лобби; старт — только создатель.
+- Мест `maxPlayers` 2–10; вход только в лобби; старт — только создатель и только когда
+  участников больше `winnersCount`.
 - Длительность — одно из `60, 240, 1440, 4320, 10080` минут; депозит 100 – 10 000 000.
-- Отрезок истории — 30 дней (`FUTURE_AFTER_MS`); у истории `hideDate = hidePrice = true`.
+- Взнос и добавка — целые `0 … MAX_COINS_AMOUNT` монет; списание — только CAS
+  (`coinBalance >= n`), баланс не уходит в минус.
+- Победителей `1 … maxPlayers − 1`; доли — целые проценты по местам, сумма 100, не
+  возрастают; остаток округления — первому месту.
+- Старт — 1000 монет (дефолт колонки), курс — `COINS_PER_USDT = 500`.
+- Вывода монет нет; донат без `userId` монет не даёт.
+- Таблицы участников внутри турнира нет: после финала — только призёры и своё место.
 - Эфир: `endsAt` выровнен по минуте; тик движка — 2 с; хвост — 30 минуток, кэш 1.5 с.
 - Турнирные сессии не входят в `listSessions` и `stats` бектеста.
 - Повторяющиеся элементы — только `shared/ui`; цвета — классами `globals.css`.
@@ -75,6 +88,51 @@ next-intl, vitest.
 > **Остановлено здесь (2026-09-14)** по просьбе владельца. Состояние и заметки к Tasks 4–11 —
 > `plans/handoffs/HANDOFF_tournaments_2026-09-14.md`.
 
+> **Предусловие к Tasks 3a–11 (2026-09-18).** Ветка растёт от неслитой
+> `feat/backtest-synthetic-market`, а в `main` с точки расхождения (`07b47b9`) ушло 32 коммита,
+> в том числе два по бектесту (`6529d89` — своя страница сессии и общий `PositionsTable`,
+> `b6710c3` — курсор раз в 10 с) и незакоммиченные правки терминала. Task 8 переносит те же
+> файлы, поэтому **сначала закоммитить работу в `main`, потом влить `main` в
+> `feat/tournaments`** и только тогда двигаться дальше. После слияния перечитать Tasks 4 и
+> 8–9: их файлы могли сдвинуться.
+
+### Task 3a: Схема — валюта, взнос, места (2026-09-18)
+
+**Files:** Modify `backend/prisma/schema.prisma`.
+
+- [ ] `Tournament`: `mode` с дефолтом `"live"`, `maxPlayers Int @default(10)`,
+  `entryFee Int @default(0)`, `prizeBonus Int @default(0)`, `winnersCount Int @default(1)`,
+  `payoutShares Int[] @default([100])`; `TournamentParticipant`: `finalEquity Float?`,
+  `place Int?`, `prizeWon Int?`; `User.coinBalance Int @default(1000)` — стартовые 1000 всем,
+  и нынешним аккаунтам тоже; модель `CoinTransaction` с ключом `coin_tx_once (userId, kind, refId)`
+  — как в спеке.
+- [ ] `npx prisma validate`, `npx prisma generate` (`nest watch` держит движок — EPERM).
+  На сервере `db push` только добавляет колонки с дефолтом и nullable, `--accept-data-loss`
+  не нужен: новая unique-колонка на существующей таблице тут не добавляется.
+- [ ] Commit.
+
+### Task 3b: Модуль `coins` и зачёт монет за донат (2026-09-18)
+
+**Files:** Create `backend/src/coins/{coins.module.ts,coins.service.ts,coins.controller.ts,coins.service.spec.ts,coins.config.ts}`;
+Modify `donations/donation.config.ts` (`COINS_PER_USDT`), `donations.service.ts`
+(`claimByAmount`), `donations.module.ts`, `donations.service.spec.ts`, `app.module.ts`.
+
+**Produces:**
+- `CoinsService`: `balance(userId)`, `credit(tx, userId, n, kind, refId)`,
+  `charge(tx, userId, n, kind, refId)` (бросает `INSUFFICIENT_COINS`), `refund(tx, …)` — все
+  пишут строку журнала с `balanceAfter` в переданной транзакции.
+- `coinsForDonation(requestedUnits: bigint): number` — от запрошенной суммы, округление вниз;
+  `COINS_PER_USDT = 500` (5.00 USDT → 2500).
+- `GET /api/coins` → `{ balance }` под `JwtAuthGuard`; `coinsPerUsdt` добавляется в
+  существующий публичный конфиг доната (`publicConfigWithTotal`) — фронту для «≈ N монет».
+- `claimByAmount`: CAS-обновление и `credit` — в одной интерактивной `$transaction`; P2002
+  по-прежнему ловится снаружи и значит «уже разобран».
+
+- [ ] Тесты: `charge` в гонке двух списаний не уводит баланс в минус; два вызова
+  `claimByAmount` на один перевод дают одну строку `DONATION`; зачёт от запрошенной суммы, не
+  от суммы с хвостом; анонимный донат монет не даёт; падение записи доната откатывает зачёт.
+- [ ] Реализация. `npx jest src/coins src/donations` — PASS. Commit.
+
 ### Task 4: Бектест под турниры
 
 **Files:** Modify `backtest.service.ts`, `backtest.controller.ts` (без изменений маршрутов),
@@ -89,23 +147,35 @@ next-intl, vitest.
 - [ ] Тесты: `listSessions`/`stats` фильтруют `tournamentId: null`; эфир — `openTrade` берёт
   цену и время из `quote()`, `closeTrade` с `stop` — `TOURNAMENT_LIVE_EXIT`, с `manual` — цена
   `quote()`; после `endTime` — `TOURNAMENT_ENDED`; `finish` эфира — `TOURNAMENT_LIVE_FINISH`;
-  история турнира — вход позже `endTime` — `BACKTEST_TIME_INVALID`, `advance` не дальше
-  `endTime`; `sessionCandles` турнирной истории — из `MarketDataService` с `to` не позже
-  границы; `systemClose` при проигранном CAS — `false`; `finishTournamentSession` закрывает
-  остаток по цене и завершает.
+  `systemClose` при проигранном CAS — `false`; `finishTournamentSession` закрывает
+  остаток по цене и завершает. (2026-09-18: снят пункт про историю турнира — `endTime` для
+  `BACKTEST_TIME_INVALID`, `advance` и `sessionCandles`.)
 - [ ] Реализация: общий `applyClose` для `closeTrade` и `systemClose`; `closeRemaining` с
   функцией цены вместо `closeAtEntry`.
 - [ ] `npx jest src/backtest` — PASS. Commit.
 
-### Task 5: Лидерборд и отрезки эфира (чистые функции)
+### Task 5: Места, призы, рейтинг и отрезки эфира (чистые функции)
 
 **Files:** Create `backend/src/tournaments/leaderboard.ts`, `leaderboard.spec.ts`,
-`live-segments.ts`, `live-segments.spec.ts`.
+`prize.ts`, `prize.spec.ts`, `rating.ts`, `rating.spec.ts`, `live-segments.ts`,
+`live-segments.spec.ts`.
 
 **Produces:**
-- `leaderboardRows(input: ParticipantInput[]): LeaderboardRow[]`;
-  `ParticipantInput = { userId, name, joinedAt, startBalance, session: { balance, status, startTime, cursorTime, endTime } | null, openTrades: { direction, entryPrice, qty, closedQty }[], closedTrades: { pnl }[], mark: number | null }`;
-  `LeaderboardRow = { place, userId, name, equity, returnPct, trades, wins, openPositions, progressDay, totalDays, finished }`.
+- `rankParticipants(input: ParticipantInput[]): RankedParticipant[]`;
+  `ParticipantInput = { userId, joinedAt, session: { balance } | null, openTrades: { direction, entryPrice, qty, closedQty }[], mark: number | null }`;
+  `RankedParticipant = { userId, equity, place }` — по эквити по убыванию, при равенстве
+  раньше вошедший выше. (2026-09-18: вместо `leaderboardRows` — таблицы внутри турнира нет;
+  остаются только эквити и место для финала. Убраны `name`, `returnPct`, `trades`, `wins`,
+  `openPositions` и всё, что было нужно истории.)
+- `prizePool(t: { entryFee, prizeBonus }, participants: number): number` и
+  `payouts(pool: number, shares: number[]): number[]` — `floor(pool × доля / 100)` по местам,
+  остаток округления — первому; `validateShares(shares, winnersCount): boolean` — длина,
+  сумма 100, не возрастают, каждая ≥ 1.
+- `ratingRows(input: { tournamentId, userId, name, place }[], viewerId: string): { rows: RatingRow[]; me: RatingRow | null }` —
+  `RatingRow = { place, userId, name, points, tournaments, wins }`; очки за турнир —
+  `участников в нём − место`; порядок — очки, победы, меньше турниров; `rows` — первые 50,
+  `me` — строка вошедшего только если он ниже пятидесятого места. Вход — участники
+  завершённых турниров (`place` не пуст).
 - `buildSegments(snap: Snapshot | null, minutes: Bar[], until: number): { segments: Segment[]; next: Snapshot | null }`;
   `Snapshot = { at, minuteT, high, low, last }`;
   `Segment = { from, to, bar: Bar, extHigh: number | null, extLow: number | null }`.
@@ -121,9 +191,16 @@ next-intl, vitest.
 
 **Produces:** `TournamentsService`: `create(userId, dto)`, `listMine(userId)`,
 `get(userId, id)`, `join`, `leave`, `start`, `remove`, `finalize(tournament)`,
-`dueForFinal(now)`.
+`dueForFinal(now)`, `rating(userId)` (2026-09-18).
 
-- [ ] Тесты — по списку спеки. Реализация. PASS. Commit.
+- [ ] Тесты — по списку спеки, включая взнос и добавку (создание, вход, выход, удаление,
+  повторный вход), дуэль на два места, старт при нескольких победителях, финал с местами и
+  призами по долям и рейтинг. Маршрут `GET /rating` объявлен раньше `:id`.
+- [ ] Реализация: `create` — валидация долей (`TOURNAMENT_BAD_PAYOUT`), `charge` взноса и
+  добавки, `join` — `charge` взноса, оба в одной транзакции со строкой участника;
+  `leave`/`remove` — `refund` (при удалении — взносы всем и добавка создателю);
+  `finalize` — CAS статуса, `finalEquity`, `place`, `prizeWon` и `TOURNAMENT_PRIZE`
+  победителям в одной транзакции. `CoinsModule` в импортах. PASS. Commit.
 
 ### Task 7: `TournamentRunner`
 
@@ -133,7 +210,7 @@ next-intl, vitest.
 `finishTournamentSession`, `minutesSince`, `TournamentsService.finalize`.
 
 - [ ] Тесты: стоп в отрезке; лимитка, затем стоп в одном отрезке; позиция не проверяется до
-  входа; `processedUntil` сохраняется; финал эфира ждёт закрытия последней минутки; ошибка
+  входа; `processedUntil` сохраняется; финал ждёт закрытия последней минутки; ошибка
   турнира не останавливает остальные. Реализация. PASS.
 - [ ] Бэкенд целиком: `npx tsc --noEmit`, `npx jest`. Commit.
 
@@ -151,28 +228,57 @@ next-intl, vitest.
 
 **Files:** Create `widgets/backtest-session/lib/live.ts`, `lib/live.test.ts`,
 `model/useLiveFeed.ts`; Modify `components/SessionScreen.tsx`, `api/types.ts`,
-`api/hooks.ts`, `lib/candles.ts` (+ тест), `components/OrderPanel.tsx` (кнопка «Завершить»
-необязательна).
+`api/hooks.ts`, `components/OrderPanel.tsx` (кнопка «Завершить» необязательна).
+(2026-09-18: `lib/candles.ts` и его тест из списка убраны — адрес свечей турнирной истории
+больше не нужен.)
 
 **Produces:**
 - `mergeMinutes(prev: Candle[], tail: Candle[]): Candle[]`; `liveAnchor(closed: Candle[], tf: number, now: number): number`.
 - `useLiveFeed(detail: SessionDetail): Replay`.
-- `SessionScreen({ id, onLeave, leaveLabel?, extraTab? })`.
+- `SessionScreen({ id, onLeave, leaveLabel? })` (2026-09-18: `extraTab` убран — вкладки с
+  лидербордом нет).
 
-- [ ] Тесты `live.ts` и `candlesPath`. Реализация. `npx vitest run`, `npx tsc --noEmit`. Commit.
+- [ ] Тесты `live.ts`. Реализация. `npx vitest run`, `npx tsc --noEmit`. Commit.
 
-### Task 10: Страницы турниров
+### Task 10: Каталог игр, торговый турнир, рейтинг (2026-09-18: переписан под каталог)
 
 **Files:** Create `entities/tournament/{api/hooks.ts,api/types.ts,index.ts}`,
-`views/tournaments/{Page.tsx,components/CreateTournament.tsx,components/TournamentsList.tsx}`,
-`views/tournament/{Page.tsx,components/Leaderboard.tsx,components/InviteLink.tsx,components/TournamentHead.tsx}`,
-`app/(app)/tournaments/page.tsx`, `app/(app)/tournaments/[id]/page.tsx`; Modify
-`widgets/top-nav/TopNav.tsx`, `shared/i18n/messages/{ru,en}.json`.
+`views/tournaments/{Page.tsx,model/games.ts,components/GameCard.tsx}`,
+`views/trading-tournaments/{Page.tsx,components/CreateTournament.tsx,components/TournamentsList.tsx,components/Rating.tsx}`,
+`views/tournament/{Page.tsx,components/Winners.tsx,components/Participants.tsx,components/InviteLink.tsx,components/TournamentHead.tsx}`,
+`views/trading-tournaments/model/payout-shares.ts` (+ тест: подстановка долей по числу победителей, сумма 100),
+`app/(app)/tournaments/page.tsx`, `app/(app)/tournaments/trading/page.tsx`,
+`app/(app)/tournaments/trading/[id]/page.tsx`; Modify `widgets/top-nav/TopNav.tsx`,
+`shared/i18n/messages/{ru,en}.json`.
 
-- [ ] Реализация, i18n, пункт навигации.
+- [ ] `/tournaments` — каталог из `GAMES` (одна запись); `/tournaments/trading` — мои
+  турниры, форма (место, депозит, длительность, взнос, добавка, победители и доли — без
+  режима; итоговый фонд под формой), рейтинг; `/tournaments/trading/<id>` — состав и фонд с
+  разбивкой по местам, после финала — призёры (`Winners`), таблицы участников нет.
+- [ ] `proxy.ts`: `next=` возвращает на `/tournaments/trading/<id>`; проверить, что путь не
+  режется белым списком.
+- [ ] i18n, пункт «Турниры» в навигации.
+- [ ] `npx tsc --noEmit`, `npx eslint`, `npx vitest run`, `npx next build`. Commit.
+
+### Task 10a: Баланс монет в шапке (2026-09-18)
+
+**Files:** Create `entities/coins/{api/hooks.ts,ui/CoinBalance.tsx,index.ts}`; Modify
+`widgets/top-nav/TopNav.tsx`, `features/donation/ui/DonateDialog.tsx` (строка «≈ N монет»),
+`features/donation/ui/PaymentStep.tsx` (сброс `['coins']` при `PAID`),
+`views/trading-tournaments`/`views/tournament` (сброс `['coins']` после взноса, выхода,
+удаления), `shared/i18n/messages/{ru,en}.json`.
+
+- [ ] `useCoinBalance` — `GET /api/coins`, `refetchInterval` 30 с; `CoinBalance` — чип в
+  правой части шапки слева от меню профиля, клик открывает `DonateDialog`; на мобильной
+  раскладке шапки в две строки чип остаётся в правой части.
+- [ ] Тест «≈ N монет» — курс и округление вниз.
 - [ ] `npx tsc --noEmit`, `npx eslint`, `npx vitest run`, `npx next build`. Commit.
 
 ### Task 11: CLAUDE.md
 
-- [ ] Раздел «Турниры»; пути терминала в разделе про бектест → `widgets/backtest-session`.
+- [ ] Раздел «Турниры» (каталог игр, торговый турнир только в эфире, валюта: 1000 на старте
+  и 500 за USDT, призовой фонд и доли, рейтинг игры; таблицы внутри турнира нет); пути
+  терминала в разделе про бектест → `widgets/backtest-session`.
+- [ ] Раздел «Донаты»: донат теперь ещё и покупка монет — зачёт в одной транзакции с CAS
+  `claimByAmount`; вывода монет пока нет.
 - [ ] Commit.
