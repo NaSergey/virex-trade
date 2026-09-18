@@ -47,6 +47,7 @@
     "admin": "Users",
     "market": "Market",
     "backtest": "Backtest",
+    "tournaments": "Tournaments",
     "support": "Support the developer",
     "referrals": "Invite a friend"
   },
@@ -730,6 +731,18 @@
     "dominantSell": "sellers lead",
     "dominantNeutral": "balanced",
     "weekdayExtremes": "Most often up on {best} ({bestPct} %), least often on {worst} ({worstPct} %)."
+  },
+  "tournaments": {
+    "title": "Tournaments",
+    "lede": "Games between users, played for in-app coins.",
+    "soon": "Coming soon",
+    "open": "Open",
+    "games": {
+      "trading": {
+        "title": "Trading tournament",
+        "description": "Trade the live BTC chart against other users: everyone gets the same chart and the same deposit, and whoever earns more wins. Anyone can create a tournament, invite friends by link, or open it to everyone."
+      }
+    }
   },
   "backtest": {
     "startTitle": "New session",

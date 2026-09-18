@@ -96,11 +96,29 @@ next-intl, vitest.
 > `feat/tournaments`** и только тогда двигаться дальше. После слияния перечитать Tasks 4 и
 > 8–9: их файлы могли сдвинуться.
 
+### Task 3.5: Каталог игр `/tournaments` (2026-09-18, первым по просьбе владельца)
+
+**Files:** Create `frontend/src/views/tournaments/{Page.tsx,model/games.ts,model/games.test.ts,components/GameCard.tsx}`,
+`frontend/src/app/(app)/tournaments/page.tsx`; Modify `widgets/top-nav/TopNav.tsx`,
+`shared/i18n/messages/{ru,en}.json`.
+
+Страница чисто фронтовая: карточки из статического `GAMES`, одна запись — «Торговый турнир»
+со ссылкой на `/tournaments/trading`. Сама страница игры появится в Task 10, до тех пор ссылка
+ведёт в никуда — поэтому карточка помечена «скоро», пока маршрут не существует, и метка
+снимается в Task 10. Пункт «Турниры» в шапке — после «Бектеста».
+
+- [ ] `games.ts` — `GAMES: readonly Game[]`, `Game = { id, href, titleKey, descriptionKey, available }`;
+  тест: ids уникальны, href начинается с `/tournaments/`, у доступной игры есть ключи текстов
+  в обоих языках.
+- [ ] `Page`, `GameCard`, маршрут, пункт шапки, i18n.
+- [ ] `npx tsc --noEmit`, `npx eslint`, `npx vitest run`. Commit.
+
 ### Task 3a: Схема — валюта, взнос, места (2026-09-18)
 
 **Files:** Modify `backend/prisma/schema.prisma`.
 
-- [ ] `Tournament`: `mode` с дефолтом `"live"`, `maxPlayers Int @default(10)`,
+- [ ] `Tournament`: `mode` с дефолтом `"live"`, `visibility String @default("private")`,
+  `@@index([visibility, status])` под общий список, `maxPlayers Int @default(10)`,
   `entryFee Int @default(0)`, `prizeBonus Int @default(0)`, `winnersCount Int @default(1)`,
   `payoutShares Int[] @default([100])`; `TournamentParticipant`: `finalEquity Float?`,
   `place Int?`, `prizeWon Int?`; `User.coinBalance Int @default(1000)` — стартовые 1000 всем,
@@ -191,7 +209,8 @@ Modify `donations/donation.config.ts` (`COINS_PER_USDT`), `donations.service.ts`
 
 **Produces:** `TournamentsService`: `create(userId, dto)`, `listMine(userId)`,
 `get(userId, id)`, `join`, `leave`, `start`, `remove`, `finalize(tournament)`,
-`dueForFinal(now)`, `rating(userId)` (2026-09-18).
+`dueForFinal(now)`, `rating(userId)`, `listPublic()` (2026-09-18: публичные лобби с местами,
+новые сверху, не больше 50). Маршруты `GET /public` и `GET /rating` объявлены раньше `:id`.
 
 - [ ] Тесты — по списку спеки, включая взнос и добавку (создание, вход, выход, удаление,
   повторный вход), дуэль на два места, старт при нескольких победителях, финал с местами и
@@ -243,11 +262,10 @@ Modify `donations/donation.config.ts` (`COINS_PER_USDT`), `donations.service.ts`
 ### Task 10: Каталог игр, торговый турнир, рейтинг (2026-09-18: переписан под каталог)
 
 **Files:** Create `entities/tournament/{api/hooks.ts,api/types.ts,index.ts}`,
-`views/tournaments/{Page.tsx,model/games.ts,components/GameCard.tsx}`,
-`views/trading-tournaments/{Page.tsx,components/CreateTournament.tsx,components/TournamentsList.tsx,components/Rating.tsx}`,
+`views/trading-tournaments/{Page.tsx,components/CreateTournament.tsx,components/TournamentsList.tsx,components/PublicTournaments.tsx,components/Rating.tsx}`,
 `views/tournament/{Page.tsx,components/Winners.tsx,components/Participants.tsx,components/InviteLink.tsx,components/TournamentHead.tsx}`,
 `views/trading-tournaments/model/payout-shares.ts` (+ тест: подстановка долей по числу победителей, сумма 100),
-`app/(app)/tournaments/page.tsx`, `app/(app)/tournaments/trading/page.tsx`,
+`app/(app)/tournaments/trading/page.tsx` (каталог `/tournaments` уже в Task 3.5),
 `app/(app)/tournaments/trading/[id]/page.tsx`; Modify `widgets/top-nav/TopNav.tsx`,
 `shared/i18n/messages/{ru,en}.json`.
 

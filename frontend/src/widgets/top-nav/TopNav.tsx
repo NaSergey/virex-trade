@@ -15,7 +15,7 @@ import { ThemeToggle } from '@/shared/ui/ThemeToggle';
 // import { VirexLogo } from '@/shared/ui/VirexLogo';
 import { useLocaleControl } from '@/shared/i18n';
 
-type Tab = 'overview' | 'tags' | 'analytics' | 'market' | 'backtest' | 'settings' | 'admin';
+type Tab = 'overview' | 'tags' | 'analytics' | 'market' | 'backtest' | 'tournaments' | 'settings' | 'admin';
 
 type NavItem = { id: Tab; labelKey: Tab };
 
@@ -25,6 +25,7 @@ const NAV: NavItem[] = [
   { id: 'analytics', labelKey: 'analytics' },
   { id: 'market', labelKey: 'market' },
   { id: 'backtest', labelKey: 'backtest' },
+  { id: 'tournaments', labelKey: 'tournaments' },
 ];
 
 /**

@@ -2082,6 +2082,46 @@
     margin-top: var(--s1);
   }
 
+  /* ═══════════════ КАТАЛОГ ИГР ═══════════════
+     Строки на волосяных линиях, а не карточки: как остальные списки продукта.
+     Игра-ссылка целиком кликабельна, подчёркивается название. */
+  .games {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--hair);
+  }
+  .game {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: var(--s4);
+    padding: var(--s4) 0;
+    border-bottom: 1px solid var(--hair);
+    color: inherit;
+    text-decoration: none;
+  }
+  .game h2 {
+    font-size: var(--t-l);
+    font-weight: 400;
+    margin: 0 0 var(--s1);
+  }
+  .game p {
+    max-width: 62ch;
+    margin: 0;
+    font-size: var(--t-s);
+    color: var(--ink-2);
+  }
+  .game-go {
+    font-size: var(--t-s);
+    white-space: nowrap;
+  }
+  .game-link:hover h2 {
+    text-decoration: underline;
+  }
+  .game-off h2 {
+    color: var(--ink-2);
+  }
+
   /* ═══════════════ СОСТОЯНИЯ ═══════════════ */
   .state {
     padding: var(--s5) 0;
