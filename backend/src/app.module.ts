@@ -20,6 +20,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
 import { DonationsModule } from './donations/donations.module';
 import { CoinsModule } from './coins/coins.module';
+import { TournamentsModule } from './tournaments/tournaments.module';
 import { ReferralsModule } from './referrals/referrals.module';
 
 @Module({
@@ -50,6 +51,7 @@ import { ReferralsModule } from './referrals/referrals.module';
     AdminModule,
     DonationsModule,
     CoinsModule,
+    TournamentsModule,
     ReferralsModule,
   ],
   controllers: [AppController],
