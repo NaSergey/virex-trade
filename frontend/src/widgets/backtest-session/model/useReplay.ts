@@ -92,6 +92,13 @@ export function useReplay(
    * не проверились бы на стоп/тейк только что открытой позиции.
    */
   pending: boolean,
+  /**
+   * Выключенная прокрутка не ходит в сеть и не сохраняет момент. Нужна ровно
+   * одному случаю: сессия турнира в эфире, где источник свечей — `useLiveFeed`.
+   * Хуки нельзя вызывать по условию, поэтому вызываются оба, а спит тот, чья
+   * очередь не настала.
+   */
+  enabled = true,
 ): Replay {
   const sessionId = detail.session.id;
   const dataSource = detail.session.dataSource;
@@ -156,8 +163,9 @@ export function useReplay(
   }, [source]);
 
   useEffect(() => {
+    if (!enabled) return;
     ensureMinutes(cursorRef.current + LOOKAHEAD_MS).catch(setError);
-  }, [ensureMinutes]);
+  }, [enabled, ensureMinutes]);
 
   // Прошлое таймфрейма — один запрос на таймфрейм; всё, что после anchor, собирается
   // из минуток, поэтому перегружать при шаге не нужно. Отметка о запросе — в рефе, а
@@ -176,12 +184,15 @@ export function useReplay(
       });
   }, [source]);
   // Выбранный — первым, и заново при выборе, если прошлый запрос упал.
-  useEffect(() => loadClosed(tf), [tf, loadClosed]);
+  useEffect(() => {
+    if (enabled) loadClosed(tf);
+  }, [enabled, tf, loadClosed]);
   // Остальные — сразу при входе, а не по клику: иначе на каждом первом переключении
   // график ждал бы сети, и ТФ менялся бы не сразу.
   useEffect(() => {
+    if (!enabled) return;
     for (const t of TIMEFRAMES) loadClosed(t);
-  }, [loadClosed]);
+  }, [enabled, loadClosed]);
 
   // ТФ свечей на экране: выбранный, как только его история загружена, а до того —
   // прежний. Иначе график на время запроса пропадал бы целиком. Правится прямо в
@@ -382,9 +393,10 @@ export function useReplay(
   // сохранения. Интервал сохраняет по ходу дела; flush сам выходит, когда
   // момент не менялся, так что на паузе запросов нет.
   useEffect(() => {
+    if (!enabled) return;
     const h = setInterval(() => void flush().catch(() => undefined), SAVE_EVERY_MS);
     return () => clearInterval(h);
-  }, [flush]);
+  }, [enabled, flush]);
 
   // Уход со страницы — pagehide, а не только размонтирование: перезагрузка (F5)
   // и закрытие вкладки эффекты React не чистят, и накопленный с последнего
@@ -392,6 +404,7 @@ export function useReplay(
   // запрос до конца уже после выгрузки страницы. visibilitychange нужен
   // отдельно: на мобильных вкладку часто убивают из фона, не дав pagehide.
   useEffect(() => {
+    if (!enabled) return;
     const onHide = () => void flush(true).catch(() => undefined);
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') onHide();
@@ -403,7 +416,7 @@ export function useReplay(
       document.removeEventListener('visibilitychange', onVisibility);
       onHide();
     };
-  }, [flush]);
+  }, [enabled, flush]);
 
   return {
     cursor,

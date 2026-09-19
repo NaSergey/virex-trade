@@ -48,6 +48,7 @@ import {
 } from '../lib/money';
 import { useDefaultLeverage } from '../model/useDefaultLeverage';
 import { useDrawingTools } from '../model/useDrawingTools';
+import { useLiveFeed } from '../model/useLiveFeed';
 import { SPEEDS, useReplay } from '../model/useReplay';
 import { DrawingStyleBar } from './drawings/DrawingStyleBar';
 import { DrawingToolbar } from './drawings/DrawingToolbar';
@@ -141,6 +142,12 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   const { session, trades } = detail;
   const scale = session.priceScale;
   const startMs = Date.parse(session.startTime);
+  /**
+   * Сессия турнира в прямом эфире. Здесь браузер не ведёт время и не проверяет
+   * срабатывания: и то и другое делает сервер (см. `useLiveFeed`), поэтому нет
+   * ни «Шага», ни скоростей, ни «Завершить».
+   */
+  const isLive = detail.tournament?.mode === 'live';
 
   /**
    * Сделки, чьё закрытие уже отправлено на сервер, но сессия ещё не перечитана —
@@ -179,7 +186,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   const { user } = useAuth();
   const drawings = useDrawingTools(user?.id ?? 'anon', session.id, scale);
 
-  const replay = useReplay(
+  const replayFeed = useReplay(
     detail,
     // Всплывающая пауза автопрокрутки на срабатывании ордера/уровня и на открытии
     // позиции убрана намеренно (обсуждали отдельно от корректности): курсор всё
@@ -235,7 +242,12 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
     // (см. параметр `pending` там), автопрокрутка тем временем просто не отдаёт
     // тиков, а не встаёт видимо для пользователя.
     openM.isPending || addToTradeM.isPending || createEntryOrdersM.isPending || closeM.isPending,
+    !isLive,
   );
+  // Хуки нельзя вызывать по условию, поэтому вызываются оба, а спит тот, чья
+  // очередь не настала: в эфире свечи идут живым хвостом, а не прокруткой.
+  const liveFeed = useLiveFeed(detail, isLive);
+  const replay = isLive ? liveFeed : replayFeed;
 
   // Плечо новой сделки берёт последнее сохранённое (см. useDefaultLeverage) —
   // только на посев начального состояния: экран монтируется, когда `detail`
@@ -842,18 +854,25 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
               таблицы было бы тесно. */}
           <div className="terminal-controls">
             <div className="replay-controls">
-              <Button variant="solid" onClick={() => void replay.step()} disabled={!replay.ready || replay.ended}>
-                {t('step')} ▶
-              </Button>
-              <Seg
-                options={speedOptions}
-                value={replay.speed ?? 0}
-                onChange={(v) => replay.setSpeed(v || null)}
-                ariaLabel={t('speed')}
-              />
+              {/* В эфире время ведут часы, а не участник: шагать и ускорять
+                  нечего, и кнопки, которые ничего не делают, тут не стоят. */}
+              {!isLive && (
+                <>
+                  <Button variant="solid" onClick={() => void replay.step()} disabled={!replay.ready || replay.ended}>
+                    {t('step')} ▶
+                  </Button>
+                  <Seg
+                    options={speedOptions}
+                    value={replay.speed ?? 0}
+                    onChange={(v) => replay.setSpeed(v || null)}
+                    ariaLabel={t('speed')}
+                  />
+                </>
+              )}
+              {isLive && <span className="muted">{t('liveBadge')}</span>}
               {session.dataSource === 'synthetic' && <span className="muted">{t('syntheticBadge')}</span>}
               <Button tight onClick={() => void leave()}>
-                {t('backToList')}
+                {isLive ? t('backToTournament') : t('backToList')}
               </Button>
               <Seg
                 className="view-switch"

@@ -30,11 +30,24 @@ export const useBacktestStats = (source: DataSource) =>
     queryFn: () => apiJson<BacktestStats>(`/api/backtest/stats${qs({ source })}`),
   });
 
+/**
+ * Сессия целиком. Турнирная перечитывается сама раз в три секунды: её позиции
+ * закрывает серверный движок, и без опроса участник не узнал бы, что стоп уже
+ * сработал.
+ */
 export const useBacktestSession = (id: string) =>
   useQuery({
     queryKey: sessionKey(id),
     queryFn: () => apiJson<SessionDetail>(`/api/backtest/sessions/${id}`),
+    refetchInterval: (q) => (q.state.data?.tournament?.mode === 'live' ? LIVE_POLL_MS : false),
   });
+
+/** Как часто перечитывать эфирную сессию: позиции закрывает сервер. */
+const LIVE_POLL_MS = 3000;
+
+/** Живой хвост минуток BTC и время сервера — источник свечей турнира в эфире. */
+export const fetchLiveTail = () =>
+  apiJson<{ serverTime: string; minutes: ApiCandle[] }>('/api/market-data/live');
 
 /**
  * После любой правки: сама сессия, список и общая статистика. И после отказа

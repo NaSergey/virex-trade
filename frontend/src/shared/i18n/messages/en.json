@@ -808,6 +808,8 @@
     "speed": "Autoplay",
     "pause": "Pause",
     "backToList": "Back to list",
+    "backToTournament": "Back to tournament",
+    "liveBadge": "Live",
     "historyEnded": "History has run out — finishing the session.",
     "dayN": "day {n}",
     "level": { "entry": "entry", "stop": "stop", "take": "take", "liq": "liquidation", "limitClose": "limit close", "orderEntry": "entry order", "gridUpper": "grid upper", "gridLower": "grid lower", "gridPending": "grid" },

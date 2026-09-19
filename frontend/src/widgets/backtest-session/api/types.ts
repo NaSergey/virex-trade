@@ -21,6 +21,22 @@ export interface BacktestSession {
   status: 'active' | 'finished';
   createdAt: string;
   finishedAt: string | null;
+  /** Турнирная сессия: id турнира и его граница. У обычной — null. */
+  tournamentId: string | null;
+  endTime: string | null;
+}
+
+/**
+ * Турнир сессии — рядом с ней, а не внутри: терминалу нужны только эти поля.
+ * `mode: 'live'` означает, что цены и время ставит сервер, а браузер не
+ * проверяет срабатывания — их исполняет серверный движок.
+ */
+export interface SessionTournament {
+  id: string;
+  name: string;
+  mode: string;
+  status: 'lobby' | 'running' | 'finished';
+  endsAt: string | null;
 }
 
 /** Одно исполнение на вход — открытие сделки или добор сеткой (см. entries
@@ -90,6 +106,8 @@ export interface Summary {
 
 export interface SessionDetail {
   session: BacktestSession;
+  /** Не null — сессия турнира; см. `SessionTournament`. */
+  tournament: SessionTournament | null;
   /** Тренажёр прежней версии генератора: графика нет, сессию можно только завершить. */
   synthOutdated: boolean;
   trades: BacktestTrade[];

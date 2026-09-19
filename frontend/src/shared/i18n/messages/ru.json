@@ -536,6 +536,8 @@
     "speed": "Автопрокрутка",
     "pause": "Пауза",
     "backToList": "К списку",
+    "backToTournament": "К турниру",
+    "liveBadge": "Прямой эфир",
     "historyEnded": "История кончилась — сессия завершается.",
     "dayN": "день {n}",
     "level": { "entry": "вход", "stop": "стоп", "take": "тейк", "liq": "ликвидация", "limitClose": "лимит закрытия", "orderEntry": "ордер входа", "gridUpper": "верх сетки", "gridLower": "низ сетки", "gridPending": "сетка" },
