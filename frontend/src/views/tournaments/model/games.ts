@@ -20,7 +20,5 @@ export type Game = {
 };
 
 export const GAMES: readonly Game[] = [
-  // Страница игры (`/tournaments/trading`) — Task 10 плана турниров; `available`
-  // станет `true` вместе с ней.
-  { id: 'trading', href: '/tournaments/trading', available: false },
+  { id: 'trading', href: '/tournaments/trading', available: true },
 ];

@@ -2082,6 +2082,30 @@
     margin-top: var(--s1);
   }
 
+  /* Баланс монет в шапке. Кнопка, но выглядит как значение: цифра моноширинная,
+     единица приглушена — это показание, а не призыв нажать. */
+  .coins {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .coins-n {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: var(--t-s);
+  }
+  .coins-unit {
+    font-size: var(--t-xs);
+    color: var(--ink-3);
+  }
+  .coins:hover .coins-n { text-decoration: underline; }
+
   /* ═══════════════ КАТАЛОГ ИГР ═══════════════
      Строки на волосяных линиях, а не карточки: как остальные списки продукта.
      Игра-ссылка целиком кликабельна, подчёркивается название. */

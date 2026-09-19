@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { CoinBalance } from '@/entities/coins';
 import { useAuth } from '@/features/auth';
 import { DonateDialog } from '@/features/donation';
 import { useOnboarding } from '@/features/onboarding';
@@ -164,6 +165,9 @@ export function TopNav() {
         </nav>
 
         <div className="top-r" ref={menuRef}>
+          {/* Монеты — слева от переключателей и профиля: их тратят в играх, а
+              баланс должен быть виден с любой страницы, не только из раздела. */}
+          <CoinBalance onBuy={() => setDonateOpen(true)} />
           <ThemeToggle />
           <Button
             variant="none"
