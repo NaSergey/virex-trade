@@ -7,8 +7,7 @@ import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { FieldGroup, Input } from '@/shared/ui/Field';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { Seg, type SegOption } from '@/shared/ui/Seg';
-import { useCreateSession } from '../api/hooks';
-import type { DataSource } from '../api/types';
+import { useCreateSession, type DataSource } from '@/widgets/backtest-session';
 
 type Visibility = 'show' | 'hide';
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { SessionScreen } from './components/SessionScreen';
+import { SessionScreen } from '@/widgets/backtest-session';
 
 /**
  * Обёртка сессии для адреса `/backtest/<id>` — сама сессия (загрузка, терминал,

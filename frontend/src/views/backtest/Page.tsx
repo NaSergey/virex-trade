@@ -6,12 +6,17 @@ import { useTranslations } from 'next-intl';
 import { useAuth } from '@/features/auth';
 import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader } from '@/shared/ui/dialog';
 import { Wrap } from '@/shared/ui/Wrap';
-import { useBacktestSessions, useBacktestStats, useDeleteSession } from './api/hooks';
-import type { DataSource, SessionListItem } from './api/types';
 import { SessionsList } from './components/SessionsList';
 import { StartSession } from './components/StartSession';
 import { StatsBlock } from './components/StatsBlock';
-import { pruneDrawings } from './lib/drawings/store';
+import {
+  pruneDrawings,
+  useBacktestSessions,
+  useBacktestStats,
+  useDeleteSession,
+  type DataSource,
+  type SessionListItem,
+} from '@/widgets/backtest-session';
 
 /**
  * Бектест — ручная прокрутка случайного отрезка истории BTC.

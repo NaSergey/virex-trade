@@ -5,9 +5,10 @@ import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import { Money } from '@/shared/ui/Money';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { Seg, type SegOption } from '@/shared/ui/Seg';
-import type { BacktestStats, DataSource, TagSummary } from '../api/types';
-import { formatR } from '../lib/money';
-import { SummaryCells } from './SummaryCells';
+import type { DataSource } from '@/widgets/backtest-session';
+import type { BacktestStats, TagSummary } from '@/widgets/backtest-session/api/types';
+import { formatR } from '@/widgets/backtest-session/lib/money';
+import { SummaryCells } from '@/widgets/backtest-session';
 
 /**
  * Итог по всем сессиям и по тегам. Подпись под таблицей тегов обязательна: как

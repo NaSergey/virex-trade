@@ -7,8 +7,8 @@ import { EmptyState } from '@/shared/ui/EmptyState';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import { Money } from '@/shared/ui/Money';
 import { SectionHead } from '@/shared/ui/SectionHead';
-import type { SessionListItem } from '../api/types';
-import { formatR } from '../lib/money';
+import type { SessionListItem } from '@/widgets/backtest-session';
+import { formatR } from '@/widgets/backtest-session/lib/money';
 
 /**
  * Сессии, свежие сверху. Дата в первой колонке — когда сессия создана, а не
