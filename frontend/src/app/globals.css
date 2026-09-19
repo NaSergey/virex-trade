@@ -2106,6 +2106,32 @@
   }
   .coins:hover .coins-n { text-decoration: underline; }
 
+  /* Состав турнира — просто имена в столбик, без маркеров: это перечень
+     участников, а не список дел. */
+  .players {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .players li {
+    padding: var(--s2) 0;
+    border-bottom: 1px solid var(--hair);
+  }
+
+  /* Доли призового фонда: по узкому полю на место, в одну строку, с переносом
+     на узком экране — мест бывает до девяти. */
+  .shares {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s3);
+  }
+  .share {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 92px;
+  }
+
   /* ═══════════════ КАТАЛОГ ИГР ═══════════════
      Строки на волосяных линиях, а не карточки: как остальные списки продукта.
      Игра-ссылка целиком кликабельна, подчёркивается название. */

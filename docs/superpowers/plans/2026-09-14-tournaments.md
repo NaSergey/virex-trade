@@ -272,7 +272,7 @@ Modify `donations/donation.config.ts` (`COINS_PER_USDT`), `donations.service.ts`
 - `SessionScreen({ id, onLeave, leaveLabel? })` (2026-09-18: `extraTab` убран — вкладки с
   лидербордом нет).
 
-- [ ] Тесты `live.ts`. Реализация. `npx vitest run`, `npx tsc --noEmit`. Commit.
+- [x] Тесты `live.ts`. Реализация. `npx vitest run`, `npx tsc --noEmit`. Commit.
 
 ### Task 10: Каталог игр, торговый турнир, рейтинг (2026-09-18: переписан под каталог)
 
@@ -284,14 +284,14 @@ Modify `donations/donation.config.ts` (`COINS_PER_USDT`), `donations.service.ts`
 `app/(app)/tournaments/trading/[id]/page.tsx`; Modify `widgets/top-nav/TopNav.tsx`,
 `shared/i18n/messages/{ru,en}.json`.
 
-- [ ] `/tournaments` — каталог из `GAMES` (одна запись); `/tournaments/trading` — мои
+- [x] `/tournaments` — каталог из `GAMES` (одна запись); `/tournaments/trading` — мои
   турниры, форма (место, депозит, длительность, взнос, добавка, победители и доли — без
   режима; итоговый фонд под формой), рейтинг; `/tournaments/trading/<id>` — состав и фонд с
   разбивкой по местам, после финала — призёры (`Winners`), таблицы участников нет.
-- [ ] `proxy.ts`: `next=` возвращает на `/tournaments/trading/<id>`; проверить, что путь не
+- [x] `proxy.ts`: `next=` возвращает на `/tournaments/trading/<id>`; проверить, что путь не
   режется белым списком.
-- [ ] i18n, пункт «Турниры» в навигации.
-- [ ] `npx tsc --noEmit`, `npx eslint`, `npx vitest run`, `npx next build`. Commit.
+- [x] i18n, пункт «Турниры» в навигации.
+- [x] `npx tsc --noEmit`, `npx eslint`, `npx vitest run`, `npx next build`. Commit.
 
 ### Task 10a: Баланс монет в шапке (2026-09-18)
 
@@ -301,17 +301,17 @@ Modify `donations/donation.config.ts` (`COINS_PER_USDT`), `donations.service.ts`
 `views/trading-tournaments`/`views/tournament` (сброс `['coins']` после взноса, выхода,
 удаления), `shared/i18n/messages/{ru,en}.json`.
 
-- [ ] `useCoinBalance` — `GET /api/coins`, `refetchInterval` 30 с; `CoinBalance` — чип в
+- [x] `useCoinBalance` — `GET /api/coins`, `refetchInterval` 30 с; `CoinBalance` — чип в
   правой части шапки слева от меню профиля, клик открывает `DonateDialog`; на мобильной
   раскладке шапки в две строки чип остаётся в правой части.
-- [ ] Тест «≈ N монет» — курс и округление вниз.
-- [ ] `npx tsc --noEmit`, `npx eslint`, `npx vitest run`, `npx next build`. Commit.
+- [x] Тест «≈ N монет» — курс и округление вниз.
+- [x] `npx tsc --noEmit`, `npx eslint`, `npx vitest run`, `npx next build`. Commit.
 
 ### Task 11: CLAUDE.md
 
-- [ ] Раздел «Турниры» (каталог игр, торговый турнир только в эфире, валюта: 1000 на старте
+- [x] Раздел «Турниры» (каталог игр, торговый турнир только в эфире, валюта: 1000 на старте
   и 500 за USDT, призовой фонд и доли, рейтинг игры; таблицы внутри турнира нет); пути
   терминала в разделе про бектест → `widgets/backtest-session`.
-- [ ] Раздел «Донаты»: донат теперь ещё и покупка монет — зачёт в одной транзакции с CAS
+- [x] Раздел «Донаты»: донат теперь ещё и покупка монет — зачёт в одной транзакции с CAS
   `claimByAmount`; вывода монет пока нет.
-- [ ] Commit.
+- [x] Commit.
