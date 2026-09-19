@@ -107,27 +107,27 @@ next-intl, vitest.
 ведёт в никуда — поэтому карточка помечена «скоро», пока маршрут не существует, и метка
 снимается в Task 10. Пункт «Турниры» в шапке — после «Бектеста».
 
-- [ ] `games.ts` — `GAMES: readonly Game[]`, `Game = { id, href, titleKey, descriptionKey, available }`;
+- [x] `games.ts` — `GAMES: readonly Game[]`, `Game = { id, href, titleKey, descriptionKey, available }`;
   тест: ids уникальны, href начинается с `/tournaments/`, у доступной игры есть ключи текстов
   в обоих языках.
-- [ ] `Page`, `GameCard`, маршрут, пункт шапки, i18n.
-- [ ] `npx tsc --noEmit`, `npx eslint`, `npx vitest run`. Commit.
+- [x] `Page`, `GameCard`, маршрут, пункт шапки, i18n.
+- [x] `npx tsc --noEmit`, `npx eslint`, `npx vitest run`. Commit.
 
 ### Task 3a: Схема — валюта, взнос, места (2026-09-18)
 
 **Files:** Modify `backend/prisma/schema.prisma`.
 
-- [ ] `Tournament`: `mode` с дефолтом `"live"`, `visibility String @default("private")`,
+- [x] `Tournament`: `mode` с дефолтом `"live"`, `visibility String @default("private")`,
   `@@index([visibility, status])` под общий список, `maxPlayers Int @default(10)`,
   `entryFee Int @default(0)`, `prizeBonus Int @default(0)`, `winnersCount Int @default(1)`,
   `payoutShares Int[] @default([100])`; `TournamentParticipant`: `finalEquity Float?`,
   `place Int?`, `prizeWon Int?`; `User.coinBalance Int @default(1000)` — стартовые 1000 всем,
   и нынешним аккаунтам тоже; модель `CoinTransaction` с ключом `coin_tx_once (userId, kind, refId)`
   — как в спеке.
-- [ ] `npx prisma validate`, `npx prisma generate` (`nest watch` держит движок — EPERM).
+- [x] `npx prisma validate`, `npx prisma generate` (`nest watch` держит движок — EPERM).
   На сервере `db push` только добавляет колонки с дефолтом и nullable, `--accept-data-loss`
   не нужен: новая unique-колонка на существующей таблице тут не добавляется.
-- [ ] Commit.
+- [x] Commit.
 
 ### Task 3b: Модуль `coins` и зачёт монет за донат (2026-09-18)
 
@@ -146,10 +146,10 @@ Modify `donations/donation.config.ts` (`COINS_PER_USDT`), `donations.service.ts`
 - `claimByAmount`: CAS-обновление и `credit` — в одной интерактивной `$transaction`; P2002
   по-прежнему ловится снаружи и значит «уже разобран».
 
-- [ ] Тесты: `charge` в гонке двух списаний не уводит баланс в минус; два вызова
+- [x] Тесты: `charge` в гонке двух списаний не уводит баланс в минус; два вызова
   `claimByAmount` на один перевод дают одну строку `DONATION`; зачёт от запрошенной суммы, не
   от суммы с хвостом; анонимный донат монет не даёт; падение записи доната откатывает зачёт.
-- [ ] Реализация. `npx jest src/coins src/donations` — PASS. Commit.
+- [x] Реализация. `npx jest src/coins src/donations` — PASS. Commit.
 
 ### Task 4: Бектест под турниры
 
@@ -162,15 +162,15 @@ Modify `donations/donation.config.ts` (`COINS_PER_USDT`), `donations.service.ts`
 - `finishTournamentSession(sessionId: string, time: Date, price: number): Promise<void>`.
 - `getSession` → `{ ..., session: { ...endTime }, tournament: { id, name, mode, status, endsAt } | null }`.
 
-- [ ] Тесты: `listSessions`/`stats` фильтруют `tournamentId: null`; эфир — `openTrade` берёт
+- [x] Тесты: `listSessions`/`stats` фильтруют `tournamentId: null`; эфир — `openTrade` берёт
   цену и время из `quote()`, `closeTrade` с `stop` — `TOURNAMENT_LIVE_EXIT`, с `manual` — цена
   `quote()`; после `endTime` — `TOURNAMENT_ENDED`; `finish` эфира — `TOURNAMENT_LIVE_FINISH`;
   `systemClose` при проигранном CAS — `false`; `finishTournamentSession` закрывает
   остаток по цене и завершает. (2026-09-18: снят пункт про историю турнира — `endTime` для
   `BACKTEST_TIME_INVALID`, `advance` и `sessionCandles`.)
-- [ ] Реализация: общий `applyClose` для `closeTrade` и `systemClose`; `closeRemaining` с
+- [x] Реализация: общий `applyClose` для `closeTrade` и `systemClose`; `closeRemaining` с
   функцией цены вместо `closeAtEntry`.
-- [ ] `npx jest src/backtest` — PASS. Commit.
+- [x] `npx jest src/backtest` — PASS. Commit.
 
 ### Task 5: Места, призы, рейтинг и отрезки эфира (чистые функции)
 
@@ -199,7 +199,7 @@ Modify `donations/donation.config.ts` (`COINS_PER_USDT`), `donations.service.ts`
   `Segment = { from, to, bar: Bar, extHigh: number | null, extLow: number | null }`.
 - `barForTrade(seg: Segment, trade: { entryTime: number; entryPrice: number }): Bar | null`.
 
-- [ ] Тесты — по списку спеки. Реализация. PASS. Commit.
+- [x] Тесты — по списку спеки. Реализация. PASS. Commit.
 
 ### Task 6: Модуль `tournaments`
 
@@ -212,10 +212,10 @@ Modify `donations/donation.config.ts` (`COINS_PER_USDT`), `donations.service.ts`
 `dueForFinal(now)`, `rating(userId)`, `listPublic()` (2026-09-18: публичные лобби с местами,
 новые сверху, не больше 50). Маршруты `GET /public` и `GET /rating` объявлены раньше `:id`.
 
-- [ ] Тесты — по списку спеки, включая взнос и добавку (создание, вход, выход, удаление,
+- [x] Тесты — по списку спеки, включая взнос и добавку (создание, вход, выход, удаление,
   повторный вход), дуэль на два места, старт при нескольких победителях, финал с местами и
   призами по долям и рейтинг. Маршрут `GET /rating` объявлен раньше `:id`.
-- [ ] Реализация: `create` — валидация долей (`TOURNAMENT_BAD_PAYOUT`), `charge` взноса и
+- [x] Реализация: `create` — валидация долей (`TOURNAMENT_BAD_PAYOUT`), `charge` взноса и
   добавки, `join` — `charge` взноса, оба в одной транзакции со строкой участника;
   `leave`/`remove` — `refund` (при удалении — взносы всем и добавка создателю);
   `finalize` — CAS статуса, `finalEquity`, `place`, `prizeWon` и `TOURNAMENT_PRIZE`
@@ -228,10 +228,20 @@ Modify `donations/donation.config.ts` (`COINS_PER_USDT`), `donations.service.ts`
 **Consumes:** `buildSegments`, `barForTrade`, `checkMinute`, `systemClose`,
 `finishTournamentSession`, `minutesSince`, `TournamentsService.finalize`.
 
-- [ ] Тесты: стоп в отрезке; лимитка, затем стоп в одном отрезке; позиция не проверяется до
+- [x] Тесты: стоп в отрезке; лимитка, затем стоп в одном отрезке; позиция не проверяется до
   входа; `processedUntil` сохраняется; финал ждёт закрытия последней минутки; ошибка
   турнира не останавливает остальные. Реализация. PASS.
-- [ ] Бэкенд целиком: `npx tsc --noEmit`, `npx jest`. Commit.
+- [x] Бэкенд целиком: `tsc` и `jest` — PASS (77 наборов, 743 теста). Commit `c164b4e`.
+
+> **Правка правила при реализации.** `barForTrade` НЕ засчитывает экстремумы отрезка позиции,
+> открытой внутри него (в спеке было «плюс новые экстремумы»). Экстремумы во времени не
+> расположены, и после перезапуска, когда отрезком становится целая минутка, сделка с её
+> пятидесятой секунды ловила бы стоп по минимуму десятой. Пропущенное касание наверстает
+> следующий тик через две секунды; выдуманное закрытие отменить было бы нечем.
+>
+> Ещё: «лимитка, затем стоп в одном отрезке» из спеки невозможно — `checkMinute` отдаёт стопу
+> приоритет над лимиткой в той же свече. Вместо этого проверяются две лимитки подряд (второй
+> проход видит уже снятую первую) и сам приоритет стопа.
 
 ### Task 8: Переезд терминала в `widgets/backtest-session`
 
@@ -239,9 +249,14 @@ Modify `donations/donation.config.ts` (`COINS_PER_USDT`), `donations.service.ts`
 → `frontend/src/widgets/backtest-session/`; обратно в `views/backtest/components/` —
 `SessionsList`, `StartSession`, `StatsBlock`; Create `widgets/backtest-session/index.ts`.
 
-- [ ] Переезд без правок кода — отдельный коммит.
-- [ ] Импорты страницы бектеста и трёх её блоков — через `@/widgets/backtest-session`.
-- [ ] `npx tsc --noEmit`, `npx vitest run`. Commit.
+- [x] Переезд без правок кода — отдельный коммит `56fa8c6` (чистые переименования).
+- [x] Импорты страницы бектеста и её блоков — через `@/widgets/backtest-session`. `SummaryCells`
+  остался в виджете: он общий у итога сессии и статистики страницы.
+- [x] `tsc` и `vitest` (22 набора, 271 тест) — PASS. Commit `a9972a0`.
+
+> Восемь ошибок eslint в коде терминала (`react-hooks/set-state-in-effect` и соседние правила
+> React Compiler) — не из этой работы: переезд был чистым переименованием, и они были там
+> раньше. `next build` ими не гейтится.
 
 ### Task 9: Терминал — эфир и турнирные пропсы
 
