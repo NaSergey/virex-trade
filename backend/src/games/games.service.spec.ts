@@ -302,3 +302,83 @@ describe('GamesService.join', () => {
     expect(h.seats).toHaveLength(0);
   });
 });
+
+describe('GamesService.leave', () => {
+  it('возвращает стек монетами и освобождает место для следующего', async () => {
+    const h = makeService();
+    await h.service.create('creator', TABLE);
+    await h.service.join('me', 'gt1', 300);
+
+    const result = await h.service.leave('me', 'gt1');
+
+    expect(result).toEqual({ success: true });
+    expect(h.credits).toEqual([{ userId: 'me', amount: 300, kind: 'GAME_CASHOUT', refId: expect.any(String) }]);
+    expect(h.seats).toHaveLength(0);
+
+    await h.service.join('other', 'gt1', 300);
+    expect(h.seats[0]).toMatchObject({ seatIndex: 0 });
+  });
+
+  it('уход идёт через транзакционный клиент, а не напрямую через prisma', async () => {
+    const h = makeService();
+    await h.service.create('creator', TABLE);
+    await h.service.join('me', 'gt1', 300);
+
+    await h.service.leave('me', 'gt1');
+
+    expect(h.tx.gameSeat.delete).toHaveBeenCalledTimes(1);
+    expect(h.prisma.gameSeat.delete).not.toHaveBeenCalled();
+  });
+
+  it('уход не сидящего — GAME_NOT_SEATED, монеты не начисляются', async () => {
+    const h = makeService();
+    await h.service.create('creator', TABLE);
+
+    await expect(h.service.leave('me', 'gt1')).rejects.toMatchObject({
+      response: { code: 'GAME_NOT_SEATED' },
+    });
+    expect(h.credits).toHaveLength(0);
+  });
+});
+
+describe('GamesService.close', () => {
+  it('создатель закрывает пустой стол', async () => {
+    const h = makeService();
+    await h.service.create('creator', TABLE);
+
+    const result = await h.service.close('creator', 'creator@example.com', 'gt1');
+
+    expect(result).toEqual({ success: true });
+    expect(h.tables.get('gt1').status).toBe('closed');
+  });
+
+  it('непустой стол закрыть нельзя', async () => {
+    const h = makeService();
+    await h.service.create('creator', TABLE);
+    await h.service.join('me', 'gt1', 300);
+
+    await expect(h.service.close('creator', 'creator@example.com', 'gt1')).rejects.toMatchObject({
+      response: { code: 'GAME_TABLE_NOT_EMPTY' },
+    });
+    expect(h.tables.get('gt1').status).toBe('open');
+  });
+
+  it('чужой стол не создателем и не владельцем — отказ', async () => {
+    const h = makeService();
+    await h.service.create('creator', TABLE);
+
+    await expect(h.service.close('me', 'me@example.com', 'gt1')).rejects.toMatchObject({
+      response: { code: 'GAME_NOT_CREATOR_OR_ADMIN' },
+    });
+  });
+
+  it('уже закрытый стол — GAME_TABLE_CLOSED', async () => {
+    const h = makeService();
+    await h.service.create('creator', TABLE);
+    await h.service.close('creator', 'creator@example.com', 'gt1');
+
+    await expect(h.service.close('creator', 'creator@example.com', 'gt1')).rejects.toMatchObject({
+      response: { code: 'GAME_TABLE_CLOSED' },
+    });
+  });
+});

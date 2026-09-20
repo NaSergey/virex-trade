@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { isOwnerEmail } from '../admin/owner';
 import { CoinsService } from '../coins/coins.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateGameTableDto } from './dto/game-table.dto';
@@ -8,9 +9,12 @@ import {
   gameBadBuyInRange,
   gameBadSeats,
   gameBuyInOutOfRange,
+  gameNotCreatorOrAdmin,
+  gameNotSeated,
   gameSeatRace,
   gameTableClosed,
   gameTableFull,
+  gameTableNotEmpty,
   gameTableNotFound,
 } from './game-errors';
 import { GameType, PUBLIC_LIST_LIMIT, SEATS_RANGE } from './games.config';
@@ -148,5 +152,39 @@ export class GamesService {
   private async pushState(id: string) {
     const state = await this.snapshot(id);
     if (state) this.gateway.broadcastTableState(id, state);
+  }
+
+  /** Уход: остаток стека возвращается монетами, место освобождается для следующего. */
+  async leave(userId: string, id: string) {
+    await this.prisma.$transaction(async (tx) => {
+      const seat = await tx.gameSeat.findUnique({ where: { tableId_userId: { tableId: id, userId } } });
+      if (!seat) throw gameNotSeated();
+      await tx.gameSeat.delete({ where: { tableId_userId: { tableId: id, userId } } });
+      await this.coins.credit(tx, userId, seat.stack, 'GAME_CASHOUT', seat.id);
+    });
+    await this.pushState(id);
+    return { success: true as const };
+  }
+
+  /**
+   * Закрыть стол — создатель или владелец сервиса, и только когда стол пуст:
+   * закрыть стол с чужими деньгами на нём нельзя. Проверка пустоты — часть
+   * самого `updateMany` (`seats: { none: {} } `), а не отдельное чтение до
+   * записи: место, занятое между чтением и записью, иначе закрыло бы стол с
+   * игроком внутри.
+   */
+  async close(userId: string, email: string | null | undefined, id: string) {
+    const table = await this.prisma.gameTable.findUnique({ where: { id } });
+    if (!table) throw gameTableNotFound();
+    if (table.creatorId !== userId && !isOwnerEmail(email)) throw gameNotCreatorOrAdmin();
+    if (table.status !== 'open') throw gameTableClosed();
+
+    const moved = await this.prisma.gameTable.updateMany({
+      where: { id, status: 'open', seats: { none: {} } },
+      data: { status: 'closed', closedAt: new Date() },
+    });
+    if (moved.count === 0) throw gameTableNotEmpty();
+    await this.pushState(id);
+    return { success: true as const };
   }
 }
