@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { GamesService } from './games.service';
 
 const TABLE = {
@@ -11,7 +12,10 @@ const TABLE = {
 function makeService() {
   const tables = new Map<string, any>();
   const seats: any[] = [];
+  const charges: any[] = [];
+  const credits: any[] = [];
   let nextTableId = 1;
+  let nextSeatId = 1;
 
   const prisma: any = {
     gameTable: {
@@ -59,15 +63,69 @@ function makeService() {
             _count: { seats: seats.filter((s) => s.tableId === t.id).length },
           })),
       ),
+      updateMany: jest.fn(async ({ where, data }: any) => {
+        const row = tables.get(where.id);
+        if (!row) return { count: 0 };
+        if (where.status && row.status !== where.status) return { count: 0 };
+        if (where.seats?.none && seats.some((s) => s.tableId === where.id)) return { count: 0 };
+        tables.set(where.id, { ...row, ...data });
+        return { count: 1 };
+      }),
     },
-    gameSeat: {},
+    gameSeat: {
+      create: jest.fn(async ({ data }: any) => {
+        const clash = seats.some(
+          (s) =>
+            s.tableId === data.tableId && (s.seatIndex === data.seatIndex || s.userId === data.userId),
+        );
+        if (clash) throw new Prisma.PrismaClientKnownRequestError('duplicate', { code: 'P2002', clientVersion: 'test' });
+        const row = { id: `gs${nextSeatId++}`, joinedAt: new Date(), ...data };
+        seats.push(row);
+        return row;
+      }),
+      findUnique: jest.fn(async ({ where }: any) => {
+        const key = where.tableId_userId;
+        return seats.find((s) => s.tableId === key.tableId && s.userId === key.userId) ?? null;
+      }),
+      delete: jest.fn(async ({ where }: any) => {
+        const key = where.tableId_userId;
+        const i = seats.findIndex((s) => s.tableId === key.tableId && s.userId === key.userId);
+        return seats.splice(i, 1)[0];
+      }),
+    },
+    $transaction: jest.fn(),
   };
 
-  const coins = { charge: jest.fn(), credit: jest.fn() };
+  // Транзакция откатывает состояние: без этого проверка «не хватило монет —
+  // и места нет» ничего бы не значила, ведь строку мы уже вставили.
+  prisma.$transaction.mockImplementation(async (arg: unknown) => {
+    if (typeof arg !== 'function') return Promise.all(arg as unknown[]);
+    const snapshotTables = new Map(tables);
+    const snapshotSeats = [...seats];
+    try {
+      return await (arg as (tx: unknown) => unknown)(prisma);
+    } catch (e) {
+      tables.clear();
+      for (const [k, v] of snapshotTables) tables.set(k, v);
+      seats.length = 0;
+      seats.push(...snapshotSeats);
+      throw e;
+    }
+  });
+
+  const coins = {
+    charge: jest.fn(async (_tx: unknown, userId: string, amount: number, kind: string, refId: string) => {
+      charges.push({ userId, amount, kind, refId });
+    }),
+    credit: jest.fn(async (_tx: unknown, userId: string, amount: number, kind: string, refId: string) => {
+      credits.push({ userId, amount, kind, refId });
+    }),
+  };
+
   const gateway = { broadcastTableState: jest.fn() };
 
   const service = new GamesService(prisma as never, coins as never, gateway as never);
-  return { service, prisma, tables, seats };
+  return { service, prisma, coins, gateway, tables, seats, charges, credits };
 }
 
 describe('GamesService.create', () => {
@@ -137,5 +195,63 @@ describe('GamesService.get', () => {
     expect(state.mySeat).toBe(1);
     expect(state.isCreator).toBe(false);
     expect(state.seats).toEqual([{ userId: 'me', name: null, seatIndex: 1, stack: 200 }]);
+  });
+});
+
+describe('GamesService.join', () => {
+  it('садится на первое свободное место и списывает buy-in', async () => {
+    const h = makeService();
+    await h.service.create('creator', TABLE);
+
+    const state = await h.service.join('me', 'gt1', 300);
+
+    expect(state.mySeat).toBe(0);
+    expect(h.charges).toEqual([{ userId: 'me', amount: 300, kind: 'GAME_BUYIN', refId: h.seats[0].id }]);
+    expect(h.gateway.broadcastTableState).toHaveBeenCalledWith('gt1', expect.any(Object));
+  });
+
+  it('повторная посадка за тот же стол отклоняется', async () => {
+    const h = makeService();
+    await h.service.create('creator', TABLE);
+    await h.service.join('me', 'gt1', 300);
+
+    await expect(h.service.join('me', 'gt1', 300)).rejects.toMatchObject({
+      response: { code: 'GAME_ALREADY_SEATED' },
+    });
+    expect(h.charges).toHaveLength(1);
+  });
+
+  it('buy-in вне диапазона стола отклоняется, монеты не списываются', async () => {
+    const h = makeService();
+    await h.service.create('creator', TABLE);
+
+    await expect(h.service.join('me', 'gt1', 50)).rejects.toMatchObject({
+      response: { code: 'GAME_BUY_IN_OUT_OF_RANGE' },
+    });
+    expect(h.charges).toHaveLength(0);
+    expect(h.seats).toHaveLength(0);
+  });
+
+  it('полный стол отклоняет посадку', async () => {
+    const h = makeService();
+    await h.service.create('creator', { ...TABLE, maxSeats: 1 });
+    await h.service.join('p1', 'gt1', 300);
+
+    await expect(h.service.join('p2', 'gt1', 300)).rejects.toMatchObject({
+      response: { code: 'GAME_TABLE_FULL' },
+    });
+  });
+
+  it('гонка за место — P2002 превращается в GAME_SEAT_RACE, а не в 500', async () => {
+    const h = makeService();
+    await h.service.create('creator', TABLE);
+    // Кто-то другой успел занять место 0 между чтением и вставкой.
+    h.prisma.gameSeat.create.mockImplementationOnce(() => {
+      throw new Prisma.PrismaClientKnownRequestError('duplicate', { code: 'P2002', clientVersion: 'test' });
+    });
+
+    await expect(h.service.join('me', 'gt1', 300)).rejects.toMatchObject({
+      response: { code: 'GAME_SEAT_RACE' },
+    });
   });
 });

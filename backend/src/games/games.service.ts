@@ -1,8 +1,20 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { CoinsService } from '../coins/coins.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateGameTableDto } from './dto/game-table.dto';
-import { gameBadBuyInRange, gameBadSeats, gameTableNotFound } from './game-errors';
+import {
+  gameAlreadySeated,
+  gameBadBuyInRange,
+  gameBadSeats,
+  gameBuyInOutOfRange,
+  gameSeatRace,
+  gameTableClosed,
+  gameTableFull,
+  gameTableNotFound,
+} from './game-errors';
 import { GameType, PUBLIC_LIST_LIMIT, SEATS_RANGE } from './games.config';
+import { GamesGateway } from './games.gateway';
 
 /**
  * Общая инфраструктура столов покера/блэкджека: лобби, посадка/уход с
@@ -13,8 +25,8 @@ import { GameType, PUBLIC_LIST_LIMIT, SEATS_RANGE } from './games.config';
 export class GamesService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly coins: unknown, // CoinsService — подключается в Task 5
-    private readonly gateway: unknown, // GamesGateway — подключается в Task 5
+    private readonly coins: CoinsService,
+    private readonly gateway: GamesGateway,
   ) {}
 
   /** Создатель не садится автоматически: buy-in ещё не выбран, и стол для чужой игры — законный случай. */
@@ -94,5 +106,47 @@ export class GamesService {
         .sort((a, b) => a.seatIndex - b.seatIndex)
         .map((s) => ({ userId: s.userId, name: s.user?.name ?? null, seatIndex: s.seatIndex, stack: s.stack })),
     };
+  }
+
+  /**
+   * Посадка: выбрать свободный номер места и списать buy-in одной
+   * транзакцией. Гонка за один и тот же `seatIndex` (или повторная посадка
+   * одного пользователя) ловится уникальным индексом БД — `P2002`
+   * превращается в понятную ошибку для повторной попытки, а не в 500.
+   */
+  async join(userId: string, id: string, buyIn: number) {
+    await this.prisma.$transaction(async (tx) => {
+      const table = await tx.gameTable.findUnique({ where: { id }, include: { seats: true } });
+      if (!table) throw gameTableNotFound();
+      if (table.status !== 'open') throw gameTableClosed();
+      if (table.seats.some((s) => s.userId === userId)) throw gameAlreadySeated();
+      if (buyIn < table.minBuyIn || buyIn > table.maxBuyIn) throw gameBuyInOutOfRange();
+
+      const taken = new Set(table.seats.map((s) => s.seatIndex));
+      let seatIndex = -1;
+      for (let i = 0; i < table.maxSeats; i++) {
+        if (!taken.has(i)) {
+          seatIndex = i;
+          break;
+        }
+      }
+      if (seatIndex === -1) throw gameTableFull();
+
+      let seat;
+      try {
+        seat = await tx.gameSeat.create({ data: { tableId: id, userId, seatIndex, stack: buyIn } });
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') throw gameSeatRace();
+        throw e;
+      }
+      await this.coins.charge(tx, userId, buyIn, 'GAME_BUYIN', seat.id);
+    });
+    await this.pushState(id);
+    return this.get(userId, id);
+  }
+
+  private async pushState(id: string) {
+    const state = await this.snapshot(id);
+    if (state) this.gateway.broadcastTableState(id, state);
   }
 }
