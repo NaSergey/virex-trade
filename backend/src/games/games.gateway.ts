@@ -67,8 +67,10 @@ export class GamesGateway implements OnGatewayInit, OnGatewayDisconnect {
 
   @SubscribeMessage('join_table')
   handleJoinTable(client: Socket, tableId: unknown) {
-    // handleConnection ждёт verifyAsync и может не успеть выставить userId
-    // раньше, чем socket.io доставит это сообщение из того же хендшейка.
+    // Middleware выше досюда неаутентифицированный сокет не пускает, но
+    // проверка остаётся: это граница аутентификации у канала, который возят
+    // деньги, и при любой правке middleware обработчики обязаны падать
+    // закрыто, а не открыто.
     if (!client.data.userId) return;
     if (typeof tableId !== 'string') return;
     client.join(tableId);
