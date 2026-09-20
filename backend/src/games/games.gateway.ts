@@ -33,8 +33,8 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(private readonly jwt: JwtService) {}
 
   async handleConnection(client: Socket) {
-    const token = client.handshake.auth?.token as string | undefined;
-    if (!token) {
+    const token = client.handshake.auth?.token as unknown;
+    if (typeof token !== 'string' || !token) {
       client.disconnect(true);
       return;
     }
@@ -51,12 +51,18 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('join_table')
-  handleJoinTable(client: Socket, tableId: string) {
+  handleJoinTable(client: Socket, tableId: unknown) {
+    // handleConnection ждёт verifyAsync и может не успеть выставить userId
+    // раньше, чем socket.io доставит это сообщение из того же хендшейка.
+    if (!client.data.userId) return;
+    if (typeof tableId !== 'string') return;
     client.join(tableId);
   }
 
   @SubscribeMessage('leave_table')
-  handleLeaveTable(client: Socket, tableId: string) {
+  handleLeaveTable(client: Socket, tableId: unknown) {
+    if (!client.data.userId) return;
+    if (typeof tableId !== 'string') return;
     client.leave(tableId);
   }
 
