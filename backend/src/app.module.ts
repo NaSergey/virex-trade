@@ -22,6 +22,7 @@ import { DonationsModule } from './donations/donations.module';
 import { CoinsModule } from './coins/coins.module';
 import { TournamentsModule } from './tournaments/tournaments.module';
 import { ReferralsModule } from './referrals/referrals.module';
+import { GamesModule } from './games/games.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { ReferralsModule } from './referrals/referrals.module';
     CoinsModule,
     TournamentsModule,
     ReferralsModule,
+    GamesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
