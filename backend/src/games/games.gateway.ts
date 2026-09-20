@@ -1,8 +1,8 @@
 import { Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
-  OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
@@ -21,10 +21,15 @@ import type { JwtPayload } from '../auth/strategies/jwt.strategy';
  * транзакцию с эскроу монет.
  */
 @WebSocketGateway({
+  // Хендшейк socket.io идёт своим HTTP-путём, и namespace его не задаёт.
+  // Наружу проксируются только `/api/*` и `/auth/*` (deploy/Caddyfile,
+  // next.config.ts), а всё прочее забирает гейт фронтенда и уводит на
+  // /login — поэтому канал обязан ехать под `/api/`.
+  path: '/api/games/socket.io',
   namespace: '/games',
   cors: { origin: process.env.FRONTEND_URL || 'http://localhost:3000', credentials: true },
 })
-export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class GamesGateway implements OnGatewayInit, OnGatewayDisconnect {
   private readonly logger = new Logger(GamesGateway.name);
 
   @WebSocketServer()
@@ -32,18 +37,28 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   constructor(private readonly jwt: JwtService) {}
 
-  async handleConnection(client: Socket) {
-    const token = client.handshake.auth?.token as unknown;
-    if (typeof token !== 'string' || !token) {
-      client.disconnect(true);
-      return;
-    }
-    try {
-      const payload = await this.jwt.verifyAsync<JwtPayload>(token, { secret: resolveJwtAccessSecret() });
-      client.data.userId = payload.sub;
-    } catch {
-      client.disconnect(true);
-    }
+  /**
+   * Аутентификация — middleware, а не `handleConnection`: socket.io шлёт
+   * пакет CONNECT до этого хука, и отказ после него клиент видит как обрыв
+   * связи, а не как отказ, и переподключается тем же мёртвым токеном
+   * бесконечно. Отказ из middleware приходит клиенту как `connect_error`,
+   * и автопереподключение не запускается.
+   */
+  afterInit(server: Server) {
+    server.use(async (client: Socket, next: (err?: Error) => void) => {
+      const token = client.handshake.auth?.token as unknown;
+      if (typeof token !== 'string' || !token) {
+        next(new Error('unauthorized'));
+        return;
+      }
+      try {
+        const payload = await this.jwt.verifyAsync<JwtPayload>(token, { secret: resolveJwtAccessSecret() });
+        client.data.userId = payload.sub;
+        next();
+      } catch {
+        next(new Error('unauthorized'));
+      }
+    });
   }
 
   handleDisconnect(client: Socket) {

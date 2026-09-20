@@ -121,11 +121,14 @@ model CoinTransaction {
   /// Баланс после этой строки — чтобы историю можно было читать, не пересчитывая.
   balanceAfter Int
   /// 'DONATION' | 'TOURNAMENT_FEE' | 'TOURNAMENT_BONUS' | 'TOURNAMENT_REFUND' | 'TOURNAMENT_PRIZE'
+  /// | 'GAME_BUYIN' | 'GAME_CASHOUT'
   kind         String
   /// Откуда строка: id доната; id турнира — добавка в фонд и приз;
   /// `<id турнира>:<joinedAt в мс>` — взнос и его возврат, то есть одно участие
   /// (вышел и вошёл снова — новое участие и новая пара строк);
-  /// `<id турнира>:bonus` — возврат добавки при удалении лобби.
+  /// `<id турнира>:bonus` — возврат добавки при удалении лобби;
+  /// `GameSeat.id` — GAME_BUYIN и GAME_CASHOUT одной посадки за стол игры
+  /// (новая посадка — новая строка GameSeat и новый id, даже за тот же стол).
   refId        String
   createdAt    DateTime @default(now())
 
@@ -1078,5 +1081,6 @@ model GameSeat {
 
   @@unique([tableId, seatIndex])
   @@unique([tableId, userId])
+  @@index([userId])
   @@map("game_seats")
 }

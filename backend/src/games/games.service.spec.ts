@@ -46,12 +46,20 @@ function makeTableApi(tables: Map<string, any>, seats: any[], counters: { table:
             (!where?.visibility || t.visibility === where.visibility) &&
             (!where?.status || t.status === where.status) &&
             (!where?.gameType || t.gameType === where.gameType) &&
+            // Каждое условие OR — это все свои поля разом (как в реальном
+            // Prisma), а не только creatorId/seats: `{ creatorId, status }`
+            // обязано требовать оба, иначе мок пропустил бы закрытый стол
+            // мимо фильтра listMine.
             (!where?.OR ||
-              where.OR.some(
-                (cond: any) =>
-                  (cond.creatorId && t.creatorId === cond.creatorId) ||
-                  (cond.seats?.some &&
-                    seats.some((s) => s.tableId === t.id && s.userId === cond.seats.some.userId)),
+              where.OR.some((cond: any) =>
+                Object.entries(cond).every(([key, val]: [string, any]) => {
+                  if (key === 'seats') {
+                    if (val.some) return seats.some((s) => s.tableId === t.id && s.userId === val.some.userId);
+                    if (val.none) return !seats.some((s) => s.tableId === t.id && s.userId === val.none.userId);
+                    return true;
+                  }
+                  return t[key] === val;
+                }),
               )) &&
             (!where?.seats?.none ||
               !seats.some((s) => s.tableId === t.id && s.userId === where.seats.none.userId)),
@@ -91,6 +99,10 @@ function makeSeatApi(seats: any[], counters: { seat: number }) {
     delete: jest.fn(async ({ where }: any) => {
       const key = where.tableId_userId;
       const i = seats.findIndex((s) => s.tableId === key.tableId && s.userId === key.userId);
+      // Настоящий Prisma бросает P2025 на DELETE несуществующей строки —
+      // ровно то, на что опирается `leave()`, чтобы отличить обычный отказ от
+      // повторного ухода.
+      if (i === -1) throw new Prisma.PrismaClientKnownRequestError('not found', { code: 'P2025', clientVersion: 'test' });
       return seats.splice(i, 1)[0];
     }),
   };
@@ -197,6 +209,28 @@ describe('GamesService.listPublic / listMine', () => {
     const rows = await h.service.listMine('me');
 
     expect(rows).toHaveLength(1);
+  });
+
+  it('мои столы показывают закрытый стол, где у меня осталось место — там мои фишки', async () => {
+    const h = makeService();
+    await h.service.create('creator', TABLE);
+    h.seats.push({ tableId: 'gt1', userId: 'me', seatIndex: 0, stack: 100 });
+    h.tables.get('gt1').status = 'closed';
+
+    const rows = await h.service.listMine('me');
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe('gt1');
+  });
+
+  it('мои столы не включают закрытый стол, где я лишь создатель без места', async () => {
+    const h = makeService();
+    await h.service.create('me', TABLE);
+    h.tables.get('gt1').status = 'closed';
+
+    const rows = await h.service.listMine('me');
+
+    expect(rows).toHaveLength(0);
   });
 });
 

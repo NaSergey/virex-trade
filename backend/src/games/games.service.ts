@@ -52,10 +52,14 @@ export class GamesService {
     });
   }
 
-  /** Столы, где я сижу или я создатель, ещё открытые. */
+  /**
+   * Мои столы: где я сижу — всегда, каким бы ни был статус, потому что в
+   * месте лежат мои фишки и их должно быть видно, чем бы стол ни кончился;
+   * где я лишь создатель — только пока он открыт.
+   */
   async listMine(userId: string) {
     const rows = await this.prisma.gameTable.findMany({
-      where: { status: 'open', OR: [{ creatorId: userId }, { seats: { some: { userId } } }] },
+      where: { OR: [{ seats: { some: { userId } } }, { creatorId: userId, status: 'open' }] },
       orderBy: { createdAt: 'desc' },
       include: { _count: { select: { seats: true } } },
     });
@@ -157,9 +161,17 @@ export class GamesService {
   /** Уход: остаток стека возвращается монетами, место освобождается для следующего. */
   async leave(userId: string, id: string) {
     await this.prisma.$transaction(async (tx) => {
-      const seat = await tx.gameSeat.findUnique({ where: { tableId_userId: { tableId: id, userId } } });
-      if (!seat) throw gameNotSeated();
-      await tx.gameSeat.delete({ where: { tableId_userId: { tableId: id, userId } } });
+      // Удаление и есть чтение: DELETE берёт блокировку строки и возвращает её
+      // актуальную версию. Читать стек отдельным запросом нельзя — между
+      // чтением и удалением игровая логика успеет его изменить, и кэшаут уйдёт
+      // на устаревшую сумму.
+      let seat;
+      try {
+        seat = await tx.gameSeat.delete({ where: { tableId_userId: { tableId: id, userId } } });
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') throw gameNotSeated();
+        throw e;
+      }
       await this.coins.credit(tx, userId, seat.stack, 'GAME_CASHOUT', seat.id);
     });
     await this.pushState(id);

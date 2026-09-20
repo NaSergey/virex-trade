@@ -10,48 +10,66 @@ function makeSocket(auth: Record<string, unknown> = {}) {
   };
 }
 
-describe('GamesGateway.handleConnection', () => {
-  it('без токена соединение обрывается', async () => {
-    const jwt = { verifyAsync: jest.fn() };
+/**
+ * Аутентификация теперь — middleware, поставленный в `afterInit`, а не
+ * `handleConnection`: socket.io шлёт пакет CONNECT раньше этого хука, и отказ
+ * после него клиент видел бы как обрыв связи и переподключался бы тем же
+ * мёртвым токеном бесконечно. Middleware достаётся вызовом `afterInit` на
+ * фейковом сервере и извлечением функции, переданной в `server.use`.
+ */
+describe('GamesGateway auth middleware', () => {
+  function getMiddleware(jwt: { verifyAsync: jest.Mock }) {
     const gateway = new GamesGateway(jwt as never);
+    const fakeServer = { use: jest.fn() };
+    gateway.afterInit(fakeServer as never);
+    return fakeServer.use.mock.calls[0][0] as (socket: unknown, next: (err?: Error) => void) => Promise<void>;
+  }
+
+  it('без токена отказывает и не проверяет его', async () => {
+    const jwt = { verifyAsync: jest.fn() };
+    const middleware = getMiddleware(jwt);
     const socket = makeSocket();
+    const next = jest.fn();
 
-    await gateway.handleConnection(socket as never);
+    await middleware(socket, next);
 
-    expect(socket.disconnect).toHaveBeenCalledWith(true);
+    expect(next).toHaveBeenCalledWith(expect.any(Error));
     expect(jwt.verifyAsync).not.toHaveBeenCalled();
   });
 
-  it('невалидный токен обрывает соединение', async () => {
-    const jwt = { verifyAsync: jest.fn().mockRejectedValue(new Error('bad token')) };
-    const gateway = new GamesGateway(jwt as never);
-    const socket = makeSocket({ token: 'bad' });
+  it('нестроковый токен отказывает так же, как отсутствующий', async () => {
+    const jwt = { verifyAsync: jest.fn() };
+    const middleware = getMiddleware(jwt);
+    const socket = makeSocket({ token: 42 });
+    const next = jest.fn();
 
-    await gateway.handleConnection(socket as never);
+    await middleware(socket, next);
 
-    expect(socket.disconnect).toHaveBeenCalledWith(true);
+    expect(next).toHaveBeenCalledWith(expect.any(Error));
+    expect(jwt.verifyAsync).not.toHaveBeenCalled();
   });
 
-  it('валидный токен кладёт userId в data и не обрывает соединение', async () => {
-    const jwt = { verifyAsync: jest.fn().mockResolvedValue({ sub: 'u1', email: 'u1@example.com' }) };
-    const gateway = new GamesGateway(jwt as never);
-    const socket = makeSocket({ token: 'good' });
+  it('невалидный токен отказывает', async () => {
+    const jwt = { verifyAsync: jest.fn().mockRejectedValue(new Error('bad token')) };
+    const middleware = getMiddleware(jwt);
+    const socket = makeSocket({ token: 'bad' });
+    const next = jest.fn();
 
-    await gateway.handleConnection(socket as never);
+    await middleware(socket, next);
+
+    expect(next).toHaveBeenCalledWith(expect.any(Error));
+  });
+
+  it('валидный токен кладёт userId в data и пропускает без ошибки', async () => {
+    const jwt = { verifyAsync: jest.fn().mockResolvedValue({ sub: 'u1', email: 'u1@example.com' }) };
+    const middleware = getMiddleware(jwt);
+    const socket = makeSocket({ token: 'good' });
+    const next = jest.fn();
+
+    await middleware(socket, next);
 
     expect(socket.data.userId).toBe('u1');
-    expect(socket.disconnect).not.toHaveBeenCalled();
-  });
-
-  it('нестроковый токен обрывает соединение так же, как отсутствующий', async () => {
-    const jwt = { verifyAsync: jest.fn() };
-    const gateway = new GamesGateway(jwt as never);
-    const socket = makeSocket({ token: 42 });
-
-    await gateway.handleConnection(socket as never);
-
-    expect(socket.disconnect).toHaveBeenCalledWith(true);
-    expect(jwt.verifyAsync).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith();
   });
 });
 
