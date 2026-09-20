@@ -88,6 +88,11 @@ model User {
   tournamentsCreated Tournament[]            @relation("TournamentCreator")
   tournamentEntries  TournamentParticipant[]
 
+  /// Столы покера/блэкджека, которые я создал, и места, которые я занимаю.
+  /// GameSeat живёт, только пока я сижу, — это не история, а текущее место.
+  gameTablesCreated GameTable[] @relation("GameTableCreator")
+  gameSeats         GameSeat[]
+
   /// Внутренняя валюта («монеты»): взносы в турниры, призы, покупка донатом.
   /// Стартовые 1000 — дефолт колонки, а не строка в register: так их получают и
   /// уже заведённые аккаунты при `db push`, и новый — без шага, который можно
@@ -1022,4 +1027,56 @@ model TronScanCursor {
   updatedAt     DateTime @updatedAt
 
   @@map("tron_scan_cursors")
+}
+
+/// Стол покера/блэкджека — общая инфраструктура обеих игр. Казино-логика
+/// ставок, не турнирная: постоянный стол, на который садятся со своим buy-in
+/// и с которого встают когда угодно, забирая остаток стека. Правила самой
+/// раздачи (карты, ставки, вскрытие) здесь не живут — предмет отдельных
+/// модулей поверх этого стола.
+model GameTable {
+  id         String     @id @default(uuid())
+  /// "blackjack" | "poker" — строкой, как остальные статусы этой схемы:
+  /// новый тип игры не требует миграции.
+  gameType   String
+  name       String
+  /// 'public' — виден в общем списке, пока открыт; 'private' — только по
+  /// ссылке. Умолчание закрытое: публикация — осознанный выбор создателя.
+  visibility String     @default("private")
+  /// 'open' — можно сесть; 'closed' — стола больше нет в лобби.
+  status     String     @default("open")
+  minBuyIn   Int
+  maxBuyIn   Int
+  maxSeats   Int
+  /// SetNull: удаление аккаунта создателя не должно стирать стол у тех, кто
+  /// за ним сидит.
+  creatorId  String?
+  creator    User?      @relation("GameTableCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+  createdAt  DateTime   @default(now())
+  closedAt   DateTime?
+  seats      GameSeat[]
+
+  @@index([visibility, status, createdAt])
+  @@map("game_tables")
+}
+
+/// Место за столом. Живёт, только пока игрок сидит — уход строку удаляет, а
+/// не помечает статусом: история и так лосслесно лежит в CoinTransaction
+/// (GAME_BUYIN/GAME_CASHOUT), а живая строка на выбывшего навсегда занимала
+/// бы номер места под `@@unique([tableId, seatIndex])`.
+model GameSeat {
+  id        String    @id @default(uuid())
+  tableId   String
+  table     GameTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seatIndex Int
+  /// Стек фишек в монетах. Меняется игровой логикой раздач (вне этого
+  /// сервиса); при посадке равен buy-in, при уходе целиком уходит в кэшаут.
+  stack     Int
+  joinedAt  DateTime  @default(now())
+
+  @@unique([tableId, seatIndex])
+  @@unique([tableId, userId])
+  @@map("game_seats")
 }

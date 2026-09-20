@@ -8,7 +8,9 @@ export type CoinTxKind =
   | 'TOURNAMENT_FEE'
   | 'TOURNAMENT_BONUS'
   | 'TOURNAMENT_REFUND'
-  | 'TOURNAMENT_PRIZE';
+  | 'TOURNAMENT_PRIZE'
+  | 'GAME_BUYIN'
+  | 'GAME_CASHOUT';
 
 /**
  * Монеты: баланс пользователя и журнал движений.
