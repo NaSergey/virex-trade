@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CoinsModule } from '../coins/coins.module';
+import { BattlePassController } from './battlepass.controller';
 import { BattlePassService } from './battlepass.service';
 
 /**
@@ -14,6 +15,7 @@ import { BattlePassService } from './battlepass.service';
  */
 @Module({
   imports: [CoinsModule],
+  controllers: [BattlePassController],
   providers: [BattlePassService],
   exports: [BattlePassService],
 })
