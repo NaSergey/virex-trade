@@ -2,12 +2,17 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import type { TagType } from './dto/tags.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { DataVersionService } from '../prisma/data-version.service';
+import { BattlePassService } from '../battlepass/battlepass.service';
+import { XP_SOURCES } from '../battlepass/xp-registry';
 
 // Curated palette (matches the chip colors used across the tag UI). Color is
 // always assigned by the server — letting users pick invites everyone
 // clustering on the same 2-3 "nice" colors, and the chart reads better when
 // tags are visually distinct by default.
-const PALETTE = ['#6366f1', '#22c55e', '#ef4444', '#f59e0b', '#06b6d4', '#ec4899', '#a855f7', '#84cc16', '#14b8a6', '#f97316'];
+const PALETTE = [
+  '#6366f1', '#22c55e', '#ef4444', '#f59e0b', '#06b6d4', '#ec4899', '#a855f7', '#84cc16', '#14b8a6', '#f97316',
+  '#0ea5e9', '#eab308', '#f43f5e', '#8b5cf6', '#64748b',
+];
 
 /**
  * Entry-reason tags. A tag is created once per user, attached to open
@@ -20,6 +25,7 @@ export class TagsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly dataVersion: DataVersionService,
+    private readonly battlePass: BattlePassService,
   ) {}
 
   // Prefer a color not already used by this user, so tags stay visually
@@ -75,6 +81,11 @@ export class TagsService {
     { name: 'Тильт', type: 'emotion' },
     { name: 'Вход без стопа', type: 'mistake' },
     { name: 'Передержал', type: 'mistake' },
+    { name: 'Divergence', type: 'setup' },
+    { name: 'FVG', type: 'setup' },
+    { name: 'Order Block', type: 'setup' },
+    { name: 'BOS', type: 'setup' },
+    { name: 'Liquidity Grab', type: 'setup' },
   ];
 
   /**
@@ -372,12 +383,14 @@ export class TagsService {
       if (owned !== unique.length)
         throw new BadRequestException({ message: 'Некоторые теги не найдены', code: 'TAGS_NOT_FOUND' });
     }
-    await this.prisma.$transaction([
-      this.prisma.tradeTag.deleteMany({ where: { tradeId } }),
-      ...(unique.length > 0
-        ? [this.prisma.tradeTag.createMany({ data: unique.map((tagId) => ({ tradeId, tagId })) })]
-        : []),
-    ]);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.tradeTag.deleteMany({ where: { tradeId } });
+      if (unique.length === 0) return;
+      await tx.tradeTag.createMany({ data: unique.map((tagId) => ({ tradeId, tagId })) });
+      // XP за разметку — один раз на сделку навсегда (ключ по tradeId), сколько
+      // бы раз её ни переразмечали. Снятие всех тегов разметкой не считается.
+      await this.battlePass.award(tx, userId, 'journal.tag', tradeId, XP_SOURCES['journal.tag'].base);
+    });
     await this.dataVersion.bump(userId);
     return { success: true };
   }

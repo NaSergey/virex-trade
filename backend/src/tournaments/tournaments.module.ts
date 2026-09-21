@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { BacktestModule } from '../backtest/backtest.module';
+import { BattlePassModule } from '../battlepass/battlepass.module';
 import { CoinsModule } from '../coins/coins.module';
 import { MarketDataModule } from '../market-data/market-data.module';
 import { TournamentRunnerService } from './tournament-runner.service';
@@ -16,7 +17,7 @@ import { TournamentsService } from './tournaments.service';
  * PrismaModule глобальный, поэтому здесь не импортируется.
  */
 @Module({
-  imports: [CoinsModule, MarketDataModule, BacktestModule],
+  imports: [CoinsModule, MarketDataModule, BacktestModule, BattlePassModule],
   controllers: [TournamentsController],
   providers: [TournamentsService, TournamentRunnerService],
   exports: [TournamentsService],

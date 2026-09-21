@@ -74,9 +74,17 @@ function makeService() {
   const live = {
     quote: jest.fn().mockResolvedValue({ time: new Date(NOW), price: 70_000 }),
   };
-  const service = new BacktestService(prisma as never, marketData as never, synthetic as never, live as never);
+  // XP за завершение сессии — не предмет этого файла, только заглушка.
+  const battlePass = { award: jest.fn() };
+  const service = new BacktestService(
+    prisma as never,
+    marketData as never,
+    synthetic as never,
+    live as never,
+    battlePass as never,
+  );
   (service as unknown as { rnd: () => number }).rnd = () => 0;
-  return { service, prisma, marketData, synthetic, live };
+  return { service, prisma, marketData, synthetic, live, battlePass };
 }
 
 /** Отказ сервиса как значение: проверяем и класс исключения, и код для фронта. */

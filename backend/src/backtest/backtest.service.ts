@@ -1,5 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { BacktestTrade, BacktestTradeEntry, Prisma, Tag } from '@prisma/client';
+import { BattlePassService } from '../battlepass/battlepass.service';
+import { XP_SOURCES } from '../battlepass/xp-registry';
 import { PrismaService } from '../prisma/prisma.service';
 import { LiveMarketService } from '../market-data/live-market.service';
 import { MarketDataService } from '../market-data/market-data.service';
@@ -9,6 +11,7 @@ import { SyntheticMarketService } from './synthetic/synthetic-market.service';
 import {
   MINUTE_MS,
   averageIn,
+  closedNumbers,
   maxDrawdownPct,
   pickPriceScale,
   pickStart,
@@ -102,9 +105,6 @@ export function tradeView(t: TradeWithRelations) {
   return { ...rest, tags: tags.map(({ tag }) => ({ id: tag.id, name: tag.name, color: tag.color, type: tag.type })) };
 }
 
-/** Числа закрытой сделки для итогов; у закрытой pnl и r всегда есть. */
-export const closedNumbers = (t: { pnl: number | null; r: number | null }) => ({ pnl: t.pnl ?? 0, r: t.r ?? 0 });
-
 const noHistory = () =>
   new ConflictException({ message: 'История минуток ещё не загружена — сессию не на чем начать', code: 'BACKTEST_NO_HISTORY' });
 
@@ -140,6 +140,7 @@ export class BacktestService {
     protected readonly marketData: MarketDataService,
     protected readonly synthetic: SyntheticMarketService,
     protected readonly live: LiveMarketService,
+    protected readonly battlePass: BattlePassService,
   ) {}
 
   /** Вынесено полем, чтобы тесты задавали случай. */
@@ -323,6 +324,11 @@ export class BacktestService {
         where: { id },
         data: { status: 'finished', finishedAt: new Date() },
       });
+      // XP только за свою сессию: турнирная кончается вместе с турниром и
+      // оплачена источником game.tournament. Сюда такая сессия и не доходит —
+      // `finish` отказывает ей выше, — но источник начисления должен быть
+      // назван в одном месте, а не выводиться из порядка проверок.
+      await this.battlePass.award(tx, userId, 'game.backtest', id, XP_SOURCES['game.backtest'].base);
       return { session };
     });
   }
