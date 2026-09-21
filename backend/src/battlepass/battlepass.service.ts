@@ -2,8 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { CoinsService } from '../coins/coins.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { dailyState, recentDayKeys, startOfUtcDay } from './daily';
-import { coinsBetween, ladder, levelFromXp } from './levels';
+import { dailyAlreadyClaimed, nothingToClaim } from './battlepass-errors';
+import { dailyState, dayKey, recentDayKeys, startOfUtcDay } from './daily';
+import { coinsBetween, ladder, levelFromXp, rewardCoins } from './levels';
 import { seasonBounds, seasonKey } from './season';
 import { XP_SOURCES, type XpSource } from './xp-registry';
 
@@ -110,5 +111,78 @@ export class BattlePassService {
       })),
       daily: dailyState(new Set(claimedDays.map((r) => r.refId)), now),
     };
+  }
+
+  /**
+   * Забрать всё, что накопилось. Одним действием и подряд: награда одного вида
+   * — монеты, и выбирать, какую монету получить раньше, незачем.
+   *
+   * Защита от двойного клика — compare-and-set в самом UPDATE (`claimedLevel`
+   * равен прочитанному), тот же приём, что у списания монет: два запроса иначе
+   * выдали бы награду дважды, и ни один не был бы неправ по отдельности.
+   */
+  async claim(userId: string, now: Date = new Date()) {
+    const season = seasonKey(now);
+    return this.prisma.$transaction(async (tx) => {
+      const progress = await tx.battlePassProgress.findUnique({
+        where: { userId_season: { userId, season } },
+      });
+      if (!progress) throw nothingToClaim();
+
+      // Снимок «от какого уровня» берём один раз, до UPDATE: ниже используем
+      // его же в цикле, а не перечитываем `progress.claimedLevel` — Prisma не
+      // мутирует объект в JS, но полагаться на это не стоит, раз значение уже
+      // под рукой.
+      const fromLevel = progress.claimedLevel;
+      const { level } = levelFromXp(progress.xp);
+      const coins = coinsBetween(fromLevel, level);
+      if (coins <= 0) throw nothingToClaim();
+
+      const moved = await tx.battlePassProgress.updateMany({
+        where: { userId, season, claimedLevel: fromLevel },
+        data: { claimedLevel: level },
+      });
+      if (moved.count !== 1) throw nothingToClaim();
+
+      // Строка журнала на уровень, а не одна на клик: одно событие — одна
+      // строка, и уникальный ключ журнала тогда сторожит каждый уровень.
+      for (let l = Math.max(2, fromLevel + 1); l <= level; l++) {
+        await this.coins.credit(tx, userId, rewardCoins(l), 'BATTLEPASS_REWARD', `${season}:${l}`);
+      }
+
+      const user = await tx.user.findUnique({ where: { id: userId }, select: { coinBalance: true } });
+      return { claimedLevel: level, coins, balance: user?.coinBalance ?? 0 };
+    });
+  }
+
+  /**
+   * Ежедневная награда за заход. Своего состояния не имеет: и «забрал ли
+   * сегодня», и «какой день подряд» выводятся из строк журнала монет.
+   *
+   * Гонку двух вкладок ловит уникальный ключ журнала `(userId, kind, refId)`, а
+   * не проверка выше по коду: проверка отвечает за понятный отказ, ключ — за
+   * то, что второй выплаты не будет. Перехват P2002 стоит СНАРУЖИ транзакции:
+   * в PostgreSQL упавший оператор прерывает её целиком, и продолжать там
+   * нечего — только перевести ошибку в отказ.
+   */
+  async claimDaily(userId: string, now: Date = new Date()) {
+    const today = dayKey(now);
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const claimed = await tx.coinTransaction.findMany({
+          where: { userId, kind: 'DAILY_REWARD', refId: { in: recentDayKeys(now) } },
+          select: { refId: true },
+        });
+        const state = dailyState(new Set(claimed.map((r) => r.refId)), now);
+        if (state.claimedToday) throw dailyAlreadyClaimed();
+
+        await this.coins.credit(tx, userId, state.coins, 'DAILY_REWARD', today);
+        const user = await tx.user.findUnique({ where: { id: userId }, select: { coinBalance: true } });
+        return { day: state.day, streak: state.streak + 1, coins: state.coins, balance: user?.coinBalance ?? 0 };
+      });
+    } catch (e) {
+      if ((e as { code?: string }).code === 'P2002') throw dailyAlreadyClaimed();
+      throw e;
+    }
   }
 }

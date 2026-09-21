@@ -1,8 +1,19 @@
+import { CoinsService } from '../coins/coins.service';
 import { BattlePassService } from './battlepass.service';
 import { XP_SOURCES } from './xp-registry';
 
 const NOW = new Date('2026-09-21T10:00:00Z');
 const SEASON = '2026-Q3';
+
+/** Тот же хелпер, что в спеке турниров: проверяется код ошибки, а не текст. */
+async function rejection(p: Promise<unknown>): Promise<any> {
+  return p.then(
+    () => {
+      throw new Error('ожидался отказ');
+    },
+    (e) => e,
+  );
+}
 
 /**
  * Поддельная база ведёт себя как Postgres ровно в тех двух местах, ради
@@ -135,5 +146,121 @@ describe('BattlePassService.state', () => {
     expect(state.levels.find((l) => l.level === 2)?.state).toBe('ready');
     expect(state.levels.find((l) => l.level === 4)?.state).toBe('locked');
     expect(state.daily.claimedToday).toBe(true);
+  });
+});
+
+/**
+ * База для claim: прогресс с CAS-обновлением, журнал монет с уникальным ключом
+ * (userId, kind, refId) и баланс. Транзакция — тот же объект: интерактивная
+ * `$transaction` вызывает колбэк со своим клиентом, и подменять его нечем.
+ */
+function fakeClaimDb(row: { xp: number; claimedLevel: number } | null, daily: string[] = []) {
+  const progress = row ? { userId: 'u1', season: SEASON, ...row } : null;
+  const journal: { kind: string; refId: string; delta: number }[] = daily.map((d) => ({
+    kind: 'DAILY_REWARD',
+    refId: d,
+    delta: 0,
+  }));
+  let balance = 0;
+
+  const tx = {
+    battlePassProgress: {
+      findUnique: jest.fn(async () => progress),
+      updateMany: jest.fn(async ({ where, data }: any) => {
+        if (!progress || progress.claimedLevel !== where.claimedLevel) return { count: 0 };
+        progress.claimedLevel = data.claimedLevel;
+        return { count: 1 };
+      }),
+    },
+    coinTransaction: {
+      findMany: jest.fn(async ({ where }: any) =>
+        journal.filter((r) => r.kind === where.kind && where.refId.in.includes(r.refId)),
+      ),
+      create: jest.fn(async ({ data }: any) => {
+        if (journal.some((r) => r.kind === data.kind && r.refId === data.refId)) {
+          throw Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
+        }
+        journal.push(data);
+        return data;
+      }),
+    },
+    user: {
+      update: jest.fn(async ({ data }: any) => {
+        balance += data.coinBalance?.increment ?? 0;
+        return { coinBalance: balance };
+      }),
+      findUnique: jest.fn(async () => ({ coinBalance: balance })),
+    },
+  };
+
+  const prisma = { $transaction: jest.fn(async (fn: any) => fn(tx)) };
+  return { prisma, tx, journal, progressRow: () => progress, balanceOf: () => balance };
+}
+
+describe('BattlePassService.claim', () => {
+  it('забирает все достигнутые уровни разом, по строке журнала на уровень', async () => {
+    const db = fakeClaimDb({ xp: 300, claimedLevel: 0 });
+    const coins = new CoinsService(db.prisma as never);
+    const res = await new BattlePassService(db.prisma as never, coins).claim('u1', NOW);
+
+    expect(res).toMatchObject({ claimedLevel: 3, coins: 100 });
+    expect(db.journal.filter((r) => r.kind === 'BATTLEPASS_REWARD')).toHaveLength(2);
+    expect(db.journal.map((r) => r.refId)).toEqual(expect.arrayContaining(['2026-Q3:2', '2026-Q3:3']));
+    expect(db.progressRow()?.claimedLevel).toBe(3);
+  });
+
+  it('второй раз забрать нечего', async () => {
+    const db = fakeClaimDb({ xp: 300, claimedLevel: 3 });
+    const coins = new CoinsService(db.prisma as never);
+    const e = await rejection(new BattlePassService(db.prisma as never, coins).claim('u1', NOW));
+
+    expect(e.response.code).toBe('BP_NOTHING_TO_CLAIM');
+    expect(db.journal).toHaveLength(0);
+  });
+
+  it('без прогресса сезона забирать нечего', async () => {
+    const db = fakeClaimDb(null);
+    const coins = new CoinsService(db.prisma as never);
+    const e = await rejection(new BattlePassService(db.prisma as never, coins).claim('u1', NOW));
+
+    expect(e.response.code).toBe('BP_NOTHING_TO_CLAIM');
+  });
+
+  it('прогресс, сдвинувшийся между чтением и записью, отменяет выдачу', async () => {
+    const db = fakeClaimDb({ xp: 300, claimedLevel: 0 });
+    // Гонка: пока шло чтение, другой запрос уже забрал награды.
+    db.tx.battlePassProgress.updateMany = jest.fn(async (_args: any) => ({ count: 0 }));
+    const coins = new CoinsService(db.prisma as never);
+    const e = await rejection(new BattlePassService(db.prisma as never, coins).claim('u1', NOW));
+
+    expect(e.response.code).toBe('BP_NOTHING_TO_CLAIM');
+  });
+});
+
+describe('BattlePassService.claimDaily', () => {
+  it('первый заход даёт награду первого дня', async () => {
+    const db = fakeClaimDb(null);
+    const coins = new CoinsService(db.prisma as never);
+    const res = await new BattlePassService(db.prisma as never, coins).claimDaily('u1', NOW);
+
+    expect(res).toMatchObject({ day: 1, streak: 1, coins: 50 });
+    expect(db.journal).toEqual([expect.objectContaining({ kind: 'DAILY_REWARD', refId: '2026-09-21' })]);
+  });
+
+  it('четвёртый день подряд даёт награду четвёртого дня', async () => {
+    const db = fakeClaimDb(null, ['2026-09-20', '2026-09-19', '2026-09-18']);
+    const coins = new CoinsService(db.prisma as never);
+    const res = await new BattlePassService(db.prisma as never, coins).claimDaily('u1', NOW);
+
+    expect(res).toMatchObject({ day: 4, streak: 4, coins: 125 });
+  });
+
+  it('второй раз за сутки — отказ, а не вторая выплата', async () => {
+    const db = fakeClaimDb(null, ['2026-09-21']);
+    const coins = new CoinsService(db.prisma as never);
+    const e = await rejection(new BattlePassService(db.prisma as never, coins).claimDaily('u1', NOW));
+
+    expect(e.response.code).toBe('BP_DAILY_CLAIMED');
+    expect(db.journal).toHaveLength(1);
   });
 });
