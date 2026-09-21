@@ -33,7 +33,7 @@
     "periodAriaLabel": "Period",
     "customDateSavedTitle": "Custom date saved — click the field to apply it again"
   },
-  "nav": {
+"nav": {
     "sections": "Sections",
     "overview": "Overview",
     "tags": "Tags",
@@ -47,9 +47,10 @@
     "admin": "Users",
     "market": "Market",
     "backtest": "Backtest",
-    "tournaments": "Tournaments",
+    "games": "Games",
     "support": "Support the developer",
-    "referrals": "Invite a friend"
+    "referrals": "Invite a friend",
+    "battlePass": "Battle Pass"
   },
   "auth": {
     "brand": "Virex",
@@ -469,9 +470,9 @@
     "cancelPayment": "Cancel the payment",
     "totalLabel": "Raised"
   },
-  "referrals": {
+"referrals": {
     "title": "Invite a friend",
-    "lede": "A permanent link — share it, and the new account will be linked to you.",
+    "lede": "A permanent link — share it, and you get 1000 coins for every friend who signs up.",
     "linkLabel": "Link",
     "totalLabel": "Registered",
     "withKeyLabel": "Connected a key",
@@ -592,7 +593,7 @@
     "dAccount": "Account",
     "dPeriod": "In this period"
   },
-  "errors": {
+"errors": {
     "INVALID_CREDENTIALS": "Invalid email or password",
     "USER_EXISTS": "A user with this email already exists",
     "REFRESH_TOKEN_MISSING": "Refresh token missing",
@@ -639,7 +640,8 @@
     "BACKTEST_ENTRY_ORDERS_PENDING": "Cancel the grid orders first",
     "BACKTEST_ENTRY_ORDER_NOT_FOUND": "Order not found",
     "BACKTEST_NOT_SYNTHETIC": "This session has a real chart, not a generated one",
-    "BACKTEST_SYNTH_OUTDATED": "The market generator has been updated — this session's chart can no longer be built"
+    "BACKTEST_SYNTH_OUTDATED": "The market generator has been updated — this session's chart can no longer be built",
+    "TOURNAMENT_NOT_PARTICIPANT": "You are not a participant of this tournament"
   },
   "landing": {
     "signIn": "Sign in",
@@ -737,20 +739,19 @@
     "buyHint": "Top up with a donation",
     "perUsdt": "≈ {n} coins"
   },
-  "tournaments": {
-    "tradingTitle": "Trading tournament",
+"tournaments": {
+    "tradingTitle": "Trading contest",
     "tradingLede": "One chart, one deposit, a prize pool made of entry fees.",
     "createTitle": "New tournament",
     "createLead": "A duel and a full tournament are the same fields with different numbers.",
     "create": "Create",
+    "createAction": "Create tournament",
     "creating": "Creating…",
     "createFailed": "Could not create the tournament",
     "nameLabel": "Name",
     "visibilityLabel": "Who can join",
     "visibilityPrivate": "Private",
     "visibilityPublic": "Public",
-    "visibilityPrivateHint": "Only people with your link can join.",
-    "visibilityPublicHint": "The tournament joins the open list — anyone can enter.",
     "playersLabel": "Seats",
     "playersDuel": "2 — duel",
     "playersN": "{n}",
@@ -762,8 +763,13 @@
     "sharesLabel": "Pool split by place",
     "sharesInvalid": "Shares must add up to exactly a hundred and must not grow towards the last place.",
     "sharesSummary": "The pool splits as — {shares}",
+    "winnerSingle": "Single winner",
     "placeN": "Place {n}",
-    "poolPreview": "Prize pool with all seats taken: {n} {unit}",
+    "poolFullHint": "pool with all seats taken",
+    "dueNow": "You pay {n} {unit} now — your entry fee and the bonus.",
+    "groupSetup": "Setup",
+    "groupStakes": "Stakes",
+    "groupPrizes": "Prizes",
     "notEnoughCoins": "Not enough coins: {n} {unit} needed",
     "myTitle": "My tournaments",
     "myEmptyTitle": "You are not in any tournament yet",
@@ -774,6 +780,7 @@
     "publicEmptyBody": "Create a public one and others will see it.",
     "ratingTitle": "Player rating",
     "ratingLead": "Across finished tournaments. A tournament awards as many points as the players you finished ahead of.",
+    "ratingTop": "top {n}",
     "ratingEmptyTitle": "The rating is empty",
     "ratingEmptyBody": "The first finished tournament will open it.",
     "ratingMe": "You are {place} — {points} points, {wins} wins",
@@ -786,10 +793,11 @@
     "joinFor": "Join for {n} {unit}",
     "joinFree": "Join the tournament",
     "leave": "Leave",
-    "start": "Start the tournament",
     "remove": "Delete",
     "trade": "Trade",
-    "needMorePlayers": "You can start once there are more players than prize places.",
+    "finishNow": "Finish now",
+    "finishNowHint": "The tournament ends early: open positions close at the current price, and places and prizes are settled as of this moment. This cannot be undone.",
+    "needMorePlayers": "The tournament starts once there are more players than prize places.",
     "loadFailed": "Could not load the tournament",
     "actionFailed": "That did not work",
     "endsAtLabel": "Ends",
@@ -804,22 +812,30 @@
     "colDuration": "Duration",
     "colPlace": "Place",
     "colPlayer": "Player",
+    "colClosedTrades": "Trades",
+    "colWinRate": "Win rate",
+    "colClosedPnl": "Result",
     "colPoints": "Points",
     "colTournaments": "Tournaments",
     "colWins": "Wins",
     "colPrize": "Prize",
-    "status": {"lobby":"Gathering players","running":"Running","finished":"Finished"},
-    "duration": {"60":"1 hour","240":"4 hours","1440":"1 day","4320":"3 days","10080":"7 days"},
-    "title": "Tournaments",
-    "lede": "Games between users, played for in-app coins.",
-    "soon": "Coming soon",
-    "open": "Open",
-    "games": {
-      "trading": {
-        "title": "Trading tournament",
-        "description": "Trade the live BTC chart against other users: everyone gets the same chart and the same deposit, and whoever earns more wins. Anyone can create a tournament, invite friends by link, or open it to everyone."
-      }
-    }
+    "status": {
+      "lobby": "Gathering players",
+      "running": "Running",
+      "finished": "Finished"
+    },
+    "duration": {
+      "60": "1 hour",
+      "240": "4 hours",
+      "1440": "1 day",
+      "4320": "3 days",
+      "10080": "7 days"
+    },
+    "readyAction": "I'm ready",
+    "notReadyAction": "Not ready",
+    "ready": "ready",
+    "notReady": "waiting",
+    "waitingOthers": "{ready} of {players} ready — the tournament starts once everyone is."
   },
   "backtest": {
     "startTitle": "New session",
@@ -1069,5 +1085,84 @@
       "startTitle": "New session",
       "startBody": "The deposit and two blind toggles: hiding the date keeps you from recognizing the period from memory, hiding the price keeps you from gauging the move's scale from the axis."
     }
+  },
+  "games": {
+    "kicker": "Play · Compete · Earn",
+    "title": "Games",
+    "tagline": "More than trading",
+    "lede": "Play, compete, sharpen your skills and earn. Virex puts trading and games in one place.",
+    "start": "Start playing",
+    "how": "How it works",
+    "aside": "Same skills — different games",
+    "play": "Play",
+    "soon": "Coming soon",
+    "tags": {
+      "1v1": "1 on 1",
+      "pvp": "Player vs player",
+      "tournaments": "Tournaments",
+      "ratings": "Ratings",
+      "fast": "Fast rounds",
+      "multiplayer": "Multiplayer"
+    },
+    "items": {
+      "blackjack": {
+        "title": "Blackjack",
+        "description": "The classic card game. Test your luck and your judgement."
+      },
+      "poker": {
+        "title": "Poker",
+        "description": "A game of skill. Bluff, logic and a cool head."
+      },
+      "jetpack": {
+        "title": "Jetpack",
+        "description": "Climb higher and cash out before the flight ends."
+      },
+      "trading": {
+        "title": "Trading",
+        "description": "A real market and real skills. Trade against other players."
+      }
+    },
+    "platform": {
+      "kicker": "Virex Games",
+      "title": "One platform. Different ways to play.",
+      "lede": "Games, tournaments, ratings and rewards — all in one place, all on the same coins.",
+      "steps": [
+        "Play",
+        "Improve",
+        "Compete",
+        "Earn"
+      ]
+    },
+    "stats": {
+      "games": "games",
+      "options": "ways to play",
+      "community": "community",
+      "communityN": "1",
+      "slogan": "PLAY THE ADVANTAGE"
+    }
+  },
+  "profile": {
+    "title": "Profile",
+    "lede": "Experience from games, season level and its rewards",
+    "level": "Level {level}",
+    "toNext": "{xp} XP to level {level}",
+    "maxed": "Season track fully completed",
+    "seasonEnds": "Season ends {date}",
+    "seasonNote": "A new season restarts the level, and unclaimed rewards expire",
+    "heroSoon": "Hero models in progress",
+    "daily": "Daily reward",
+    "dailyLede": "Each day in a row gives more than the last, up to the seventh",
+    "dailyClaim": "Claim {coins}",
+    "dailyDone": "Today’s reward is claimed",
+    "dailyStreak": "{days} days in a row",
+    "day": "Day {day}",
+    "track": "Season rewards",
+    "claim": "Claim {coins}",
+    "claimNone": "Nothing to claim",
+    "claimed": "Claimed",
+    "ready": "Ready to claim",
+    "locked": "Needs {xp} XP",
+    "loadFailed": "Could not load the profile",
+    "claimFailed": "Could not claim the reward"
   }
 }

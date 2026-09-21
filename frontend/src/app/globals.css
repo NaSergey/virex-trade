@@ -86,6 +86,9 @@
   --hair-2: var(--color-line-2);
   --rule: var(--color-line-strong);
   --ground: var(--color-app);
+  /* Канал фона для прозрачной шапки (`.top`, blur) — та же нужда в rgb(), что
+     у --ink-rgb: альфа от hex не берётся. */
+  --ground-rgb: 5 5 5;
   --ink: var(--color-fg);
   --ink-2: var(--color-muted);
   --ink-3: var(--color-subtle);
@@ -113,6 +116,47 @@
      полей, календарь в input[type=date]. Значение живёт в переменной, потому
      что мест, где оно объявлено, два, а тема одна. */
   --scheme: dark;
+
+  /* ═══════════════ ПАЛИТРА РАЗДЕЛА ИГР ═══════════════
+     Единственное место продукта с собственным цветом. Остальной Virex держит
+     правило «цвет означает деньги» — здесь считать нечего, здесь выбирают, во
+     что играть, и витрина без цвета не отличается от списка настроек.
+
+     Правило не сломано, а ограничено: игровые цвета живут в своих именах
+     (--g-*), никогда не подменяют --profit/--loss/--doubt и не заходят на
+     страницы с числами.
+
+     Цвет держится внутри картинок и в редких метках. Цветные подложки под
+     карточками пробовались дважды и оба раза разваливали витрину на куски
+     чужих друг другу цветов: поле остаётся чёрным, светится предмет.
+
+     Набор один на обе темы: ассеты раздела сняты на чёрном, и светлого
+     перевода у этих имён нет — см. комментарий у .games-bg. */
+  /* Поле раздела и фон карточки — два почти чёрных, отличающихся ровно
+     настолько, чтобы карточка читалась блоком без рамки. */
+  --g-field: #050505;
+  --g-card: #080808;
+  /* Линии — те же волосяные линейки продукта, заданные от белого: раздел
+     тёмный всегда, и выводить их от краски темы незачем. */
+  --g-line: rgb(255 255 255 / 0.1);
+  --g-line-2: rgb(255 255 255 / 0.14);
+  --g-ink: #f2f0ea;
+  --g-ink-2: #9a9a96;
+  --g-ink-3: #5e5e5a;
+  /* Свет под страницей: два едва различимых пятна, а не фон-картинка. */
+  --g-deep: rgb(255 255 255 / 0.045);
+  --g-warm: rgb(154 92 255 / 0.05);
+  /* Три акцента на весь раздел — ровно те цвета, что уже светятся на самих
+     картинках: зелёный (блэкджек, торговля), красный (покер), фиолетовый
+     (джетпак). Зелёный отвечает ещё и за метку «Доступно»: это состояние, а
+     не игра, поэтому отдельного цвета под него не заводится. */
+  --g-a-green: #65c996;
+  --g-a-red: #d9554f;
+  --g-a-purple: #9a5cff;
+  /* Тот же зелёный каналами — для света вокруг окна турнира (`.dlg-game`):
+     свет строится из нескольких значений прозрачности, а альфа от hex не
+     берётся. Та же нужда, что у --ink-rgb выше. */
+  --g-a-green-rgb: 101 201 150;
 }
 
 /* ═══════════════ СВЕТЛАЯ ТЕМА ═══════════════
@@ -169,6 +213,7 @@
   --color-ring: #1c1a16;
 
   --ink-rgb: 28 26 22;
+  --ground-rgb: 245 242 234;
   /* Подложка на бумаге не чёрная, а густая тушь: чистый чёрный под светлым
      листом читается дырой, а не притенением. */
   --scrim: rgb(28 26 22 / 0.45);
@@ -291,9 +336,23 @@
   .money-l { font-size: var(--t-m); }
 
   /* ═══════════════ ШАПКА ═══════════════ */
+  /* Полупрозрачная, с блюром: контент под ней (баннер турниров, длинные
+     таблицы) при прокрутке продолжает читаться сквозь неё размытым пятном, а
+     не обрывается ровной плашкой на границе шапки. Фон — заметно прозрачнее
+     прежнего (0.55, не 0.72), а блюр — крупный (28px) и с saturate: на почти
+     монохромном листе продукта лёгкое размытие плотной подложки было
+     незаметно само по себе, эффект читается только на контрастном фоне вроде
+     сцены турниров и только пока за ним реально что-то прокручивается —
+     на первом экране без скролла подложке блюрить ещё нечего. */
   .top {
     border-bottom: 1px solid var(--rule);
-    background: var(--ground);
+    background: rgb(var(--ground-rgb) / 0.6);
+    /* Только стандартное свойство, без ручного -webkit-: Lightning CSS
+       (сборка Turbopack) схлопывает такую пару в одну строку и оставляет
+       ТОЛЬКО префиксную, а её Chrome и Firefox уже не читают — в бандле
+       оставался мёртвый `-webkit-backdrop-filter`, и блюра не было нигде,
+       кроме Safari. Префиксы расставляет сборка сама, по browserslist. */
+    backdrop-filter: blur(24px) saturate(1.4);
     position: sticky;
     top: 0;
     z-index: 40;
@@ -477,6 +536,28 @@
      читалась бы как задвоенная рамка, поэтому дорожку здесь не делит линейка
      .marg, только её отступ. */
   .asym.terminal > .marg { border-left: 0; }
+  /* Дорожки без линейки между ними. На странице игры справа стоит лидерборд —
+     такая же таблица, как две слева, — и вертикальная линия между ними
+     читалась бы рамкой вокруг одной из них. Расстояние держит gap сетки,
+     поэтому и отбивка под линейку здесь не нужна. */
+  .asym.bare > .marg {
+    border-left: 0;
+    padding-left: 0;
+  }
+  /* Та же правка, что у .lab-r: под каждым заголовком раздела здесь сразу
+     стоит таблица со своей нижней чертой в шапке — вторая черта под самим
+     заголовком читалась бы задвоенной линией. Прописные моноширинные и так
+     не похожи на текст рядом, подпись раздела держит одна капитель. */
+  .asym.bare .h2row {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+  /* Между «Моими турнирами» и «Открытыми турнирами» нужен воздух: без отступа
+     заголовок второго списка вставал сразу за нижней чертой последней строки
+     первого, и две таблицы читались одной. */
+  .asym.bare section + section {
+    margin-top: var(--s5);
+  }
   /* Строка шага/скорости/переключателя таблицы — на всю ширину терминала
      (обе колонки грида), а не внутри узкой колонки графика: тикет обычно
      короче графика по высоте, и место под ним справа иначе просто пустовало
@@ -1094,6 +1175,11 @@
 
   .ledger tbody tr.row { cursor: pointer; }
   .ledger tbody tr.row:hover > td { background: var(--band); }
+  /* Клик принят, данные для окна ещё едут. Подсветка та же, что под курсором:
+     новой краски тут не нужно, нужно только чтобы нажатие не выглядело
+     промахом — на тачскрине курсора нет, а ждать всё равно приходится. */
+  .ledger tbody tr.row.busy { cursor: progress; }
+  .ledger tbody tr.row.busy > td { background: var(--band); }
   .ledger .sortable {
     cursor: pointer;
     user-select: none;
@@ -1380,6 +1466,14 @@
   .seg button[aria-pressed="true"] {
     background: var(--ink);
     color: var(--ground);
+  }
+  /* В окне тумблер стоит без рамки и без делений: у окна своя рамка, внутри
+     неё обведённый ряд кнопок — вторая по счёту. Выбранное деление и так
+     показано инверсной плашкой, а остальные читаются как то, чем они и
+     являются, — подписями рядом. */
+  .dlg .seg,
+  .dlg .seg button {
+    border: 0;
   }
 
   /* Выбор биржи в настройках: семь делений не встают в ряд ни при каком
@@ -2095,10 +2189,18 @@
     color: var(--ink);
     white-space: nowrap;
   }
+  /* Место под число занято до того, как оно приедет: пока в шапке стоял
+     прочерк, приход баланса раздвигал кнопку и толкал вправо от неё и тему, и
+     профиль — вся правая половина шапки переезжала на глазах. Пять знаков —
+     это «10 000»; шире баланс не бывает на старте и растёт редко, а лишний
+     запас под шесть знаков оставил бы дыру в шапке навсегда. */
   .coins-n {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     font-size: var(--t-s);
+    display: inline-block;
+    min-width: 5ch;
+    text-align: right;
   }
   .coins-unit {
     font-size: var(--t-xs);
@@ -2107,16 +2209,53 @@
   .coins:hover .coins-n { text-decoration: underline; }
 
   /* Состав турнира — просто имена в столбик, без маркеров: это перечень
-     участников, а не список дел. */
+     участников, а не список дел. Черты между строками нет: заголовок раздела
+     уже отбит своей линейкой, и вторая линия под каждым именем в списке из
+     двух-трёх строк собиралась в тесную решётку прямо под ним — воздуха между
+     строками достаточно, разделять их ещё и чертой незачем. */
   .players {
     list-style: none;
     margin: 0;
     padding: 0;
   }
+  /* Имя слева, отметка готовности справа: лобби отвечает на «кого ещё ждём»,
+     и ответ должен читаться одним движением глаза по правому краю, а не
+     вылавливаться из строк разной длины. */
   .players li {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--s3);
     padding: var(--s2) 0;
-    border-bottom: 1px solid var(--hair);
   }
+  /* Отметка готовности — точкой и словом, тот же приём, что у статуса турнира
+     (`.tstate`): список бывает на десять имён, и до текста взгляд быстрее
+     ловит цветную точку сбоку от строки, чем оттенок капители на её правом
+     краю. Просто текстом («ждёт» серым, «готов» зелёным) это и было раньше —
+     без своего знака состояние читалось только вчитавшись в каждое слово. */
+  .pstate {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s2);
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--ink-3);
+  }
+  .pstate::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    background: currentColor;
+    flex: none;
+  }
+  /* Тот же зелёный, что у точки идущего турнира в шапке этого же окна
+     (`.tstate[data-s="running"]`) — не --profit: готовность к игре не деньги,
+     и красить её деньговым цветом значило бы завести второй смысл у одной
+     краски. */
+  .pstate[data-r="true"] { color: var(--g-a-green); }
 
   /* Доли призового фонда: по узкому полю на место, в одну строку, с переносом
      на узком экране — мест бывает до девяти. */
@@ -2132,44 +2271,907 @@
     width: 92px;
   }
 
-  /* ═══════════════ КАТАЛОГ ИГР ═══════════════
-     Строки на волосяных линиях, а не карточки: как остальные списки продукта.
-     Игра-ссылка целиком кликабельна, подчёркивается название. */
-  .games {
-    display: flex;
-    flex-direction: column;
+  /* ── форма нового турнира ──────────────────────────────────────
+     Одиннадцать полей подряд читались анкетой: название турнира и доля
+     третьего места весили одинаково, а границы между «что за турнир»,
+     «сколько это стоит» и «кому сколько достанется» не было вовсе. Поэтому
+     поля собраны в три подписанные группы, а короткие стоят парами.
+
+     Своих красок здесь нет: окно открывают с чёрной витрины, и оно идёт в
+     игровом тоне (`.dlg-game`) — краску всё содержимое берёт оттуда. */
+  .fsect {
+    margin-top: var(--s4);
+    padding-top: var(--s3);
     border-top: 1px solid var(--hair);
   }
-  .game {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: baseline;
-    gap: var(--s4);
-    padding: var(--s4) 0;
-    border-bottom: 1px solid var(--hair);
-    color: inherit;
-    text-decoration: none;
-  }
-  .game h2 {
-    font-size: var(--t-l);
-    font-weight: 400;
-    margin: 0 0 var(--s1);
-  }
-  .game p {
-    max-width: 62ch;
-    margin: 0;
-    font-size: var(--t-s);
+  /* Подпись группы — та же капитель, что у подписей полей, но краской текста:
+     подпись, которая называет пять подписей под собой, не может весить
+     столько же, сколько они. */
+  .fsect-head {
+    display: block;
+    margin-bottom: var(--s3);
     color: var(--ink-2);
   }
-  .game-go {
-    font-size: var(--t-s);
+  /* Пара коротких полей в строку: «мест» и «депозит», «взнос» и «добавка» —
+     по одному вопросу на пару, и в столбик они растягивали окно вдвое. */
+  .fgrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: var(--s4);
+  }
+  /* Пояснение под контролом — не отдельная мысль, а продолжение его подписи:
+     мельче текста и вплотную к тому, что объясняет. Красное (нехватка монет,
+     неверные доли) — то же место и тот же кегль: сообщение об ошибке стоит
+     там, где стояла подсказка, а не отдельной строкой в конце формы. */
+  .fhint {
+    margin-top: var(--s1);
+    font-size: var(--t-xs);
+    color: var(--ink-3);
+  }
+  .fhint.neg { color: var(--loss); }
+  /* Нативный список select'а в тёмном окне: `.in` держит color-scheme темы
+     страницы, и при светлой теме выпадашка открывалась бы белым листом
+     поверх тёмного окна. */
+  .dlg-game .in { color-scheme: dark; }
+  /* На телефоне окно шириной в экран: пара полей в строке оставляет на число
+     с единицей («10 000 USDT») полторы сотни пикселей, и оно режется. */
+  @media (max-width: 640px) {
+    .fgrid { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  /* ── турнир окном ──────────────────────────────────────────────
+     Раскладка содержимого `.dlg-game`: шапка (имя, состояние, фонд), полоса
+     условий, действия с подписями, состав. Краску правила ниже не назначают —
+     она приходит из переопределённой темы окна; игровое имя здесь одно, у
+     точки идущего турнира, и это тот же акцент, которым размечена карточка
+     торговли на витрине. */
+
+  /* Имя турнира — крупнее, чем заголовок обычного окна: там заголовок
+     называет действие («Изменить уровни»), а здесь он и есть предмет, ради
+     которого окно открыли, и стоит рядом с фондом того же кегля. */
+  .dlg-game .dh h3 { font-size: var(--t-l); }
+  /* На узком экране фонд с долями мест уходит под имя, а не отжимает его в
+     колонку шириной в два слова. Своим правилом, а не общим: в остальных окнах
+     справа стоит одно короткое число, и переносить там нечего. */
+  .dlg-game .dh { flex-wrap: wrap; }
+
+  /* Состояние турнира точкой и словом. Точка нужна ровно затем, чтобы «идёт»
+     отличалось от «ждёт» боковым зрением, до чтения; поэтому она одна и
+     бьётся только у идущего турнира — остальные два состояния ничего не
+     ждут. */
+  .tstate {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s2);
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .tstate::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    background: currentColor;
+    flex: none;
+  }
+  .tstate[data-s="lobby"] { color: var(--ink-2); }
+  .tstate[data-s="running"] { color: var(--g-a-green); }
+  .tstate[data-s="running"]::before { animation: tstate-beat 2400ms ease-in-out infinite; }
+  @keyframes tstate-beat {
+    0% { opacity: 1; }
+    50% { opacity: 0.25; }
+    100% { opacity: 1; }
+  }
+
+  /* Фонд — единственное число, относящееся ко всему окну, и поэтому стоит в
+     шапке справа (`.dh-aside`), а не шестым в ряду условий: от него зависит
+     решение «входить», а условия отвечают на «как это устроено». Доли мест
+     идут прямо под ним — обещание «фонд 200» без того, кому и сколько из него
+     достанется, решения не закрывает. */
+  .tpool {
+    display: block;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums lining-nums;
+    font-size: var(--t-l);
+    line-height: 1.1;
     white-space: nowrap;
   }
-  .game-link:hover h2 {
-    text-decoration: underline;
-  }
-  .game-off h2 {
+  .tpool-unit {
+    font-size: var(--t-xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     color: var(--ink-2);
+  }
+  /* Доли переносятся по словам и не тянут шапку: мест бывает до девяти, и
+     строка «1: 40% · 2: 25% · …» в одну линию отняла бы у имени турнира
+     половину ширины окна. */
+  .tpool-sub {
+    display: block;
+    margin-top: var(--s1);
+    max-width: 34ch;
+    font-size: var(--t-xs);
+    color: var(--ink-3);
+  }
+
+  /* Полоса условий — общая плотная строка величин (`.metrics` / `MetricCell`),
+     отбитая волосом сверху и снизу: в окне она одна и должна читаться блоком,
+     а не началом текста. Число мельче обычных 22px — в ряду из четырёх на
+     860 пикселях «10 000 USDT» этим кеглем не помещается и режется. */
+  .tstats {
+    border-top: 1px solid var(--hair);
+    border-bottom: 1px solid var(--hair);
+    padding: var(--s1) 0;
+    margin-bottom: var(--s4);
+  }
+  .tstats .mval { font-size: var(--t-m); }
+
+  /* Подвал окна: действия за линейкой, как у всех окон продукта. В теле они
+     стояли между условиями турнира и его составом и разрывали чтение ровно
+     там, где человек ещё решает, входить ли.
+     Колонкой, а не строкой: кнопки делят ширину подвала поровну, и подписи
+     рядом с ними не поместились бы — они уходят строкой выше. */
+  .tfoot {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--s2);
+  }
+  /* Чего ждёт лобби, почему кнопка не сработает и что сделает необратимая.
+     Пустая строка не отнимает у подвала высоту: своего содержимого у неё нет,
+     а gap колонки считается только по видимым детям. */
+  .tfoot-note { font-size: var(--t-s); }
+  .tfoot-note:empty { display: none; }
+  .tacts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+  }
+  /* Кнопки во всю ширину и поровну между собой: в подвале их от одной до трёх,
+     и ряд коротких кнопок у правого края оставлял бы полосу пустой.
+     `flex: 1 1 140px` — на узком экране ряд переносится, а не сжимает подписи
+     вроде «ЗАВЕРШИТЬ СЕЙЧАС» в многоточие. */
+  .tacts .btn { flex: 1 1 140px; }
+  .tsect { margin-top: var(--s4); }
+  /* Последняя строка сводки (не лобби, а закрытая таблица результатов) без
+     своей нижней черты: сразу под ней в окне стоит верх подвала (`.df`,
+     действия турнира), и две линии почти впритык читались бы одной толстой.
+     У лобби-списка (`.players`) той же задачи больше нет — черты между
+     строками там не осталось вовсе. */
+  .tsect .ledger tbody tr:last-child td { border-bottom: 0; }
+
+  /* Подписи лидерборда — мельче обычного текста: он стоит в боковой колонке
+     рядом со списками турниров, и объяснение правила очков не должно весить
+     больше самих очков. */
+  .rating-note {
+    font-size: var(--t-xs);
+  }
+
+  /* ═══════════════ ИГРЫ: ВИТРИНА РАЗДЕЛА ═══════════════
+     Единственный раздел продукта, который не читают, а рассматривают.
+     Держится он на готовых ассетах (`public/assets/games/`): стекло,
+     отражения и неон такого качества в SVG не собрать, а витрина стоит именно
+     на них. Интерфейс вокруг них остаётся своим — чёрное поле, волосяные
+     линии, моноширинные служебные подписи; цвет живёт внутри картинок и в
+     редких метках, а не в подложках.
+
+     Раздел тёмный в обеих темах, и это не упущение: ассеты сняты на чёрном, и
+     на бумаге вся витрина стала бы набором чёрных прямоугольников посреди
+     листа. Поэтому имена --g-* здесь без светлого перевода, а `.games-bg`
+     кладёт под страницу непрозрачное поле.
+
+     Скругления — единственное исключение из нулевого радиуса во всём
+     продукте, и сделано оно осознанно: карточка игры не строка гроссбуха, и
+     прямые углы читались бы здесь таблицей. Исключение держится в одном
+     правиле ниже — снять его значит вернуть раздел в общую систему. */
+  .games-bg {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(90% 60% at 50% -10%, var(--g-deep), transparent 64%),
+      radial-gradient(70% 50% at 88% 108%, var(--g-warm), transparent 60%),
+      var(--g-field);
+    /* Заливка наливается при заходе на раздел, а не стоит готовой: переход со
+       страницы журнала на витрину — смена обстановки, и показать её сменой
+       света дешевле, чем объяснять словами. Один раз, на монтировании; при
+       prefers-reduced-motion глобальное правило внизу файла сводит её к нулю. */
+    animation: games-veil 700ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+  @keyframes games-veil {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  /* Содержимое встаёт над заливкой: без своего слоя фиксированный фон накрыл
+     бы страницу целиком. */
+  .games-page {
+    position: relative;
+    z-index: 1;
+    color: var(--g-ink);
+  }
+  /* То самое исключение: скругления только внутри раздела и только у его
+     собственных элементов. */
+  .games-page :is(.gcard, .gbtn, .gbadge, .gchip, .gplat, .gcard > img) {
+    border-radius: 12px !important;
+  }
+  .games-page :is(.gchip, .gbadge) {
+    border-radius: 999px !important;
+  }
+
+  /* Кикер — служебная строка над заголовком: моноширинный верхний регистр,
+     как все служебные подписи продукта. */
+  .gkicker {
+    margin: 0 0 var(--s3);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.34em;
+    text-transform: uppercase;
+    color: var(--g-ink-3);
+  }
+
+  /* ── герой ─────────────────────────────────────────────── */
+  /* 42 % текста и 58 % картинки: панели ассета стоят в ряд и на узкой дорожке
+     схлопнулись бы в полоску. */
+  .ghero {
+    display: grid;
+    grid-template-columns: minmax(0, 42fr) minmax(0, 58fr) auto;
+    align-items: center;
+    gap: var(--s4);
+    padding: var(--s5) 0 var(--s6);
+  }
+  .ghero h1 {
+    margin: 0;
+    font-size: clamp(52px, 6vw, 80px);
+    font-weight: 600;
+    line-height: 0.95;
+    letter-spacing: 0.01em;
+    text-transform: uppercase;
+    color: var(--g-ink);
+  }
+  .ghero-tag {
+    margin: var(--s2) 0 0;
+    font-size: 27px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--g-ink-2);
+  }
+  .ghero-lede {
+    margin: var(--s3) 0 0;
+    max-width: 44ch;
+    font-size: var(--t-s);
+    line-height: 1.6;
+    color: var(--g-ink-2);
+  }
+  .ghero-cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+    margin-top: var(--s4);
+  }
+  .ghero-art img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  /* Подпись вдоль правого края — узкий столбец строк, а не повёрнутый текст:
+     вертикальную надпись пришлось бы читать, наклонив голову. */
+  .ghero-aside {
+    margin: 0;
+    width: 9ch;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.8;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--g-ink-3);
+  }
+
+  /* ── кнопки раздела ────────────────────────────────────── */
+  /* Своя кнопка, а не shared/ui/Button: у продукта кнопка — служебный элемент
+     строки таблицы, здесь она первое, на что смотрят. Живёт только внутри
+     раздела и наружу не выходит. */
+  .gbtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s2);
+    padding: 13px var(--s4);
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
+  }
+  .gbtn-solid {
+    background: var(--g-ink);
+    color: var(--g-field);
+    border: 1px solid var(--g-ink);
+  }
+  .gbtn-solid:hover {
+    background: #ffffff;
+    border-color: #ffffff;
+  }
+  .gbtn-line {
+    background: none;
+    color: var(--g-ink);
+    border: 1px solid var(--g-line);
+  }
+  .gbtn-line:hover {
+    border-color: var(--g-line-2);
+  }
+  /* Кнопка ненаписанной игры — не кнопка, а место под неё: ряд карточек стоит
+     ровно только потому, что низ у всех один. */
+  .gbtn-off {
+    background: none;
+    color: var(--g-ink-3);
+    border: 1px solid var(--g-line);
+    cursor: default;
+  }
+
+  /* ── карточки игр ──────────────────────────────────────── */
+  /* Четыре в ряд на листе, 2×2 на планшете, одна на телефоне — раскладка
+     задана явно, а не auto-fit: на планшете авторазмещение давало три в ряд и
+     одну сиротой во втором ряду. */
+  .gcards {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--s3);
+  }
+  /* Ни рамки, ни отступа перед картинкой: карточка не рама вокруг предмета, а
+     сам предмет. outline вместо border — тонкая линия акцента появляется
+     только под курсором, и до этого момента у карточки нет ничего похожего
+     на границу, которую можно было бы «убрать».
+     Пропорция кадра (384×514) задана самой карточке, а не отдельной обёртке
+     под картинку: обёртки под картинку больше нет — карточка кончается вместе
+     с кадром, а название, бейдж и .gcard-reveal лежат поверх него, а не рядом. */
+  .gcard {
+    --g-a: var(--g-ink);
+    position: relative;
+    display: block;
+    aspect-ratio: 384 / 514;
+    overflow: hidden;
+    background: var(--g-card);
+    outline: 1px solid transparent;
+    outline-offset: -1px;
+    transition: outline-color 160ms ease, transform 160ms ease;
+  }
+  /* Акцент — цвет свечения, уже снятого на самой картинке: линия под курсором
+     подхватывает его, чтобы отклик не выглядел чужим по отношению к кадру. */
+  .gcard-green { --g-a: var(--g-a-green); }
+  .gcard-red { --g-a: var(--g-a-red); }
+  .gcard-purple { --g-a: var(--g-a-purple); }
+  .gcard:not(.gcard-soon):hover,
+  .gcard:not(.gcard-soon):focus-visible {
+    outline-color: var(--g-a);
+    transform: translateY(-2px);
+  }
+  /* Картинка — во всю ширину и высоту карточки: `cover` ничего не обрезает,
+     раз пропорция карточки и есть пропорция кадра, только масштабирует.
+     Сцена торговли — тот же слой: у её SVG тот же viewBox, и оба типа
+     картинки ведут себя одинаково. */
+  .gcard > img,
+  .gcard > .tscene {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  /* Градиент сверху держит название и метку читаемыми на любом кадре: без
+     него светлый участок картинки съедал бы текст, а тёмный красил бы
+     затемнение зря — здесь оно всегда лёгкое, ровно под высоту шапки. */
+  .gcard-scrim {
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 40%;
+    background: linear-gradient(to bottom, rgb(0 0 0 / 0.65), transparent);
+    pointer-events: none;
+  }
+  .gcard-head {
+    position: absolute;
+    inset: 0 0 auto 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s2);
+    padding: var(--s3);
+  }
+  /* На месте прежнего номера ряда: карточка называет себя сама, без разворота
+     к тексту ниже, которого теперь и нет. min-width: 0 и обрезка в многоточие
+     нужны, чтобы длинное название не наехало на бейдж. */
+  .gcard-title {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding-bottom: 0;
+    border-bottom: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: var(--t-s);
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--g-ink);
+  }
+  .gbadge {
+    flex: none;
+    padding: 4px 11px;
+    border: 1px solid var(--g-line-2);
+    background: rgb(5 5 5 / 0.55);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--g-ink-2);
+  }
+  /* Описание, чипы и вход — поверх нижней части кадра, а не под ним: карточка
+     кончается вместе с картинкой. Видны по наведению или фокусу; прячет их
+     только opacity, а не display/visibility — скринридер получает текст
+     независимо от того, наведена ли карточка мышью.
+     На тачскрине навести нечем, и это не потеря: у доступной игры кликабелен
+     весь кадр (см. GameCard.tsx), переход не заперт за состоянием наведения. */
+  .gcard-reveal {
+    position: absolute;
+    inset: auto 0 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--s2);
+    padding: var(--s3);
+    background: linear-gradient(to top, rgb(5 5 5 / 0.95) 60%, transparent);
+    opacity: 0;
+    transform: translateY(6px);
+    pointer-events: none;
+    transition: opacity 180ms ease, transform 180ms ease;
+  }
+  .gcard:hover .gcard-reveal,
+  .gcard:focus-visible .gcard-reveal {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+  .gcard-lede {
+    margin: 0;
+    font-size: var(--t-s);
+    line-height: 1.55;
+    color: var(--g-ink-2);
+  }
+  /* Чипы отвечают на «с кем и как быстро» — формат игры человек выбирает
+     раньше сюжета. */
+  .gchips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s1);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .gchip {
+    padding: 4px 11px;
+    border: 1px solid var(--g-line);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--g-ink-2);
+  }
+  .gcard-reveal .gbtn {
+    width: 100%;
+  }
+  /* Ненаписанная игра стоит той же карточкой, но тусклее: она часть витрины,
+     а не её брак. */
+  .gcard-soon {
+    opacity: 0.74;
+  }
+
+  /* ── сцена торговли ────────────────────────────────────── */
+  /* Краски сцены живут здесь, а не в атрибутах SVG: разведённые по трём
+     десяткам атрибутов внутри рисунка, они расходятся при первой же правке.
+
+     Шкала одна на всю сцену и идёт от почти чёрного зелёного через зелёный
+     продукта (--ts-4 — это `--g-a-green` раздела) к кости (--ts-7 — краска
+     всего Virex). Тон свечи берётся по её месту в тренде: чем выше цена, тем
+     светлее тело, и последнее в ряду почти белое.
+
+     Красного в теле свечи нет: падение показывает полая заливка, не второй
+     сигнальный цвет, — направление читается формой, а не тем же оттенком,
+     что на графике в журнале сделок означает конкретный убыток. Коррекционные
+     тела берутся тёмными (--ts-dark).
+
+     Красный стоит только у метки short — тем же тоном, что у акцента покера
+     (--g-a-red), а не своим: в разделе один красный, а не два похожих. Long и
+     short должны различаться на глаз мгновенно, ещё до того, как прочитано
+     слово, — это стороны сделки, а не оттенки одного состояния, как тело и
+     коррекция внутри самого ряда. */
+  .tscene {
+    --ts-1: #143a2c;
+    --ts-2: #1d6b4c;
+    --ts-3: #2f9a6e;
+    --ts-4: #65c996;
+    --ts-5: #9ae5c0;
+    --ts-6: #cdf5e2;
+    --ts-7: #f2f0ea;
+    --ts-dark: #101a16;
+    --ts-dark-edge: #2b4a3d;
+    --ts-red: var(--g-a-red);
+    --ts-red-dim: #f2938e;
+  }
+
+  /* Сцена идёт постоянно: это единственная работающая игра раздела, и её
+     карточка должна отличаться от трёх обещаний не только меткой «Доступно».
+
+     У каждого цикла кадр 0 % и кадр 100 % — одно и то же состояние. Причина не
+     в педантизме: `prefers-reduced-motion` глобальным правилом внизу файла
+     обрывает анимацию на первой итерации почти мгновенно, и сцена обязана
+     остаться в собранном виде, а не на половине схлопнувшейся свечи. */
+
+  /* Единственное движение сцены — то, чем рынок и занят: рост, коррекция,
+     рост, коррекция. Тело поднимается импульсом и откатывается примерно на
+     половину хода, и так по кругу. Импульс идёт по ряду слева направо
+     (задержка от `--i`), амплитуда растёт к правому краю (`--amp`): иначе ряд
+     качался бы целиком, как одна картинка, а не раскрывался трендом.
+
+     transform-box: fill-box обязателен, иначе и сдвиг, и масштаб считаются от
+     системы координат всего SVG, и свеча уезжает в угол кадра. */
+  .tsc-bar {
+    transform-box: fill-box;
+    transform-origin: 50% 100%;
+    animation: tsc-bar 7600ms ease-in-out infinite;
+    animation-delay: calc(var(--i, 0) * 95ms);
+  }
+  @keyframes tsc-bar {
+    /* база */
+    0%,
+    100% {
+      transform: translateY(0) scaleY(1);
+    }
+    /* рост */
+    24% {
+      transform: translateY(calc(var(--amp, 10) * -1px)) scaleY(1.07);
+    }
+    /* коррекция — откат примерно на половину */
+    40% {
+      transform: translateY(calc(var(--amp, 10) * -0.45px)) scaleY(0.97);
+    }
+    /* рост выше прежнего */
+    68% {
+      transform: translateY(calc(var(--amp, 10) * -1.7px)) scaleY(1.1);
+    }
+    /* и снова коррекция, откуда цикл смыкается с базой */
+    86% {
+      transform: translateY(calc(var(--amp, 10) * -0.6px)) scaleY(0.98);
+    }
+  }
+  /* Пятно под телом ходит с ним в такт: тело выше — опора мельче. */
+  .tsc-bar-shadow {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: tsc-bar-shadow 7600ms ease-in-out infinite;
+    animation-delay: calc(var(--i, 0) * 95ms);
+  }
+  @keyframes tsc-bar-shadow {
+    0%,
+    100% {
+      transform: scaleX(1);
+      opacity: 1;
+    }
+    24% {
+      transform: scaleX(0.9);
+      opacity: 0.8;
+    }
+    40% {
+      transform: scaleX(0.96);
+      opacity: 0.92;
+    }
+    68% {
+      transform: scaleX(0.84);
+      opacity: 0.7;
+    }
+    86% {
+      transform: scaleX(0.95);
+      opacity: 0.9;
+    }
+  }
+  /* Зарево дышит медленно и с мелкой амплитудой: движение на витрине должно
+     замечаться краем глаза, а не перетягивать внимание с названий игр. */
+  .tsc-aura {
+    animation: tsc-aura 6200ms ease-in-out infinite;
+  }
+  @keyframes tsc-aura {
+    0%,
+    100% {
+      opacity: 0.82;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+  /* Искры поднимаются над рядом — единственное в сцене, что не про цену. */
+  /* backwards обязателен: у искр разная задержка старта (до трёх секунд), а
+     до первого кадра анимации элемент стоит таким, каким объявлен в разметке —
+     то есть непрозрачной точкой в полную величину. Шесть таких точек висели
+     внизу сцены сразу после загрузки и гасли одна за другой по мере того, как
+     до каждой доходила очередь: фон на глазах превращался в другой фон.
+     С backwards кадр 0 % (opacity: 0) действует всё время ожидания. */
+  .tsc-spark {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: tsc-spark 3800ms ease-out infinite backwards;
+    animation-delay: calc(var(--i, 0) * 620ms);
+  }
+  @keyframes tsc-spark {
+    0% {
+      transform: translateY(0) scale(0.4);
+      opacity: 0;
+    }
+    20% {
+      opacity: 0.75;
+    }
+    100% {
+      transform: translateY(-150px) scale(0.2);
+      opacity: 0;
+    }
+  }
+  /* Неон обеих меток чуть дышит, но с разными периодами: синхронное мерцание
+     двух надписей читалось бы аварийной сигнализацией. */
+  .tsc-long {
+    animation: tsc-neon 3400ms ease-in-out infinite;
+  }
+  .tsc-short {
+    animation: tsc-neon 4600ms ease-in-out infinite;
+  }
+  @keyframes tsc-neon {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.82;
+    }
+  }
+
+  /* ── полоса «одна платформа» ───────────────────────────── */
+  /* Ассет лежит фоном на всю полосу: у него тёмные края, и текст ложится прямо
+     на кадр без подложки и затемнения. Кадр центрированный (знак V посреди
+     гор), поэтому обрезается он от центра, а полоса держит высоту, на которой
+     от знака остаётся не одна линия. */
+  .gplat {
+    position: relative;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--s4);
+    min-height: 260px;
+    margin-top: var(--s5);
+    padding: var(--s4);
+    border: 1px solid var(--g-line);
+  }
+  .gplat-art {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    pointer-events: none;
+  }
+  .gplat-txt {
+    position: relative;
+    max-width: 46ch;
+  }
+  .gplat h2 {
+    margin: 0;
+    font-size: var(--t-l);
+    font-weight: 500;
+    line-height: 1.2;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--g-ink);
+  }
+  .gplat-lede {
+    margin: var(--s3) 0 0;
+    font-size: var(--t-s);
+    color: var(--g-ink-2);
+  }
+  /* Четыре шага — порядок, а не список свойств. Стоят столбцом в правой части
+     полосы, обычной колонкой сетки, а не абсолютом поверх кадра: кадр
+     обрезается по ширине окна, и привязка к точке на картинке съезжала бы на
+     каждом втором экране. */
+  .gplat-steps {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--g-ink-2);
+  }
+
+  /* ── полоса итогов ─────────────────────────────────────── */
+  .gstats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--s4);
+    margin-top: var(--s4);
+    padding: var(--s4) 0 0;
+    border-top: 1px solid var(--g-line);
+  }
+  .gstats > div {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s1);
+  }
+  .gstats b {
+    font-size: var(--t-xl);
+    font-weight: 500;
+    line-height: 1;
+    color: var(--g-ink);
+  }
+  .gstats span {
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--g-ink-3);
+  }
+  .gstats-brand {
+    text-align: right;
+  }
+  .gstats-brand b {
+    letter-spacing: 0.34em;
+  }
+
+  /* ── узкие экраны ──────────────────────────────────────── */
+  @media (max-width: 1199px) {
+    .gcards {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .ghero {
+      grid-template-columns: minmax(0, 1fr);
+      padding: var(--s4) 0 var(--s5);
+    }
+    /* Столбец из девяти знаков на планшете — лесенка по букве в строке. */
+    .ghero-aside {
+      display: none;
+    }
+    /* Шаги над кадром съезжают с нарисованной рамки, как только полоса
+       обрезается по ширине: ниже этой границы они встают обычной строкой под
+       текстом. */
+    .gplat {
+      grid-template-columns: minmax(0, 1fr);
+      min-height: 0;
+    }
+    .gplat-steps {
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: var(--s3);
+      margin-top: var(--s4);
+    }
+    .gplat-art {
+      opacity: 0.45;
+    }
+  }
+  @media (max-width: 767px) {
+    .gcards {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .gstats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--s3);
+    }
+    .gstats-brand {
+      text-align: left;
+    }
+  }
+
+  /* ═══════════════ БАННЕР ТУРНИРОВ ═══════════════
+     Шапка /games/trading — единственное место вне раздела игр, которое берёт
+     его токены (`.tscene`/`.tsc-*`, `--g-*`): страница листает обе темы
+     продукта, а сцена снята под чёрное поле и светлого перевода не имеет —
+     см. комментарий у `--g-field` выше.
+
+     Полоса уходит в оба края вьюпорта (рендерится вне `<Wrap>`, см.
+     `Page.tsx`) — тот же приём, что у кривой P&L (`.bleed`), только сама
+     полоса, а не только её SVG. Содержимое внутри держит читательскую
+     колонку через `.cbanner-in`, как `.top-in` внутри полноширинного `.top`. */
+  .cbanner {
+    position: relative;
+    overflow: hidden;
+    min-height: 320px;
+    background: var(--g-field);
+    color: var(--g-ink);
+  }
+  .cbanner .cscene {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  /* Низ сцены обрывался о собственный фон вместо того, чтобы уйти в него.
+     Слишком узкая полоса (16%) сжимала тот же переход в короткую дистанцию и
+     на глаз читалась резче, чем совсем без неё, — тот же цвет, но сгущённый
+     в тонкую линию. Слишком широкая (45%, сплошной цвет с 92%) гасила
+     половину ряда: свечи слева, самые ранние и потому самые низкие по цене,
+     тонут в полосе первыми. Здесь верхняя треть полосы прозрачна совсем (ряд
+     остаётся виден), а дальше идёт длинный плавный спуск без единого плато —
+     дистанция важнее самого факта градиента. Цвет — тот же, что у фона
+     баннера (--g-field), а не отдельный «чёрный». */
+  .cbanner-fade {
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 34%;
+    background: linear-gradient(to bottom, transparent, transparent 30%, var(--g-field) 96%);
+    pointer-events: none;
+  }
+  .cbanner-scrim {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to right, rgb(0 0 0 / 0.75), rgb(0 0 0 / 0.35) 45%, rgb(0 0 0 / 0.1) 75%);
+    pointer-events: none;
+  }
+  .cbanner-in {
+    position: relative;
+    max-width: var(--wrap);
+    margin: 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s4);
+    min-height: 320px;
+    padding: var(--s4);
+  }
+  .cbanner-txt {
+    max-width: 52ch;
+  }
+  .cbanner-txt h1 {
+    color: var(--g-ink);
+  }
+  .cbanner-lede {
+    margin-top: var(--s2);
+    max-width: 56ch;
+    color: var(--g-ink-2);
+  }
+  .cbanner-cta {
+    margin-left: auto;
+  }
+  /* .btn.solid берёт цвет от --ink/--ground, которые переворачиваются с
+     темой — в светлой теме это дало бы тёмную кнопку на и так тёмном
+     баннере. Только эти два свойства свои, остальное — обычный .btn. */
+  .cbanner-cta .btn.solid {
+    background: var(--g-ink);
+    color: var(--g-field);
+    border-color: var(--g-ink);
+  }
+  .cbanner-cta .btn.solid:hover {
+    background: #ffffff;
+    border-color: #ffffff;
+  }
+  @media (max-width: 640px) {
+    .cbanner-in {
+      flex-direction: column;
+      align-items: flex-start;
+      min-height: 0;
+      padding: var(--s3);
+    }
+    .cbanner-cta {
+      margin-left: 0;
+    }
   }
 
   /* ═══════════════ СОСТОЯНИЯ ═══════════════ */
@@ -2482,8 +3484,41 @@
   .don-done p { margin-bottom: var(--s3); }
 
   /* ═══════════════ ДИАЛОГИ ═══════════════ */
+  /* Положение окна описано здесь целиком, а не утилитами Tailwind в самом
+     компоненте, и центруется оно свойством `translate`, а не `transform`:
+     transform занят приходом и уходом (ниже), и держать в одном свойстве и
+     центровку, и анимацию значит повторять сдвиг на -50% в каждом кадре —
+     расходятся они при первой же правке. Два разных свойства применяются
+     подряд (translate → scale → transform), поэтому окно остаётся по центру
+     само собой. */
   .dlg {
-    border: 1px solid var(--major);
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    z-index: 50;
+    translate: -50% -50%;
+    /* Была рамка цветом --major (85% альфы) — тот же волос, что у заголовков
+       разделов, но по всему периметру окна он читался тяжёлой светлой рамкой:
+       --major сделан для короткой строки-разделителя, а не для контура
+       520–860 пикселей. Вместо неё — тот же вес линии, что уже стоял на окне
+       турнира (там рамка дороже не была, потому что тон окна переопределяет
+       --hair-2 на дымчатый --g-line-2): теперь оба окна, игровое и обычное,
+       держат периметр одной и той же переменной, и тон продолжает решать её
+       яркость сам. Тень снизу отдельным слоем — отрыв листа от страницы, а не
+       часть контура.
+
+       Ширина по сторонам не 1px, как сверху и снизу, а меньше: окно стоит по
+       центру через `left: 50%` + `translate(-50%, -50%)`, и левый край почти
+       при любой ширине вьюпорта и масштабе страницы падает на дробный пиксель
+       — вертикальную линию браузер сглаживает по двум аппаратным пикселям
+       вместо одного, и она читается вдвое толще горизонтальной, у которой с
+       высотой окна такое совпадение реже. Явно заниженная ширина возвращает
+       обе линии к одному и тому же весу на глаз, вместо того чтобы зависеть
+       от того, на какое число упадёт край на конкретном экране. */
+    border-style: solid;
+    border-color: var(--hair-2);
+    border-width: 1px 0.6px;
+    box-shadow: 0 24px 64px rgb(0 0 0 / 0.55);
     background: var(--ground);
     color: var(--ink);
     padding: 0;
@@ -2491,8 +3526,49 @@
     width: 100%;
     max-height: 90vh;
     overflow-y: auto;
+    /* Окно приходит и уходит, а не возникает врезкой: модальное окно забирает
+       весь экран, и без движения непонятно, лист ли это поверх страницы или
+       страница сменилась. Всплытие на десяток пикселей с едва заметным
+       приближением — ровно столько, чтобы направление прочиталось. */
+    animation: dlg-in 220ms cubic-bezier(0.32, 0.72, 0, 1) both;
   }
-  .dlg-backdrop { background: var(--scrim); }
+  /* Уход короче прихода и без доводки: открытие показывает, что появилось, а
+     закрытию показывать нечего — его дело не задерживать руку. Длительность
+     продублирована в DIALOG_EXIT_MS (shared/ui/dialog.tsx): анимацию отыгрывает
+     браузер, а снять окно с дерева должен React — Radix ждёт её только внутри
+     своего поддерева, и окно, которое родитель рисует условно, иначе исчезает
+     первым кадром. */
+  .dlg[data-state="closed"] {
+    animation: dlg-out 150ms cubic-bezier(0.4, 0, 1, 1) both;
+  }
+  /* Шире дефолтных 520px — разбор одной сделки со свечами, состав турнира. */
+  .dlg-wide { max-width: min(94vw, 860px); }
+  .dlg-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: var(--scrim);
+    animation: dlg-scrim-in 200ms ease-out both;
+  }
+  .dlg-backdrop[data-state="closed"] {
+    animation: dlg-scrim-out 150ms ease-in both;
+  }
+  @keyframes dlg-in {
+    from { opacity: 0; transform: translateY(10px) scale(0.985); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes dlg-out {
+    from { opacity: 1; transform: none; }
+    to { opacity: 0; transform: translateY(4px) scale(0.99); }
+  }
+  @keyframes dlg-scrim-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes dlg-scrim-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
   /* Заголовок и итог справа — по верхней линии, а не по центру: у заголовка с
      подзаголовком высота вдвое больше, и центрирование опустило бы число к
      середине второй строки. */
@@ -2524,6 +3600,71 @@
     display: flex;
     justify-content: flex-end;
     gap: var(--s2);
+  }
+
+  /* ── окно раздела игр ────────────────────────────────────────── */
+  /* Единственное окно продукта со своим полем. Турнир открывают с чёрной
+     витрины `/games/trading`, и белый лист поверх неё читался бы чужой
+     страницей, влетевшей сверху, а не листом этой же.
+     Тон берётся из палитры раздела (--g-*), у которой нет светлого перевода:
+     окно остаётся тёмным в обеих темах — ровно как баннер той же страницы
+     (см. `.cbanner`).
+
+     Переопределяются ПРИКЛАДНЫЕ имена темы, а не свойства детей: внутри стоят
+     общие компоненты продукта (`KeyValue`, `LedgerTable`, `MetricCell`,
+     `Button`), и каждый из них берёт краску и линейки из этих же имён. Так
+     тёмным становится всё содержимое разом, без единого правила «а в этом
+     окне кнопка другая» — той ручной правки, которой держится `.cbanner-cta`.
+
+     --profit/--loss/--doubt в список не входят намеренно: игровой тон отвечает
+     за поле, а не за числа. Деньги внутри окна красятся как везде. */
+  .dlg-game {
+    --ground: var(--g-field);
+    --ink: var(--g-ink);
+    --ink-2: var(--g-ink-2);
+    --ink-3: var(--g-ink-3);
+    --ink-rgb: 242 240 234;
+    --hair: var(--g-line);
+    --hair-2: var(--g-line-2);
+    --rule: var(--g-line-2);
+    --meta: var(--g-ink-2);
+    --meta-dim: var(--g-ink-3);
+    /* Поле окна на тон светлее поля раздела — тем же разрывом, которым на
+       витрине карточка отделяется от страницы без рамки. */
+    background: var(--g-card);
+    color: var(--g-ink);
+    /* Скроллбар окна — тёмный: окно прокручивается, а тема страницы под ним
+       может быть светлой. */
+    color-scheme: dark;
+    /* Кромка сверху — тот же приём, что у окна необратимого (`.dlg-risk`):
+       род окна опознаётся раньше, чем прочитан заголовок. Акцент приглушён до
+       половины — на 860 пикселях полная заливка --g-a-green читается полосой
+       светофора, а не кромкой. */
+    border-top: 2px solid rgb(var(--g-a-green-rgb) / 0.5);
+    /* Зелёное свечение по бокам. box-shadow, а не слой под окном: окно
+       прокручивается (`overflow-y: auto`) и обрезало бы о себя любой свой
+       слой, а тень браузер рисует снаружи и не режет.
+
+       Свет стоит ВПЛОТНУЮ к кромке и набран двумя слоями на сторону. Один
+       широкий слой с большим отступом здесь уже стоял и был не виден вовсе:
+       размытая тень набирает половину своей прозрачности только на собственном краю,
+       и отнесённая от окна на сорок пикселей она приходит к его кромке почти
+       прозрачной. А место сбоку от окна есть не всегда — в окне шириной 860
+       на экране 935 его остаётся по три десятка пикселей на сторону, и свет
+       обязан быть ярким именно там, а не в ста пикселях, которых нет.
+       Ближний слой (размытие 18) даёт саму кромку, дальний (52) уводит её в
+       темноту, когда место всё-таки есть.
+
+       Сдвиг только по горизонтали и отрицательный разгон: сверху и снизу
+       свет не нужен — окно занимает почти всю высоту экрана, и ореол вокруг
+       него читался бы подсветкой всей страницы, а не окна. */
+    box-shadow:
+      0 0 0 1px rgb(var(--g-a-green-rgb) / 0.4),
+      -6px 0 18px -4px rgb(var(--g-a-green-rgb) / 0.7),
+      6px 0 18px -4px rgb(var(--g-a-green-rgb) / 0.7),
+      -22px 0 52px -12px rgb(var(--g-a-green-rgb) / 0.45),
+      22px 0 52px -12px rgb(var(--g-a-green-rgb) / 0.45),
+      0 40px 120px rgb(0 0 0 / 0.7);
   }
 
   /* ── подтверждение необратимого ──────────────────────────────── */
@@ -2857,6 +3998,12 @@
     border-top: 1px solid var(--rule);
     margin-top: var(--s4);
     padding-top: var(--s3);
+  }
+  /* Сложившись в одну колонку, дорожки .bare тоже остаются без линии: её и
+     сверху заменяет воздух. */
+  .asym.bare > .marg {
+    border-top: 0;
+    padding-top: 0;
   }
   .an,
   .cmp { grid-template-columns: repeat(2, 1fr); }
@@ -3376,4 +4523,116 @@
 @keyframes tour-sheet-in {
   from { opacity: 0; transform: translateY(100%); }
   to { opacity: 1; transform: none; }
+}
+
+/* ── ПРОФИЛЬ И BATTLE PASS ─────────────────────────────────────────────────
+   Страница профиля — обычная страница продукта, не раздел игр: ни чёрного
+   поля, ни скруглений, ни палитры --g-*. Цвета — прикладные имена темы, и
+   потому блок одинаково работает в обеих темах. */
+
+.hero-card {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: var(--s3);
+  margin-bottom: var(--s4);
+}
+
+/* Место под модель героя. Занято сейчас, чтобы страница не переезжала, когда
+   модели появятся; пока в нём стоит номер уровня — пустая рамка читалась бы
+   как незагрузившаяся картинка. */
+.hero-slot {
+  aspect-ratio: 3 / 4;
+  border: 1px solid var(--hair);
+  display: grid;
+  place-items: center;
+}
+
+.hero-level {
+  font-size: var(--t-xl);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+
+.hero-name { font-weight: 600; }
+.hero-soon { margin: var(--s1) 0 var(--s3); }
+
+.profile-section { margin-top: var(--s5); }
+
+.xpbar-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s2);
+  margin-bottom: var(--s1);
+}
+
+.xpbar-rail {
+  height: 8px;
+  background: var(--hair);
+}
+
+.xpbar-fill {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+}
+
+.daily-row,
+.track {
+  display: grid;
+  gap: var(--s2);
+  list-style: none;
+  padding: 0;
+  margin: var(--s2) 0;
+}
+
+.daily-row { grid-template-columns: repeat(7, 1fr); }
+.track { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+
+.daily-cell,
+.track-cell {
+  border: 1px solid var(--hair);
+  padding: var(--s2);
+  display: grid;
+  gap: 2px;
+}
+
+/* Пройденное приглушено, сегодняшнее и готовое к выдаче — обведено. В системе,
+   где цвет означает деньги, «вот это» нельзя покрасить: его можно обвести. */
+.daily-cell.is-done,
+.track-cell.is-claimed { opacity: 0.5; }
+
+.daily-cell.is-today,
+.track-cell.is-ready { outline: 2px solid var(--ink); }
+
+.track-cell.is-locked { opacity: 0.6; }
+
+.daily-day,
+.track-level {
+  font-size: var(--t-xs);
+  color: var(--ink-2);
+}
+
+.daily-coins,
+.track-coins {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.track-note { font-size: var(--t-xs); }
+
+/* Точка на кнопке профиля: награда, которой не видно, — не награда. */
+.acct.has-dot { position: relative; }
+.acct.has-dot::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  background: var(--ink);
+}
+
+@media (max-width: 640px) {
+  .hero-card { grid-template-columns: 1fr; }
+  .daily-row { grid-template-columns: repeat(4, 1fr); }
 }

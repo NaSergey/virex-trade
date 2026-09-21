@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { useBattlePass } from '@/entities/battle-pass';
 import { CoinBalance } from '@/entities/coins';
 import { useAuth } from '@/features/auth';
 import { DonateDialog } from '@/features/donation';
@@ -16,7 +17,7 @@ import { ThemeToggle } from '@/shared/ui/ThemeToggle';
 // import { VirexLogo } from '@/shared/ui/VirexLogo';
 import { useLocaleControl } from '@/shared/i18n';
 
-type Tab = 'overview' | 'tags' | 'analytics' | 'market' | 'backtest' | 'tournaments' | 'settings' | 'admin';
+type Tab = 'overview' | 'tags' | 'analytics' | 'market' | 'backtest' | 'games' | 'settings' | 'admin';
 
 type NavItem = { id: Tab; labelKey: Tab };
 
@@ -26,7 +27,7 @@ const NAV: NavItem[] = [
   { id: 'analytics', labelKey: 'analytics' },
   { id: 'market', labelKey: 'market' },
   { id: 'backtest', labelKey: 'backtest' },
-  { id: 'tournaments', labelKey: 'tournaments' },
+  { id: 'games', labelKey: 'games' },
 ];
 
 /**
@@ -65,6 +66,12 @@ export function TopNav() {
   const { locale } = useLocaleControl();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  // Награда, которой не видно, — не награда: точка на кнопке профиля
+  // появляется, когда ждут либо уровни, либо сегодняшняя ежедневная.
+  const battlePass = useBattlePass();
+  const hasRewards = Boolean(
+    battlePass.data && (battlePass.data.pendingCoins > 0 || !battlePass.data.daily.claimedToday),
+  );
   const [donateOpen, setDonateOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
@@ -171,7 +178,7 @@ export function TopNav() {
           <ThemeToggle />
           <Button
             variant="none"
-            className="acct"
+            className={`acct${hasRewards ? ' has-dot' : ''}`}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((v) => !v)}
@@ -195,6 +202,15 @@ export function TopNav() {
                   которой посвящена рейка разделов выше. */}
               <KeyValue label={t('settings')} control valueClassName="">
                 <Link className="btn bare" href="/settings" onClick={() => setMenuOpen(false)}>
+                  {tc('open')}
+                </Link>
+              </KeyValue>
+              {/* Прогресс — переход по адресу, а не окно: у профиля есть свой
+                  адрес, и меню обязано его отдавать. Подпись — «Battle Pass», а
+                  не «Профиль»: кнопка, открывающая это меню, уже так
+                  называется, и два «Профиля» подряд ничего не различали бы. */}
+              <KeyValue label={t('battlePass')} control valueClassName="">
+                <Link className="btn bare" href="/profile" onClick={() => setMenuOpen(false)}>
                   {tc('open')}
                 </Link>
               </KeyValue>
