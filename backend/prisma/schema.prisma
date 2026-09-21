@@ -101,6 +101,10 @@ model User {
   coinBalance      Int               @default(1000)
   coinTransactions CoinTransaction[]
 
+  /// Battle Pass: прогресс по сезонам и журнал начисленного XP.
+  battlePassProgress BattlePassProgress[]
+  battlePassXpEvents BattlePassXpEvent[]
+
   @@map("users")
 }
 
@@ -121,14 +125,17 @@ model CoinTransaction {
   /// Баланс после этой строки — чтобы историю можно было читать, не пересчитывая.
   balanceAfter Int
   /// 'DONATION' | 'TOURNAMENT_FEE' | 'TOURNAMENT_BONUS' | 'TOURNAMENT_REFUND' | 'TOURNAMENT_PRIZE'
-  /// | 'GAME_BUYIN' | 'GAME_CASHOUT'
+  /// | 'GAME_BUYIN' | 'GAME_CASHOUT' | 'REFERRAL_BONUS' | 'BATTLEPASS_REWARD' | 'DAILY_REWARD'
   kind         String
   /// Откуда строка: id доната; id турнира — добавка в фонд и приз;
   /// `<id турнира>:<joinedAt в мс>` — взнос и его возврат, то есть одно участие
   /// (вышел и вошёл снова — новое участие и новая пара строк);
   /// `<id турнира>:bonus` — возврат добавки при удалении лобби;
   /// `GameSeat.id` — GAME_BUYIN и GAME_CASHOUT одной посадки за стол игры
-  /// (новая посадка — новая строка GameSeat и новый id, даже за тот же стол).
+  /// (новая посадка — новая строка GameSeat и новый id, даже за тот же стол);
+  /// `<сезон>:<уровень>` — награда Battle Pass за уровень;
+  /// `YYYY-MM-DD` (UTC) — ежедневная награда за заход: ключ журнала и есть её
+  /// защита от второй выплаты за те же сутки.
   refId        String
   createdAt    DateTime @default(now())
 
@@ -405,6 +412,11 @@ model TournamentParticipant {
   userId       String
   user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   joinedAt     DateTime   @default(now())
+  /// Готов ли участник начать. Турнир выходит из лобби сам, когда готовы все,
+  /// — кнопки старта у создателя нет. Колонкой, а не отдельной таблицей: у
+  /// готовности нет ни истории, ни времени, это одно «да/нет» в лобби, и после
+  /// старта она не читается.
+  ready        Boolean    @default(false)
   /// Итог турнира — проставляется финалом, один раз. Рейтинг игры считается
   /// агрегатом по этим колонкам, а не пересчётом сессий.
   finalEquity  Float?
@@ -1083,4 +1095,49 @@ model GameSeat {
   @@unique([tableId, userId])
   @@index([userId])
   @@map("game_seats")
+}
+
+/// Прогресс Battle Pass за один сезон. Уровень не хранится — он функция от xp
+/// (см. battlepass/levels.ts): правило начисления это соглашение, а не факт о
+/// человеке, и сохранённый уровень пришлось бы пересчитывать задним числом при
+/// любой его правке. Тот же довод, что у рейтинга турниров.
+model BattlePassProgress {
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Ключ сезона: '2026-Q4'. Календарный квартал UTC, см. battlepass/season.ts.
+  season       String
+  xp           Int      @default(0)
+  /// До какого уровня награды забраны. Забирают подряд и всё сразу: награда
+  /// одного вида — монеты, и выбирать, какую монету получить раньше, незачем.
+  claimedLevel Int      @default(0)
+  updatedAt    DateTime @updatedAt
+
+  @@id([userId, season])
+  @@map("battle_pass_progress")
+}
+
+/// Журнал начисленного XP — по строке на событие. Нужен ровно за тем же, за чем
+/// CoinTransaction: чтобы «откуда взялось» имело ответ и чтобы одно событие не
+/// было оплачено дважды, сколько бы раз его ни разобрали.
+model BattlePassXpEvent {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Сезон, в который начисление попало. Для выборки, не для ключа.
+  season    String
+  /// Ключ реестра: 'game.tournament', 'game.backtest', ...
+  source    String
+  /// Id того, за что начислено: турнира, сессии, сделки.
+  refId     String
+  /// Фактически начисленное — может быть 0, если упёрлись в дневной потолок.
+  /// Строка нужна и в этом случае: она и есть отметка «событие разобрано».
+  xp        Int
+  createdAt DateTime @default(now())
+
+  /// Ключ НЕ включает сезон: турнир, доигранный в последнюю минуту квартала и
+  /// финализированный в первую минуту следующего, — одно событие.
+  @@unique([userId, source, refId], map: "bp_xp_once")
+  @@index([userId, season])
+  @@index([userId, source, createdAt])
+  @@map("battle_pass_xp_events")
 }

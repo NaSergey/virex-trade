@@ -10,7 +10,10 @@ export type CoinTxKind =
   | 'TOURNAMENT_REFUND'
   | 'TOURNAMENT_PRIZE'
   | 'GAME_BUYIN'
-  | 'GAME_CASHOUT';
+  | 'GAME_CASHOUT'
+  | 'REFERRAL_BONUS'
+  | 'BATTLEPASS_REWARD'
+  | 'DAILY_REWARD';
 
 /**
  * Монеты: баланс пользователя и журнал движений.
