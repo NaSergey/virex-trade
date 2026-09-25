@@ -422,8 +422,16 @@ export class TagsService {
    * Copy position tags onto freshly synced trades. Called by TradeSyncService
    * after inserts: every trade closed after its position was tagged inherits
    * the tags. Idempotent via skipDuplicates + the closedAt >= createdAt guard.
+   *
+   * Это основной путь разметки — тегируют обычно открытую позицию, а не
+   * закрытую сделку задним числом (тот путь, `setTradeTags`, отдельный). XP
+   * начисляется здесь же, тем же tx, что и связка TradeTag: ключ по tradeId,
+   * тот же приём, что у `setTradeTags`, — сколько раз ни гоняй sync по одной и
+   * той же сделке (а он идёт на каждый тик), второй раз `awardMany` не даст.
+   * Потолка нет по той же причине, что и там: сделки берутся из реальной
+   * истории биржи, а не печатаются пользователем.
    */
-  async linkTagsToNewTrades(userId: string): Promise<number> {
+  async linkTagsToNewTrades(userId: string, now: Date = new Date()): Promise<number> {
     const posTags = await this.prisma.positionTag.findMany({ where: { userId } });
     if (posTags.length === 0) return 0;
 
@@ -451,8 +459,12 @@ export class TagsService {
           .map((t) => ({ tradeId: tr.id, tagId: t.tagId })),
       );
       if (rows.length > 0) {
-        const res = await this.prisma.tradeTag.createMany({ data: rows, skipDuplicates: true });
-        linked += res.count;
+        const tradeIds = [...new Set(rows.map((r) => r.tradeId))];
+        linked += await this.prisma.$transaction(async (tx) => {
+          const res = await tx.tradeTag.createMany({ data: rows, skipDuplicates: true });
+          await this.battlePass.awardMany(tx, userId, 'journal.tag', tradeIds, XP_SOURCES['journal.tag'].base, now);
+          return res.count;
+        });
       }
     }
     return linked;

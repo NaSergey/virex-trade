@@ -1,11 +1,14 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { isOwnerEmail } from '../admin/owner';
 import { CoinsService } from '../coins/coins.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { runsApiJobs } from '../role';
 import { CreateGameTableDto } from './dto/game-table.dto';
 import {
   gameAlreadySeated,
+  gameBadBets,
+  gameBadBlinds,
   gameBadBuyInRange,
   gameBadSeats,
   gameBuyInOutOfRange,
@@ -17,8 +20,30 @@ import {
   gameTableNotEmpty,
   gameTableNotFound,
 } from './game-errors';
-import { GameType, PUBLIC_LIST_LIMIT, SEATS_RANGE } from './games.config';
+import {
+  BLACKJACK_MIN_BET,
+  GameType,
+  POKER_MIN_BIG_BLIND,
+  POKER_MIN_BUYIN_BB,
+  PUBLIC_LIST_LIMIT,
+  SEATS_RANGE,
+} from './games.config';
 import { GamesGateway } from './games.gateway';
+
+/**
+ * Правила игры поверх стола. Стол ничего не знает о раздачах, но уход из-за
+ * стола посреди раздачи — это ещё и ход в ней (фолд), поэтому уход идёт
+ * через очередь движка: между фолдом и удалением места не должна начаться
+ * новая раздача, которая снимет с уходящего блайнд.
+ */
+export interface TableEngine {
+  /** Выполнить `fn` в очереди операций стола — после всего, что уже в ней. */
+  exclusive<T>(tableId: string, fn: () => Promise<T>): Promise<T>;
+  /** Игрок встаёт: вызывается внутри `exclusive`, до удаления места. */
+  onLeaving(tableId: string, userId: string): Promise<void>;
+  /** Состав стола изменился — сесть, встать. */
+  onSeatsChanged(tableId: string): void;
+}
 
 /**
  * Общая инфраструктура столов покера/блэкджека: лобби, посадка/уход с
@@ -26,18 +51,81 @@ import { GamesGateway } from './games.gateway';
  * отдельные модули поверх него.
  */
 @Injectable()
-export class GamesService {
+export class GamesService implements OnApplicationBootstrap {
+  private readonly logger = new Logger(GamesService.name);
+  private readonly engines = new Map<string, TableEngine>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly coins: CoinsService,
     private readonly gateway: GamesGateway,
   ) {}
 
+  /**
+   * Раздачи, прерванные перезапуском, возвращают вклады. `GameHand` общий у
+   * покера и блэкджека: сама раздача живёт в памяти `api`, а поставленное в
+   * неё уже списано со стеков, и вернуть его — забота слоя столов, а не одной
+   * из игр. Только там, где живут столы.
+   */
+  async onApplicationBootstrap() {
+    if (!runsApiJobs()) return;
+    const open = await this.prisma.gameHand.findMany({ where: { finishedAt: null } });
+    for (const hand of open) {
+      try {
+        await this.voidHand(hand.id, hand.tableId, hand.contributions as Record<string, number>);
+      } catch (e) {
+        this.logger.error(`void hand ${hand.id}: ${(e as Error).message}`);
+      }
+    }
+  }
+
+  private async voidHand(handId: string, tableId: string, contributions: Record<string, number>) {
+    await this.prisma.$transaction(async (tx) => {
+      // CAS: вторая попытка того же возврата ничего не найдёт.
+      const moved = await tx.gameHand.updateMany({
+        where: { id: handId, finishedAt: null },
+        data: { finishedAt: new Date(), voided: true },
+      });
+      if (moved.count === 0) return;
+      for (const [userId, amount] of Object.entries(contributions)) {
+        if (!(amount > 0)) continue;
+        const back = await tx.gameSeat.updateMany({
+          where: { tableId, userId },
+          data: { stack: { increment: amount } },
+        });
+        if (back.count === 0) await this.coins.credit(tx, userId, amount, 'GAME_REFUND', `${handId}:${userId}`);
+      }
+    });
+  }
+
+  /** Модуль игры регистрирует свой движок при старте — стол о правилах не знает. */
+  registerEngine(gameType: GameType, engine: TableEngine) {
+    this.engines.set(gameType, engine);
+  }
+
   /** Создатель не садится автоматически: buy-in ещё не выбран, и стол для чужой игры — законный случай. */
   async create(userId: string, dto: CreateGameTableDto) {
     const seatsRange = SEATS_RANGE[dto.gameType];
     if (dto.maxSeats < seatsRange[0] || dto.maxSeats > seatsRange[1]) throw gameBadSeats();
     if (dto.maxBuyIn < dto.minBuyIn) throw gameBadBuyInRange();
+    const bigBlind = dto.gameType === 'poker' ? dto.bigBlind : undefined;
+    if (
+      dto.gameType === 'poker' &&
+      (!bigBlind || bigBlind < POKER_MIN_BIG_BLIND || dto.minBuyIn < bigBlind * POKER_MIN_BUYIN_BB)
+    ) {
+      throw gameBadBlinds();
+    }
+    const bets = dto.gameType === 'blackjack' ? { minBet: dto.minBet, maxBet: dto.maxBet } : null;
+    if (
+      bets &&
+      (!bets.minBet ||
+        !bets.maxBet ||
+        bets.minBet < BLACKJACK_MIN_BET ||
+        bets.maxBet < bets.minBet ||
+        dto.minBuyIn < bets.minBet)
+    ) {
+      throw gameBadBets();
+    }
 
     return this.prisma.gameTable.create({
       data: {
@@ -47,6 +135,9 @@ export class GamesService {
         minBuyIn: dto.minBuyIn,
         maxBuyIn: dto.maxBuyIn,
         maxSeats: dto.maxSeats,
+        bigBlind: bigBlind ?? null,
+        minBet: bets?.minBet ?? null,
+        maxBet: bets?.maxBet ?? null,
         creatorId: userId,
       },
     });
@@ -67,7 +158,8 @@ export class GamesService {
   }
 
   /**
-   * Открытые публичные столы без меня. Заполненные отсеиваются после чтения
+   * Открытые публичные столы без меня — ни тех, где я сижу, ни созданных мной:
+   * и те и другие стоят в «Моих». Заполненные отсеиваются после чтения
    * — условие «мест меньше maxSeats» в одном запросе Prisma не выразить, а
    * открытых столов в системе всегда немного (тот же приём, что
    * `TournamentsService.listPublic`).
@@ -79,6 +171,11 @@ export class GamesService {
         status: 'open',
         ...(gameType ? { gameType } : {}),
         seats: { none: { userId } },
+        // Свой стол — в «Моих», даже если я за ним не сижу (создатель не
+        // садится сам): вторая строка того же стола читалась бы вторым столом.
+        // Стол без создателя (аккаунт удалён) ничей и остаётся в списке — одно
+        // `not` его бы выбросило: пустое поле не проходит и `<>`.
+        OR: [{ creatorId: null }, { creatorId: { not: userId } }],
       },
       orderBy: { createdAt: 'desc' },
       take: PUBLIC_LIST_LIMIT,
@@ -150,6 +247,8 @@ export class GamesService {
       await this.coins.charge(tx, userId, buyIn, 'GAME_BUYIN', seat.id);
     });
     await this.pushState(id);
+    const table = await this.prisma.gameTable.findUnique({ where: { id }, select: { gameType: true } });
+    if (table) this.engines.get(table.gameType)?.onSeatsChanged(id);
     return this.get(userId, id);
   }
 
@@ -160,6 +259,18 @@ export class GamesService {
 
   /** Уход: остаток стека возвращается монетами, место освобождается для следующего. */
   async leave(userId: string, id: string) {
+    const table = await this.prisma.gameTable.findUnique({ where: { id }, select: { gameType: true } });
+    const engine = table ? this.engines.get(table.gameType) : undefined;
+    if (!engine) return this.cashOut(userId, id);
+    const res = await engine.exclusive(id, async () => {
+      await engine.onLeaving(id, userId);
+      return this.cashOut(userId, id);
+    });
+    engine.onSeatsChanged(id);
+    return res;
+  }
+
+  private async cashOut(userId: string, id: string) {
     await this.prisma.$transaction(async (tx) => {
       // Удаление и есть чтение: DELETE берёт блокировку строки и возвращает её
       // актуальную версию. Читать стек отдельным запросом нельзя — между

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader } from '@/shared/ui/dialog';
+import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader, useDialogFade } from '@/shared/ui/dialog';
 import { Field, Input } from '@/shared/ui/Field';
 
 export interface ConfirmRequest {
@@ -31,11 +31,12 @@ export interface ConfirmRequest {
  */
 export function ConfirmDialog({ request, onClose }: { request: ConfirmRequest; onClose: () => void }) {
   const t = useTranslations('common');
+  const { closing, close } = useDialogFade(onClose);
   const [typed, setTyped] = useState('');
   const matches = typed.trim().toUpperCase() === request.word.toUpperCase();
 
   return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={!closing} onOpenChange={(v) => !v && close()}>
       {/* Кромка цветом убытка — то единственное, чем окно необратимого
           отличается от обычного диалога ещё до того, как прочитан заголовок. */}
       {/* Единственное окно, которое открывают ради ввода: фокус сразу в поле
@@ -71,9 +72,9 @@ export function ConfirmDialog({ request, onClose }: { request: ConfirmRequest; o
           confirmDisabled={!matches}
           onConfirm={() => {
             request.onConfirm();
-            onClose();
+            close();
           }}
-          onCancel={onClose}
+          onCancel={close}
         />
       </DialogContent>
     </Dialog>

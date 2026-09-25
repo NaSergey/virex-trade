@@ -118,6 +118,47 @@ describe('BattlePassService.award', () => {
   });
 });
 
+describe('BattlePassService.awardMany', () => {
+  it('начисляет за каждое событие пачки разом', async () => {
+    const db = fakeDb();
+    await service().awardMany(db.tx as never, 'u1', 'journal.tag', ['t1', 't2', 't3'], 15, NOW);
+
+    expect(db.events).toHaveLength(3);
+    expect(db.progress.get(db.key('u1', SEASON))?.xp).toBe(45);
+  });
+
+  it('refId, уже начисленный раньше, в пачке не повторяется', async () => {
+    const db = fakeDb();
+    await service().award(db.tx as never, 'u1', 'journal.tag', 't1', 15, NOW);
+    await service().awardMany(db.tx as never, 'u1', 'journal.tag', ['t1', 't2'], 15, NOW);
+
+    expect(db.events).toHaveLength(2);
+    expect(db.progress.get(db.key('u1', SEASON))?.xp).toBe(30);
+  });
+
+  it('пустой список ничего не пишет', async () => {
+    const db = fakeDb();
+    await service().awardMany(db.tx as never, 'u1', 'journal.tag', [], 15, NOW);
+
+    expect(db.events).toHaveLength(0);
+    expect(db.progress.has(db.key('u1', SEASON))).toBe(false);
+  });
+
+  it('выключенный источник не начисляет', async () => {
+    const db = fakeDb();
+    await service().awardMany(db.tx as never, 'u1', 'game.table', ['seat1'], 100, NOW);
+
+    expect(db.events).toHaveLength(0);
+  });
+
+  it('источник с дневным потолком не поддерживается — обходить его пачкой нельзя', async () => {
+    const db = fakeDb();
+    await expect(
+      service().awardMany(db.tx as never, 'u1', 'game.backtest', ['s1'], 50, NOW),
+    ).rejects.toThrow();
+  });
+});
+
 describe('BattlePassService.state', () => {
   it('пустой прогресс — первый уровень, забирать нечего', async () => {
     const prisma = {

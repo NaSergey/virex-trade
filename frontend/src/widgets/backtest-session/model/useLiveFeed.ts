@@ -5,6 +5,7 @@ import { fetchCandles, fetchLiveTail } from '../api/hooks';
 import type { SessionDetail } from '../api/types';
 import {
   DAY,
+  DEFAULT_TIMEFRAME,
   fromApi,
   lastPrice,
   loadedUntil,
@@ -38,8 +39,8 @@ export function useLiveFeed(detail: SessionDetail, enabled = true): Replay {
   const { session } = detail;
   const endTime = session.endTime ? Date.parse(session.endTime) : null;
 
-  const [tf, setTf] = useState(1);
-  const [shownTf, setShownTf] = useState(1);
+  const [tf, setTf] = useState<number>(DEFAULT_TIMEFRAME);
+  const [shownTf, setShownTf] = useState(tf);
   const [closed, setClosed] = useState<Candle[]>([]);
   const [anchor, setAnchor] = useState<number | null>(null);
   const [minutes, setMinutes] = useState<Candle[]>([]);

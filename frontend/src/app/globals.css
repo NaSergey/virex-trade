@@ -475,16 +475,101 @@
     align-items: center;
     padding: var(--s2) var(--s3) var(--s2) 0;
   }
+  /* Меню профиля выпадает из шапки: разворачивается сверху вниз от кромки,
+     к которой подвешено, и уходит обратно вверх. Врезкой оно возникало поверх
+     страницы без связи с кнопкой, и было неясно, откуда оно взялось.
+     Уход короче прихода — тот же расклад, что у окон (.dlg). С дерева меню
+     снимает конец анимации ухода (onAnimationEnd в TopNav), поэтому пока
+     оно уходит, клики проходят сквозь него. */
   .acct-menu {
     position: absolute;
     top: calc(100% - 1px);
     right: 0;
     z-index: 50;
-    min-width: 220px;
+    width: 260px;
+    max-width: calc(100vw - var(--s3) * 2);
     background: var(--ground);
     border: 1px solid var(--major);
-    padding: var(--s3);
+    padding: var(--s2);
+    animation: acct-in 220ms cubic-bezier(0.32, 0.72, 0, 1) both;
   }
+  .acct-menu[data-state="closed"] {
+    animation: acct-out 140ms cubic-bezier(0.4, 0, 1, 1) both;
+    pointer-events: none;
+  }
+  @keyframes acct-in {
+    from { opacity: 0; transform: translateY(-6px); clip-path: inset(0 0 100% 0); }
+    to { opacity: 1; transform: none; clip-path: inset(0); }
+  }
+  @keyframes acct-out {
+    from { opacity: 1; transform: none; }
+    to { opacity: 0; transform: translateY(-6px); }
+  }
+  .acct-id {
+    padding: var(--s2) var(--s2) var(--s3);
+    border-bottom: 1px solid var(--hair);
+  }
+  .acct-name {
+    font-size: var(--t-m);
+    color: var(--ink);
+  }
+  .acct-mail {
+    margin-top: 2px;
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    color: var(--ink-3);
+    overflow-wrap: anywhere;
+  }
+  .acct-lang {
+    padding: var(--s3) var(--s2);
+    border-bottom: 1px solid var(--hair);
+  }
+  /* Тумблер языка — на всю ширину меню, половина на язык. */
+  .acct-lang .seg button { flex: 1; }
+  .acct-items {
+    display: flex;
+    flex-direction: column;
+    padding: var(--s2) 0;
+  }
+  /* Пункт — вся строка: подпись и есть действие. Стрелка появляется под
+     курсором — без слова «Открыть» справа она одна говорит, что строка
+     ведёт дальше. */
+  .acct-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s2);
+    width: 100%;
+    padding: 10px var(--s2);
+    background: none;
+    border: 0;
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    text-align: left;
+    color: var(--ink-2);
+    cursor: pointer;
+    transition: background-color 0.12s, color 0.12s;
+  }
+  .acct-item::after {
+    content: '→';
+    opacity: 0;
+    transform: translateX(-4px);
+    transition: opacity 0.12s, transform 0.12s;
+  }
+  .acct-item:hover,
+  .acct-item:focus-visible {
+    background: var(--band);
+    color: var(--ink);
+    outline: 0;
+  }
+  .acct-item:hover::after,
+  .acct-item:focus-visible::after {
+    opacity: 1;
+    transform: none;
+  }
+  .acct-logout { width: 100%; }
 
   /* ═══════════════ ОБЩЕЕ ═══════════════ */
   h2 {
@@ -547,17 +632,23 @@
   /* Та же правка, что у .lab-r: под каждым заголовком раздела здесь сразу
      стоит таблица со своей нижней чертой в шапке — вторая черта под самим
      заголовком читалась бы задвоенной линией. Прописные моноширинные и так
-     не похожи на текст рядом, подпись раздела держит одна капитель. */
-  .asym.bare .h2row {
+     не похожи на текст рядом, подпись раздела держит одна капитель.
+
+     `.lists` — та же стопка таблиц без второй дорожки (лобби покера): мои
+     столы и свободные. Сетка там не нужна, а обе правки нужны ровно те же. */
+  .asym.bare .h2row,
+  .lists .h2row {
     border-bottom: 0;
     padding-bottom: 0;
   }
   /* Между «Моими турнирами» и «Открытыми турнирами» нужен воздух: без отступа
      заголовок второго списка вставал сразу за нижней чертой последней строки
      первого, и две таблицы читались одной. */
-  .asym.bare section + section {
+  .asym.bare section + section,
+  .lists section + section {
     margin-top: var(--s5);
   }
+  .lists { margin-top: var(--s4); }
   /* Строка шага/скорости/переключателя таблицы — на всю ширину терминала
      (обе колонки грида), а не внутри узкой колонки графика: тикет обычно
      короче графика по высоте, и место под ним справа иначе просто пустовало
@@ -1571,6 +1662,56 @@
     cursor: pointer;
   }
   option { background: var(--ground); }
+  /* Раскрытый список — свой, а не нарисованный системой: `appearance:
+     base-select`, стилизуемый нативный select. Клавиатура, скринридер и выбор
+     на телефоне остаются браузерными, анимация — одним CSS, без скриптов.
+     Браузер без поддержки показывает прежний системный список. Вид — как у
+     списка плеча в терминале (`.lev-menu`). Подсветка пункта — от
+     `--ink-rgb`, а не `--band`: `--band` в тёмном окне игр не переопределён
+     и лёг бы светлой полосой. */
+  @supports (appearance: base-select) {
+    select.in,
+    select.in::picker(select) { appearance: base-select; }
+    select.in { display: inline-flex; align-items: center; gap: var(--s2); }
+    select.in::picker-icon {
+      margin-inline-start: auto;
+      color: var(--ink-3);
+      transition: rotate 140ms ease;
+    }
+    select.in:open::picker-icon { rotate: 180deg; }
+    select.in::picker(select) {
+      margin-block: 4px;
+      padding: 2px;
+      border: 1px solid var(--rule);
+      border-radius: 0;
+      background: var(--ground);
+      color: var(--ink);
+      box-shadow: none;
+      opacity: 0;
+      translate: 0 -4px;
+      transition:
+        opacity 140ms ease,
+        translate 140ms ease,
+        display 140ms allow-discrete,
+        overlay 140ms allow-discrete;
+    }
+    select.in:open::picker(select) { opacity: 1; translate: 0 0; }
+    @starting-style {
+      select.in:open::picker(select) { opacity: 0; translate: 0 -4px; }
+    }
+    select.in option {
+      padding: 6px var(--s2);
+      font-family: var(--font-mono);
+      font-size: var(--t-xs);
+      color: var(--ink-2);
+      background: none;
+      cursor: pointer;
+    }
+    select.in option::checkmark { display: none; }
+    select.in option:hover,
+    select.in option:focus-visible { color: var(--ink); background: rgb(var(--ink-rgb) / 0.06); outline: 0; }
+    select.in option:checked { color: var(--ink); background: rgb(var(--ink-rgb) / 0.1); }
+  }
 
   .btn {
     appearance: none;
@@ -2654,10 +2795,10 @@
   }
   /* Картинка — во всю ширину и высоту карточки: `cover` ничего не обрезает,
      раз пропорция карточки и есть пропорция кадра, только масштабирует.
-     Сцена торговли — тот же слой: у её SVG тот же viewBox, и оба типа
-     картинки ведут себя одинаково. */
+     Сцены (торговля, покер, блэкджек, джетпак) — тот же слой: корень сцены .gscene
+     держит пропорцию кадра, и оба типа картинки ведут себя одинаково. */
   .gcard > img,
-  .gcard > .tscene {
+  .gcard > .gscene {
     position: absolute;
     inset: 0;
     display: block;
@@ -2939,6 +3080,605 @@
     }
   }
 
+  /* ── слои сцен ─────────────────────────────────────────── */
+  /* Сцена витрины — стопка HTML-слоёв, а не один SVG (SceneLayer.tsx).
+     Движение HTML-слоя (transform, opacity) браузер отдаёт видеокарте, а
+     движение узла внутри SVG перерисовывает весь SVG на каждом кадре вместе со
+     всеми размытиями — пятнадцать размытий на кадр в двух сценах сразу и
+     давали подлагивание. Поэтому внутри SVG слоя ничего не анимируется:
+     рисунок растрируется один раз, дальше слой только движется и гаснет.
+     Точки поворота слоёв ставит разметка (transform-origin в процентах рамки
+     слоя, lib/scene-box.ts), здесь их нет.
+
+     --u — единица сцены в пикселях: кадр — 384 единицы в ширину, а карточка
+     тянется по сетке. Сдвиги в keyframes задаются в единицах сцены, и
+     движение масштабируется вместе с карточкой. cqw считается от ширины
+     корня сцены, поэтому корень — контейнер. */
+  .gscene {
+    container-type: inline-size;
+    --u: calc(100cqw / 384);
+  }
+  .gl {
+    position: absolute;
+  }
+  .gl-fill {
+    position: absolute;
+    inset: 0;
+  }
+  /* overflow: visible — свечение, вышедшее за рамку слоя, не обрезается о неё. */
+  .gl-art {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+  /* Сцена за краем экрана стоит на паузе (usePauseOffscreen): прокрученная
+     витрина не гоняет слои, которых никто не видит. */
+  .gscene[data-paused],
+  .gscene[data-paused] * {
+    animation-play-state: paused !important;
+  }
+
+  /* ── сцены карточных игр: покер и блэкджек ─────────────── */
+  /* Обе сцены собраны из одних деталей (CasinoScene.tsx) и различаются
+     краской и составом кадра. Краски — здесь, а не в атрибутах SVG, по той же
+     причине, что у торговли.
+
+     Шкала сцены стоит на акценте её игры (--csn-4 = --g-a-red у покера,
+     --g-a-green у блэкджека): в разделе один красный и один зелёный, и неон
+     карты не должен спорить с соседней карточкой вторым, чуть другим
+     оттенком. Карты и фишки чёрные с оттенком своей сцены — цвет живёт в
+     свете, а не в заливке предметов. Сталь и кость общие. */
+  .csn {
+    --csn-7: #f2f0ea;
+    --csn-steel-1: #e4e2de;
+    --csn-steel-2: #7c7a7e;
+    --csn-steel-3: #26252a;
+  }
+  .pscene {
+    --csn-1: #1f0708;
+    --csn-2: #4a1214;
+    --csn-3: #93292a;
+    --csn-4: var(--g-a-red);
+    --csn-5: #f2938e;
+    --csn-6: #ffd6d2;
+    --csn-card-1: #1c0c0d;
+    --csn-card-2: #060505;
+    --csn-chip-1: #24141a;
+    --csn-chip-2: #0b0808;
+  }
+  .bscene {
+    --csn-1: #0b1f17;
+    --csn-2: #173d2d;
+    --csn-3: #2a8a5f;
+    --csn-4: var(--g-a-green);
+    --csn-5: #9ae5c0;
+    --csn-6: #cdf5e2;
+    --csn-card-1: #0c1a14;
+    --csn-card-2: #050706;
+    --csn-chip-1: #13231c;
+    --csn-chip-2: #080b09;
+  }
+  .csn-rank {
+    font-family: var(--font-serif);
+    font-weight: 400;
+  }
+
+  /* Предметы парят: подъём с лёгким наклоном и обратно. Период, задержка,
+     высота и наклон — свои у каждого предмета (переменные ставит Float в
+     CasinoScene.tsx): с общим ритмом кадр качался бы целиком, как одна
+     картинка. Точка поворота — центр предмета или, у тузов покера, нижний
+     край карты: пара раскрывается и сходится, как карты в руке. Кадр 0 % =
+     кадр 100 % = собранная сцена — из-за того же правила reduced-motion, что
+     и у торговли. */
+  .csn-float {
+    animation: csn-float var(--dur, 6400ms) ease-in-out infinite;
+    animation-delay: var(--delay, 0ms);
+  }
+  @keyframes csn-float {
+    0%,
+    100% {
+      transform: translateY(0) rotate(0deg);
+    }
+    50% {
+      transform: translateY(calc(var(--lift, 8) * var(--u) * -1)) rotate(var(--sway, 0deg));
+    }
+  }
+  /* Блэкджек: валет время от времени переворачивается рубашкой вверх и
+     обратно — жест крупье. Переворот — сжатие по ширине до нуля и обратно:
+     на первом нуле лицо сменяется рубашкой, на втором — снова лицом. Кривые
+     по участкам (ускорение к ребру, торможение от него) повторяют проекцию
+     вращения, иначе карта «хлопала» бы с постоянной скоростью.
+
+     Сжатие — вдоль собственной оси карты: слой поворачивается на её угол
+     (--rot), сжимается и поворачивается обратно. Сжатие по оси кадра
+     перекосило бы наклонённую карту в параллелограмм.
+
+     Большую часть цикла карта лежит лицом, и кадр 0 % = 100 % — лицом: под
+     reduced-motion валет остаётся открытым, и рука на 21 читается. */
+  .csn-flip {
+    animation: csn-flip 9000ms infinite;
+  }
+  @keyframes csn-flip {
+    0%,
+    84% {
+      transform: rotate(var(--rot, 0deg)) scaleX(1) rotate(calc(var(--rot, 0deg) * -1));
+      animation-timing-function: ease-in;
+    }
+    87% {
+      transform: rotate(var(--rot, 0deg)) scaleX(0) rotate(calc(var(--rot, 0deg) * -1));
+      animation-timing-function: ease-out;
+    }
+    90% {
+      transform: rotate(var(--rot, 0deg)) scaleX(1) rotate(calc(var(--rot, 0deg) * -1));
+      animation-timing-function: ease-in;
+    }
+    93% {
+      transform: rotate(var(--rot, 0deg)) scaleX(0) rotate(calc(var(--rot, 0deg) * -1));
+      animation-timing-function: ease-out;
+    }
+    96%,
+    100% {
+      transform: rotate(var(--rot, 0deg)) scaleX(1) rotate(calc(var(--rot, 0deg) * -1));
+    }
+  }
+  .csn-flip-face {
+    animation: csn-flip-face 9000ms infinite step-end;
+  }
+  @keyframes csn-flip-face {
+    0%,
+    93%,
+    100% {
+      opacity: 1;
+    }
+    87% {
+      opacity: 0;
+    }
+  }
+  .csn-flip-back {
+    opacity: 0;
+    animation: csn-flip-back 9000ms infinite step-end;
+  }
+  @keyframes csn-flip-back {
+    0%,
+    93%,
+    100% {
+      opacity: 0;
+    }
+    87% {
+      opacity: 1;
+    }
+  }
+  /* Тень фишки на полу ходит в такт фишке: поднялась — тень мельче и бледнее. */
+  .csn-shadow {
+    animation: csn-shadow var(--dur, 6400ms) ease-in-out infinite;
+    animation-delay: var(--delay, 0ms);
+  }
+  @keyframes csn-shadow {
+    0%,
+    100% {
+      transform: scaleX(1);
+      opacity: 1;
+    }
+    50% {
+      transform: scaleX(0.86);
+      opacity: 0.7;
+    }
+  }
+  /* Неон кромки дышит со своим периодом у каждого предмета (--glow): общий
+     период у пяти источников света читался бы мигающей вывеской. */
+  .csn-neon {
+    animation: csn-neon var(--glow, 3600ms) ease-in-out infinite;
+  }
+  @keyframes csn-neon {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.6;
+    }
+  }
+  .csn-aura {
+    animation: csn-aura 6800ms ease-in-out infinite;
+  }
+  @keyframes csn-aura {
+    0%,
+    100% {
+      opacity: 0.8;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+  /* Отражение фишек — их же слои, отзеркаленные относительно линии пола
+     (точку зеркала и маску затухания ставит разметка). */
+  .csn-reflect {
+    transform: scaleY(-1);
+  }
+  /* Искры — от пола вверх со сносом вбок. Ядро и ореол — радиальный градиент
+     квадратного слоя, а не скругление с тенью: глобальный сброс радиусов и
+     теней снял бы оба. backwards — по той же причине, что у искр торговли: до
+     своей очереди искра должна быть невидимой, а не висеть точкой у пола. */
+  .csn-ember {
+    position: absolute;
+    background: radial-gradient(
+      circle closest-side,
+      var(--csn-5) 0 36%,
+      color-mix(in srgb, var(--csn-4) 25%, transparent) 40% 96%,
+      transparent 100%
+    );
+    animation: csn-ember 4200ms ease-out infinite backwards;
+    animation-delay: calc(var(--i, 0) * 600ms);
+  }
+  @keyframes csn-ember {
+    0% {
+      transform: translate(0, 0) scale(0.5);
+      opacity: 0;
+    }
+    18% {
+      opacity: 0.9;
+    }
+    100% {
+      transform: translate(calc(var(--dx, 0) * var(--u)), calc(-170 * var(--u))) scale(0.2);
+      opacity: 0;
+    }
+  }
+
+  /* ── сцена джетпака ────────────────────────────────────── */
+  /* Парение, неон, зарево и искры — те же, что у карточных сцен (.csn-*), и
+     шкала та же, на акценте игры: --csn-4 = --g-a-purple. Своё у джетпака —
+     пламя, дым, точки траектории и вспышки множителей (.jsc-*). Кадр 0 % =
+     кадр 100 % = собранная сцена у каждого цикла — по тому же правилу
+     reduced-motion. */
+  .jscene {
+    --csn-1: #0d0826;
+    --csn-2: #24125e;
+    --csn-3: #5a2fd0;
+    --csn-4: var(--g-a-purple);
+    --csn-5: #cdb4ff;
+    --csn-6: #f1e8ff;
+  }
+  /* Пламя дрожит вдоль оси ракеты вокруг среза сопла. Слой не повёрнут вместе
+     с ракетой, поэтому сжатие стоит между поворотами на её угол (--rot), как
+     у переворота валета: сжатие по оси кадра перекосило бы факел. Базовое
+     значение у слоя наведения задано тем же списком функций, что и под
+     курсором, — иначе переход шёл бы через разложение матрицы. */
+  .jsc-thrust {
+    transform: rotate(var(--rot)) scaleY(1) rotate(calc(var(--rot) * -1));
+    transition: transform 600ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .jsc-flame {
+    animation: jsc-flame 1700ms ease-in-out infinite;
+  }
+  @keyframes jsc-flame {
+    0%,
+    100% {
+      transform: rotate(var(--rot)) scaleY(1) rotate(calc(var(--rot) * -1));
+    }
+    30% {
+      transform: rotate(var(--rot)) scaleY(1.06) rotate(calc(var(--rot) * -1));
+    }
+    60% {
+      transform: rotate(var(--rot)) scaleY(0.95) rotate(calc(var(--rot) * -1));
+    }
+    80% {
+      transform: rotate(var(--rot)) scaleY(1.03) rotate(calc(var(--rot) * -1));
+    }
+  }
+  /* Дым плывёт двумя слоями в разные стороны и с разным периодом: дальний
+     сносит влево, ближний клубится у пламени. Дальний заходит за левый край
+     кадра, поэтому сдвиг влево не открывает щели у кромки. */
+  .jsc-smoke-far {
+    animation: jsc-smoke-far 12000ms ease-in-out infinite;
+  }
+  @keyframes jsc-smoke-far {
+    0%,
+    100% {
+      transform: translate(0, 0);
+    }
+    50% {
+      transform: translate(calc(-5 * var(--u)), calc(2 * var(--u)));
+    }
+  }
+  .jsc-smoke-near {
+    animation: jsc-smoke-near 8400ms ease-in-out infinite;
+  }
+  @keyframes jsc-smoke-near {
+    0%,
+    100% {
+      transform: translate(0, 0) scale(1);
+    }
+    50% {
+      transform: translate(calc(3 * var(--u)), calc(-2 * var(--u))) scale(1.035);
+    }
+  }
+  /* Рост ставки в покое: точки траектории вспыхивают снизу вверх, следом
+     загораются плашки 1.8x → 3.4x → 12.6x. Общий период 6 с у обоих, задержки
+     — по месту на кривой (--i). Точка — HTML-слой с радиальным градиентом, как
+     искры: глобальный сброс радиусов и теней снял бы скругление с тенью. */
+  .jsc-dot {
+    position: absolute;
+    background: radial-gradient(
+      circle closest-side,
+      #ffffff 0 30%,
+      var(--csn-5) 36%,
+      color-mix(in srgb, var(--csn-4) 25%, transparent) 46% 72%,
+      transparent 100%
+    );
+    animation: jsc-dot 6000ms ease-in-out infinite;
+    animation-delay: calc(var(--i, 0) * 260ms);
+  }
+  @keyframes jsc-dot {
+    0%,
+    22%,
+    100% {
+      transform: scale(1);
+    }
+    9% {
+      transform: scale(1.45);
+    }
+  }
+  .jsc-flash {
+    opacity: 0;
+    animation: jsc-flash 6000ms ease-in-out infinite;
+    animation-delay: calc(1400ms + var(--i, 0) * 520ms);
+  }
+  @keyframes jsc-flash {
+    0%,
+    16%,
+    100% {
+      opacity: 0;
+    }
+    6% {
+      opacity: 1;
+    }
+  }
+
+  /* ── сцены под курсором ────────────────────────────────── */
+  /* У каждой игры своё движение под курсором, и каждое — про саму игру:
+     торговля — рынок пошёл вверх, покер — вскрытие (тузы встают, масти
+     бьются), блэкджек — переворот валета, джетпак — взлёт. Одинаковый
+     «подъём с подсветкой» у трёх карточек различал бы их только цветом.
+
+     Карты под курсором не пропадают из кадра и не закрывают друг друга:
+     раздача с прилётом из шуза и сходящиеся тузы здесь уже стояли, и
+     исчезающая карта читалась поломкой.
+
+     Всё движение — в верхней половине кадра: нижнюю при наведении закрывает
+     .gcard-reveal, и то, что происходит под ней, никто не увидит.
+
+     Селекторы — .gcard:hover без :not(.gcard-soon): карточка «Скоро» не
+     ссылка, но показывать игру под курсором ей так же нужно. focus-visible —
+     для клавиатуры: у доступных игр карточка — ссылка. */
+
+  /* Слой наведения — отдельный слой между местом предмета и его парением
+     (Float в CasinoScene.tsx): парение занимает transform анимацией, и
+     переход на том же слое с ней бы спорил. Точка поворота карты — её
+     нижний край: карта встаёт и ложится от него. */
+  .csn-hover {
+    transition: transform 460ms cubic-bezier(0.3, 0.7, 0.2, 1);
+  }
+  /* Вспышка неона: в покое её нет вовсе, поэтому вид без наведения она не
+     меняет. */
+  .csn-flare {
+    opacity: 0;
+    transition: opacity 320ms ease;
+  }
+  .gcard:hover .csn-flare,
+  .gcard:focus-visible .csn-flare {
+    opacity: 0.85;
+  }
+
+  /* Покер: вскрытие. Тузы выпрямляются и поднимаются, каждый на своём
+     месте, — рука показана столу. Сходиться им нельзя: передний туз
+     закрывает задний, а показать нужно оба. Не веер: веером пара уже
+     раскрывается в покое, и тот же жест шире читался бы как тот же жест. */
+  .gcard:hover .psc-show-back,
+  .gcard:focus-visible .psc-show-back {
+    transform: translate(calc(-8 * var(--u)), calc(-14 * var(--u))) rotate(9deg);
+  }
+  .gcard:hover .psc-show-front,
+  .gcard:focus-visible .psc-show-front {
+    transform: translate(calc(8 * var(--u)), calc(-18 * var(--u))) rotate(-6deg);
+  }
+  /* Масти обоих тузов — пика и червь — бьются при наведении в такт: три
+     удара (двойной толчок и пауза), а не бесконечно. Крупная масть бьющейся
+     карты — свой слой (beat в CardSpec).
+
+     Одноразовые жесты сцен (удары мастей, переворот валета)
+     запускаются по [data-play], а не по :hover: атрибут ставит наведение и
+     снимает конец жеста (usePlayOnHover), поэтому жест доигрывает до конца,
+     даже если курсор ушёл посреди него. На :hover анимация обрывалась рывком:
+     она живёт, только пока совпадает селектор. */
+  .pscene[data-play] .csn-suit-beat {
+    animation: psc-beat 1100ms ease-in-out 3;
+  }
+  @keyframes psc-beat {
+    0%,
+    28%,
+    70%,
+    100% {
+      transform: scale(1);
+    }
+    14% {
+      transform: scale(1.14);
+    }
+    42% {
+      transform: scale(1.08);
+    }
+  }
+
+  /* Блэкджек: валет переворачивается сразу — тот же переворот, что раз в
+     9 с в покое (.csn-flip), только по наведению и один раз. Это решение
+     владельца: переворот — узнаваемый жест этой карточки, и под курсором его
+     не нужно ждать. Раздача из шуза стояла здесь и снята: карты на время
+     пропадали из кадра, а исчезающие карты читались поломкой.
+
+     Жест наведения заменяет цикл покоя целиком и, закончившись, оставляет
+     валета лицом; когда data-play снят, цикл покоя начинается заново с кадра
+     0 %, а он тоже лицом, — шва нет. Длительность и форма — тот же участок
+     цикла покоя (84–96 % от 9 с), растянутый на всю анимацию. */
+  .bscene[data-play] .csn-flip {
+    animation: csn-flip-once 1000ms;
+  }
+  .bscene[data-play] .csn-flip-face {
+    animation: csn-flip-face-once 1000ms step-end;
+  }
+  .bscene[data-play] .csn-flip-back {
+    animation: csn-flip-back-once 1000ms step-end;
+  }
+  @keyframes csn-flip-once {
+    0% {
+      transform: rotate(var(--rot, 0deg)) scaleX(1) rotate(calc(var(--rot, 0deg) * -1));
+      animation-timing-function: ease-in;
+    }
+    25% {
+      transform: rotate(var(--rot, 0deg)) scaleX(0) rotate(calc(var(--rot, 0deg) * -1));
+      animation-timing-function: ease-out;
+    }
+    50% {
+      transform: rotate(var(--rot, 0deg)) scaleX(1) rotate(calc(var(--rot, 0deg) * -1));
+      animation-timing-function: ease-in;
+    }
+    75% {
+      transform: rotate(var(--rot, 0deg)) scaleX(0) rotate(calc(var(--rot, 0deg) * -1));
+      animation-timing-function: ease-out;
+    }
+    100% {
+      transform: rotate(var(--rot, 0deg)) scaleX(1) rotate(calc(var(--rot, 0deg) * -1));
+    }
+  }
+  @keyframes csn-flip-face-once {
+    0%,
+    75%,
+    100% {
+      opacity: 1;
+    }
+    25% {
+      opacity: 0;
+    }
+  }
+  @keyframes csn-flip-back-once {
+    0%,
+    75%,
+    100% {
+      opacity: 0;
+    }
+    25% {
+      opacity: 1;
+    }
+  }
+  /* Джетпак: рывок. Ракета коротко приседает назад и выстреливает вверх по
+     своей оси — это даёт кривая перехода с отрицательным началом и перелётом
+     в конце: ровный сдвиг читался плавным подъёмом, а не ускорением. Пламя
+     тем временем вытягивается почти вдвое и вспыхивает форсажем (.jsc-boost),
+     корпус коротко дрожит (.jsc-shake), старший множитель подрастает и
+     вспыхивает (.csn-flare) — ставка растёт, пока летишь.
+
+     У перехода две кривые: рывок — на :hover (у перехода берётся кривая
+     того состояния, в которое идут), а назад ракета съезжает плавно, по
+     кривой покоя, — с приседанием и назад она дёргалась бы.
+
+     Дрожь — одноразовый жест, запускается по [data-play] и доигрывает до
+     конца (usePlayOnHover). Плашки стоят выше носа с запасом на рывок,
+     парение ракеты и рост 12.6x — они не должны сходиться. */
+  .jsc-launch {
+    transition: transform 700ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .gcard:hover .jsc-launch,
+  .gcard:focus-visible .jsc-launch {
+    transform: translate(calc(14 * var(--u)), calc(-14 * var(--u)));
+    transition: transform 560ms cubic-bezier(0.5, -0.9, 0.25, 1.5);
+  }
+  .gcard:hover .jsc-thrust,
+  .gcard:focus-visible .jsc-thrust {
+    transform: rotate(var(--rot)) scaleY(1.75) rotate(calc(var(--rot) * -1));
+    transition: transform 380ms cubic-bezier(0.2, 0.8, 0.2, 1.1);
+  }
+  .jsc-boost {
+    opacity: 0;
+    transition: opacity 500ms ease;
+  }
+  .gcard:hover .jsc-boost,
+  .gcard:focus-visible .jsc-boost {
+    opacity: 1;
+    transition-duration: 200ms;
+  }
+  .jscene[data-play] .jsc-shake {
+    animation: jsc-shake 80ms linear 10;
+  }
+  @keyframes jsc-shake {
+    0%,
+    100% {
+      transform: translate(0, 0);
+    }
+    25% {
+      transform: translate(calc(0.8 * var(--u)), calc(-0.5 * var(--u)));
+    }
+    75% {
+      transform: translate(calc(-0.7 * var(--u)), calc(0.6 * var(--u)));
+    }
+  }
+  .gcard:hover .jsc-peak,
+  .gcard:focus-visible .jsc-peak {
+    transform: scale(1.1);
+  }
+  /* Плашки под курсором светлеют каждая целиком, а не только цифры:
+     подсветка (.jsc-lit — светлая заливка, рамка и неон сильнее) проявляется
+     поверх плашки, цифры белеют, их свечение набирает силу. Числа при этом
+     перебором растут выше своих и возвращаются, когда курсор уходит, — это
+     делает JS (useMultiplierRoll), CSS менять текст не умеет. */
+  .jsc-lit {
+    opacity: 0;
+    transition: opacity 240ms ease;
+  }
+  .gcard:hover .jsc-lit,
+  .gcard:focus-visible .jsc-lit {
+    opacity: 1;
+  }
+  .jsc-digits,
+  .jsc-num-glow {
+    transition: opacity 240ms ease;
+  }
+  .jsc-num {
+    transition: fill 240ms ease;
+  }
+  .gcard:hover .jsc-digits,
+  .gcard:focus-visible .jsc-digits,
+  .gcard:hover .jsc-num-glow,
+  .gcard:focus-visible .jsc-num-glow {
+    opacity: 1;
+  }
+  .gcard:hover .jsc-num,
+  .gcard:focus-visible .jsc-num {
+    fill: #ffffff;
+  }
+  /* Торговля: рынок пошёл вверх. Ряд поднимается волной слева направо, и чем
+     правее свеча, тем выше (от той же --amp, что и её собственный ход), —
+     тренд становится круче, а не сдвигается целиком. Свойство translate, а не
+     transform: transform у свечи занят анимацией, а отдельное свойство
+     складывается с ней, а не заменяет её. LONG подрастает — это отдельный
+     слой (.tsc-long-lift), его точку поворота ставит разметка; SHORT не
+     трогается — он внизу кадра, под .gcard-reveal. */
+  .tsc-bar {
+    transition: translate 560ms cubic-bezier(0.3, 0.7, 0.2, 1);
+    transition-delay: calc(var(--i, 0) * 30ms);
+  }
+  .gcard:hover .tsc-bar,
+  .gcard:focus-visible .tsc-bar {
+    translate: 0 calc(var(--amp, 10) * -1.3px);
+  }
+  .tsc-long-lift {
+    transition: transform 380ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .gcard:hover .tsc-long-lift,
+  .gcard:focus-visible .tsc-long-lift {
+    transform: scale(1.1);
+  }
+
   /* ── полоса «одна платформа» ───────────────────────────── */
   /* Ассет лежит фоном на всю полосу: у него тёмные края, и текст ложится прямо
      на кадр без подложки и затемнения. Кадр центрированный (знак V посреди
@@ -3193,6 +3933,9 @@
     margin: 0 auto;
   }
   .state .btn { margin-top: var(--s3); }
+  /* Пустая таблица: нижнюю черту даёт сама ячейка, и черта состояния легла бы
+     к ней вплотную — двойной линией. */
+  .ledger td > .state { border-bottom: 0; }
   /* Полоса краски на месте ещё не пришедшего значения.
      
      По ней проходит медленная волна — не «шиммер» ради красоты, а
@@ -4620,6 +5363,11 @@
 
 .track-note { font-size: var(--t-xs); }
 
+/* Модалка ежедневной награды: одна кнопка, и она во всю ширину подвала —
+   это главное и единственное действие окна, закрыть можно и Esc, и кликом
+   по затемнению. */
+.df-solo .btn { width: 100%; }
+
 /* Точка на кнопке профиля: награда, которой не видно, — не награда. */
 .acct.has-dot { position: relative; }
 .acct.has-dot::after {
@@ -4635,4 +5383,1398 @@
 @media (max-width: 640px) {
   .hero-card { grid-template-columns: 1fr; }
   .daily-row { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* ── СТОЛ КАРТОЧНЫХ ИГР (/games/poker/<id>, /games/blackjack/<id>) ──────────
+   Общий стол покера и блэкджека (`widgets/card-table`): классы `ct-` — его,
+   `pk-` — только покерные (банк, борд, панель рейза, справка), `bj-` — блэкджека.
+   Стол — предмет, а не таблица: овал сукна, круглые места, фишки. Поэтому
+   здесь второе после витрины игр исключение из нулевого радиуса и нулевых
+   теней — правилами с !important внутри `.ct-page`, в слое `base` (почему
+   именно там — см. блок ниже).
+   Поле тёмное в обеих темах, как весь раздел (`.games-bg` под страницей);
+   прикладные имена темы переопределены на самой странице, чтобы общие
+   компоненты внутри (поле суммы, ползунок, ошибки) брали тёмную краску. */
+@property --ct-p {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 100%;
+}
+/* Исключение стола из нулевого радиуса и теней — в слое `base`, рядом с самим
+   правилом, а не в `components`. Правило стоит с !important, а у !important
+   порядок слоёв обратный: важное из более раннего слоя побеждает важное из
+   позднего. В `components` исключение проигрывало молча — стол был
+   прямоугольником, аватары квадратами. Внутри одного слоя решает
+   специфичность, и `.ct-page …` перебивает `*`. */
+@layer base {
+  .ct-page :is(.pk-pot, .ct-plate, .ct-bet, .pk-chip, .ct-toggle, .ct-status, .ct-say-line) {
+    border-radius: 999px !important;
+  }
+  /* Сукно — эллипс: места стоят по эллипсу (lib/layout.ts). */
+  .ct-page :is(.ct-felt, .ct-felt-line) {
+    border-radius: 50% !important;
+  }
+  .ct-page :is(.ct-avatar, .ct-timer, .pk-dealer, .ct-dot, .ct-sit) {
+    border-radius: 50% !important;
+  }
+  .ct-page :is(.ct-act, .pk-amount) {
+    border-radius: 6px !important;
+  }
+  /* Радиус карты — доля её ширины, как `rx` в её SVG (10 из 100): у мелкой
+     карты шесть пикселей скругления были бы кругом, у крупной — углом. */
+  .ct-page .ct-card { border-radius: calc(var(--w) * 0.1) !important; }
+  .ct-page .ct-felt {
+    box-shadow:
+      inset 0 0 40px rgb(0 0 0 / 0.55),
+      0 18px 60px rgb(0 0 0 / 0.6) !important;
+  }
+  .ct-page .ct-card:not(.ct-slot) { box-shadow: 0 2px 6px rgb(0 0 0 / 0.45) !important; }
+  .ct-page .ct-plate { box-shadow: 0 6px 18px rgb(0 0 0 / 0.5) !important; }
+  .ct-page .pk-dealer { box-shadow: 0 2px 5px rgb(0 0 0 / 0.5) !important; }
+  .ct-page :is(.ct-toggle, .ct-menu-item).on .ct-dot { box-shadow: 0 0 8px var(--ct-green) !important; }
+  .ct-page .ct-menu-list { box-shadow: 0 12px 32px rgb(0 0 0 / 0.6) !important; }
+}
+@layer components {
+  .ct-page {
+    --ground: var(--g-field);
+    --ink: var(--g-ink);
+    --ink-2: var(--g-ink-2);
+    --ink-3: var(--g-ink-3);
+    --ink-rgb: 242 240 234;
+    --hair: var(--g-line);
+    --hair-2: var(--g-line-2);
+    --rule: var(--g-line-2);
+    --meta: var(--g-ink-2);
+    --meta-dim: var(--g-ink-3);
+    --ct-rail: #2a2b31;
+    --ct-plate: #1b1c21;
+    --ct-green: var(--g-a-green);
+    position: relative;
+    z-index: 1;
+    color: var(--g-ink);
+    color-scheme: dark;
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    /* Стол со всеми кнопками — ровно окно под шапкой, без прокрутки: панель
+       хода стоит внизу, а сцена забирает оставшееся (`.ct-stage-box`). Тот же
+       приём, что у терминала бектеста (`--bt-screen`). min-height — пол для
+       низких окон: ниже него стол сжался бы до нечитаемого, и лучше уж пусть
+       страница прокрутится. */
+    height: calc(100dvh - var(--top-h) - 1px);
+    min-height: 520px;
+  }
+  .ct-wait { color: var(--g-ink-2); text-align: center; margin: 8px 0; }
+
+  /* Стол и справка по комбинациям рядом; на узком экране справка уходит под
+     стол — сцена держит пропорцию и сжалась бы до нечитаемого. */
+  .ct-body { flex: 1; min-height: 0; display: flex; gap: 20px; align-items: flex-start; }
+  .ct-main {
+    flex: 1;
+    align-self: stretch;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  @media (max-width: 1100px) {
+    .ct-body { flex-direction: column; align-items: stretch; }
+  }
+
+  /* Шапка стола */
+  .ct-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .ct-backlink { color: var(--g-ink-2); text-decoration: none; font-size: 13px; }
+  .ct-backlink:hover { color: var(--g-ink); }
+  /* Меню стола за «⋯». Класс `.ct-ghost` сюда не брать: так зовутся летящие
+     предметы (`Effects`), у них `position: absolute` с центровкой, и две
+     кнопки шапки под этим классом ложились друг на друга. */
+  .ct-menu { position: relative; display: flex; align-items: center; gap: 10px; }
+  .ct-more {
+    width: 36px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--g-line);
+    color: var(--g-ink-2);
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .ct-more:hover,
+  .ct-more[aria-expanded='true'] { color: var(--g-ink); border-color: var(--g-line-2); }
+  .ct-menu-list {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 20;
+    min-width: 220px;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    background: var(--ct-plate);
+    border: 1px solid var(--g-line-2);
+  }
+  .ct-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 10px;
+    background: transparent;
+    border: 0;
+    color: var(--g-ink-2);
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .ct-menu-item:hover,
+  .ct-menu-item:focus-visible { background: rgb(255 255 255 / 0.05); color: var(--g-ink); }
+  .ct-menu-item .ct-dot { margin-left: auto; }
+  .ct-menu-item.on .ct-dot { background: var(--ct-green); }
+  .ct-note { font-size: 12px; color: var(--g-ink-2); }
+
+  /* Справка по комбинациям — слева от стола, рука на строку: название и
+     карты рядом, а не друг под другом, — так девять рук вдвое ниже сцены. */
+  .pk-ranks {
+    flex: none;
+    margin-top: 28px;
+    padding: 10px 12px;
+    background: rgb(0 0 0 / 0.4);
+    border: 1px solid var(--g-line);
+  }
+  .pk-ranks-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+  .pk-rank-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; }
+  .pk-rank-name { font-size: 12px; color: var(--g-ink); white-space: nowrap; }
+  .pk-rank-cards { display: flex; gap: 2px; }
+  .pk-ranks .ct-sm { --w: 22px; }
+  /* На узком экране справка уходит под стол, а не встаёт над ним. */
+  @media (max-width: 1100px) {
+    /* Под столом справка делит с ним высоту окна — прокручивается внутри,
+       а не отнимает у стола всё. */
+    .pk-ranks { order: 1; margin-top: 0; max-height: 34%; overflow-y: auto; }
+    .pk-ranks-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px 20px; }
+  }
+
+  /* Сцена и сукно. Места стоят в процентах сцены (lib/layout.ts), поэтому
+     сцена держит пропорцию сама: широкая на столе, вытянутая на телефоне.
+     Пропорция продублирована в `STAGE_WIDE`/`STAGE_TALL`.
+     Коробка сцены — контейнер размеров: сцена берёт меньшее из её ширины и
+     высоты × пропорцию, то есть вписывается в место, оставшееся от панели
+     хода. Полей у сцены нет — вся высота уходит в стол. */
+  .ct-stage-box {
+    --ct-aspect: 2;
+    flex: 1;
+    min-height: 0;
+    container-type: size;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .ct-stage {
+    position: relative;
+    width: min(100cqw, 100cqh * var(--ct-aspect));
+    aspect-ratio: var(--ct-aspect);
+  }
+  @media (max-width: 720px) {
+    .ct-stage-box { --ct-aspect: 0.75; }
+  }
+  .ct-felt {
+    position: absolute;
+    /* Почти во всю высоту сцены: места сверху и снизу сидят на бортике
+       (`SEAT_RY` в lib/layout.ts), и полей под них сцене не нужно. */
+    inset: 6% 15%;
+    background: radial-gradient(ellipse at 50% 40%, #33353e 0%, #22232a 55%, #17181d 100%);
+    border: 12px solid var(--ct-rail);
+  }
+  .ct-felt-line {
+    position: absolute;
+    inset: 7% 6%;
+    border: 1px solid rgb(255 255 255 / 0.07);
+  }
+  .ct-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+  .ct-center-note { font-size: 13px; color: var(--g-ink-2); text-align: center; }
+  .pk-pot {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 6px;
+    background: rgb(0 0 0 / 0.5);
+    padding: 3px 14px 4px 8px;
+    font-size: 13px;
+    color: var(--g-ink-2);
+  }
+  .pk-board { display: flex; gap: 6px; }
+  .ct-logo { width: 34px; height: 34px; opacity: 0.35; color: var(--g-ink); }
+
+  /* Карты: рисунок — SVG на общих определениях стола (TableDefs.tsx), здесь
+     только размер. Пропорция 100×140 — та же, что у viewBox карты. */
+  .ct-card {
+    --w: 56px;
+    position: relative;
+    display: inline-block;
+    width: var(--w);
+    height: calc(var(--w) * 1.4);
+    user-select: none;
+  }
+  .ct-card > svg { display: block; width: 100%; height: 100%; }
+  .ct-rank {
+    fill: #fff;
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-weight: 800;
+  }
+  .ct-sm { --w: 30px; }
+  .ct-md { --w: 46px; }
+  /* От ширины сцены, а не окна: стол вписывается в высоту окна и на низком
+     экране меньше, чем ширина окна подсказывает. */
+  .ct-lg { --w: clamp(32px, 5.4cqw, 60px); }
+  .ct-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+  .ct-slot {
+    background: rgb(255 255 255 / 0.035);
+    border: 1px solid rgb(255 255 255 / 0.05);
+  }
+  .ct-dim { opacity: 0.4; }
+
+  /* Место */
+  .ct-seat {
+    position: absolute;
+    z-index: 2;
+    translate: -50% -50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: opacity 200ms;
+  }
+  .pk-hole { display: flex; gap: 3px; margin-bottom: -10px; position: relative; z-index: 0; }
+  .ct-me .pk-hole { margin-bottom: -6px; }
+  .ct-plate {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 3px 16px 3px 3px;
+    background: var(--ct-plate);
+    border: 1px solid var(--g-line-2);
+    white-space: nowrap;
+  }
+  .ct-avatar {
+    position: relative;
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(160deg, #3a3c46, #24252c);
+    border: 2px solid #4a4c57;
+    flex: none;
+  }
+  .ct-initials { font-weight: 700; font-size: 14px; color: var(--g-ink); }
+  .ct-info { display: flex; flex-direction: column; gap: 3px; line-height: 1.15; min-width: 56px; }
+  .ct-name {
+    font-size: 11px;
+    color: var(--g-ink-3);
+    max-width: 96px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .ct-stack { font-size: 16px; font-weight: 600; color: var(--g-ink); }
+  .ct-status {
+    margin-top: 4px;
+    padding: 1px 8px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--g-ink-2);
+    background: rgb(0 0 0 / 0.55);
+  }
+  .ct-status.pos { color: var(--ct-green); font-size: 12px; }
+  .pk-hand { margin-top: 2px; font-size: 11px; color: var(--g-ink-2); }
+  .pk-folded { opacity: 0.45; }
+  .ct-turn .ct-plate { border-color: rgb(var(--g-a-green-rgb) / 0.6); }
+  /* Победитель загорается, когда до него долетели фишки банка, а не когда
+     пришёл итог: задержка — `--win-delay` у места. Свечение — filter, а не
+     box-shadow: тени продукта сняты глобальным !important, и анимация его
+     не перебьёт. */
+  .ct-win .ct-plate {
+    animation: ct-win-glow 900ms ease-out var(--win-delay, 0ms) both;
+  }
+  @keyframes ct-win-glow {
+    0% { border-color: var(--g-line-2); filter: none; }
+    35% { border-color: var(--ct-green); filter: drop-shadow(0 0 18px rgb(var(--g-a-green-rgb) / 0.8)); }
+    100% { border-color: var(--ct-green); filter: drop-shadow(0 0 10px rgb(var(--g-a-green-rgb) / 0.45)); }
+  }
+
+  /* Дуга хода: убывающий сектор вокруг кружка. */
+  .ct-timer {
+    position: absolute;
+    inset: -6px;
+    background: conic-gradient(var(--ct-green) var(--ct-p), transparent 0);
+    mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+    animation: ct-turn var(--ct-turn, 20s) linear forwards;
+  }
+  @keyframes ct-turn {
+    from { --ct-p: 100%; }
+    to { --ct-p: 0%; }
+  }
+
+  /* Кнопка дилера сидит центром на правом краю плашки своего места —
+     фишкой, прислонённой к скруглению. */
+  .pk-dealer {
+    position: absolute;
+    z-index: 3;
+    right: 0;
+    top: 50%;
+    translate: 50% -50%;
+    width: 22px;
+    height: 22px;
+    display: grid;
+    place-items: center;
+    font-size: 11px;
+    font-weight: 800;
+    color: #222;
+    background: linear-gradient(160deg, #f4f4f0, #c9c9c4);
+  }
+  /* Ставка — стопка фишек и сумма рядом. Стопка стоит на плашке снизу,
+     поэтому выравнивание по низу: высокая стопка растёт вверх, а не в стороны. */
+  .ct-bet {
+    position: absolute;
+    z-index: 3;
+    translate: -50% -50%;
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    padding: 2px 10px 3px 6px;
+    font-size: 12px;
+    font-weight: 600;
+    background: rgb(0 0 0 / 0.55);
+    color: var(--g-ink);
+  }
+  .ct-stack-svg { display: block; overflow: visible; filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.5)); }
+
+  .ct-sit {
+    width: 64px;
+    height: 64px;
+    display: grid;
+    place-items: center;
+    background: rgb(255 255 255 / 0.03);
+    border: 1px dashed var(--g-line-2);
+    color: var(--g-ink-2);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  button.ct-sit:hover { color: var(--g-ink); border-color: var(--ct-green); }
+  .ct-sit-off { cursor: default; color: var(--g-ink-3); font-size: 11px; }
+
+  /* Низ: переключатели и панель хода. */
+  /* min-height — высота панели хода: у зрителя вместо неё одна строка, и без
+     резерва стол менял бы размер в момент посадки. */
+  .ct-bottom {
+    flex: none;
+    min-height: 96px;
+    border-top: 1px solid var(--g-line);
+    padding-top: 10px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
+    container: ct-bottom / inline-size;
+  }
+  /* Переключатели — в одной полосе с панелью хода, справа от неё, а не
+     отдельной строкой над ней: строка отнимала высоту у стола. Левая
+     колонка пустая и держит панель хода по центру. */
+  .ct-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 560px) minmax(0, 1fr);
+    align-items: center;
+    gap: 16px;
+  }
+  .ct-controls > :not(.ct-toggles) { grid-column: 2; grid-row: 1; }
+  .ct-toggles {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  @container ct-bottom (max-width: 900px) {
+    .ct-controls { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+    .ct-controls > :not(.ct-toggles),
+    .ct-toggles { grid-column: auto; grid-row: auto; }
+    .ct-toggles { justify-self: center; flex-direction: row; flex-wrap: wrap; justify-content: center; }
+  }
+  .ct-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 12px 5px 6px;
+    background: rgb(0 0 0 / 0.4);
+    border: 1px solid var(--g-line);
+    color: var(--g-ink-2);
+    font-size: 12px;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .ct-dot { width: 14px; height: 14px; background: #3a3b42; }
+  .ct-toggle.on { color: var(--g-ink); }
+  .ct-toggle.on .ct-dot { background: var(--ct-green); }
+
+  .pk-actions { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .pk-sizing { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .pk-chip {
+    padding: 6px 14px;
+    background: #26272d;
+    border: 1px solid transparent;
+    color: var(--g-ink);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .pk-chip:hover:not(:disabled) { border-color: var(--g-line-2); }
+  .pk-chip:disabled { opacity: 0.4; cursor: default; }
+  .pk-slider { width: 150px; }
+  .pk-amount { width: 110px; text-align: center; }
+  .pk-buttons {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    width: 100%;
+    max-width: 600px;
+  }
+  .ct-act {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 44px;
+    background: linear-gradient(180deg, #1d1e23, #141519);
+    border: 1px solid var(--g-line-2);
+    color: var(--g-ink);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+  }
+  .ct-act > span { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+  .ct-act small { font-size: 12px; font-weight: 500; color: var(--g-ink-2); letter-spacing: 0; }
+  .ct-act svg { width: 20px; height: 20px; stroke-width: 3; }
+  .pk-fold svg { color: #ff5a36; }
+  .pk-call svg { color: #3aa0ff; }
+  .pk-raise svg { color: var(--ct-green); }
+  .ct-act:hover:not(:disabled) { border-color: var(--g-ink-3); }
+  .ct-act:disabled { opacity: 0.4; cursor: default; }
+  @media (max-width: 720px) {
+    .ct-plate { padding-right: 10px; gap: 6px; }
+    .ct-avatar { width: 34px; height: 34px; }
+    .ct-stack { font-size: 13px; }
+    .ct-name { display: none; }
+    .ct-act { font-size: 13px; }
+    .pk-slider { width: 100%; order: 5; }
+    /* Ползунок уходит отдельной строкой, переключатели переносятся. */
+    .ct-bottom { min-height: 190px; }
+  }
+}
+
+/* ── СТОЛ КАРТОЧНЫХ ИГР: ДВИЖЕНИЕ ОТ ЛИЦА КРУПЬЕ ─────────────────────────────
+   Все движения идут от колоды крупье и к ней: сдача по кругу, сброшенные
+   карты — в колоду, ставки — в банк, банк — победителю. Тайминги — одна шкала
+   (`widgets/card-table/lib/motion.ts`), и числа ниже продублированы оттуда.
+
+   Смещения задаются в долях сцены: сцена — контейнер размеров, и `cqw`/`cqh`
+   в `--dx`/`--dy` значат ровно проценты, в которых стоят места. Поэтому
+   полёт «от колоды к месту» одинаков на широком столе и на телефоне.
+
+   Центровка мест и фишек держится свойством `translate`, движение внутри —
+   тоже `translate` там, где элемент не центруется, и `transform` там, где
+   центруется: одно свойство на одну задачу, как у окон продукта.
+
+   `prefers-reduced-motion` глобальным правилом сводит длительности к нулю, а
+   задержки оставляет: предметы появляются в свой момент, но без полёта. */
+@layer components {
+  .ct-stage { container-type: size; }
+  .pk-board { perspective: 700px; }
+  .pk-hole { perspective: 500px; }
+
+  /* Карта летит от колоды рубашкой. */
+  .ct-fly {
+    animation: ct-fly 380ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+  @keyframes ct-fly {
+    from { translate: var(--dx) var(--dy); rotate: -14deg; scale: 0.7; opacity: 0; }
+    12% { opacity: 1; }
+    to { translate: 0 0; rotate: 0deg; scale: 1; opacity: 1; }
+  }
+
+  /* Переворот: лицо и рубашка спиной к спине в одной обёртке. */
+  .ct-flip {
+    position: relative;
+    display: inline-block;
+    width: var(--w);
+    height: calc(var(--w) * 1.42);
+    transform-style: preserve-3d;
+  }
+  .ct-flip > .ct-card {
+    position: absolute;
+    inset: 0;
+    backface-visibility: hidden;
+  }
+  .ct-flip > .ct-face-back { transform: rotateY(180deg); }
+  .ct-flip-fly { animation: ct-fly-flip 640ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .ct-flip-only { animation: ct-flip 260ms ease-out both; }
+  @keyframes ct-fly-flip {
+    0% { translate: var(--dx) var(--dy); transform: rotateY(180deg) rotate(-14deg) scale(0.7); opacity: 0; }
+    8% { opacity: 1; }
+    60% { translate: 0 0; transform: rotateY(180deg) rotate(0deg) scale(1); opacity: 1; }
+    100% { translate: 0 0; transform: rotateY(0deg); opacity: 1; }
+  }
+  @keyframes ct-flip {
+    from { transform: rotateY(180deg); }
+    to { transform: rotateY(0deg); }
+  }
+
+  /* Ставка съезжает от игрока к своему месту на сукне. */
+  .ct-bet { animation: ct-bet-in 320ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  @keyframes ct-bet-in {
+    from { translate: calc(-50% + var(--dx, 0px)) calc(-50% + var(--dy, 0px)); opacity: 0; }
+    30% { opacity: 1; }
+    to { translate: -50% -50%; opacity: 1; }
+  }
+
+  /* Кнопка дилера переезжает к новому месту — появляется после сдачи. */
+  .pk-dealer { animation: ct-pop-in 300ms cubic-bezier(0.3, 1.6, 0.5, 1) both; }
+  .ct-status,
+  .pk-hand { animation: ct-pop-in 260ms cubic-bezier(0.3, 1.6, 0.5, 1) both; }
+  @keyframes ct-pop-in {
+    from { scale: 0.4; opacity: 0; }
+    to { scale: 1; opacity: 1; }
+  }
+
+  /* Чей ход — плашка чуть выходит вперёд. */
+  .ct-plate { transition: border-color 200ms, scale 200ms; }
+  .ct-turn .ct-plate { scale: 1.05; }
+  .ct-seat { transition: opacity 300ms; }
+
+  /* Банк: число досчитывается, а после выплаты банк уходит со стола. */
+  .pk-pot-n { color: var(--g-ink); margin-left: 4px; font-weight: 700; }
+  .pk-pot-out { animation: pk-fade-out 300ms ease both; }
+  @keyframes pk-fade-out {
+    from { opacity: 1; scale: 1; }
+    to { opacity: 0; scale: 0.9; }
+  }
+
+  /* Место крупье: колода и реплики. */
+  .ct-dealer-spot {
+    position: absolute;
+    z-index: 3;
+    translate: -50% -50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    pointer-events: none;
+  }
+  .ct-deck { position: relative; width: 30px; height: 42px; }
+  .ct-deck > .ct-card { position: absolute; left: 0; top: 0; }
+  .ct-deck > .ct-card:nth-child(2) { translate: 2px -2px; }
+  .ct-deck > .ct-card:nth-child(3) { translate: 4px -4px; }
+  .ct-shuffle > .ct-card:nth-child(1) { animation: ct-shuffle-a 360ms ease-in-out 2 both; }
+  .ct-shuffle > .ct-card:nth-child(3) { animation: ct-shuffle-b 360ms ease-in-out 2 both; }
+  @keyframes ct-shuffle-a {
+    50% { translate: -16px 2px; rotate: -10deg; }
+  }
+  @keyframes ct-shuffle-b {
+    50% { translate: 20px -6px; rotate: 10deg; }
+  }
+  .ct-dealer-label {
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--g-ink-3);
+  }
+  /* Реплика крупье — строка постоянной высоты в центральной колонке над
+     банком (DealerSay): в колонке она не может лечь на банк или борд, а
+     постоянная высота не даёт им прыгать, когда реплики нет. Одна строка,
+     длинное обрезается многоточием, а не переносится на банк. */
+  .ct-say {
+    height: 24px;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+  }
+  .ct-say-line {
+    display: inline-block;
+    max-width: 90%;
+    padding: 3px 12px;
+    background: rgb(0 0 0 / 0.62);
+    border: 1px solid var(--g-line-2);
+    color: var(--g-ink);
+    font-size: 12px;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    animation: ct-say 1600ms ease both;
+  }
+  @keyframes ct-say {
+    0% { opacity: 0; translate: 0 -6px; }
+    10% { opacity: 1; translate: 0 0; }
+    85% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+
+  /* Слой доезжающих предметов. */
+  .ct-effects { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
+  .ct-ghost {
+    position: absolute;
+    translate: -50% -50%;
+    display: flex;
+    gap: 2px;
+  }
+  .ct-muck { animation: ct-go-away 440ms ease-in both; }
+  @keyframes ct-go-away {
+    from { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+    to { transform: translate(var(--dx), var(--dy)) rotate(30deg) scale(0.6); opacity: 0; }
+  }
+  /* Фишки едут своё время: сбор ставок короче, выигрыш к месту длиннее
+     (`--go-ms` ставит `Effects` из `COLLECT`/`WIN_FLY`). */
+  .ct-g-chips { animation: ct-go var(--go-ms, 360ms) cubic-bezier(0.4, 0, 0.2, 1) both; }
+  @keyframes ct-go {
+    from { transform: translate(0, 0); opacity: 1; }
+    85% { opacity: 1; }
+    to { transform: translate(var(--dx), var(--dy)); opacity: 0; }
+  }
+
+  /* Кнопки хода отвечают на нажатие. */
+  .ct-act { transition: border-color 150ms, scale 120ms, opacity 200ms; }
+  .ct-act:active:not(:disabled) { scale: 0.97; }
+  .pk-chip { transition: border-color 150ms, scale 120ms; }
+  .pk-chip:active:not(:disabled) { scale: 0.95; }
+}
+
+/* ── СТОЛ БЛЭКДЖЕКА (/games/blackjack/<id>) ─────────────────────────────────
+   Тот же стол, что у покера (`widgets/card-table`); здесь только своё: рука
+   крупье в центре сукна, руки мест веером, панель ставок и панель хода. */
+@layer base {
+  .ct-page :is(.bj-total, .bj-result, .bj-stake-n) { border-radius: 999px !important; }
+}
+@layer components {
+  /* Панель ставок выше панели хода покера: резерв низа, чтобы стол не менял
+     размер, когда окно ставок сменяется ходом. */
+  .bj-page .ct-bottom { min-height: 116px; }
+  /* Панель под столом не подменяется, а перетекает: уходящее содержимое и
+     приходящее стоят в одной ячейке, одно гаснет, другое проявляется — после
+     того, как на столе доиграло то, чего оно ждёт (`Track.enter`). */
+  .bj-panel { display: grid; min-width: 0; }
+  .bj-panel > * {
+    grid-area: 1 / 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-width: 0;
+  }
+  /* `visibility` в ключевых кадрах — чтобы невидимую до своей задержки панель
+     нельзя было нажать: скрытое не принимает кликов. */
+  .bj-panel-in { animation: bj-panel-in 260ms ease-out both; }
+  @keyframes bj-panel-in {
+    from { opacity: 0; translate: 0 8px; visibility: hidden; }
+    to { opacity: 1; translate: 0 0; visibility: visible; }
+  }
+  .bj-panel-out { animation: bj-panel-out 200ms ease-in forwards; pointer-events: none; }
+  @keyframes bj-panel-out {
+    to { opacity: 0; translate: 0 -6px; }
+  }
+
+  .bj-dealer {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: calc(clamp(32px, 5.4cqw, 60px) * 1.42);
+  }
+  .bj-cards { display: flex; perspective: 500px; }
+  /* Веер: каждая следующая карта ложится на предыдущую, угол с рангом виден. */
+  .bj-cards > * + * { margin-left: calc(var(--w) * -0.55); }
+  /* У мелкой карты ранг крупно по центру, а не в углу — веер реже. */
+  .bj-cards > .ct-sm + .ct-sm { margin-left: calc(var(--w) * -0.3); }
+  /* Место: в потоке только плашка, и она стоит ровно в точке места. Всё
+     остальное — столбиком над ней, прижатым к плашке снизу, как за настоящим
+     столом: ставка перед игроком, над ней карты, над картами счёт. Пришли
+     карты или уехали — плашка не двигается; три вещи не ложатся друг на друга. */
+  .bj-above {
+    position: absolute;
+    z-index: 0;
+    left: 50%;
+    bottom: calc(100% + 3px);
+    translate: -50% 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    pointer-events: none;
+  }
+  .bj-above > .ct-status { margin-top: 0; white-space: nowrap; }
+  .bj-hands { display: flex; align-items: flex-end; gap: 12px; }
+  /* Строка ставки держит высоту и пустой: легли фишки или ушли — карты над
+     ней не прыгают. Высота — стопка из пяти фишек с подписью (`MAX_STACK`).
+     Ставка и итог раунда стоят в одной ячейке: фишки уехали — на их месте
+     проявляется, чем кончилась ставка. */
+  .bj-stake-slot { height: 28px; display: grid; place-items: end center; }
+  .bj-stake-slot > * { grid-area: 1 / 1; }
+  /* Ставка: в центре слота — сама стопка фишек, ровно там, куда прилетают
+     свои фишки и выигрыш (`BET_RISE`): прилетевшее сливается со стопкой.
+     Сумма — подписью справа, вне центра, поэтому летящие фишки её не
+     закрывают. */
+  .bj-stake {
+    position: relative;
+    display: block;
+    animation: bj-stake-in 300ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+  .bj-stake-n {
+    position: absolute;
+    left: calc(100% + 6px);
+    bottom: 0;
+    padding: 1px 7px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.35;
+    white-space: nowrap;
+    color: var(--g-ink);
+    background: rgb(0 0 0 / 0.55);
+  }
+  /* Чужая ставка выдвигается от плашки игрока — он её и положил. */
+  @keyframes bj-stake-in {
+    from { translate: 0 14px; opacity: 0; }
+    to { translate: 0 0; opacity: 1; }
+  }
+  /* Рука: карты и её счёт сбоку, на уровне верха карт. Счёт относится к
+     руке, а не к месту, и с итогом раунда (в строке ставки) не путается. */
+  .bj-hand { position: relative; display: flex; align-items: flex-start; gap: 4px; }
+  .bj-total {
+    padding: 1px 7px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--g-ink);
+    background: rgb(0 0 0 / 0.65);
+    animation: ct-pop-in 260ms cubic-bezier(0.3, 1.6, 0.5, 1) both;
+  }
+  .bj-dealer .bj-total { font-size: 13px; padding: 2px 9px; }
+  .bj-active .bj-total { background: var(--ct-green); color: #06140b; }
+  .bj-total.bj-bust { background: #d8423d; color: #fff; }
+  /* Итог раунда — на месте ставки, одна плашка на место: исход и сколько он
+     принёс. Цвет — о деньгах: выиграл, проиграл, остался при своих. */
+  .bj-result {
+    padding: 3px 10px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+    color: var(--g-ink-2);
+    background: rgb(0 0 0 / 0.72);
+    animation: ct-pop-in 260ms cubic-bezier(0.3, 1.6, 0.5, 1) both;
+  }
+  .bj-r-win,
+  .bj-r-blackjack { color: var(--ct-green); }
+  .bj-r-lose,
+  .bj-r-bust { color: #ff6b5a; }
+  .bj-rules {
+    margin: 0;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--g-ink-3);
+    text-align: center;
+  }
+  /* Расчёт ставки — движение самой ставки, а не стопок поверх стола: оно
+     кончается ровно на месте (lib/motion.ts: STAKE_LOSE, WIN_HOLD, STAKE_HOME).
+     Первая анимация в списке — та же, что у появления ставки: сменись она,
+     браузер проиграл бы появление ещё раз. */
+  .bj-stake-lose {
+    animation:
+      bj-stake-in 300ms cubic-bezier(0.2, 0.7, 0.2, 1) both,
+      bj-stake-to-dealer 420ms cubic-bezier(0.45, 0, 0.2, 1) var(--pay, 0ms) forwards;
+  }
+  .bj-stake-home {
+    animation:
+      bj-stake-in 300ms cubic-bezier(0.2, 0.7, 0.2, 1) both,
+      bj-stake-to-player 360ms cubic-bezier(0.5, 0, 0.75, 0.3) var(--home, 0ms) forwards;
+  }
+  @keyframes bj-stake-to-dealer {
+    to { translate: var(--dx) var(--dy); scale: 0.6; opacity: 0; }
+  }
+  @keyframes bj-stake-to-player {
+    to { translate: 0 26px; scale: 0.75; opacity: 0; }
+  }
+  /* Выигрыш прилетает от крупье и встаёт вплотную слева от ставки. Место
+     ему задано самой ставкой, поэтому садится ровно, а не в точку «где-то
+     рядом». */
+  .bj-stake-win {
+    position: absolute;
+    right: calc(100% + 2px);
+    bottom: 0;
+    animation: bj-win-in 520ms cubic-bezier(0.2, 0.7, 0.2, 1) var(--pay, 0ms) both;
+  }
+  @keyframes bj-win-in {
+    from { translate: var(--dx) var(--dy); opacity: 0; }
+    15% { opacity: 1; }
+    to { translate: 0 0; opacity: 1; }
+  }
+  @keyframes bj-fade {
+    to { opacity: 0; }
+  }
+  /* Своя ставка складывается из фишек, прилетевших от кнопок: каждая легла —
+     стопка вздрагивает, а не выезжает от места, как чужая. Этот жест у своей
+     ставки во всех фазах: смена анимации на сдаче проиграла бы появление
+     ставки ещё раз. */
+  .bj-stake-drop { animation: ct-pop-in 220ms cubic-bezier(0.3, 1.6, 0.5, 1) both; }
+  .bj-stake-drop.bj-stake-lose {
+    animation:
+      ct-pop-in 220ms cubic-bezier(0.3, 1.6, 0.5, 1) both,
+      bj-stake-to-dealer 420ms cubic-bezier(0.45, 0, 0.2, 1) var(--pay, 0ms) forwards;
+  }
+  .bj-stake-drop.bj-stake-home {
+    animation:
+      ct-pop-in 220ms cubic-bezier(0.3, 1.6, 0.5, 1) both,
+      bj-stake-to-player 360ms cubic-bezier(0.5, 0, 0.75, 0.3) var(--home, 0ms) forwards;
+  }
+
+  /* Уборка стола: крупье сгребает руки к колоде — место за местом
+     (`--collect-delay`), свои карты последними. До своей очереди рука лежит
+     на месте (`forwards`, а не `both`). */
+  .bj-leaving .bj-hand,
+  .bj-dealer.bj-leaving .bj-cards {
+    animation: bj-collect 520ms cubic-bezier(0.55, 0, 0.75, 0.25) var(--collect-delay, 0ms) forwards;
+  }
+  .bj-leaving > .ct-status,
+  .bj-leaving .bj-result,
+  .bj-dealer.bj-leaving .bj-total { animation: bj-fade 240ms ease forwards; }
+  @keyframes bj-collect {
+    0% { translate: 0 0; rotate: 0deg; scale: 1; opacity: 1; }
+    70% { opacity: 1; }
+    100% { translate: var(--dx) var(--dy); rotate: -12deg; scale: 0.45; opacity: 0; }
+  }
+
+  /* Панель ставок: полоса окна, фишки номиналов, сумма и кнопки. */
+  .bj-bet { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; }
+  .bj-countdown { width: 100%; max-width: 420px; height: 3px; background: rgb(255 255 255 / 0.08); overflow: hidden; }
+  .bj-countdown > span {
+    display: block;
+    height: 100%;
+    background: var(--ct-green);
+    transform-origin: left;
+    animation: bj-count var(--bj-ms, 15s) linear forwards;
+  }
+  @keyframes bj-count {
+    from { scale: 1 1; }
+    to { scale: 0 1; }
+  }
+  .bj-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+  .bj-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 4px;
+    background: transparent;
+    border: 0;
+    color: var(--g-ink-2);
+    font-size: 11px;
+    cursor: pointer;
+    transition: scale 120ms, color 150ms;
+  }
+  .bj-chip:hover:not(:disabled) { color: var(--g-ink); }
+  .bj-chip:active:not(:disabled) { scale: 0.94; }
+  .bj-chip:disabled { opacity: 0.4; cursor: default; }
+  /* Строка суммы ниже панели хода: кнопки здесь второстепенны рядом с
+     фишками, и высота панели ставок отнимается у стола. */
+  .bj-bet-row { display: flex; align-items: center; gap: 10px; }
+  .bj-bet-row .ct-act { min-width: 112px; min-height: 34px; padding: 0 12px; font-size: 12px; }
+  .bj-bet .fhint { margin: 0; }
+  .bj-draft { min-width: 64px; text-align: center; font-size: 16px; font-weight: 700; }
+  /* Колонок столько, сколько кнопок: «Сплит» есть не всегда. */
+  .bj-buttons {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 10px;
+    width: 100%;
+    max-width: 600px;
+  }
+  @media (max-width: 720px) {
+    .bj-page .ct-bottom { min-height: 200px; }
+    .bj-buttons { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .bj-bet-row .ct-act { min-width: 96px; }
+  }
+}
+
+/* ── Джетпак (/games/jetpack) ─────────────────────────────────────
+   Третье исключение из нулевого радиуса и теней (как стол и витрина): поле
+   полёта, кнопки и плашки истории — предметы игры, а не строки гроссбуха.
+   Исключение — в слое base, как у стола: там стоит глобальный сброс с
+   !important, и из components оно проиграло бы молча. */
+@layer base {
+  .jpg-page :is(.jpg-stage, .jpg-panel, .jpg-side) { border-radius: 12px !important; }
+  .jpg-page :is(.jpg-go, .jpg-mini, .jpg-toggle, .in) { border-radius: 8px !important; }
+  .jpg-page :is(.jpg-hx, .jpg-dot, .jpg-burst, .jpg-bar, .jpg-bar > span) { border-radius: 999px !important; }
+  .jpg-page .jpg-beacon { border-radius: 50% !important; }
+  /* Свет панелей — тот же неон, что у сцены, но тише: панель обрамляет
+     полёт, а не спорит с ним. Светится только то, что можно нажать сейчас. */
+  .jpg-page :is(.jpg-panel, .jpg-side) { box-shadow: inset 0 1px 0 rgb(205 180 255 / 0.08) !important; }
+  .jpg-page .jpg-go:not(:disabled) {
+    box-shadow: 0 0 22px rgb(154 92 255 / 0.3), inset 0 1px 0 rgb(255 255 255 / 0.22) !important;
+  }
+  .jpg-page .jpg-go.jpg-cash:not(:disabled) {
+    box-shadow: 0 0 22px rgb(var(--g-a-green-rgb) / 0.32), inset 0 1px 0 rgb(255 255 255 / 0.3) !important;
+  }
+  .jpg-page .jpg-toggle.on .jpg-dot { box-shadow: 0 0 8px rgb(154 92 255 / 0.7) !important; }
+  .jpg-page .jpg-panel .in:focus { box-shadow: 0 0 0 3px rgb(154 92 255 / 0.16) !important; }
+}
+@layer components {
+  /* Экран — ровно окно под шапкой, как стол: сцена забирает остаток от
+     панели ставки. Поле тёмное в обеих темах; прикладные имена темы
+     переопределены на странице — общие компоненты внутри (поле, таблица)
+     берут тёмную краску. Шкала свечения ракеты — та же `--csn-*`, что у
+     карточки витрины. */
+  .jpg-page {
+    --ground: var(--g-field);
+    --ink: var(--g-ink);
+    --ink-2: var(--g-ink-2);
+    --ink-3: var(--g-ink-3);
+    --ink-rgb: 242 240 234;
+    --hair: var(--g-line);
+    --hair-2: var(--g-line-2);
+    --rule: var(--g-line-2);
+    --meta: var(--g-ink-2);
+    --meta-dim: var(--g-ink-3);
+    --csn-3: #5a2fd0;
+    --csn-4: var(--g-a-purple);
+    --csn-5: #cdb4ff;
+    /* Кромка поля, панелей и полей ввода — фиолетовая, как линия горизонта
+       сцены, а не серая: три блока экрана читаются одним предметом. */
+    --jpg-edge: rgb(154 92 255 / 0.24);
+    position: relative;
+    z-index: 1;
+    color: var(--g-ink);
+    color-scheme: dark;
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    height: calc(100dvh - var(--top-h) - 1px);
+    min-height: 560px;
+  }
+  .jpg-wait { color: var(--g-ink-2); text-align: center; margin: 8px 0; }
+  .jpg-top { display: flex; align-items: center; gap: 16px; min-width: 0; }
+  .jpg-back { color: var(--g-ink-2); text-decoration: none; font-size: 13px; white-space: nowrap; }
+  .jpg-back:hover { color: var(--g-ink); }
+  .jpg-history { display: flex; gap: 6px; margin: 0; padding: 0; list-style: none; overflow: hidden; min-width: 0; }
+  .jpg-hx { padding: 3px 10px; font-size: 12px; border: 1px solid var(--g-line); color: var(--g-ink-3); white-space: nowrap; }
+  .jpg-hx.mid { color: var(--g-a-purple); border-color: color-mix(in srgb, var(--g-a-purple) 45%, transparent); }
+  .jpg-hx.high { color: #f1e8ff; background: color-mix(in srgb, var(--g-a-purple) 35%, transparent); border-color: var(--g-a-purple); }
+
+  .jpg-body { flex: 1; min-height: 0; display: flex; gap: 16px; }
+  .jpg-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+  /* Панели — из того же ночного неба, что и поле полёта: индиго-подложка
+     вместо серой вуали. Линейки таблицы и полей берут краску из прикладных
+     имён — они перекрашены здесь, а не правкой общих компонентов. */
+  .jpg-panel,
+  .jpg-side {
+    --hair: rgb(154 92 255 / 0.13);
+    --rule: rgb(154 92 255 / 0.24);
+    border: 1px solid var(--jpg-edge);
+    background: linear-gradient(180deg, rgb(30 16 78 / 0.5), rgb(10 6 30 / 0.6));
+  }
+  .jpg-side {
+    width: 340px;
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    overflow: auto;
+  }
+  .jpg-side-head { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--g-ink-2); }
+  .jpg-rules { margin: auto 0 0; font-size: 11px; color: var(--g-ink-3); }
+  .jpg-mine { color: var(--g-a-purple); }
+  .jpg-won { color: var(--g-a-green); }
+  .jpg-lost { color: var(--g-a-red); }
+
+  /* Поле полёта — от земли до космоса. Под всем — космос; над ним небо двумя
+     слоями (высокое и закатное), их гасит кадр по высоте. Всё, что движется
+     (звёзды, планета, горы, город, облака, земля, метки, корабль), — отдельные
+     слои с transform, их двигает кадр (`FlightStage` → `World`). */
+  .jpg-stage {
+    position: relative;
+    flex: 1;
+    min-height: 240px;
+    overflow: hidden;
+    border: 1px solid var(--jpg-edge);
+    background:
+      radial-gradient(60% 50% at 70% 30%, rgb(60 30 140 / 0.35), transparent 70%),
+      #03020a;
+  }
+  .jpg-defs { position: absolute; }
+  .jpg-layer { position: absolute; inset: 0; will-change: transform; pointer-events: none; }
+  .jpg-art { position: absolute; left: 0; overflow: visible; }
+
+  /* Небо: у земли — ночное, как на референсе владельца: глубокий фиолет с
+     сиреневым светом к горизонту; выше — индиго стратосферы. Кадр гасит
+     ночное к 2.2x, высокое — к космосу. */
+  .jpg-sky { position: absolute; inset: 0; pointer-events: none; }
+  .jpg-sky.high { background: linear-gradient(#05030f, #0f0832 55%, #1b0f4a); }
+  .jpg-sky.night {
+    background: linear-gradient(#0c0628 0%, #180b44 38%, #2c1370 64%, #4a1f96 84%, #6a2cb0 100%);
+  }
+  .jpg-nebula {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(40% 30% at 22% 28%, rgb(154 92 255 / 0.22), transparent 70%),
+      radial-gradient(35% 28% at 78% 62%, rgb(255 110 190 / 0.14), transparent 70%),
+      radial-gradient(30% 24% at 55% 12%, rgb(90 140 255 / 0.12), transparent 70%);
+  }
+
+  /* Звёзды — узор слоя, а не узлы: слой сдвигается по модулю плитки и не
+     кончается. Разноцветные, как на референсе: белые, сиреневые, розовые,
+     бирюзовые. Плитка и размер слоя задаются из разметки. */
+  .jpg-starfield { position: absolute; inset: 0; pointer-events: none; }
+  .jpg-stars { position: absolute; left: 0; will-change: transform; }
+  .jpg-stars.far {
+    opacity: 0.7;
+    background-image:
+      radial-gradient(circle at 23px 41px, #fff 0 0.8px, transparent 1.4px),
+      radial-gradient(circle at 97px 12px, #cdb4ff 0 0.8px, transparent 1.4px),
+      radial-gradient(circle at 151px 88px, #ff9ccc 0 0.8px, transparent 1.4px),
+      radial-gradient(circle at 211px 160px, #fff 0 0.7px, transparent 1.3px),
+      radial-gradient(circle at 60px 190px, #8fe6ff 0 0.8px, transparent 1.4px),
+      radial-gradient(circle at 180px 226px, #fff 0 0.7px, transparent 1.3px),
+      radial-gradient(circle at 128px 140px, #cdb4ff 0 0.7px, transparent 1.3px),
+      radial-gradient(circle at 8px 118px, #fff 0 0.7px, transparent 1.3px),
+      radial-gradient(circle at 44px 76px, #ff9ccc 0 0.7px, transparent 1.3px),
+      radial-gradient(circle at 196px 58px, #8fe6ff 0 0.7px, transparent 1.3px),
+      radial-gradient(circle at 118px 206px, #fff 0 0.8px, transparent 1.4px),
+      radial-gradient(circle at 228px 112px, #cdb4ff 0 0.7px, transparent 1.3px),
+      radial-gradient(circle at 76px 150px, #fff 0 0.6px, transparent 1.2px),
+      radial-gradient(circle at 160px 18px, #fff 0 0.6px, transparent 1.2px);
+  }
+  .jpg-stars.mid {
+    opacity: 0.85;
+    background-image:
+      radial-gradient(circle at 40px 70px, #fff 0 1.1px, transparent 1.9px),
+      radial-gradient(circle at 170px 30px, #b89cff 0 1.1px, transparent 1.9px),
+      radial-gradient(circle at 250px 150px, #ff7ac0 0 1px, transparent 1.8px),
+      radial-gradient(circle at 110px 220px, #5ae0ff 0 1px, transparent 1.8px),
+      radial-gradient(circle at 280px 270px, #fff 0 1px, transparent 1.8px),
+      radial-gradient(circle at 206px 96px, #ff7ac0 0 1px, transparent 1.8px),
+      radial-gradient(circle at 70px 262px, #b89cff 0 1px, transparent 1.8px),
+      radial-gradient(circle at 18px 176px, #5ae0ff 0 0.9px, transparent 1.7px);
+  }
+  .jpg-stars.near {
+    background-image:
+      radial-gradient(circle at 70px 110px, #fff 0 1.5px, rgb(205 180 255 / 0.35) 2.5px, transparent 4px),
+      radial-gradient(circle at 290px 40px, #fff 0 1.4px, rgb(255 160 215 / 0.3) 2.4px, transparent 4px),
+      radial-gradient(circle at 210px 300px, #fff 0 1.5px, rgb(120 220 255 / 0.35) 2.5px, transparent 4px);
+  }
+
+  /* Луна — диск с ореолом одним градиентом (край — резкий переход цвета). */
+  .jpg-moon {
+    position: absolute;
+    translate: -50% -50%;
+    background: radial-gradient(
+      circle,
+      #fff8dc 0 22%,
+      #ffe6a0 38%,
+      rgb(255 230 160 / 0.4) 40%,
+      rgb(255 220 150 / 0.14) 58%,
+      transparent 72%
+    );
+  }
+
+  /* Сиреневая и розовая дымка за холмами — свет над горизонтом. */
+  .jpg-haze {
+    position: absolute;
+    translate: 0 -62%;
+    background: radial-gradient(closest-side, rgb(170 70 220 / 0.5), rgb(120 50 200 / 0.22) 55%, transparent);
+  }
+  .jpg-haze.pink { background: radial-gradient(closest-side, rgb(230 80 180 / 0.42), rgb(150 50 190 / 0.18) 55%, transparent); }
+
+  /* Облака: мягкие эллипсы градиентом, без размытия, ночные — сиреневые и
+     синие, подсвеченные луной. Передние крупнее и прозрачнее — сквозь них
+     видно ракету. Место — центр облака. */
+  .jpg-cloud { position: absolute; aspect-ratio: 3 / 1; translate: -50% -50%; }
+  .jpg-cloud.lit {
+    background:
+      radial-gradient(45% 50% at 32% 58%, rgb(170 130 255 / 0.34), transparent 70%),
+      radial-gradient(40% 48% at 62% 42%, rgb(120 170 255 / 0.28), transparent 70%),
+      radial-gradient(35% 40% at 80% 60%, rgb(120 80 220 / 0.26), transparent 70%);
+  }
+  .jpg-cloud.dim {
+    background:
+      radial-gradient(45% 50% at 35% 55%, rgb(90 60 190 / 0.3), transparent 70%),
+      radial-gradient(40% 45% at 66% 45%, rgb(110 110 230 / 0.22), transparent 70%);
+  }
+  .jpg-cloud.front {
+    background:
+      radial-gradient(45% 50% at 38% 55%, rgb(215 205 255 / 0.2), transparent 70%),
+      radial-gradient(40% 45% at 66% 45%, rgb(150 200 255 / 0.15), transparent 70%);
+  }
+
+  /* Площадка (LaunchSite) и космодром (Spaceport): сами — неподвижные SVG,
+     отдельными слоями — только то, что движется. */
+  .jpg-trench-glow {
+    position: absolute;
+    translate: -50% -50%;
+    background: radial-gradient(closest-side, rgb(255 225 240 / 0.9), rgb(240 110 190 / 0.45) 45%, transparent);
+    opacity: 0.25;
+  }
+  .jpg-trench-glow[data-launched] { animation: jpg-trench 3.2s ease-out both; }
+  @keyframes jpg-trench {
+    0% { opacity: 0.25; }
+    8% { opacity: 1; }
+    100% { opacity: 0.3; }
+  }
+  /* Стрелы башни держат ракету за борт; на старте отводятся, как у настоящих:
+     поворачиваются в глубину, и сбоку видно, как они укорачиваются к башне
+     (сжатие по x вокруг кромки башни). Кабельная — чуть позже. */
+  .jpg-arm { position: absolute; transition: scale 700ms cubic-bezier(0.5, 0, 0.3, 1); }
+  .jpg-arm.late { transition-delay: 180ms; }
+  .jpg-arm > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .jpg-arm[data-launched] { scale: 0.18 1; }
+  /* Луч радара бьёт в небо влево-вверх и медленно качается; кадр 0 % = 100 %. */
+  .jpg-radar-beam {
+    position: absolute;
+    translate: 0 -50%;
+    transform-origin: 0 50%;
+    rotate: -148deg;
+    clip-path: polygon(0 44%, 100% 0, 100% 100%, 0 56%);
+    background: linear-gradient(90deg, rgb(170 205 255 / 0.55), rgb(140 170 255 / 0.18) 60%, transparent);
+    animation: jpg-radar 7s ease-in-out infinite;
+  }
+  @keyframes jpg-radar {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(9deg); }
+  }
+  .jpg-beacon {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    translate: -50% -50%;
+    background: radial-gradient(circle, #fff 0 16%, #ff4f8b 30%, transparent 70%);
+    animation: jpg-beacon 1.4s steps(1, end) infinite;
+  }
+  .jpg-beacon.late { animation-delay: 0.7s; }
+  @keyframes jpg-beacon {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.15; }
+  }
+  /* Дым старта: клубы разлетаются от площадки и тают, пока ракета уходит. */
+  .jpg-smoke, .jpg-steam { position: absolute; width: 0; height: 0; }
+  .jpg-smoke > i {
+    position: absolute;
+    width: 80px;
+    aspect-ratio: 1.6;
+    translate: -50% -65%;
+    background: radial-gradient(closest-side, rgb(240 228 255 / 0.8), rgb(190 160 245 / 0.35) 55%, transparent);
+    animation: jpg-puff 3.4s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+    animation-delay: calc(var(--i) * 55ms);
+  }
+  @keyframes jpg-puff {
+    0% { transform: translate(0, 0) scale(0.3); opacity: 0; }
+    12% { opacity: 0.95; }
+    100% { transform: translate(calc(var(--dx) * 40px), -14px) scale(2.4); opacity: 0; }
+  }
+  /* Прогрев на площадке в окне ставок — пар дышит; кадр 0 % = кадр 100 %. */
+  .jpg-steam > i {
+    position: absolute;
+    width: 56px;
+    aspect-ratio: 1.8;
+    translate: -50% -70%;
+    background: radial-gradient(closest-side, rgb(230 215 255 / 0.45), transparent);
+    animation: jpg-steam 2.6s ease-in-out infinite;
+  }
+  .jpg-steam > i + i { translate: -10% -80%; animation-delay: 1.3s; }
+  @keyframes jpg-steam {
+    0%, 100% { transform: scale(1); opacity: 0.5; }
+    50% { transform: scale(1.2); opacity: 0.8; }
+  }
+
+  .jpg-mark {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 0;
+    border-top: 1px dashed rgb(255 255 255 / 0.14);
+  }
+  .jpg-mark > span {
+    position: absolute;
+    right: 10px;
+    top: -18px;
+    font-size: 11px;
+    color: var(--g-ink-2);
+  }
+
+  /* Корабль: слои карточки, положенные друг на друга. Сдвиг и наклон — кадр
+     (вокруг сопла), покачивание — анимация вложенного слоя: в одном слое они
+     затёрли бы друг друга (оба transform). */
+  .jpg-ship { position: absolute; left: 0; top: 0; will-change: transform; transition: opacity 120ms ease-out; }
+  .jpg-ship[data-hidden] { opacity: 0; }
+  .jpg-ship { --thrust: 0; }
+  .jpg-ship :is(.jpg-sway, .jpg-halo, .jpg-flame, .jpg-flicker, .jpg-flame-glow, .jpg-boost),
+  .jpg-ship svg { position: absolute; inset: 0; }
+  .jpg-ship svg { width: 100%; height: 100%; display: block; overflow: visible; }
+  .jpg-ship[data-flying] .jpg-sway { animation: jpg-sway 2.6s ease-in-out infinite; }
+  @keyframes jpg-sway {
+    0%, 100% { transform: translate(0, 0) rotate(0deg); }
+    30% { transform: translate(1.5px, -2px) rotate(0.8deg); }
+    70% { transform: translate(-1.5px, 1px) rotate(-0.8deg); }
+  }
+  /* Пламя — по тяге (`--thrust` пишет кадр, lib/flight.ts → thrustAt): на
+     площадке огня нет (идёт пар), на старте — факел зажигания, дальше за ~3 с
+     он плавно вытягивается до полного. Дрожь — вложенный слой `.jpg-flicker`:
+     в одном слое с длиной они затёрли бы друг друга (оба transform). */
+  .jpg-flame {
+    transform: scaleY(calc(0.06 + 0.94 * var(--thrust)));
+    opacity: min(1, calc(var(--thrust) * 4));
+  }
+  .jpg-ship[data-flying] .jpg-flicker { animation: jpg-flicker 160ms ease-in-out infinite alternate; }
+  @keyframes jpg-flicker {
+    from { transform: scaleY(0.95); }
+    to { transform: scaleY(1.06); }
+  }
+  .jpg-flame-glow { animation: jpg-glow 1.8s ease-in-out infinite; }
+  @keyframes jpg-glow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.8; }
+  }
+  /* Ореол — свет от пламени по силуэту: разгорается вместе с тягой. Форсаж —
+     только на последней трети разгона, полной тягой. */
+  .jpg-halo { opacity: calc(0.35 + 0.65 * var(--thrust)); }
+  .jpg-boost { opacity: clamp(0, calc((var(--thrust) - 0.6) * 2.1), 0.85); }
+
+  .jpg-burst {
+    position: absolute;
+    width: 220px;
+    height: 220px;
+    margin: -110px 0 0 -110px;
+    background: radial-gradient(circle, #fff 0 8%, #ffb3c8 18%, var(--g-a-red) 36%, transparent 68%);
+    animation: jpg-burst 700ms ease-out both;
+    pointer-events: none;
+  }
+  @keyframes jpg-burst {
+    from { transform: scale(0.2); opacity: 1; }
+    to { transform: scale(1.4); opacity: 0; }
+  }
+
+  /* Табло — вверху по центру: ракета стартует слева внизу и уходит вправо,
+     число не ложится ни на площадку, ни на её точку в кадре. */
+  .jpg-readout {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: 6%;
+    gap: 6px;
+    pointer-events: none;
+  }
+  .jpg-label { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--g-ink-2); }
+  .jpg-num { font-size: clamp(40px, 8vw, 88px); font-weight: 700; color: #f1e8ff; text-shadow: 0 0 24px rgb(154 92 255 / 0.55); }
+  .jpg-stage[data-phase='crashed'] .jpg-num { color: var(--g-a-red); text-shadow: 0 0 24px rgb(217 85 79 / 0.45); }
+  .jpg-bar { width: 180px; height: 4px; background: rgb(255 255 255 / 0.1); overflow: hidden; }
+  .jpg-bar > span { display: block; height: 100%; background: var(--g-a-purple); transform-origin: left; }
+
+  /* Панель ставки */
+  .jpg-panel {
+    display: grid;
+    grid-template-columns: 1fr minmax(200px, 280px);
+    grid-template-areas: 'fields go' 'hint hint' 'err err';
+    gap: 8px 12px;
+    align-items: center;
+    padding: 12px;
+  }
+  .jpg-fields { grid-area: fields; display: flex; gap: 12px; flex-wrap: wrap; }
+  .jpg-fields .field { margin: 0; }
+  /* stretch: кнопки ½ и ×2 встают вровень с полем, а не ниже его рамки. */
+  .jpg-row { display: flex; align-items: stretch; gap: 6px; }
+  .jpg-row .in { width: 96px; }
+  /* Поле ставки — в рамке, а не общей чертой снизу: в панели-предмете черта
+     без рамки читалась строкой формы. */
+  .jpg-panel .in {
+    padding: 8px 10px;
+    border: 1px solid var(--jpg-edge);
+    background: rgb(6 4 20 / 0.7);
+    transition: border-color 120ms ease-out;
+  }
+  .jpg-panel .in:focus { border-color: var(--g-a-purple); }
+  .jpg-panel .in:disabled { opacity: 0.55; }
+  .jpg-panel .in[aria-invalid] { border-color: color-mix(in srgb, var(--g-a-red) 60%, transparent); }
+  .jpg-panel .in-adorned .in.in-has-suffix { padding-right: 2em; }
+  .jpg-panel .in-suffix { right: 10px; }
+  .jpg-mini {
+    padding: 0 10px;
+    font-size: 12px;
+    border: 1px solid var(--jpg-edge);
+    background: rgb(154 92 255 / 0.08);
+    color: var(--g-ink);
+    transition: background-color 120ms ease-out, border-color 120ms ease-out;
+  }
+  .jpg-mini:not(:disabled):hover { background: rgb(154 92 255 / 0.18); border-color: rgb(154 92 255 / 0.5); }
+  .jpg-mini:disabled { opacity: 0.4; }
+  .jpg-toggle { display: inline-flex; align-items: center; padding: 8px 4px; }
+  .jpg-toggle:disabled { opacity: 0.5; }
+  .jpg-dot { width: 10px; height: 10px; border: 1px solid rgb(154 92 255 / 0.45); }
+  .jpg-toggle.on .jpg-dot { background: var(--g-a-purple); border-color: var(--g-a-purple); }
+  .jpg-go {
+    grid-area: go;
+    height: 52px;
+    font-size: 16px;
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(180deg, #ad7bff, #7c44f2);
+    border: 1px solid rgb(205 180 255 / 0.45);
+    transition: filter 120ms ease-out;
+  }
+  .jpg-go:not(:disabled):hover { filter: brightness(1.08); }
+  .jpg-go:disabled {
+    background: rgb(154 92 255 / 0.07);
+    border-color: var(--jpg-edge);
+    color: var(--g-ink-2);
+    cursor: default;
+  }
+  .jpg-cash { background: linear-gradient(180deg, #86e0b0, #4fb483); border-color: rgb(200 255 225 / 0.5); color: #04110a; }
+  .jpg-hint { grid-area: hint; margin: 0; font-size: 12px; color: var(--g-ink-3); }
+  .jpg-panel > .neg { grid-area: err; margin: 0; }
+
+  @media (max-width: 900px) {
+    .jpg-page { height: auto; min-height: 0; }
+    .jpg-body { flex-direction: column; }
+    .jpg-stage { flex: none; aspect-ratio: 16 / 11; }
+    .jpg-side { width: auto; }
+    .jpg-panel { grid-template-columns: 1fr; grid-template-areas: 'fields' 'go' 'hint' 'err'; }
+  }
 }

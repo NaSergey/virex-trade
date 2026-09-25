@@ -92,6 +92,34 @@ interface LedgerTableProps<T> {
    * раскрытие, либо переход, но не оба сразу.
    */
   rowHref?: (row: T) => string | undefined;
+  /**
+   * То же, что `rowHref`, но строка не уводит со страницы, а зовёт обработчик —
+   * например, открывает окно. Affordance та же: курсор, подсветка, Enter,
+   * и клик из вложенной кнопки обработчиком не считается.
+   *
+   * Отдельным свойством, а не «href, начинающийся с решётки»: переход и
+   * действие различаются для скринридера и для клавиатуры (ссылку открывают в
+   * новой вкладке, окно — нет), и сводить их к одному значению значит соврать
+   * хотя бы одному из них. Если передано и то и другое, побеждает `rowHref` —
+   * строка не может значить сразу две вещи.
+   */
+  onRowClick?: (row: T) => void;
+  /**
+   * Строка попала под курсор или под фокус с клавиатуры. Нужно там, где клик
+   * по ней открывает окно с ДРУГИМИ данными: их заказывают здесь, пока рука
+   * идёт к строке, и к клику они уже в кэше — окно открывается сразу готовым,
+   * а не разворачивается из заглушки на глазах.
+   *
+   * Наведение — подсказка, а не обещание: на тачскрине его не бывает, и
+   * обработчик клика обязан уметь дождаться данных сам.
+   */
+  onRowHover?: (row: T) => void;
+  /**
+   * Ключ строки, чей клик ещё выполняется (например, едут данные для окна).
+   * Строка держит подсветку и курсор ожидания — иначе тап по ней выглядит
+   * промахом, и человек жмёт второй раз.
+   */
+  busyKey?: string | null;
 }
 
 /**
@@ -120,6 +148,9 @@ export function LedgerTable<T>({
   onSort,
   renderExpanded,
   rowHref,
+  onRowClick,
+  onRowHover,
+  busyKey,
 }: LedgerTableProps<T>) {
   const router = useRouter();
   const [openKey, setOpenKey] = useState<string | null>(null);
@@ -226,11 +257,13 @@ export function LedgerTable<T>({
               const open = openKey === key;
               const closing = !open && closingKey === key;
               const href = rowHref?.(row);
+              // Строка не может значить две вещи сразу: адрес сильнее действия.
+              const activate = href ? () => router.push(href) : onRowClick ? () => onRowClick(row) : null;
               // Собственные действия строки остаются собственными: клик,
               // пришедший из ссылки или кнопки внутри неё, переходом не считаем.
               const fromControl = (e: React.MouseEvent) =>
                 (e.target as HTMLElement).closest('a,button,input,select,textarea') != null;
-              const go = () => router.push(href!);
+              const go = () => activate!();
               const toggle = () => {
                 if (open) {
                   // закрываем — прежняя строка доигрывает анимацию, а не пропадает
@@ -245,11 +278,18 @@ export function LedgerTable<T>({
               return (
                 <Fragment key={key}>
                   <tr
-                    className={renderExpanded || href ? `row${open ? ' open' : ''}` : undefined}
+                    className={
+                      renderExpanded || activate
+                        ? `row${open ? ' open' : ''}${busyKey === key ? ' busy' : ''}`
+                        : undefined
+                    }
                     style={{ '--i': index } as React.CSSProperties}
-                    tabIndex={href ? 0 : undefined}
+                    tabIndex={activate ? 0 : undefined}
+                    aria-busy={busyKey === key || undefined}
+                    onMouseEnter={onRowHover ? () => onRowHover(row) : undefined}
+                    onFocus={onRowHover ? () => onRowHover(row) : undefined}
                     onClick={
-                      href
+                      activate
                         ? (e) => {
                             if (!fromControl(e)) go();
                           }
@@ -258,7 +298,7 @@ export function LedgerTable<T>({
                           : undefined
                     }
                     onKeyDown={
-                      href
+                      activate
                         ? (e) => {
                             if (e.target !== e.currentTarget) return;
                             if (e.key === 'Enter' || e.key === ' ') {

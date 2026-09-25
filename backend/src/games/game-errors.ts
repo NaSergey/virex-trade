@@ -44,3 +44,15 @@ export const gameNotCreatorOrAdmin = () =>
 
 export const gameBadSeats = () =>
   new BadRequestException({ message: 'Недопустимое число мест для этого типа игры', code: 'GAME_BAD_SEATS' });
+
+export const gameBadBlinds = () =>
+  new BadRequestException({
+    message: 'Большой блайнд — от 2 монет, минимальный buy-in — не меньше двух больших блайндов',
+    code: 'GAME_BAD_BLINDS',
+  });
+
+export const gameBadBets = () =>
+  new BadRequestException({
+    message: 'Ставка — от 2 монет, «до» не меньше «от», минимальный buy-in — не меньше минимальной ставки',
+    code: 'GAME_BAD_BETS',
+  });

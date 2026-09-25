@@ -6,6 +6,7 @@ import type { BacktestCloseOrder, BacktestEntryOrder, BacktestTrade, SessionDeta
 import { advanceTo, type OpenPosition } from '../lib/advance';
 import {
   DAY,
+  DEFAULT_TIMEFRAME,
   MINUTE,
   TIMEFRAMES,
   bucketStart,
@@ -104,7 +105,7 @@ export function useReplay(
   const dataSource = detail.session.dataSource;
   const source = useMemo(() => ({ id: sessionId, dataSource }), [sessionId, dataSource]);
   const [cursor, setCursor] = useState(() => Date.parse(detail.session.cursorTime));
-  const [tf, setTf] = useState(60);
+  const [tf, setTf] = useState<number>(DEFAULT_TIMEFRAME);
   const [minutes, setMinutes] = useState<Candle[]>([]);
   const [closed, setClosed] = useState<Record<number, ClosedSet>>({});
   const [speed, setSpeed] = useState<number | null>(null);

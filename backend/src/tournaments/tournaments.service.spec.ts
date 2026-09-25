@@ -622,6 +622,20 @@ describe('TournamentsService.remove', () => {
     await allReady(h);
     expect((await rejection(h.service.remove('u1', 'tn1'))).response.code).toBe('TOURNAMENT_NOT_LOBBY');
   });
+
+  it('удаление завершённого турнира не трогает деньги — призы уже выплачены финалом', async () => {
+    const h = makeService();
+    await h.service.create('u1', { ...CREATE, prizeBonus: 500 });
+    await h.service.join('u2', 'tn1');
+    await allReady(h);
+    await h.service.finalize(h.tournaments.get('tn1'));
+    h.credits.length = 0;
+
+    await h.service.remove('u1', 'tn1');
+
+    expect(h.credits).toEqual([]);
+    expect(h.tournaments.has('tn1')).toBe(false);
+  });
 });
 
 describe('TournamentsService.finalize', () => {

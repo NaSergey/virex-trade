@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@/shared/ui/dialog';
+import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, useDialogFade } from '@/shared/ui/dialog';
 import { Seg } from '@/shared/ui/Seg';
 import { Button } from '@/shared/ui/Button';
 import { SectionHead } from '@/shared/ui/SectionHead';
@@ -35,6 +35,7 @@ const TF_HOURS: Record<RangeTf, number> = { '15m': 0.25, '30m': 0.5, '1h': 1, '4
 export function RangeCheckModal({ trade, onClose }: { trade: Trade; onClose: () => void }) {
   const t = useTranslations('rangeCheck');
   const tc = useTranslations('common');
+  const { closing, close } = useDialogFade(onClose);
   const { locale } = useLocaleControl();
   // Тот же ТФ, которым греется кэш по наведению на кнопку (usePrefetchRangeCheck),
   // иначе окно спросит запрос, которого в кэше нет.
@@ -54,7 +55,7 @@ export function RangeCheckModal({ trade, onClose }: { trade: Trade; onClose: () 
   };
 
   return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={!closing} onOpenChange={(v) => !v && close()}>
       <DialogContent wide>
         <DialogHeader
           title={t('title')}
@@ -95,7 +96,7 @@ export function RangeCheckModal({ trade, onClose }: { trade: Trade; onClose: () 
           )}
         </DialogBody>
         <DialogFooter>
-          <Button variant="solid" onClick={onClose}>
+          <Button variant="solid" onClick={close}>
             {tc('close')}
           </Button>
         </DialogFooter>

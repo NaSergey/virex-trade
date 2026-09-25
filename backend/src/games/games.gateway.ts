@@ -26,6 +26,12 @@ import type { JwtPayload } from '../auth/strategies/jwt.strategy';
   // next.config.ts), а всё прочее забирает гейт фронтенда и уводит на
   // /login — поэтому канал обязан ехать под `/api/`.
   path: '/api/games/socket.io',
+  // Без завершающего слэша. Next в dev отвечает 308 на `/api/games/socket.io/`
+  // и срезает слэш (trailingSlash: false), а движок socket.io по умолчанию
+  // слушает только адрес со слэшем — рукопожатие получало 404, и стол не
+  // получал ни одного обновления. С этим флагом путь сверяется префиксом и
+  // принимает обе формы. Клиент обязан ставить тот же флаг.
+  addTrailingSlash: false,
   namespace: '/games',
   cors: { origin: process.env.FRONTEND_URL || 'http://localhost:3000', credentials: true },
 })
@@ -83,8 +89,25 @@ export class GamesGateway implements OnGatewayInit, OnGatewayDisconnect {
     client.leave(tableId);
   }
 
+  /**
+   * Каждому сокету комнаты — свой вид. Нужен покеру: карманные карты видны
+   * только владельцу, и общий снимок в комнату их бы раскрыл.
+   */
+  async emitPersonal(tableId: string, event: string, build: (userId: string) => unknown) {
+    const sockets = await this.server.in(tableId).fetchSockets();
+    for (const s of sockets) {
+      const userId = s.data.userId as string | undefined;
+      if (userId) s.emit(event, build(userId));
+    }
+  }
+
   /** Снимок стола рассылается комнате после любой мутации (join/leave/close). */
   broadcastTableState(tableId: string, state: unknown) {
     this.server.to(tableId).emit('table_state', state);
+  }
+
+  /** Сколько сокетов подписано на комнату — джетпак засыпает, когда смотреть некому. */
+  async roomSize(room: string): Promise<number> {
+    return (await this.server.in(room).fetchSockets()).length;
   }
 }

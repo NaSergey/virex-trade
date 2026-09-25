@@ -7,7 +7,8 @@ import { EmptyState } from '@/shared/ui/EmptyState';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import { Money } from '@/shared/ui/Money';
 import { SectionHead } from '@/shared/ui/SectionHead';
-import type { SessionListItem } from '@/widgets/backtest-session';
+import { Seg, type SegOption } from '@/shared/ui/Seg';
+import type { DataSource, SessionListItem } from '@/widgets/backtest-session';
 import { formatR } from '@/widgets/backtest-session/lib/money';
 
 /**
@@ -19,21 +20,33 @@ import { formatR } from '@/widgets/backtest-session/lib/money';
  * становится записью в статистике. Кнопки-«крестика» на активной сессии в
  * терминале намеренно нет — так сессию можно бросить недосмотренной ошибкой
  * клика; отдельный шаг в списке сессий с подтверждением этого не допускает.
+ *
+ * Переключатель «реальные / тренажёр» стоит в шапке этого раздела, а меняет
+ * срез статистики ниже: раздел читается сверху вниз, и выбор источника —
+ * первое, что человек делает, прежде чем смотреть числа.
  */
 export function SessionsList({
   sessions,
   isLoading,
   onOpen,
   onDelete,
+  source,
+  onSource,
 }: {
   sessions: SessionListItem[];
   isLoading: boolean;
   onOpen: (id: string) => void;
   onDelete: (session: SessionListItem) => void;
+  source: DataSource;
+  onSource: (source: DataSource) => void;
 }) {
   const t = useTranslations('backtest');
   const { locale } = useLocaleControl();
   const intl = locale === 'en' ? 'en-US' : 'ru-RU';
+  const sources: SegOption<DataSource>[] = [
+    { value: 'real', label: t('statsReal') },
+    { value: 'synthetic', label: t('statsSynthetic') },
+  ];
 
   const columns: LedgerColumn<SessionListItem>[] = [
     {
@@ -84,7 +97,9 @@ export function SessionsList({
 
   return (
     <section data-tour="bt-sessions">
-      <SectionHead title={t('sessionsTitle')} />
+      <SectionHead title={t('sessionsTitle')}>
+        <Seg options={sources} value={source} onChange={onSource} ariaLabel={t('statsSource')} />
+      </SectionHead>
       <LedgerTable
         columns={columns}
         rows={sessions}

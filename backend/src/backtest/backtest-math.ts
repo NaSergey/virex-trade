@@ -89,6 +89,9 @@ export interface Summary {
   pnl: number;
 }
 
+/** Числа закрытой сделки для итогов; у закрытой pnl и r всегда есть. */
+export const closedNumbers = (t: { pnl: number | null; r: number | null }) => ({ pnl: t.pnl ?? 0, r: t.r ?? 0 });
+
 export function summarize(rows: { pnl: number; r: number }[]): Summary {
   const trades = rows.length;
   const wins = rows.filter((x) => x.pnl > 0).length;

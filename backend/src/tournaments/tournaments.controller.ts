@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CreateTournamentDto } from './dto/tournament.dto';
+import { CreateTournamentDto, ReadyDto } from './dto/tournament.dto';
 import { TournamentsService } from './tournaments.service';
 
 /**
@@ -29,8 +29,8 @@ export class TournamentsController {
   }
 
   @Get('public')
-  listPublic() {
-    return this.tournaments.listPublic();
+  listPublic(@CurrentUser('userId') userId: string) {
+    return this.tournaments.listPublic(userId);
   }
 
   @Get('rating')
@@ -53,9 +53,27 @@ export class TournamentsController {
     return this.tournaments.leave(userId, id);
   }
 
-  @Post(':id/start')
-  start(@CurrentUser('userId') userId: string, @Param('id') id: string) {
-    return this.tournaments.start(userId, id);
+  /**
+   * Готовность участника. Отдельной команды «начать» нет: турнир выходит из
+   * лобби сам, когда готовы все, — см. `TournamentsService.setReady`.
+   */
+  @Post(':id/ready')
+  ready(
+    @CurrentUser('userId') userId: string,
+    @Param('id') id: string,
+    @Body() dto: ReadyDto,
+  ) {
+    return this.tournaments.setReady(userId, id, dto.ready);
+  }
+
+  // Право шире остальных: ещё и у владельца сервиса, поэтому сюда едет почта.
+  @Post(':id/finish')
+  finish(
+    @CurrentUser('userId') userId: string,
+    @CurrentUser('email') email: string,
+    @Param('id') id: string,
+  ) {
+    return this.tournaments.finishEarly(userId, email, id);
   }
 
   @Delete(':id')

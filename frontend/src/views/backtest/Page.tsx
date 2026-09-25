@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/features/auth';
-import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader } from '@/shared/ui/dialog';
+import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader, useDialogFade } from '@/shared/ui/dialog';
 import { Wrap } from '@/shared/ui/Wrap';
 import { SessionsList } from './components/SessionsList';
 import { StartSession } from './components/StartSession';
@@ -35,6 +35,7 @@ export function BacktestPage() {
   const { user } = useAuth();
   const deleteSession = useDeleteSession();
   const [deleting, setDeleting] = useState<SessionListItem | null>(null);
+  const { closing, close } = useDialogFade(() => setDeleting(null));
 
   // Рисунки удалённых сессий лежат в localStorage, пока их не убрать: чистим по
   // свежему списку, только ключи этого пользователя.
@@ -59,8 +60,10 @@ export function BacktestPage() {
             isLoading={sessions.isLoading}
             onOpen={openSession}
             onDelete={setDeleting}
+            source={statsSource}
+            onSource={setStatsSource}
           />
-          <StatsBlock stats={stats.data} isLoading={stats.isLoading} source={statsSource} onSource={setStatsSource} />
+          <StatsBlock stats={stats.data} isLoading={stats.isLoading} />
         </div>
         <div className="marg">
           <StartSession onStarted={openSession} />
@@ -72,7 +75,7 @@ export function BacktestPage() {
           пустые прогоны без единой сделки. Обычное подтверждение здесь не
           рефлекс, который стоит гасить, а нормальный вес действия. */}
       {deleting && (
-        <Dialog open onOpenChange={(v) => !v && setDeleting(null)}>
+        <Dialog open={!closing} onOpenChange={(v) => !v && close()}>
           {/* Кромка цветом убытка — тот же приём, что у ConfirmDialog: окно
               необратимого опознаётся раньше, чем прочитан заголовок. */}
           <DialogContent className="dlg-risk">
@@ -83,9 +86,9 @@ export function BacktestPage() {
               confirmVariant="risk"
               onConfirm={() => {
                 deleteSession.mutate(deleting.id);
-                setDeleting(null);
+                close();
               }}
-              onCancel={() => setDeleting(null)}
+              onCancel={close}
             />
           </DialogContent>
         </Dialog>

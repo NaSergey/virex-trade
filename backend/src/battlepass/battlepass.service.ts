@@ -62,6 +62,46 @@ export class BattlePassService {
     });
   }
 
+  /**
+   * Пакетный `award`: разом заявить одно и то же XP за N событий одного
+   * источника — там, где событий сразу много (привязка тега открытой позиции
+   * ко всем свежим сделкам под ним) и вести их по одному было бы N круговыми
+   * запросами вместо одного `createMany`.
+   *
+   * Только для источников без дневного потолка: `withinDailyCap` спрашивает
+   * «сколько влезает» у одного события за раз, а не у пачки, и молча обрезать
+   * тут нечего — бросает явно, чтобы капнутый источник не обошёл свой лимит
+   * через этот метод.
+   */
+  async awardMany(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    source: XpSource,
+    refIds: string[],
+    xp: number,
+    now: Date = new Date(),
+  ): Promise<void> {
+    const def = XP_SOURCES[source];
+    if (!def?.enabled || refIds.length === 0) return;
+    if (def.dailyCap != null) {
+      throw new Error(`awardMany: источник "${source}" с дневным потолком, используйте award() по одному`);
+    }
+
+    const season = seasonKey(now);
+    const written = await tx.battlePassXpEvent.createMany({
+      data: refIds.map((refId) => ({ userId, season, source, refId, xp })),
+      skipDuplicates: true,
+    });
+    if (written.count === 0) return;
+
+    const granted = written.count * xp;
+    await tx.battlePassProgress.upsert({
+      where: { userId_season: { userId, season } },
+      create: { userId, season, xp: granted },
+      update: { xp: { increment: granted } },
+    });
+  }
+
   /** Сколько из запрошенного помещается в сегодняшний потолок источника. */
   private async withinDailyCap(
     tx: Prisma.TransactionClient,

@@ -22,6 +22,8 @@ export interface TournamentBase {
 /** Строка «моих турниров». */
 export interface MyTournament extends TournamentBase {
   players: number;
+  /** Нужен, чтобы решить, показывать ли кнопку досрочного финала прямо в строке. */
+  creatorId: string | null;
 }
 
 /** Строка общего списка открытых турниров. */
@@ -42,14 +44,40 @@ export interface TournamentWinner extends TournamentParticipantView {
   prizeWon: number | null;
 }
 
+/**
+ * Сводка участника по ЗАКРЫТЫМ сделкам. Ни направлений, ни открытых позиций
+ * здесь нет намеренно: сторона чужой открытой сделки — это подсказка, по
+ * которой играют вместо своей системы.
+ */
+export interface TournamentPlayerStats {
+  trades: number;
+  wins: number;
+  winRate: number;
+  totalR: number;
+  avgR: number;
+  pnl: number;
+}
+
+export interface TournamentPlayer extends TournamentParticipantView {
+  /** Нажал ли «Я готов». Значит что-то только в лобби: турнир стартует, когда готовы все. */
+  ready: boolean;
+  /** null — сессии ещё нет, турнир в лобби. Это не то же самое, что нулевая сводка. */
+  stats: TournamentPlayerStats | null;
+}
+
 /** Страница турнира целиком. */
 export interface TournamentDetail {
   tournament: TournamentBase & { creatorName: string | null; players: number; prizePool: number };
-  participants: TournamentParticipantView[];
+  participants: TournamentPlayer[];
   /** Пусто, пока турнир не завершён: до финала мест не существует. */
   winners: TournamentWinner[];
   /** Свой итог — единственный результат, который участник видит поимённо. */
-  me: { place: number | null; finalEquity: number | null; prizeWon: number | null } | null;
+  me: {
+    place: number | null;
+    finalEquity: number | null;
+    prizeWon: number | null;
+    ready: boolean;
+  } | null;
   isParticipant: boolean;
   isCreator: boolean;
   /** Сессия этого участника; null — он не играет или турнир ещё в лобби. */

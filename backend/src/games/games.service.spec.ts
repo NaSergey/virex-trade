@@ -7,6 +7,8 @@ const TABLE = {
   minBuyIn: 100,
   maxBuyIn: 1000,
   maxSeats: 3,
+  minBet: 10,
+  maxBet: 100,
 };
 
 /**
@@ -58,6 +60,8 @@ function makeTableApi(tables: Map<string, any>, seats: any[], counters: { table:
                     if (val.none) return !seats.some((s) => s.tableId === t.id && s.userId === val.none.userId);
                     return true;
                   }
+                  // `{ not: x }` — как в SQL: пустое поле не проходит ни `=`, ни `<>`.
+                  if (val && typeof val === 'object' && 'not' in val) return t[key] != null && t[key] !== val.not;
                   return t[key] === val;
                 }),
               )) &&
@@ -189,6 +193,33 @@ describe('GamesService.create', () => {
       response: { code: 'GAME_BAD_BUYIN_RANGE' },
     });
   });
+
+  it('блэкджек без лимитов ставки отклоняется', async () => {
+    const h = makeService();
+    const { minBet: _min, maxBet: _max, ...noBets } = TABLE;
+
+    await expect(h.service.create('u1', noBets)).rejects.toMatchObject({ response: { code: 'GAME_BAD_BETS' } });
+  });
+
+  it.each([
+    ['минимальная ставка меньше двух', { minBet: 1 }],
+    ['«до» меньше «от»', { minBet: 50, maxBet: 20 }],
+    ['минимальный buy-in меньше минимальной ставки', { minBet: 200, maxBet: 300 }],
+  ])('%s — GAME_BAD_BETS', async (_name, over) => {
+    const h = makeService();
+
+    await expect(h.service.create('u1', { ...TABLE, ...over })).rejects.toMatchObject({
+      response: { code: 'GAME_BAD_BETS' },
+    });
+  });
+
+  it('лимиты ставки сохраняются на столе блэкджека', async () => {
+    const h = makeService();
+
+    const table = await h.service.create('u1', TABLE);
+
+    expect(table).toMatchObject({ minBet: 10, maxBet: 100, bigBlind: null });
+  });
 });
 
 describe('GamesService.listPublic / listMine', () => {
@@ -200,6 +231,26 @@ describe('GamesService.listPublic / listMine', () => {
     const rows = await h.service.listPublic('me');
 
     expect(rows).toHaveLength(0);
+  });
+
+  it('публичный список не показывает мои столы, даже если я за ними не сижу', async () => {
+    const h = makeService();
+    await h.service.create('me', { ...TABLE, visibility: 'public' });
+    await h.service.create('other', { ...TABLE, visibility: 'public' });
+
+    const rows = await h.service.listPublic('me');
+
+    expect(rows.map((r) => r.creatorId)).toEqual(['other']);
+  });
+
+  it('стол без создателя (аккаунт удалён) — ничей и остаётся в публичном списке', async () => {
+    const h = makeService();
+    const table = await h.service.create('gone', { ...TABLE, visibility: 'public' });
+    h.tables.set(table.id, { ...h.tables.get(table.id), creatorId: null });
+
+    const rows = await h.service.listPublic('me');
+
+    expect(rows).toHaveLength(1);
   });
 
   it('мои столы включают те, где я создатель, даже без места', async () => {

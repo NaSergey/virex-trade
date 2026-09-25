@@ -7,6 +7,7 @@ import { DrawingLayer } from './drawings/DrawingLayer';
 import { useDrawingGestures, type ChartDrawingProps, type ChartGeo } from './drawings/useDrawingGestures';
 import {
   anchorTimeAt,
+  autoPriceRange,
   frameAtTime,
   frameBounds,
   glidePrice,
@@ -69,6 +70,9 @@ const FRAME_GLIDE_MS = 220;
     натурального (авто) диапазона видимых свечей. */
 const MIN_PRICE_FRAC = 0.15;
 const MAX_PRICE_FRAC = 6;
+/** Поле сверху и снизу натурального диапазона — доля размаха свечей. Оно и
+    решает, сколько высоты кадра занимает ряд: при 0.06 — около 89 %. */
+const AUTO_PAD = 0.06;
 /** С какого смещения по вертикали драг фона считается ещё и сдвигом цены —
     в экранных пикселях. Ноль тут не годится: горизонтальный жест почти всегда
     уводит курсор на пиксель-другой вниз, и любой пан выключал бы
@@ -513,29 +517,12 @@ export const ReplayChart = memo(function ReplayChart({
   }, [glide]);
 
   // Натуральный (авто) диапазон — считается всегда, а не только когда
-  // используется: он же служит базой для границ ручного зума цены (колесо
-  // справа), которые должны отталкиваться от текущих видимых свечей, а не от
-  // застывшего значения на момент первого зума.
-  // Циклом, а не Math.min(...values)/Math.max(...values): спред на массиве
-  // высот-минимумов до ~800 чисел (до 400 свечей × 2) выделял бы промежуточный
-  // массив и распаковывал его в аргументы на каждый тик драга уровня.
-  let autoLo = Infinity;
-  let autoHi = -Infinity;
-  for (const c of shown) {
-    if (c.h > autoHi) autoHi = c.h;
-    if (c.l < autoLo) autoLo = c.l;
-  }
-  for (const l of levels) {
-    if (l.price > autoHi) autoHi = l.price;
-    if (l.price < autoLo) autoLo = l.price;
-  }
-  if (!Number.isFinite(autoLo) || !Number.isFinite(autoHi)) {
-    autoLo = 0;
-    autoHi = 1;
-  }
-  const autoPad = (autoHi - autoLo) * 0.06 || Math.abs(autoHi) * 0.01 || 1;
-  autoLo -= autoPad;
-  autoHi += autoPad;
+  // используется: он же служит базой для границ ручного зума цены, которые
+  // должны отталкиваться от текущих видимых свечей, а не от застывшего
+  // значения на момент первого зума. Уровни сделки в него не входят — см.
+  // autoPriceRange: масштаб задают свечи, иначе ликвидация или далёкий стоп
+  // сплющивают весь ряд, а при смене ТФ это повторяется каждый раз заново.
+  const { lo: autoLo, hi: autoHi } = autoPriceRange(shown, AUTO_PAD);
 
   let lo: number;
   let hi: number;

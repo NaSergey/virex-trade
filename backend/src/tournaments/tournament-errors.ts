@@ -14,14 +14,25 @@ export const notLobby = () =>
 export const tournamentFull = () =>
   new ConflictException({ message: 'Все места заняты', code: 'TOURNAMENT_FULL' });
 
-export const tooFewPlayers = () =>
-  new ConflictException({
-    message: 'Участников меньше, чем призовых мест',
-    code: 'TOURNAMENT_TOO_FEW',
+/** Готовность отмечает только тот, кто вошёл: со стороны здесь решать нечего. */
+export const notParticipant = () =>
+  new ForbiddenException({
+    message: 'Вы не участник этого турнира',
+    code: 'TOURNAMENT_NOT_PARTICIPANT',
   });
 
 export const notCreator = () =>
   new ForbiddenException({ message: 'Это может только создатель турнира', code: 'TOURNAMENT_NOT_CREATOR' });
+
+/** Досрочный финал — право шире, чем у остальных действий: ещё и у владельца сервиса. */
+export const notTournamentAdmin = () =>
+  new ForbiddenException({
+    message: 'Завершить турнир может его создатель или владелец сервиса',
+    code: 'TOURNAMENT_NOT_ADMIN',
+  });
+
+export const notRunning = () =>
+  new ConflictException({ message: 'Турнир не идёт', code: 'TOURNAMENT_NOT_RUNNING' });
 
 export const creatorLeave = () =>
   new ConflictException({

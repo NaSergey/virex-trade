@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { AuthGuard } from '@/features/auth';
+import { DailyRewardPrompt } from '@/features/daily-reward';
 import { OnboardingProvider, TourOverlay } from '@/features/onboarding';
 import { TopNav } from '@/widgets/top-nav';
 
@@ -36,6 +37,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           и её, потому что «Обучение заново» живёт в меню профиля. Сюда без
           куки сессии не попасть — гейт отработал раньше, на edge. */}
       <TourOverlay />
+      {/* Тоже снаружи защиты и тоже читает состояние Battle Pass, как и
+          TopNav: гейт на edge уже отсеял запросы без сессии. */}
+      <DailyRewardPrompt />
     </OnboardingProvider>
   );
 }

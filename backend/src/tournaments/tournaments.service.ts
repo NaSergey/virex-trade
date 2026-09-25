@@ -391,20 +391,30 @@ export class TournamentsService {
     });
   }
 
+  /**
+   * Удаляет лобби или уже подведённый итог. Идущий турнир — нет: у него есть
+   * незакрытые сессии остальных участников, и досрочный конец подводит
+   * `finishEarly`, а не удаление.
+   *
+   * Деньги трогаются только из лобби: там взнос списан, а игры ещё не было.
+   * У завершённого турнира призы уже разошлись через `TournamentRunner`
+   * одной транзакцией — трогать их здесь второй раз значит удвоить выплату.
+   */
   async remove(userId: string, id: string) {
     return this.prisma.$transaction(async (tx) => {
       const tournament = await tx.tournament.findUnique({ where: { id } });
       if (!tournament) throw tournamentNotFound();
       if (tournament.creatorId !== userId) throw notCreator();
-      // У идущего турнира есть сессии других людей — удалять его нельзя.
-      if (tournament.status !== 'lobby') throw notLobby();
+      if (tournament.status === 'running') throw notLobby();
 
-      const participants = await tx.tournamentParticipant.findMany({ where: { tournamentId: id } });
-      for (const p of participants) {
-        await this.coins.refund(tx, p.userId, tournament.entryFee, feeRef(id, p.joinedAt));
-      }
-      if (tournament.creatorId) {
-        await this.coins.refund(tx, tournament.creatorId, tournament.prizeBonus, `${id}:bonus`);
+      if (tournament.status === 'lobby') {
+        const participants = await tx.tournamentParticipant.findMany({ where: { tournamentId: id } });
+        for (const p of participants) {
+          await this.coins.refund(tx, p.userId, tournament.entryFee, feeRef(id, p.joinedAt));
+        }
+        if (tournament.creatorId) {
+          await this.coins.refund(tx, tournament.creatorId, tournament.prizeBonus, `${id}:bonus`);
+        }
       }
       await tx.tournament.delete({ where: { id } });
       return { success: true as const };

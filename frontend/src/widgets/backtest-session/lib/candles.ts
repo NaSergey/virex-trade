@@ -30,6 +30,10 @@ export interface ApiCandle {
 export const MINUTE = 60_000;
 export const DAY = 86_400_000;
 export const TIMEFRAMES = [1, 5, 15, 60, 240, 1440] as const;
+/** С какого ТФ открывается терминал — и на прокрутке бектеста, и в эфире
+    турнира. Часовик, а не минутка: со старта нужен контекст движения, а не
+    последние два часа, и переключаться вниз дешевле, чем каждый раз вверх. */
+export const DEFAULT_TIMEFRAME = 60;
 
 export const fromApi = (c: ApiCandle): Candle => ({ t: Date.parse(c.time), o: c.open, h: c.high, l: c.low, c: c.close });
 

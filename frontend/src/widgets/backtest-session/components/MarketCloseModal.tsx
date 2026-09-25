@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader } from '@/shared/ui/dialog';
+import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader, useDialogFade } from '@/shared/ui/dialog';
 import { Field, Input } from '@/shared/ui/Field';
 import { Slider } from '@/shared/ui/Slider';
 import { formatMoney, formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
@@ -35,6 +35,7 @@ export function MarketCloseModal({
   error: unknown;
 }) {
   const t = useTranslations('backtest');
+  const { closing, close } = useDialogFade(onClose);
   const [pct, setPct] = useState(100);
   const qty = (remaining * pct) / 100;
   // Цена не меняется (закрытие сейчас) — levelImpact на равной цене даёт
@@ -42,7 +43,7 @@ export function MarketCloseModal({
   const impact = levelImpact(trade.direction, screenPrice, screenPrice, qty);
 
   return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={!closing} onOpenChange={(v) => !v && close()}>
       <DialogContent>
         <DialogHeader title={t('marketCloseTitle')} subtitle={`${t('unrealized')} ${formatPriceGrouped(screenPrice)}`} />
         <DialogBody>
@@ -69,7 +70,7 @@ export function MarketCloseModal({
           confirmVariant="risk"
           confirmDisabled={isPending || !(qty > 0) || !canClose}
           onConfirm={() => onSubmit(qty)}
-          onCancel={onClose}
+          onCancel={close}
         />
       </DialogContent>
     </Dialog>

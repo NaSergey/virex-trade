@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   anchorTimeAt,
+  autoPriceRange,
   frameAtTime,
   glidePrice,
   indexAtOrAfter,
@@ -221,5 +222,42 @@ describe('priceTicks', () => {
     expect(a).toContain(80000);
     expect(b).toContain(80000);
     expect(a[a.indexOf(80000)]).toBe(b[b.indexOf(80000)]);
+  });
+});
+
+describe('autoPriceRange', () => {
+  const PAD = 0.06;
+  /** Сто двадцать минуток BTC около 100 000 — размах 0.65 %, медиана по базе price_candles. */
+  const minuteCandles = [
+    { h: 100_325, l: 100_100 },
+    { h: 100_200, l: 99_675 },
+    { h: 100_120, l: 99_900 },
+  ];
+  const span = 100_325 - 99_675;
+
+  it('диапазон задают свечи, с полем по краям', () => {
+    const r = autoPriceRange(minuteCandles, PAD);
+    const pad = span * PAD;
+    expect(r.lo).toBeCloseTo(99_675 - pad, 6);
+    expect(r.hi).toBeCloseTo(100_325 + pad, 6);
+  });
+
+  it('свечи занимают кадр снизу доверху на любом размахе', () => {
+    // Главное свойство: как бы ни ходила цена на этом ТФ, ряд разворачивается
+    // на всю высоту — при переключении таймфрейма поправлять шкалу не нужно.
+    for (const spanPct of [0.0065, 0.014, 0.0666]) {
+      const half = (100_000 * spanPct) / 2;
+      const r = autoPriceRange([{ h: 100_000 + half, l: 100_000 - half }], PAD);
+      expect((2 * half) / (r.hi - r.lo)).toBeCloseTo(1 / (1 + 2 * PAD), 6);
+    }
+  });
+
+  it('пустой кадр не роняет счёт', () => {
+    expect(autoPriceRange([], PAD)).toEqual({ lo: 0, hi: 1 });
+  });
+
+  it('свечи по одной цене дают невырожденный диапазон', () => {
+    const r = autoPriceRange([{ h: 100, l: 100 }], PAD);
+    expect(r.hi).toBeGreaterThan(r.lo);
   });
 });

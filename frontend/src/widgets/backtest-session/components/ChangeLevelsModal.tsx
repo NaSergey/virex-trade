@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader } from '@/shared/ui/dialog';
+import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader, useDialogFade } from '@/shared/ui/dialog';
 import { Field, Input } from '@/shared/ui/Field';
 import { Slider } from '@/shared/ui/Slider';
 import { fmtPctSigned, formatPriceGrouped } from '@/shared/lib/utils/format';
@@ -35,6 +35,7 @@ export function ChangeLevelsModal({
   error: unknown;
 }) {
   const t = useTranslations('backtest');
+  const { closing, close } = useDialogFade(onClose);
   const [stop, setStop] = useState(() => toScreen(trade.stopLoss, scale));
   const [take, setTake] = useState<number | null>(() => (trade.takeProfit != null ? toScreen(trade.takeProfit, scale) : null));
   const takeRange = levelSliderRange('take', screenPrice, trade.direction);
@@ -44,7 +45,7 @@ export function ChangeLevelsModal({
   const err = checkLevels(trade.direction, screenPrice, stop, take);
 
   return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={!closing} onOpenChange={(v) => !v && close()}>
       <DialogContent>
         <DialogHeader
           title={t('changeLevelsTitle')}
@@ -108,7 +109,7 @@ export function ChangeLevelsModal({
           confirmLabel={t('apply')}
           confirmDisabled={isPending || err != null}
           onConfirm={() => onApply(stop, take)}
-          onCancel={onClose}
+          onCancel={close}
         />
       </DialogContent>
     </Dialog>

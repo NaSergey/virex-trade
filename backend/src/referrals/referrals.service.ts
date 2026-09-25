@@ -4,31 +4,26 @@ import { PrismaService } from '../prisma/prisma.service';
 
 export interface ReferralStats {
   total: number;
-  withKey: number;
   slug: string | null;
 }
 
 /**
  * Статистика по приглашённым и управление кастомным слагом ссылки.
  *
- * «Сейчас», а не «когда-либо»: у withKey нет отдельного флага «был
- * подключён» — он разошёлся бы с реальным состоянием в момент отключения
- * ключа (`settings.controller` такой путь уже поддерживает), и число
- * обманывало бы пригласившего.
+ * Пригласившему отдаётся только число регистраций. Подключил ли приглашённый
+ * ключи биржи — его дело: счётчик «подключили ключ» здесь был и снят, потому
+ * что по нему пригласивший узнавал о чужих ключах.
  */
 @Injectable()
 export class ReferralsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getStats(userId: string): Promise<ReferralStats> {
-    const [total, withKey, user] = await Promise.all([
+    const [total, user] = await Promise.all([
       this.prisma.user.count({ where: { invitedById: userId } }),
-      this.prisma.user.count({
-        where: { invitedById: userId, exchangeConnections: { some: {} } },
-      }),
       this.prisma.user.findUnique({ where: { id: userId }, select: { referralSlug: true } }),
     ]);
-    return { total, withKey, slug: user?.referralSlug ?? null };
+    return { total, slug: user?.referralSlug ?? null };
   }
 
   /**

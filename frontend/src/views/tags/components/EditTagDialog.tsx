@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader } from '@/shared/ui/dialog';
+import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader, useDialogFade } from '@/shared/ui/dialog';
 import { Seg } from '@/shared/ui/Seg';
 import { Field, FieldGroup, Input } from '@/shared/ui/Field';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
@@ -21,14 +21,15 @@ export function EditTagDialog({ tag, onClose }: { tag: TagItem; onClose: () => v
   const [name, setName] = useState(tag.name);
   const [type, setType] = useState<TagType>(tag.type ?? 'setup');
   const update = useUpdateTag();
+  const { closing, close } = useDialogFade(onClose);
 
   const submit = () => {
     if (!name.trim()) return;
-    update.mutate({ id: tag.id, name: name.trim(), type }, { onSuccess: onClose });
+    update.mutate({ id: tag.id, name: name.trim(), type }, { onSuccess: close });
   };
 
   return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={!closing} onOpenChange={(v) => !v && close()}>
       <DialogContent>
         <DialogHeader
           title={t('editTagTitle')}
@@ -55,7 +56,7 @@ export function EditTagDialog({ tag, onClose }: { tag: TagItem; onClose: () => v
           confirmLabel={update.isPending ? tc('saving') : tc('save')}
           confirmDisabled={!name.trim() || update.isPending}
           onConfirm={submit}
-          onCancel={onClose}
+          onCancel={close}
         />
       </DialogContent>
     </Dialog>

@@ -15,6 +15,57 @@ import { Button, type ButtonVariant } from '@/shared/ui/Button';
  * где их и так достаточно.
  */
 const Dialog = DialogPrimitive.Root;
+
+/**
+ * Сколько окно уходит с экрана. Число дублируется в globals.css
+ * (`.dlg[data-state="closed"]`) и держится здесь только ради `useDialogFade`:
+ * анимацию отыгрывает браузер, а снять окно с дерева должен React.
+ *
+ * Больше самой анимации (150мс) на пару кадров: между тем, как React пометит
+ * окно закрытым, и первым кадром анимации проходит кадр браузера, и без
+ * запаса окно снималось бы за мгновение до конца ухода. Лишние кадры не видны
+ * — к ним окно уже прозрачно.
+ */
+export const DIALOG_EXIT_MS = 190;
+
+/**
+ * Закрытие в два шага для окон, которые родитель рисует условно
+ * (`{deleting && <DeleteDialog …/>}` — так устроена половина окон продукта).
+ *
+ * Radix ждёт анимацию закрытия только внутри своего поддерева: он снимет
+ * содержимое портала сам, но лишь пока смонтирован сам `Dialog`. Условный
+ * родитель снимает его раньше первого кадра, и окно исчезает врезкой, как бы
+ * ни была описана анимация в стилях.
+ *
+ * Поэтому `close()` сначала переводит окно в `closed` (браузер отыгрывает
+ * уход), и только потом сообщает родителю, что окна больше нет. Второе
+ * нажатие в эти две десятых секунды игнорируется: оно завело бы второй
+ * таймер и вернуло бы окно на экран уже закрытым.
+ */
+export function useDialogFade(onClose: () => void) {
+  const [closing, setClosing] = React.useState(false);
+  const timer = React.useRef<number | null>(null);
+
+  React.useEffect(
+    () => () => {
+      if (timer.current != null) window.clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  const close = React.useCallback(() => {
+    if (timer.current != null) return;
+    setClosing(true);
+    timer.current = window.setTimeout(() => {
+      timer.current = null;
+      setClosing(false);
+      onClose();
+    }, DIALOG_EXIT_MS);
+  }, [onClose]);
+
+  return { closing, close };
+}
+
 const DialogPortal = DialogPrimitive.Portal;
 const DialogClose = DialogPrimitive.Close;
 
@@ -22,7 +73,7 @@ const DialogOverlay = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
 >(({ className, ...props }, ref) => (
-  <DialogPrimitive.Overlay ref={ref} className={cn('dlg-backdrop fixed inset-0 z-50', className)} {...props} />
+  <DialogPrimitive.Overlay ref={ref} className={cn('dlg-backdrop', className)} {...props} />
 ));
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
@@ -32,22 +83,24 @@ const DialogContent = React.forwardRef<
     /** Шире дефолтных 520px — для разбора одной сделки со свечами. */
     wide?: boolean;
     /**
+     * Окно раздела игр: тёмное поле в обеих темах и зелёное свечение по бокам.
+     * Именем состояния, а не классом снаружи, потому что это не одна краска, а
+     * весь набор — поле, линейки, кромка и свет вокруг.
+     */
+    tone?: 'game';
+    /**
      * Отдать фокус первому полю внутри — только там, где окно и открывают ради
      * ввода (набрать слово в подтверждении необратимого). См. ниже, почему это
      * не умолчание.
      */
     autoFocusContent?: boolean;
   }
->(({ className, children, wide = false, autoFocusContent = false, ...props }, ref) => (
+>(({ className, children, wide = false, tone, autoFocusContent = false, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
-      className={cn(
-        'dlg fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2',
-        wide && 'max-w-[min(94vw,860px)]',
-        className,
-      )}
+      className={cn('dlg', wide && 'dlg-wide', tone === 'game' && 'dlg-game', className)}
       /**
        * Фокус при открытии остаётся на самом окне, а не уезжает на первый
        * интерактивный элемент. Причина конкретная: у половины окон продукта

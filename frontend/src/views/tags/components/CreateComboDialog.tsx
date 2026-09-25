@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader } from '@/shared/ui/dialog';
+import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader, useDialogFade } from '@/shared/ui/dialog';
 import { useIdSet } from '@/shared/lib/hooks/useIdSet';
 import { TagPicker, type TagItem } from '@/entities/tag';
 
@@ -25,9 +25,10 @@ export function CreateComboDialog({
 }) {
   const t = useTranslations('tags');
   const { selected, toggle, ids } = useIdSet();
+  const { closing, close } = useDialogFade(onClose);
 
   return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={!closing} onOpenChange={(v) => !v && close()}>
       <DialogContent>
         <DialogHeader title={t('newComboTitle')} subtitle={t('newComboSubtitle')} />
         <DialogBody>
@@ -37,7 +38,7 @@ export function CreateComboDialog({
           confirmLabel={t('create')}
           confirmDisabled={selected.size < 2 || isPending}
           onConfirm={() => onCreate(ids)}
-          onCancel={onClose}
+          onCancel={close}
         />
       </DialogContent>
     </Dialog>

@@ -34,6 +34,26 @@ export class CreateGameTableDto {
   @Min(1)
   @Max(9)
   maxSeats: number;
+
+  /** Только покер, и там обязателен — проверяет `GamesService.create`. */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(MAX_COINS_AMOUNT)
+  bigBlind?: number;
+
+  /** Только блэкджек, и там обязательны — проверяет `GamesService.create`. */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(MAX_COINS_AMOUNT)
+  minBet?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(MAX_COINS_AMOUNT)
+  maxBet?: number;
 }
 
 export class JoinGameTableDto {

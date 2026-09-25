@@ -3,13 +3,13 @@ import { Prisma } from '@prisma/client';
 import { ReferralsService } from './referrals.service';
 
 describe('ReferralsService.getStats', () => {
-  it('считает total и withKey раздельно, отдаёт слаг', async () => {
+  it('считает приглашённых и отдаёт слаг — без сведений о их ключах', async () => {
     const calls: Array<{ where: Record<string, unknown> }> = [];
     const prisma = {
       user: {
         count: async (args: { where: Record<string, unknown> }) => {
           calls.push(args);
-          return 'exchangeConnections' in args.where ? 3 : 5;
+          return 5;
         },
         findUnique: async () => ({ referralSlug: 'sergey' }),
       },
@@ -17,12 +17,9 @@ describe('ReferralsService.getStats', () => {
 
     const stats = await new ReferralsService(prisma).getStats('inviter-1');
 
-    expect(stats).toEqual({ total: 5, withKey: 3, slug: 'sergey' });
+    expect(stats).toEqual({ total: 5, slug: 'sergey' });
+    expect(calls).toHaveLength(1);
     expect(calls[0].where).toEqual({ invitedById: 'inviter-1' });
-    expect(calls[1].where).toEqual({
-      invitedById: 'inviter-1',
-      exchangeConnections: { some: {} },
-    });
   });
 
   it('без приглашённых и без слага отдаёт нули и null', async () => {
@@ -35,7 +32,7 @@ describe('ReferralsService.getStats', () => {
 
     const stats = await new ReferralsService(prisma).getStats('lonely');
 
-    expect(stats).toEqual({ total: 0, withKey: 0, slug: null });
+    expect(stats).toEqual({ total: 0, slug: null });
   });
 });
 

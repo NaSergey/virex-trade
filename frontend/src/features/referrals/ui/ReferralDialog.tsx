@@ -80,11 +80,10 @@ export function ReferralDialog({
             <CopyLink value={link} />
           </KeyValue>
           <KeyValue label={t('totalLabel')}>{stats?.total ?? '—'}</KeyValue>
-          <KeyValue label={t('withKeyLabel')}>{stats?.withKey ?? '—'}</KeyValue>
 
-          {/* Тот же ряд «подпись слева — управление справа», что у доната в
-              меню профиля, а не отдельная форма: строка продолжает те же три
-              выше, а не стоит рядом с ними чужеродным блоком. */}
+          {/* Тот же ряд «подпись слева — управление справа», а не отдельная
+              форма: строка продолжает строки выше, а не стоит рядом с ними
+              чужеродным блоком. */}
           <KeyValue label={t('customLabel')} control valueClassName="">
             <span style={{ display: 'inline-flex', gap: 'var(--s2)', alignItems: 'center' }}>
               <Input

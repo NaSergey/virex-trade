@@ -105,6 +105,9 @@ model User {
   battlePassProgress BattlePassProgress[]
   battlePassXpEvents BattlePassXpEvent[]
 
+  /// Ставки джетпака (crash-игры).
+  jetpackBets JetpackBet[]
+
   @@map("users")
 }
 
@@ -125,7 +128,7 @@ model CoinTransaction {
   /// Баланс после этой строки — чтобы историю можно было читать, не пересчитывая.
   balanceAfter Int
   /// 'DONATION' | 'TOURNAMENT_FEE' | 'TOURNAMENT_BONUS' | 'TOURNAMENT_REFUND' | 'TOURNAMENT_PRIZE'
-  /// | 'GAME_BUYIN' | 'GAME_CASHOUT' | 'REFERRAL_BONUS' | 'BATTLEPASS_REWARD' | 'DAILY_REWARD'
+  /// | 'GAME_BUYIN' | 'GAME_CASHOUT' | 'GAME_REFUND' | 'REFERRAL_BONUS' | 'BATTLEPASS_REWARD' | 'DAILY_REWARD'
   kind         String
   /// Откуда строка: id доната; id турнира — добавка в фонд и приз;
   /// `<id турнира>:<joinedAt в мс>` — взнос и его возврат, то есть одно участие
@@ -133,6 +136,10 @@ model CoinTransaction {
   /// `<id турнира>:bonus` — возврат добавки при удалении лобби;
   /// `GameSeat.id` — GAME_BUYIN и GAME_CASHOUT одной посадки за стол игры
   /// (новая посадка — новая строка GameSeat и новый id, даже за тот же стол);
+  /// `<GameHand.id>:<userId>` — GAME_REFUND вклада в раздачу, прерванную
+  /// перезапуском, тому, кто успел встать из-за стола;
+  /// `<GameHand.id>:<userId>` — GAME_PAYOUT выигрыша блэкджека тому, кто встал
+  /// из-за стола посреди раунда: его руки доиграны за него;
   /// `<сезон>:<уровень>` — награда Battle Pass за уровень;
   /// `YYYY-MM-DD` (UTC) — ежедневная награда за заход: ключ журнала и есть её
   /// защита от второй выплаты за те же сутки.
@@ -298,8 +305,8 @@ model Tag {
   type      String   @default("setup")
   createdAt DateTime @default(now())
 
-  tradeTags    TradeTag[]
-  positionTags PositionTag[]
+  tradeTags         TradeTag[]
+  positionTags      PositionTag[]
   backtestTradeTags BacktestTradeTag[]
 
   @@unique([userId, name])
@@ -320,34 +327,34 @@ model TradeTag {
 /// вручную. Тренировочные сделки живут отдельно от журнала (Trade) — иначе
 /// диагностика живой торговли считала бы сделки, которых не было на бирже.
 model BacktestSession {
-  id             String    @id @default(uuid())
-  userId         String
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String      @id @default(uuid())
+  userId       String
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// Точка старта; выбирает сервер, чтобы её нельзя было «перебросить» из браузера.
-  startTime      DateTime
+  startTime    DateTime
   /// Текущий момент сессии: время закрытия последней показанной минутки. Только растёт.
-  cursorTime     DateTime
-  startBalance   Float
+  cursorTime   DateTime
+  startBalance Float
   /// Текущий депозит сессии: стартовый плюс PnL закрытых сделок.
-  balance        Float
-  hideDate       Boolean
-  hidePrice      Boolean
+  balance      Float
+  hideDate     Boolean
+  hidePrice    Boolean
   /// Коэффициент показа цен; 1, если цена не скрыта. В базе цены настоящие.
-  priceScale     Float
+  priceScale   Float
   /// Откуда свечи: 'real' — отрезок price_candles, 'synthetic' — рынок строит генератор (backtest/synthetic).
-  dataSource     String    @default("real")
+  dataSource   String      @default("real")
   /// Зерно генератора; только у synthetic.
-  seed           Int?
+  seed         Int?
   /// Версия генератора (SYNTH_VERSION), которой построена сессия; только у synthetic.
-  synthVersion   Int?
-  status         String    @default("active") // 'active' | 'finished'
-  createdAt      DateTime  @default(now())
-  finishedAt     DateTime?
+  synthVersion Int?
+  status       String      @default("active") // 'active' | 'finished'
+  createdAt    DateTime    @default(now())
+  finishedAt   DateTime?
   /// Турнирная сессия: создаётся стартом турнира; в список и статистику бектеста не входит.
-  tournamentId   String?
-  tournament     Tournament? @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  tournamentId String?
+  tournament   Tournament? @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   /// Граница сессии: дальше неё ни свечей, ни сделок. Только у турнирных.
-  endTime        DateTime?
+  endTime      DateTime?
 
   trades      BacktestTrade[]
   entryOrders BacktestEntryOrder[]
@@ -476,14 +483,14 @@ model BacktestTrade {
 /// только усреднённый итог, и разметить на графике каждый отдельный вход
 /// было нечем (см. BacktestTradeExit — тот же приём для частичных закрытий).
 model BacktestTradeEntry {
-  id      String        @id @default(uuid())
-  tradeId String
-  trade   BacktestTrade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
-  qty     Float
-  price   Float
-  time    DateTime
+  id        String        @id @default(uuid())
+  tradeId   String
+  trade     BacktestTrade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  qty       Float
+  price     Float
+  time      DateTime
   /// Порядок вставки — тот же приём, что у BacktestTradeExit.createdAt.
-  createdAt DateTime    @default(now())
+  createdAt DateTime      @default(now())
 
   @@index([tradeId])
   @@map("backtest_trade_entries")
@@ -891,11 +898,11 @@ model TradeRisk {
 /// означал бы повторную рассылку всем сразу — ровно то, что делал
 /// VolatilityAlertService своими двумя булевыми полями на всех пользователей.
 model NotificationState {
-  id     String @id @default(uuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// NotifKey из реестра.
-  key    String
+  key         String
   /// Не null, пока условие держится. Обнуляется, когда метрика вернулась под
   /// порог, — тогда следующий всплеск снова считается событием.
   activeSince DateTime?
@@ -1063,6 +1070,11 @@ model GameTable {
   minBuyIn   Int
   maxBuyIn   Int
   maxSeats   Int
+  /// Большой блайнд покера; малый — половина вниз. У блэкджека пусто.
+  bigBlind   Int?
+  /// Лимиты ставки блэкджека на руку; у покера пусто.
+  minBet     Int?
+  maxBet     Int?
   /// SetNull: удаление аккаунта создателя не должно стирать стол у тех, кто
   /// за ним сидит.
   creatorId  String?
@@ -1070,6 +1082,7 @@ model GameTable {
   createdAt  DateTime   @default(now())
   closedAt   DateTime?
   seats      GameSeat[]
+  hands      GameHand[]
 
   @@index([visibility, status, createdAt])
   @@map("game_tables")
@@ -1095,6 +1108,62 @@ model GameSeat {
   @@unique([tableId, userId])
   @@index([userId])
   @@map("game_seats")
+}
+
+/// Раздача карточной игры (покер, раунд блэкджека) — страховка денег, а не
+/// история. Сама раздача живёт в памяти `api`; поставленное списывается с
+/// места сразу, и здесь записано, кто сколько вложил. Раздача без `finishedAt` при старте
+/// процесса — прерванная перезапуском: вклады возвращаются (на место, а
+/// ушедшему — монетами), и `voided` отмечает, что банк не разыгран.
+model GameHand {
+  id            String    @id @default(uuid())
+  tableId       String
+  table         GameTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  /// { userId: вложено — в банк покера или на руки блэкджека }
+  contributions Json      @default("{}")
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+  voided        Boolean   @default(false)
+
+  @@index([finishedAt])
+  @@map("game_hands")
+}
+
+/// Раунд джетпака — crash-игры без столов и комнат: раунд один на всех.
+/// Точка краша пишется только на краше — пока ракета летит, её нет ни в
+/// виде, ни в базе. Раунд без finishedAt при старте `api` прерван
+/// перезапуском: ставкам без вывода возвращается сумма (JetpackService).
+/// Пишется, только когда цикл не спит, — раунды без зрителей базу не засоряют.
+model JetpackRound {
+  id         String       @id @default(uuid())
+  createdAt  DateTime     @default(now())
+  crashX100  Int?
+  finishedAt DateTime?
+  voided     Boolean      @default(false)
+  bets       JetpackBet[]
+
+  @@index([finishedAt])
+  @@map("jetpack_rounds")
+}
+
+/// Ставка раунда джетпака. Множители — целыми в сотых (2.35x = 235):
+/// «успел ли» сравнивается точно. Одна ставка на раунд держится уникальным
+/// ключом, а не проверкой в коде — в гонке двух вкладок проверка бы проиграла.
+model JetpackBet {
+  id          String       @id @default(uuid())
+  roundId     String
+  round       JetpackRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount      Int
+  autoX100    Int?
+  cashoutX100 Int?
+  payout      Int?
+  createdAt   DateTime     @default(now())
+
+  @@unique([roundId, userId])
+  @@index([userId])
+  @@map("jetpack_bets")
 }
 
 /// Прогресс Battle Pass за один сезон. Уровень не хранится — он функция от xp

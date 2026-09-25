@@ -42,6 +42,10 @@ ENV NODE_ENV=production \
 
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
+# Статика из public (картинки раздела игр): standalone-сборка её не
+# копирует сама, и без этой строки /assets/* на проде отвечает 404 —
+# локально при этом всё видно, потому что dev-сервер читает public с диска.
+COPY --from=build /app/public ./public
 
 EXPOSE 8090
 

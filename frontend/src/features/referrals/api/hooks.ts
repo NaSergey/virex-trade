@@ -5,7 +5,6 @@ import { apiJson } from '@/shared/api/http';
 
 export interface ReferralStats {
   total: number;
-  withKey: number;
   /** Кастомное имя вместо userId в ссылке — null, если не задано. */
   slug: string | null;
 }

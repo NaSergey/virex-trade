@@ -4,8 +4,6 @@ import { useTranslations } from 'next-intl';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import { Money } from '@/shared/ui/Money';
 import { SectionHead } from '@/shared/ui/SectionHead';
-import { Seg, type SegOption } from '@/shared/ui/Seg';
-import type { DataSource } from '@/widgets/backtest-session';
 import type { BacktestStats, TagSummary } from '@/widgets/backtest-session/api/types';
 import { formatR } from '@/widgets/backtest-session/lib/money';
 import { SummaryCells } from '@/widgets/backtest-session';
@@ -14,24 +12,11 @@ import { SummaryCells } from '@/widgets/backtest-session';
  * Итог по всем сессиям и по тегам. Подпись под таблицей тегов обязательна: как
  * и в журнале, сделка идёт целиком каждому своему тегу, и колонка не суммируется.
  * Тренажёр и реальные сессии — раздельно: результат тега на сгенерированном
- * рынке говорит о генераторе, а не о рынке.
+ * рынке говорит о генераторе, а не о рынке. Переключатель источника стоит не
+ * здесь, а выше, в шапке списка сессий (`SessionsList`).
  */
-export function StatsBlock({
-  stats,
-  isLoading,
-  source,
-  onSource,
-}: {
-  stats?: BacktestStats;
-  isLoading: boolean;
-  source: DataSource;
-  onSource: (source: DataSource) => void;
-}) {
+export function StatsBlock({ stats, isLoading }: { stats?: BacktestStats; isLoading: boolean }) {
   const t = useTranslations('backtest');
-  const sources: SegOption<DataSource>[] = [
-    { value: 'real', label: t('statsReal') },
-    { value: 'synthetic', label: t('statsSynthetic') },
-  ];
 
   const columns: LedgerColumn<TagSummary>[] = [
     { key: 'tag', header: t('colTag'), render: (x) => x.tag.name },
@@ -50,9 +35,7 @@ export function StatsBlock({
 
   return (
     <section data-tour="bt-stats">
-      <SectionHead title={t('statsTitle')}>
-        <Seg options={sources} value={source} onChange={onSource} ariaLabel={t('statsSource')} />
-      </SectionHead>
+      <SectionHead title={t('statsTitle')} />
       <SummaryCells summary={stats?.overall} sessions={stats?.overall.sessions ?? 0} loading={isLoading} />
       <SectionHead title={t('byTagTitle')} />
       <LedgerTable

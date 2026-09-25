@@ -2,7 +2,10 @@
 
 import {
   forwardRef,
+  useEffect,
   useId,
+  useImperativeHandle,
+  useRef,
   type CSSProperties,
   type InputHTMLAttributes,
   type ReactNode,
@@ -69,17 +72,45 @@ export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement>, Co
  * детьми (`<option>`), а не массивом: списки здесь разнородные — где-то часы,
  * где-то категории тегов, где-то первым идёт пустой пункт-заглушка, — и
  * пересказывать всё это пропсами вышло бы длиннее самой разметки.
+ *
+ * Раскрытый список рисует CSS (`appearance: base-select` в globals.css), и
+ * он — часть страницы, а не системное окно: Esc в нём видит и модальное окно
+ * вокруг, и Radix закрыл бы окно целиком. Radix слушает document в фазе
+ * перехвата, поэтому Esc из открытого списка останавливается раньше, на
+ * window. Событие не отменяется — список браузер закрывает сам.
  */
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
   { full, className, children, ...rest },
   ref,
 ) {
+  const inner = useRef<HTMLSelectElement>(null);
+  useImperativeHandle(ref, () => inner.current as HTMLSelectElement);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = inner.current;
+      if (e.key !== 'Escape' || !el || !(e.target instanceof Node) || !el.contains(e.target)) return;
+      if (isPickerOpen(el)) e.stopPropagation();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
+
   return (
-    <select ref={ref} className={cn('in', full && 'full', className)} {...rest}>
+    <select ref={inner} className={cn('in', full && 'full', className)} {...rest}>
       {children}
     </select>
   );
 });
+
+/** `:open` у select понимают только браузеры со стилизуемым списком — у остальных он системный. */
+function isPickerOpen(el: HTMLSelectElement) {
+  try {
+    return el.matches(':open');
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Подписанное поле: `.field` + `.lbl` + контрол, связанные общим id.

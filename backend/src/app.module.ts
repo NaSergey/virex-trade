@@ -23,6 +23,9 @@ import { CoinsModule } from './coins/coins.module';
 import { TournamentsModule } from './tournaments/tournaments.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { GamesModule } from './games/games.module';
+import { PokerModule } from './poker/poker.module';
+import { BlackjackModule } from './blackjack/blackjack.module';
+import { JetpackModule } from './jetpack/jetpack.module';
 import { BattlePassModule } from './battlepass/battlepass.module';
 
 @Module({
@@ -56,6 +59,9 @@ import { BattlePassModule } from './battlepass/battlepass.module';
     TournamentsModule,
     ReferralsModule,
     GamesModule,
+    PokerModule,
+    BlackjackModule,
+    JetpackModule,
     BattlePassModule,
   ],
   controllers: [AppController],

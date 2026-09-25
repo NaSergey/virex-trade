@@ -11,9 +11,14 @@ export type CoinTxKind =
   | 'TOURNAMENT_PRIZE'
   | 'GAME_BUYIN'
   | 'GAME_CASHOUT'
+  | 'GAME_REFUND'
+  | 'GAME_PAYOUT'
   | 'REFERRAL_BONUS'
   | 'BATTLEPASS_REWARD'
-  | 'DAILY_REWARD';
+  | 'DAILY_REWARD'
+  | 'JETPACK_BET'
+  | 'JETPACK_WIN'
+  | 'JETPACK_REFUND';
 
 /**
  * Монеты: баланс пользователя и журнал движений.

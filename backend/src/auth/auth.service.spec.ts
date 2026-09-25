@@ -1,5 +1,6 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { REFERRAL_BONUS_COINS } from '../coins/coins.config';
 
 // Минимальные ручные стабы вместо полного PrismaService/JwtService — login с
 // несуществующим email не доходит ни до bcrypt, ни до jwt.sign, так что оба
@@ -8,8 +9,9 @@ import { AuthService } from './auth.service';
 describe('AuthService.login', () => {
   it('кидает UnauthorizedException с code INVALID_CREDENTIALS, если пользователя нет', async () => {
     const prisma = { user: { findUnique: async () => null } } as any;
-    // Третий аргумент — TagsService: login до него не доходит, как и до bcrypt.
-    const service = new AuthService(prisma, {} as any, {} as any);
+    // Третий и четвёртый аргументы — TagsService и CoinsService: login до них
+    // не доходит, как и до bcrypt.
+    const service = new AuthService(prisma, {} as any, {} as any, {} as any);
 
     let caught: unknown;
     try {
@@ -30,10 +32,21 @@ describe('AuthService.register', () => {
 
   // Ручной стаб PrismaService: register() трогает user.findUnique (по email),
   // user.findFirst (резолвит ref по id ИЛИ по слагу — см. resolveInviter),
-  // user.create и refreshToken.create. jwt и tags — заглушки, как в блоке
-  // AuthService.login выше.
+  // $transaction (внутри которого — user.create), и вне транзакции —
+  // refreshToken.create. jwt и tags — заглушки, как в блоке AuthService.login
+  // выше. coins.credit пишет вызовы в creditCalls вместо jest.fn — тот же
+  // ручной стиль, что и у created.
   function makeService(existingUsers: Array<{ id: string; referralSlug?: string }>) {
     const created: any[] = [];
+    const creditCalls: any[] = [];
+    const txClient = {
+      user: {
+        create: async ({ data }: { data: any }) => {
+          created.push(data);
+          return { id: 'new-user-id', email: data.email, name: data.name };
+        },
+      },
+    };
     const prisma = {
       user: {
         findUnique: async () => null, // почта всегда свободна в этих тестах
@@ -46,16 +59,18 @@ describe('AuthService.register', () => {
           }
           return null;
         },
-        create: async ({ data }: { data: any }) => {
-          created.push(data);
-          return { id: 'new-user-id', email: data.email, name: data.name };
-        },
       },
       refreshToken: { create: async () => ({}) },
+      $transaction: async (cb: (tx: any) => Promise<any>) => cb(txClient),
     } as any;
     const jwt = { signAsync: async () => 'access-token' } as any;
     const tags = { createDefaults: async () => undefined } as any;
-    return { service: new AuthService(prisma, jwt, tags), created };
+    const coins = {
+      credit: async (tx: any, userId: string, amount: number, kind: string, refId: string) => {
+        creditCalls.push({ tx, userId, amount, kind, refId });
+      },
+    } as any;
+    return { service: new AuthService(prisma, jwt, tags, coins), created, creditCalls };
   }
 
   it('валидный ref по id закрепляет пригласившего', async () => {
@@ -88,5 +103,37 @@ describe('AuthService.register', () => {
     await service.register(baseDto as any);
 
     expect(created[0].invitedById).toBeNull();
+  });
+
+  it('валидный ref начисляет пригласившему реферальный бонус', async () => {
+    const { service, creditCalls } = makeService([{ id: 'inviter-1' }]);
+
+    await service.register({ ...baseDto, ref: 'inviter-1' } as any);
+
+    expect(creditCalls).toEqual([
+      {
+        tx: expect.anything(),
+        userId: 'inviter-1',
+        amount: REFERRAL_BONUS_COINS,
+        kind: 'REFERRAL_BONUS',
+        refId: 'new-user-id',
+      },
+    ]);
+  });
+
+  it('без ref не начисляет реферальный бонус', async () => {
+    const { service, creditCalls } = makeService([]);
+
+    await service.register(baseDto as any);
+
+    expect(creditCalls).toEqual([]);
+  });
+
+  it('несуществующий ref не начисляет реферальный бонус', async () => {
+    const { service, creditCalls } = makeService([]);
+
+    await service.register({ ...baseDto, ref: 'ghost' } as any);
+
+    expect(creditCalls).toEqual([]);
   });
 });

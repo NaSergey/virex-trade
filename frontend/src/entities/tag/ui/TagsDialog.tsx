@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader } from '@/shared/ui/dialog';
+import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader, useDialogFade } from '@/shared/ui/dialog';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { useIdSet } from '@/shared/lib/hooks/useIdSet';
 import { useTags } from '../api/hooks';
@@ -38,9 +38,10 @@ export function TagsDialog({
   const tc = useTranslations('common');
   const { data: tagsData } = useTags();
   const { selected, toggle, ids } = useIdSet(initialTagIds);
+  const { closing, close } = useDialogFade(onClose);
 
   return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={!closing} onOpenChange={(v) => !v && close()}>
       <DialogContent>
         <DialogHeader title={title} subtitle={subtitle} />
         <DialogBody>
@@ -56,7 +57,7 @@ export function TagsDialog({
           confirmLabel={isPending ? tc('saving') : tc('save')}
           confirmDisabled={isPending}
           onConfirm={() => onSave(ids)}
-          onCancel={onClose}
+          onCancel={close}
         />
       </DialogContent>
     </Dialog>

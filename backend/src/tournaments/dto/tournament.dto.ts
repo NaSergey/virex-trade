@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
   IsNumber,
@@ -69,4 +70,14 @@ export class CreateTournamentDto {
   @Max(100, { each: true })
   @Type(() => Number)
   payoutShares: number[];
+}
+
+/**
+ * Готовность участника — значением, а не двумя адресами (`/ready`,
+ * `/unready`): это одно состояние с двумя значениями, и отдельный адрес под
+ * каждое означал бы два места, где оно меняется.
+ */
+export class ReadyDto {
+  @IsBoolean()
+  ready: boolean;
 }

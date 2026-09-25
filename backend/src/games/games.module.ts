@@ -20,6 +20,6 @@ import { GamesService } from './games.service';
   imports: [CoinsModule, JwtModule.register({})],
   controllers: [GamesController],
   providers: [GamesService, GamesGateway],
-  exports: [GamesService],
+  exports: [GamesService, GamesGateway],
 })
 export class GamesModule {}

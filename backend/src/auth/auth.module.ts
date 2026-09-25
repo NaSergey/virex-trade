@@ -6,6 +6,7 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { RefreshTokenCleanupService } from './refresh-token-cleanup.service';
 import { TagsModule } from '../tags/tags.module';
+import { CoinsModule } from '../coins/coins.module';
 
 @Module({
   imports: [
@@ -15,6 +16,8 @@ import { TagsModule } from '../tags/tags.module';
     JwtModule.register({}),
     // Стартовые теги нового аккаунта создаёт TagsService — см. register().
     TagsModule,
+    // Реферальный бонус пригласившему начисляет CoinsService — см. register().
+    CoinsModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, RefreshTokenCleanupService],

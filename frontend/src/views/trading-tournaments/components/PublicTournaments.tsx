@@ -10,7 +10,17 @@ import { SectionHead } from '@/shared/ui/SectionHead';
  * Открытые турниры — те, кого создатель сделал публичными и где ещё есть
  * места. Закрытых здесь нет по замыслу: в них зовут ссылкой.
  */
-export function PublicTournaments() {
+export function PublicTournaments({
+  onOpen,
+  onPreload,
+  openingId,
+}: {
+  onOpen: (id: string) => void;
+  /** Данные турнира заказываются по наведению — окно открывается уже с ними. */
+  onPreload: (id: string) => void;
+  /** Турнир, чьи данные едут прямо сейчас: его строка держится занятой. */
+  openingId: string | null;
+}) {
   const t = useTranslations('tournaments');
   const tc = useTranslations('coins');
   const { data, isLoading } = usePublicTournaments();
@@ -56,7 +66,9 @@ export function PublicTournaments() {
         rows={data ?? []}
         rowKey={(x) => x.id}
         isLoading={isLoading}
-        rowHref={(x) => `/tournaments/trading/${x.id}`}
+        onRowClick={(x) => onOpen(x.id)}
+        onRowHover={(x) => onPreload(x.id)}
+        busyKey={openingId}
         empty={<EmptyState title={t('publicEmptyTitle')}>{t('publicEmptyBody')}</EmptyState>}
       />
     </section>

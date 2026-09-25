@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader } from '@/shared/ui/dialog';
+import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader, useDialogFade } from '@/shared/ui/dialog';
 import { Field, Input } from '@/shared/ui/Field';
 import { Slider } from '@/shared/ui/Slider';
 import { formatMoney, formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
@@ -37,13 +37,14 @@ export function LimitCloseModal({
   error: unknown;
 }) {
   const t = useTranslations('backtest');
+  const { closing, close } = useDialogFade(onClose);
   const [price, setPrice] = useState(screenPrice);
   const [pct, setPct] = useState(100);
   const qty = (remaining * pct) / 100;
   const impact = levelImpact(trade.direction, screenPrice, price, qty);
 
   return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={!closing} onOpenChange={(v) => !v && close()}>
       <DialogContent>
         <DialogHeader
           title={t('limitCloseTitle')}
@@ -79,7 +80,7 @@ export function LimitCloseModal({
           confirmLabel={t('limitCloseConfirm')}
           confirmDisabled={isPending || !(qty > 0) || !(price > 0)}
           onConfirm={() => onSubmit(fromScreen(price, scale), qty)}
-          onCancel={onClose}
+          onCancel={close}
         />
       </DialogContent>
     </Dialog>

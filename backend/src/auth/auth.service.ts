@@ -14,6 +14,8 @@ import { JwtPayload } from './strategies/jwt.strategy';
 import { resolveJwtAccessSecret } from './jwt-secret';
 import { isOwnerEmail } from '../admin/owner';
 import { TagsService } from '../tags/tags.service';
+import { CoinsService } from '../coins/coins.service';
+import { REFERRAL_BONUS_COINS } from '../coins/coins.config';
 
 export interface PublicUser {
   id: string;
@@ -50,6 +52,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly tags: TagsService,
+    private readonly coins: CoinsService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthResult> {
@@ -69,16 +72,25 @@ export class AuthService {
     const invitedById = dto.ref ? await this.resolveInviter(dto.ref) : null;
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
-    const user = await this.prisma.user.create({
-      data: {
-        email: dto.email,
-        password: passwordHash,
-        // DTO уже обрезал пробелы и потребовал непустое значение. Колонка
-        // остаётся nullable ради тех, кто регистрировался, когда имя было
-        // необязательным, — их записи трогать незачем.
-        name: dto.name,
-        invitedById,
-      },
+    // Создание пользователя и реферальный бонус пригласившему — одна
+    // транзакция: начисление не должно разойтись с событием, которое его
+    // вызвало (тот же принцип, что у зачёта доната и взносов турнира).
+    const user = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          email: dto.email,
+          password: passwordHash,
+          // DTO уже обрезал пробелы и потребовал непустое значение. Колонка
+          // остаётся nullable ради тех, кто регистрировался, когда имя было
+          // необязательным, — их записи трогать незачем.
+          name: dto.name,
+          invitedById,
+        },
+      });
+      if (invitedById) {
+        await this.coins.credit(tx, invitedById, REFERRAL_BONUS_COINS, 'REFERRAL_BONUS', created.id);
+      }
+      return created;
     });
 
     // Примеры тегов, чтобы первую сделку было чем разметить. Провал не

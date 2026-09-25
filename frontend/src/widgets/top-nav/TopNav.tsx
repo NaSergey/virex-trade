@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -11,7 +11,6 @@ import { DonateDialog } from '@/features/donation';
 import { useOnboarding } from '@/features/onboarding';
 import { ReferralDialog } from '@/features/referrals';
 import { Button } from '@/shared/ui/Button';
-import { KeyValue } from '@/shared/ui/Lookup';
 import { LocaleSwitch } from '@/shared/ui/LocaleSwitch';
 import { ThemeToggle } from '@/shared/ui/ThemeToggle';
 // import { VirexLogo } from '@/shared/ui/VirexLogo';
@@ -61,11 +60,15 @@ export function TopNav() {
   const { user, logout } = useAuth();
   const { restart } = useOnboarding();
   const t = useTranslations('nav');
-  const tc = useTranslations('common');
   const to = useTranslations('onboarding');
   const { locale } = useLocaleControl();
   const pathname = usePathname();
-  const [menuOpen, setMenuOpen] = useState(false);
+  // Три состояния, а не флаг: закрытое меню ещё доигрывает анимацию ухода
+  // ('closing'), и снять его с дерева сразу значило бы оборвать её первым
+  // кадром. Повторное нажатие «Профиля» посреди ухода возвращает меню назад.
+  const [menu, setMenu] = useState<'closed' | 'open' | 'closing'>('closed');
+  const menuOpen = menu === 'open';
+  const closeMenu = useCallback(() => setMenu((m) => (m === 'open' ? 'closing' : m)), []);
   // Награда, которой не видно, — не награда: точка на кнопке профиля
   // появляется, когда ждут либо уровни, либо сегодняшняя ежедневная.
   const battlePass = useBattlePass();
@@ -125,11 +128,11 @@ export function TopNav() {
   useEffect(() => {
     if (!menuOpen) return;
     const onClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) closeMenu();
     };
     document.addEventListener('mousedown', onClickOutside);
     return () => document.removeEventListener('mousedown', onClickOutside);
-  }, [menuOpen]);
+  }, [menuOpen, closeMenu]);
 
   return (
     <header className="top">
@@ -181,104 +184,115 @@ export function TopNav() {
             className={`acct${hasRewards ? ' has-dot' : ''}`}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((v) => !v)}
+            onClick={() => setMenu((m) => (m === 'open' ? 'closing' : 'open'))}
           >
             {t('profile')}
           </Button>
-          {menuOpen && (
-            <div className="acct-menu" role="menu">
-              <KeyValue label={t('who')}>{user?.name || t('noName')}</KeyValue>
-              <KeyValue label={t('email')}>{user?.email}</KeyValue>
+          {menu !== 'closed' && (
+            <div
+              className="acct-menu"
+              role="menu"
+              data-state={menu === 'closing' ? 'closed' : 'open'}
+              // Меню снимается с дерева концом своей анимации ухода, а не
+              // таймером: длительность живёт в одном месте — в стилях.
+              // Анимации детей (тумблер языка) сюда тоже всплывают — их
+              // отсекает сверка узла.
+              onAnimationEnd={(e) => {
+                if (e.target === e.currentTarget) setMenu((m) => (m === 'closing' ? 'closed' : m));
+              }}
+            >
+              {/* Кто вошёл — без подписей «кто» и «почта»: имя и адрес
+                  узнаются сами, а подписи только удлиняли меню. */}
+              <div className="acct-id">
+                <div className="acct-name">{user?.name || t('noName')}</div>
+                <div className="acct-mail">{user?.email}</div>
+              </div>
               {/* Язык — свойство учётной записи, а не раздел сайта: в рейке
                   шапки он стоял наравне с «Обзором» и «Тегами», хотя ничего
                   не открывает. Здесь он рядом с именем и почтой — там, где
                   человек и ищет настройки своего профиля, — и заодно
                   освобождает узкую шапку на телефоне. */}
-              <KeyValue label={tc('language')} control valueClassName="">
+              <div className="acct-lang">
                 <LocaleSwitch />
-              </KeyValue>
-              {/* Настройки — сюда же, рядом с языком: оба пункта про учётную
-                  запись и подключение к ней, а не про работу с журналом,
-                  которой посвящена рейка разделов выше. */}
-              <KeyValue label={t('settings')} control valueClassName="">
-                <Link className="btn bare" href="/settings" onClick={() => setMenuOpen(false)}>
-                  {tc('open')}
+              </div>
+              {/* Пункт меню — вся строка целиком, а не слово «Открыть» справа
+                  от подписи: подпись и есть действие, и второе слово рядом с
+                  ней только отодвигало цель от руки. */}
+              <div className="acct-items">
+                {/* Настройки — сюда же, рядом с языком: оба пункта про учётную
+                    запись и подключение к ней, а не про работу с журналом,
+                    которой посвящена рейка разделов выше. */}
+                <Link className="acct-item" href="/settings" onClick={closeMenu}>
+                  {t('settings')}
                 </Link>
-              </KeyValue>
-              {/* Прогресс — переход по адресу, а не окно: у профиля есть свой
-                  адрес, и меню обязано его отдавать. Подпись — «Battle Pass», а
-                  не «Профиль»: кнопка, открывающая это меню, уже так
-                  называется, и два «Профиля» подряд ничего не различали бы. */}
-              <KeyValue label={t('battlePass')} control valueClassName="">
-                <Link className="btn bare" href="/profile" onClick={() => setMenuOpen(false)}>
-                  {tc('open')}
+                {/* Прогресс — переход по адресу, а не окно: у профиля есть свой
+                    адрес, и меню обязано его отдавать. Подпись — «Battle Pass», а
+                    не «Профиль»: кнопка, открывающая это меню, уже так
+                    называется, и два «Профиля» подряд ничего не различали бы. */}
+                <Link className="acct-item" href="/profile" onClick={closeMenu}>
+                  {t('battlePass')}
                 </Link>
-              </KeyValue>
-              {/* Обучение здесь, а не в Настройках: туры идут по всем пяти
-                  разделам, и вернуть их надо уметь с того раздела, где
-                  застрял, а не сходив за этим на страницу ключей. */}
-              <KeyValue label={to('menuLabel')} control valueClassName="">
+                {/* Обучение здесь, а не в Настройках: туры идут по всем пяти
+                    разделам, и вернуть их надо уметь с того раздела, где
+                    застрял, а не сходив за этим на страницу ключей. */}
                 <Button
-                  variant="bare"
+                  variant="none"
+                  className="acct-item"
                   onClick={() => {
-                    setMenuOpen(false);
+                    closeMenu();
                     restart();
                   }}
                 >
-                  {to('menuAction')}
+                  {to('menuLabel')}
                 </Button>
-              </KeyValue>
-              {/* Донат стоит здесь, а не в рейке разделов: рейка — это работа
-                  с журналом, и просьба о деньгах в одном ряду со «Сделками»
-                  торговалась бы за внимание с продуктом. В меню профиля она
-                  находится тогда, когда человек её ищет.
+                {/* Донат стоит здесь, а не в рейке разделов: рейка — это работа
+                    с журналом, и просьба о деньгах в одном ряду со «Сделками»
+                    торговалась бы за внимание с продуктом. В меню профиля она
+                    находится тогда, когда человек её ищет.
 
-                  Кнопка, а не ссылка, и это тот редкий случай, когда так и
-                  надо: за ней нет раздела с адресом — за ней окно на два шага,
-                  которое открывается поверх той страницы, где человек сейчас
-                  работает, и закрывается обратно в неё. */}
-              <KeyValue label={t('support')} control valueClassName="">
+                    Кнопка, а не ссылка, и это тот редкий случай, когда так и
+                    надо: за ней нет раздела с адресом — за ней окно на два шага,
+                    которое открывается поверх той страницы, где человек сейчас
+                    работает, и закрывается обратно в неё. */}
                 <Button
-                  variant="bare"
+                  variant="none"
+                  className="acct-item"
                   onClick={() => {
-                    setMenuOpen(false);
+                    closeMenu();
                     setDonateOpen(true);
                   }}
                 >
-                  {tc('open')}
+                  {t('support')}
                 </Button>
-              </KeyValue>
-              {/* Тот же приём, что у доната: пункт открывает окно поверх
-                  текущей страницы, а не уводит на отдельный адрес. */}
-              <KeyValue label={t('referrals')} control valueClassName="">
+                {/* Тот же приём, что у доната: пункт открывает окно поверх
+                    текущей страницы, а не уводит на отдельный адрес. */}
                 <Button
-                  variant="bare"
+                  variant="none"
+                  className="acct-item"
                   onClick={() => {
-                    setMenuOpen(false);
+                    closeMenu();
                     setInviteOpen(true);
                   }}
                 >
-                  {tc('open')}
+                  {t('referrals')}
                 </Button>
-              </KeyValue>
-              {/* Аналитика по пользователям сервиса — не раздел работы с
-                  журналом, а инструмент владельца, тот же класс пунктов, что
-                  донат и рефералы. В общей рейке разделов она обещала бы
-                  доступ, которого у обычного пользователя нет; здесь её видно
-                  только владельцу (`user.isAdmin`), и это тот редкий случай,
-                  когда справа — не окно, а обычный переход по адресу. */}
-              {user?.isAdmin && (
-                <KeyValue label={t('admin')} control valueClassName="">
-                  <Link className="btn bare" href="/admin" onClick={() => setMenuOpen(false)}>
-                    {tc('open')}
+                {/* Аналитика по пользователям сервиса — не раздел работы с
+                    журналом, а инструмент владельца, тот же класс пунктов, что
+                    донат и рефералы. В общей рейке разделов она обещала бы
+                    доступ, которого у обычного пользователя нет; здесь её видно
+                    только владельцу (`user.isAdmin`), и это тот редкий случай,
+                    когда за пунктом — не окно, а обычный переход по адресу. */}
+                {user?.isAdmin && (
+                  <Link className="acct-item" href="/admin" onClick={closeMenu}>
+                    {t('admin')}
                   </Link>
-                </KeyValue>
-              )}
+                )}
+              </div>
               <Button
                 variant="risk"
-                style={{ marginTop: 'var(--s3)', width: '100%' }}
+                className="acct-logout"
                 onClick={() => {
-                  setMenuOpen(false);
+                  closeMenu();
                   void logout();
                 }}
               >
