@@ -15,7 +15,9 @@ type Visibility = 'show' | 'hide';
  * Параметры новой сессии. Дата по умолчанию скрыта: «это март 2020» — и трейдер
  * уже помнит, куда пошла цена. Цена по умолчанию видна: условная шкала от 100
  * до 1000 непривычна, и включать её — осознанный выбор. У тренажёра даты
- * вымышленные, поэтому поля «Дата» у него нет — сервер скрывает её сам.
+ * вымышленные, поэтому поля «Дата» у него нет — сервер скрывает её сам. У эфира
+ * нет ни «Даты», ни «Цены»: прятать их незачем — у живого рынка будущего нет,
+ * и вспоминать нечего.
  */
 export function StartSession({ onStarted }: { onStarted: (id: string) => void }) {
   const t = useTranslations('backtest');
@@ -26,9 +28,11 @@ export function StartSession({ onStarted }: { onStarted: (id: string) => void })
   const create = useCreateSession();
 
   const synthetic = market === 'synthetic';
+  const live = market === 'live';
   const depositN = Number(deposit);
   const valid = depositN >= 100 && depositN <= 10_000_000;
   const markets: SegOption<DataSource>[] = [
+    { value: 'live', label: t('marketLive') },
     { value: 'real', label: t('marketReal') },
     { value: 'synthetic', label: t('marketSynthetic') },
   ];
@@ -43,7 +47,7 @@ export function StartSession({ onStarted }: { onStarted: (id: string) => void })
       <FieldGroup label={t('market')}>
         <Seg options={markets} value={market} onChange={setMarket} ariaLabel={t('market')} />
       </FieldGroup>
-      <p className="muted" style={{ fontSize: 'var(--t-m)' }}>{synthetic ? t('syntheticLead') : t('startLead')}</p>
+      <p className="muted" style={{ fontSize: 'var(--t-m)' }}>{t(live ? 'liveLead' : synthetic ? 'syntheticLead' : 'startLead')}</p>
       {/* Без отдельной строки-подписи над полем: «Депозит» встаёт прямо в него,
           слева, тем же приёмом, что USDT справа, — полю есть чем назвать себя
           самому. aria-label держит имя для скринридера взамен снятого <label>. */}
@@ -57,25 +61,32 @@ export function StartSession({ onStarted }: { onStarted: (id: string) => void })
         onChange={(e) => setDeposit(e.target.value)}
         style={{ marginTop: 'var(--s4)', marginBottom: 'var(--s3)' }}
       />
-      {!synthetic && (
+      {market === 'real' && (
         <FieldGroup label={t('date')}>
           <Seg options={visibility} value={date} onChange={setDate} ariaLabel={t('date')} />
         </FieldGroup>
       )}
-      <FieldGroup label={t('price')}>
-        <Seg options={visibility} value={price} onChange={setPrice} ariaLabel={t('price')} />
-      </FieldGroup>
+      {!live && (
+        <FieldGroup label={t('price')}>
+          <Seg options={visibility} value={price} onChange={setPrice} ariaLabel={t('price')} />
+        </FieldGroup>
+      )}
       <Button
         variant="solid"
         disabled={!valid || create.isPending}
         onClick={() =>
           create.mutate(
-            { startBalance: depositN, dataSource: market, hideDate: synthetic || date === 'hide', hidePrice: price === 'hide' },
+            {
+              startBalance: depositN,
+              dataSource: market,
+              hideDate: market === 'real' ? date === 'hide' : synthetic,
+              hidePrice: !live && price === 'hide',
+            },
             { onSuccess: (r) => onStarted(r.session.id) },
           )
         }
       >
-        {create.isPending ? t(synthetic ? 'startingSynthetic' : 'starting') : t('start')}
+        {create.isPending ? t(live ? 'startingLive' : synthetic ? 'startingSynthetic' : 'starting') : t('start')}
       </Button>
       <ErrorNote error={create.error} fallback={t('startFailed')} />
     </section>

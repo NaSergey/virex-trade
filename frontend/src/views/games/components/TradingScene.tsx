@@ -182,9 +182,32 @@ function Bars() {
   );
 }
 
-/** Рамки меток — метка и запас под её неон (обводка 4, размытие 5). */
-const LONG_BOX: Box = { x: 200, y: 76, w: 172, h: 84 };
+/** Рамки меток — метка и запас `LABEL_PAD` под её неон (обводка 4, размытие 5). */
+const LONG_BOX: Box = { x: 200, y: 18, w: 172, h: 84 };
 const SHORT_BOX: Box = { x: 2, y: 420, w: 180, h: 86 };
+const LABEL_PAD = 20;
+
+/**
+ * Место меток — от краёв карточки, а не в координатах кадра: LONG справа
+ * вверху на том же отступе, что и название (`--s3`, padding `.gcard-head`),
+ * SHORT зеркально слева внизу. Отступ названия — в пикселях, а кадр тянется
+ * по сетке, и отступ в единицах кадра совпадал бы с ним на одной ширине
+ * карточки. Карточка срезает кадр на 6 % сверху и 4 % снизу
+ * (`.gcard > .gscene` в globals.css) — от этих краёв и идёт отсчёт.
+ */
+const CUT_TOP = 0.06 * SCENE_H;
+const CUT_BOTTOM = 0.04 * SCENE_H;
+const units = (n: number) => `${+n.toFixed(2)} * var(--u)`;
+const LONG_AT: CSSProperties = {
+  left: 'auto',
+  right: `calc(var(--s3) - ${units(LABEL_PAD)})`,
+  top: `calc(var(--s3) + ${units(CUT_TOP - LABEL_PAD)})`,
+};
+const SHORT_AT: CSSProperties = {
+  top: 'auto',
+  left: `calc(var(--s3) - ${units(LABEL_PAD)})`,
+  bottom: `calc(var(--s3) + ${units(CUT_BOTTOM - LABEL_PAD)})`,
+};
 
 /**
  * Затухание отражения — CSS-маска на его слое: у пола 40 %, к 40 % глубины —
@@ -331,14 +354,14 @@ export function TradingScene() {
           Каждая метка — свой слой: неон рисуется один раз, дышит прозрачность
           слоя. LONG под курсором подрастает (.tsc-long-lift — отдельный слой,
           transform дыхания не тронут). SHORT под курсором не меняется — его
-          закрывает .gcard-reveal. */}
-      <Place box={LONG_BOX}>
-        <Fill className="tsc-long-lift" style={{ transformOrigin: originIn(LONG_BOX, [286, 118]) }}>
+          закрывала подложка .gcard-reveal (снята 2026-09-25). */}
+      <Place box={LONG_BOX} style={LONG_AT}>
+        <Fill className="tsc-long-lift" style={{ transformOrigin: originIn(LONG_BOX, [286, 60]) }}>
           <Fill className="tsc-long">
             <Art box={LONG_BOX}>
               <rect
                 x="220"
-                y="96"
+                y="38"
                 width="132"
                 height="44"
                 rx="12"
@@ -349,7 +372,7 @@ export function TradingScene() {
               />
               <rect
                 x="220"
-                y="96"
+                y="38"
                 width="132"
                 height="44"
                 rx="12"
@@ -360,7 +383,7 @@ export function TradingScene() {
               />
               <text
                 x="286"
-                y="125"
+                y="67"
                 textAnchor="middle"
                 fontFamily="var(--font-mono)"
                 fontSize="21"
@@ -373,7 +396,7 @@ export function TradingScene() {
           </Fill>
         </Fill>
       </Place>
-      <Place box={SHORT_BOX}>
+      <Place box={SHORT_BOX} style={SHORT_AT}>
         <Fill className="tsc-short">
           <Art box={SHORT_BOX}>
             <rect

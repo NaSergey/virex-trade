@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════════════════════════════
-   VIREX — тёмный гроссбух
+   TRADE PLAY — тёмный гроссбух
    Единственный фон #050505. Структуру держат линейки, не контейнеры.
    Цвет означает только деньги и сомнение — декоративного акцента нет.
    Активное состояние = инверсная плашка.
@@ -92,6 +92,19 @@
   --ink: var(--color-fg);
   --ink-2: var(--color-muted);
   --ink-3: var(--color-subtle);
+  /* Свечение знака монеты (`.coin`): белое на тёмном поле, на бумаге его нет —
+     белый ореол на светлом не виден, а тёмный читался бы размытой тенью. */
+  --coin-glow: rgb(255 255 255 / 0.55);
+  /* Знак в шапке (`TradePlayMark`): пять стопов отлива, кромка осколков и
+     свечение. На тёмном поле — серебро, на бумаге — графит: серебро на светлом
+     сливалось бы с листом. */
+  --tpm-1: #ffffff;
+  --tpm-2: #6c727a;
+  --tpm-3: #dfe3e7;
+  --tpm-4: #474c52;
+  --tpm-5: #b3b9bf;
+  --tpm-edge: #fff;
+  --tpm-glow: rgb(255 255 255 / 0.2);
   --profit: var(--color-up);
   --loss: var(--color-down);
   --doubt: var(--color-warn);
@@ -118,7 +131,7 @@
   --scheme: dark;
 
   /* ═══════════════ ПАЛИТРА РАЗДЕЛА ИГР ═══════════════
-     Единственное место продукта с собственным цветом. Остальной Virex держит
+     Единственное место продукта с собственным цветом. Остальной Trade Play держит
      правило «цвет означает деньги» — здесь считать нечего, здесь выбирают, во
      что играть, и витрина без цвета не отличается от списка настроек.
 
@@ -153,6 +166,10 @@
   --g-a-green: #65c996;
   --g-a-red: #d9554f;
   --g-a-purple: #9a5cff;
+  /* Янтарный — не игра, а состояние: турнир набирает участников (значок
+     OPEN, `.tbadge`). Своим именем, а не --doubt: это тон раздела игр, и
+     «сомнение» продукта к набору в турнир отношения не имеет. */
+  --g-a-amber: #d9a14f;
   /* Тот же зелёный каналами — для света вокруг окна турнира (`.dlg-game`):
      свет строится из нескольких значений прозрачности, а альфа от hex не
      берётся. Та же нужда, что у --ink-rgb выше. */
@@ -186,6 +203,14 @@
   --color-fg: #1c1a16;
   --color-muted: #6b655b;
   --color-subtle: #8b8477;
+  --coin-glow: transparent;
+  --tpm-1: #7a8087;
+  --tpm-2: #202327;
+  --tpm-3: #5f656c;
+  --tpm-4: #111315;
+  --tpm-5: #50565c;
+  --tpm-edge: rgb(255 255 255 / 0.5);
+  --tpm-glow: transparent;
 
   /* линейки трёх весов — та же тушь малой доли */
   --color-line: rgba(28, 26, 22, 0.16);
@@ -366,24 +391,25 @@
     gap: var(--s5);
     height: var(--top-h);
   }
-  /* Знак крупнее строки, в которой стоит: в 30 пикселях фитили свечей уже
-     тоньше пикселя и знак читается кривым. Но высоты шапке он добавлять не
-     должен — прирост съеден отрицательными полями, поэтому по вертикали он
-     по-прежнему занимает свои 30px, а рисуется на 42. Отсюда же overflow не
-     нужен: шапка ничего не режет. */
   .mark {
     display: flex;
     align-items: center;
-    gap: var(--s2);
-    font-family: var(--font-mono);
-    font-size: var(--t-s);
-    letter-spacing: 0.32em;
-    text-transform: uppercase;
     flex: none;
+    color: inherit;
+    text-decoration: none;
   }
-  .mark .virex-logo {
+  /* Знак «TP» вместо слова: осколки стекла, краски — токены --tpm-*. */
+  .tp-mark {
+    display: block;
     flex: none;
-    margin-block: -6px;
+    filter: drop-shadow(0 0 5px var(--tpm-glow));
+  }
+  /* Кромки — отдельными линиями, яркость каждой задаёт разметка
+     (stroke-opacity по тому, как кромка смотрит на свет). */
+  .tp-mark-edge {
+    stroke: var(--tpm-edge);
+    stroke-width: 1.1;
+    stroke-linecap: round;
   }
   .nav {
     display: flex;
@@ -697,7 +723,9 @@
      а не собственные размеры, поэтому измерение (ReplayChart: box) не может
      замкнуться на самом себе. */
   .replay-chart { position: absolute; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; user-select: none; }
-  .replay-chart .lvl-hit { cursor: ns-resize; }
+  /* Над графиком — перекрестие; над самими уровнями (ордера, позиции, лимитки) — обычная мышь. */
+  .replay-chart .lvl-hit { cursor: pointer; }
+  .replay-chart .lvl-static { cursor: default; }
   .replay-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); margin-top: var(--s3); }
   /* Переключатель таблицы (Открытые позиции / Ордера / История) — в той же
      строке, что шаг/скорость/«к списку», прижат к правому краю ВСЕГО терминала
@@ -706,6 +734,21 @@
      .replay-controls, который раздвинул бы и левые кнопки между собой. */
   .replay-controls .view-switch { margin-left: auto; }
   .replay-chart-wrap { position: relative; flex: 1; min-height: 0; }
+  /* Меню правой кнопки по графику: одна строка «Копировать цену». */
+  .chart-menu { position: absolute; z-index: 5; min-width: 160px; background: var(--color-background); border: 1px solid var(--hair); padding: 2px; }
+  .chart-menu-item { display: block; width: 100%; text-align: left; padding: var(--s1) var(--s2); font-size: 12px; font-family: var(--font-mono); color: var(--color-fg); }
+  .chart-hint { position: absolute; top: var(--s2); left: 50%; translate: -50% 0; z-index: 5; padding: var(--s1) var(--s2); font-size: 12px; background: var(--color-fg); color: var(--color-background); pointer-events: none; }
+  .chart-menu-item:hover { background: var(--color-line); }
+  /* Настройки графика — окошко под шестерёнкой, прижатое к её правому краю:
+     шестерёнка стоит у правого края графика, и меню влево не вылезает за экран. */
+  /* Флекс, а не блок: кнопка в блоке встаёт на строку текста, и её межстрочный
+     зазор делал ряд иконок выше и сдвигал шестерёнку относительно звука. */
+  .chart-settings { position: relative; display: inline-flex; align-items: center; }
+  .chart-settings-menu { top: calc(100% + 4px); right: 0; }
+  .chart-menu-head { padding: var(--s1) var(--s2); font-size: 10px; font-family: var(--font-mono); color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .chart-menu-check { display: flex; align-items: center; gap: var(--s1); }
+  /* Место под галочку держится и без неё: пункт не прыгает влево, когда его выключают. */
+  .chart-menu-mark { display: inline-flex; width: 12px; height: 12px; }
   /* Рисование: полоса инструментов слева от графика, стиль выделенной фигуры —
      поверх его левого верхнего угла. Растянута на всю высоту окна графика
      (align-items по умолчанию), чтобы и сам график мог её заполнить. */
@@ -873,6 +916,84 @@
     border-radius: 0;
   }
   .slider::-moz-range-track { background: transparent; }
+  /* Звук игры (AudioControl из shared/ui): кнопка с иконкой состояния и
+     окошко громкости под ней. Краски — прикладные имена темы, поэтому игра
+     со своим тоном страницы получает его без правок; вид кнопки (заливка,
+     скругление) игра задаёт своим классом-обёрткой. */
+  .audio { position: relative; display: inline-flex; flex: none; }
+  .audio-btn,
+  .audio-mute { position: relative; display: grid; place-items: center; flex: none; color: var(--ink); }
+  .audio-btn { width: 28px; height: 28px; }
+  .audio-mute { width: 24px; height: 24px; }
+  .audio-btn:hover,
+  .audio-mute:hover { background: var(--hair); }
+  .audio[data-off] .audio-btn { color: var(--ink-3); }
+  .audio-btn > svg { width: 15px; height: 15px; }
+  .audio-mute > svg { width: 14px; height: 14px; }
+  /* У музыки своей «выключенной» иконки нет — её перечёркивает черта. */
+  .audio[data-off] .audio-btn.music::after {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 1.5px;
+    background: currentColor;
+    rotate: -45deg;
+  }
+  /* Окошко — узкая колонка по центру кнопки: вертикальный ползунок и
+     выключатель. Выпадает из-под кнопки (сверху вниз, с растяжкой
+     по высоте от кромки кнопки), а его элементы следом по очереди выезжают
+     тем же движением (`--i` — место в колонке). Уходит обратно вверх; узел
+     снимается по концу ухода. Центровка и сдвиг от края экрана
+     (`--audio-shift`) — свойство `translate`, а не `transform`: тот занят
+     анимацией. Кадр 100 % = покой, поэтому под reduced-motion окошко просто
+     стоит на месте. */
+  .audio-pop {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 6px 6px;
+    color: var(--ink);
+    background: var(--ground);
+    border: 1px solid var(--hair);
+    translate: calc(-50% + var(--audio-shift, 0px)) 0;
+    transform-origin: center top;
+    animation: audio-drop 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .audio-pop[data-state='closed'] { animation: audio-lift 150ms ease-in both; }
+  @keyframes audio-drop {
+    from { opacity: 0; transform: translateY(-10px) scaleY(0.4); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes audio-lift {
+    from { opacity: 1; transform: none; }
+    to { opacity: 0; transform: translateY(-8px) scaleY(0.6); }
+  }
+  .audio-pop > * { animation: audio-item 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: calc(60ms + var(--i) * 50ms); }
+  .audio-pop[data-state='closed'] > * { animation: none; }
+  @keyframes audio-item {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: none; }
+  }
+  /* Вертикальный ползунок — тот же `Slider`, повёрнутый письмом, а не
+     `rotate`: повёрнутый трансформом он занимал бы в раскладке место лёжа.
+     `direction: rtl` ставит ноль внизу. Поле шире линии — за 2 px ползунок не
+     ухватить, — а сама линия рисуется фоном по центру поля. */
+  .audio-pop .audio-slider {
+    --i: 0;
+    writing-mode: vertical-lr;
+    direction: rtl;
+    width: 16px;
+    height: 104px;
+    flex: none;
+    margin: 0;
+    background:
+      linear-gradient(to top, var(--ink) 0 var(--slider-pct), var(--hair) var(--slider-pct) 100%) center / 2px 100% no-repeat;
+  }
   /* Карточка предпросмотра размера — те же строки .kv (через KeyValue), что и
      остальная панель, просто обведены рамкой и подняты фоном: это готовый
      ответ «сколько купить», а не ещё одна строка среди прочих. */
@@ -1657,6 +1778,9 @@
   }
   .in-prefix { left: 0; }
   .in-suffix { right: 0; }
+  /* Знак монеты в суффиксе — ростом с заглавную подписи, а не со строчную:
+     от кегля `--t-xs` обычные 0.8em дают знак меньше буквы рядом. */
+  .in-suffix .coin { height: 1.1em; color: var(--ink); }
   select.in {
     font-family: var(--font-mono);
     cursor: pointer;
@@ -2317,6 +2441,23 @@
     margin-top: var(--s1);
   }
 
+  /* Знак монеты (`CoinIcon`) вместо слова «монет» рядом с числом. Кегль
+     задаёт соседний текст: знак ростом с заглавную, стоит на базовой линии
+     (у SVG она — нижний край) и не сжимается в flex-строке. Ширина — от
+     пропорции знака, а не второй цифрой: её пришлось бы править вместе с
+     `viewBox`. */
+  .coin {
+    display: inline-block;
+    height: 0.8em;
+    width: auto;
+    aspect-ratio: 100 / 74;
+    flex: none;
+    filter: drop-shadow(0 0 0.06em var(--coin-glow))
+      drop-shadow(0 0 0.3em color-mix(in srgb, var(--coin-glow) 60%, transparent));
+  }
+  /* Раздел игр тёмный в обеих темах — и свечение у знака там остаётся. */
+  :is(.games-page, .dlg-game, .ct-page, .jpg-page) { --coin-glow: rgb(255 255 255 / 0.55); }
+
   /* Баланс монет в шапке. Кнопка, но выглядит как значение: цифра моноширинная,
      единица приглушена — это показание, а не призыв нажать. */
   .coins {
@@ -2329,6 +2470,9 @@
     cursor: pointer;
     color: var(--ink);
     white-space: nowrap;
+    /* Свечение знака выходит за кнопку — без отступа оно упиралось бы в
+       переключатель темы справа. */
+    margin-right: var(--s3);
   }
   /* Место под число занято до того, как оно приедет: пока в шапке стоял
      прочерк, приход баланса раздвигал кнопку и толкал вправо от неё и тему, и
@@ -2343,10 +2487,7 @@
     min-width: 5ch;
     text-align: right;
   }
-  .coins-unit {
-    font-size: var(--t-xs);
-    color: var(--ink-3);
-  }
+  .coins .coin { color: var(--ink); }
   .coins:hover .coins-n { text-decoration: underline; }
 
   /* Состав турнира — просто имена в столбик, без маркеров: это перечень
@@ -2369,8 +2510,41 @@
     gap: var(--s3);
     padding: var(--s2) 0;
   }
+  /* Правый край строки состава: отметка готовности и, у создателя командного
+     набора, кнопка переноса в другую команду. */
+  .players-r {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--s2);
+  }
+
+  /* Командный турнир — две колонки, A и B, рядом: сравнивают их друг с другом,
+     и столбиком одна уехала бы под сгиб окна. На узком экране — столбиком. */
+  .teams-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s4);
+  }
+  @media (max-width: 640px) {
+    .teams-grid { grid-template-columns: minmax(0, 1fr); }
+  }
+  .team-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--s2);
+    padding-bottom: var(--s2);
+    border-bottom: 1px solid var(--hair);
+  }
+  .team-name {
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
   /* Отметка готовности — точкой и словом, тот же приём, что у статуса турнира
-     (`.tstate`): список бывает на десять имён, и до текста взгляд быстрее
+     (`.tbadge`): список бывает на десять имён, и до текста взгляд быстрее
      ловит цветную точку сбоку от строки, чем оттенок капители на её правом
      краю. Просто текстом («ждёт» серым, «готов» зелёным) это и было раньше —
      без своего знака состояние читалось только вчитавшись в каждое слово. */
@@ -2393,7 +2567,7 @@
     flex: none;
   }
   /* Тот же зелёный, что у точки идущего турнира в шапке этого же окна
-     (`.tstate[data-s="running"]`) — не --profit: готовность к игре не деньги,
+     (`.tbadge[data-s="running"]`) — не --profit: готовность к игре не деньги,
      и красить её деньговым цветом значило бы завести второй смысл у одной
      краски. */
   .pstate[data-r="true"] { color: var(--g-a-green); }
@@ -2475,31 +2649,145 @@
      колонку шириной в два слова. Своим правилом, а не общим: в остальных окнах
      справа стоит одно короткое число, и переносить там нечего. */
   .dlg-game .dh { flex-wrap: wrap; }
+  /* Имя с подзаголовком сжимаются, а не выталкивают фонд вниз: без основы
+     шириной `.dh-main` была бы вся длина подзаголовка, и фонд переносился даже
+     на широком окне — и вставал слева с выравниванием по правому краю своей
+     узкой колонки, то есть висел с отступом посреди строки. Перенос остаётся
+     для узкого экрана, и там фонд прижат вправо (`margin-left: auto`). */
+  .dlg-game .dh-main { flex: 1 1 20ch; }
+  .dlg-game .dh-aside { margin-left: auto; }
 
-  /* Состояние турнира точкой и словом. Точка нужна ровно затем, чтобы «идёт»
-     отличалось от «ждёт» боковым зрением, до чтения; поэтому она одна и
-     бьётся только у идущего турнира — остальные два состояния ничего не
-     ждут. */
-  .tstate {
+  /* Состояние турнира значком — LIVE / OPEN / ENDED (образец владельца
+     2026-09-26): слово в рамке своего цвета на тонкой подложке того же
+     цвета. Точка — только у тех, что ещё живут, чтобы «идёт» и «набор»
+     отличались от прошедших боковым зрением, до чтения; бьётся она у одного
+     идущего — остальные ничего не ждут. Цвет задаётся одной переменной
+     (`--tb`), рамка и подложка выводятся из неё. */
+  .tbadge-row {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--s2);
+  }
+  .tbadge {
+    --tb: var(--g-ink-3);
     display: inline-flex;
     align-items: center;
     gap: var(--s2);
+    padding: 2px 8px;
     font-family: var(--font-mono);
     font-size: var(--t-xs);
+    line-height: 1.4;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: var(--ink-3);
+    white-space: nowrap;
+    color: var(--tb);
+    background: color-mix(in srgb, var(--tb) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--tb) 45%, transparent);
   }
-  .tstate::before {
+  .tbadge[data-s="running"] { --tb: var(--g-a-green); }
+  .tbadge[data-s="lobby"] { --tb: var(--g-a-amber); }
+  .tbadge[data-s="running"]::before,
+  .tbadge[data-s="lobby"]::before {
     content: "";
     width: 6px;
     height: 6px;
     background: currentColor;
     flex: none;
   }
-  .tstate[data-s="lobby"] { color: var(--ink-2); }
-  .tstate[data-s="running"] { color: var(--g-a-green); }
-  .tstate[data-s="running"]::before { animation: tstate-beat 2400ms ease-in-out infinite; }
+  .tbadge[data-s="running"]::before { animation: tstate-beat 2400ms ease-in-out infinite; }
+  /* Отсчёт до старта рядом со значком OPEN: цифры моноширинные, чтобы строка
+     не дрожала каждую секунду. */
+  .tcount {
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    font-variant-numeric: tabular-nums lining-nums;
+    color: var(--ink-2);
+    white-space: nowrap;
+  }
+
+  /* Общая таблица турниров — строки-панели по образцу владельца (2026-09-26).
+     Подписи стоят внутри ячеек («призовой фонд», «конец через»), поэтому шапки
+     у таблицы нет; на узком экране `LedgerTable` сам превращает строки в
+     карточки с подписями колонок. Строки выше обычных: в ячейке по две
+     строки текста, и воздух между турнирами нужен, чтобы они не слипались. */
+  .tboard .ledger thead { display: none; }
+  .tboard .ledger td {
+    padding-top: var(--s3);
+    padding-bottom: var(--s3);
+    vertical-align: middle;
+  }
+  .tb-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .tb-name {
+    font-size: var(--t-m);
+    color: var(--ink);
+  }
+  .tb-sub {
+    font-size: var(--t-xs);
+    color: var(--ink-3);
+  }
+  /* Знак монеты — по высоте цифр, а не по середине строчных букв: сброс
+     Tailwind ставит `svg` `vertical-align: middle`, и знак проседал ниже
+     числа. Сдвиг = половина высоты цифр (≈0.7em) минус половина знака. */
+  .tb-sub .coin {
+    height: 0.9em;
+    vertical-align: -0.1em;
+  }
+  /* Формат — той же капителью, что значок: это паспорт турнира, а не текст. */
+  .tb-meta {
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+  .tb-big {
+    font-size: var(--t-m);
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .tb-big .coin {
+    height: 0.8em;
+    vertical-align: -0.05em;
+  }
+  /* Места — по делению на место: заполненность видна раньше, чем прочитано
+     «2 / 5». Зелёный раздела игр, не --profit: места не деньги. */
+  .seats {
+    display: flex;
+    gap: 3px;
+    width: 112px;
+  }
+  .seats > span {
+    flex: 1;
+    height: 4px;
+    background: var(--g-line-2);
+  }
+  .seats > span[data-on="true"] { background: var(--g-a-green); }
+  .seats-n {
+    width: 112px;
+    text-align: center;
+  }
+  .tb-time { align-items: center; }
+  .tb-label {
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+  .tb-clock {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums lining-nums;
+    color: var(--ink);
+    white-space: nowrap;
+  }
   @keyframes tstate-beat {
     0% { opacity: 1; }
     50% { opacity: 0.25; }
@@ -2519,12 +2807,7 @@
     line-height: 1.1;
     white-space: nowrap;
   }
-  .tpool-unit {
-    font-size: var(--t-xs);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--ink-2);
-  }
+  .tpool .coin { height: 0.7em; }
   /* Доли переносятся по словам и не тянут шапку: мест бывает до девяти, и
      строка «1: 40% · 2: 25% · …» в одну линию отняла бы у имени турнира
      половину ширины окна. */
@@ -2581,12 +2864,24 @@
      строками там не осталось вовсе. */
   .tsect .ledger tbody tr:last-child td { border-bottom: 0; }
 
-  /* Подписи лидерборда — мельче обычного текста: он стоит в боковой колонке
-     рядом со списками турниров, и объяснение правила очков не должно весить
-     больше самих очков. */
-  .rating-note {
-    font-size: var(--t-xs);
+  /* Вкладки панели игроков («Рейтинг игроков» / «Сделки игроков») стоят на
+     месте заголовка раздела: делят ширину колонки поровну и отбиты снизу так
+     же, как h2. */
+  .ptabs { margin-bottom: var(--s3); }
+  .ptabs button {
+    flex: 1;
+    text-align: center;
   }
+
+  /* Ячейка ленты сделок в две строки — главное (игрок, сделка) и подпись под
+     ним (турнир, уровни): в узкой колонке пять величин в ряд не помещаются. */
+  .feed-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .feed-cell .subtle { font-size: var(--t-xs); }
 
   /* ═══════════════ ИГРЫ: ВИТРИНА РАЗДЕЛА ═══════════════
      Единственный раздел продукта, который не читают, а рассматривают.
@@ -2637,11 +2932,8 @@
   }
   /* То самое исключение: скругления только внутри раздела и только у его
      собственных элементов. */
-  .games-page :is(.gcard, .gbtn, .gbadge, .gchip, .gplat, .gcard > img) {
+  .games-page :is(.gcard, .gbtn, .gplat, .gcard > img) {
     border-radius: 12px !important;
-  }
-  .games-page :is(.gchip, .gbadge) {
-    border-radius: 999px !important;
   }
 
   /* Кикер — служебная строка над заголовком: моноширинный верхний регистр,
@@ -2655,19 +2947,33 @@
     color: var(--g-ink-3);
   }
 
-  /* ── герой ─────────────────────────────────────────────── */
-  /* 42 % текста и 58 % картинки: панели ассета стоят в ряд и на узкой дорожке
-     схлопнулись бы в полоску. */
+  /* ── первый экран: баннер и карточки ───────────────────── */
+  /* Баннер и карточки — ровно окно под шапкой у любого экрана (тот же расчёт,
+     что у стола, .ct-page). Карточки держат пропорцию кадра — их высота идёт
+     от ширины колонки, — а баннер забирает всё, что осталось над ними.
+     min-height, а не height: на планшете карточки стоят 2×2 и в окно не
+     помещаются, и тогда экран растёт, а не обрезает их. */
+  .gfirst {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s3);
+    min-height: calc(100dvh - var(--top-h) - 1px);
+    padding: var(--s4) 0;
+  }
+  /* Баннер: пока в нём только текст раздела — слева заголовок и слоган,
+     справа внизу лида и кнопки. Рамка показывает, сколько места у баннера. */
   .ghero {
+    flex: 1;
     display: grid;
-    grid-template-columns: minmax(0, 42fr) minmax(0, 58fr) auto;
-    align-items: center;
-    gap: var(--s4);
-    padding: var(--s5) 0 var(--s6);
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: var(--s3) var(--s5);
+    padding: var(--s4);
+    border: 1px solid var(--g-line);
   }
   .ghero h1 {
     margin: 0;
-    font-size: clamp(52px, 6vw, 80px);
+    font-size: clamp(40px, 4.4vw, 64px);
     font-weight: 600;
     line-height: 0.95;
     letter-spacing: 0.01em;
@@ -2676,14 +2982,16 @@
   }
   .ghero-tag {
     margin: var(--s2) 0 0;
-    font-size: 27px;
+    font-size: 22px;
     letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--g-ink-2);
   }
+  .ghero-side {
+    max-width: 52ch;
+  }
   .ghero-lede {
-    margin: var(--s3) 0 0;
-    max-width: 44ch;
+    margin: 0;
     font-size: var(--t-s);
     line-height: 1.6;
     color: var(--g-ink-2);
@@ -2692,24 +3000,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--s2);
-    margin-top: var(--s4);
-  }
-  .ghero-art img {
-    display: block;
-    width: 100%;
-    height: auto;
-  }
-  /* Подпись вдоль правого края — узкий столбец строк, а не повёрнутый текст:
-     вертикальную надпись пришлось бы читать, наклонив голову. */
-  .ghero-aside {
-    margin: 0;
-    width: 9ch;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    line-height: 1.8;
-    letter-spacing: 0.24em;
-    text-transform: uppercase;
-    color: var(--g-ink-3);
+    margin-top: var(--s3);
   }
 
   /* ── кнопки раздела ────────────────────────────────────── */
@@ -2747,14 +3038,6 @@
   .gbtn-line:hover {
     border-color: var(--g-line-2);
   }
-  /* Кнопка ненаписанной игры — не кнопка, а место под неё: ряд карточек стоит
-     ровно только потому, что низ у всех один. */
-  .gbtn-off {
-    background: none;
-    color: var(--g-ink-3);
-    border: 1px solid var(--g-line);
-    cursor: default;
-  }
 
   /* ── карточки игр ──────────────────────────────────────── */
   /* Четыре в ряд на листе, 2×2 на планшете, одна на телефоне — раскладка
@@ -2766,22 +3049,33 @@
     gap: var(--s3);
   }
   /* Ни рамки, ни отступа перед картинкой: карточка не рама вокруг предмета, а
-     сам предмет. outline вместо border — тонкая линия акцента появляется
-     только под курсором, и до этого момента у карточки нет ничего похожего
-     на границу, которую можно было бы «убрать».
-     Пропорция кадра (384×514) задана самой карточке, а не отдельной обёртке
-     под картинку: обёртки под картинку больше нет — карточка кончается вместе
-     с кадром, а название, бейдж и .gcard-reveal лежат поверх него, а не рядом. */
+     сам предмет. Тонкая линия акцента появляется только под курсором (::after
+     ниже), и до этого момента у карточки нет ничего похожего на границу,
+     которую можно было бы «убрать».
+     Пропорция задана самой карточке: кадр 384×514, срезанный по высоте на
+     10 % (решение владельца 2026-09-25). Название лежит поверх кадра, а не
+     рядом. */
   .gcard {
     --g-a: var(--g-ink);
     position: relative;
     display: block;
-    aspect-ratio: 384 / 514;
+    aspect-ratio: 384 / 462.6;
     overflow: hidden;
     background: var(--g-card);
-    outline: 1px solid transparent;
-    outline-offset: -1px;
-    transition: outline-color 160ms ease, transform 160ms ease;
+    outline: none;
+    transition: transform 160ms ease;
+  }
+  /* Линия акцента — слой поверх сцены, а не outline карточки: outline внутри
+     карточки рисуется под её абсолютными слоями, и сцена с непрозрачным фоном
+     во весь кадр (джетпак) закрывала его целиком. Слой последний в дереве,
+     поэтому ложится поверх всех слоёв сцены. */
+  .gcard::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 1px solid transparent;
+    pointer-events: none;
+    transition: border-color 160ms ease;
   }
   /* Акцент — цвет свечения, уже снятого на самой картинке: линия под курсором
      подхватывает его, чтобы отклик не выглядел чужим по отношению к кадру. */
@@ -2790,21 +3084,34 @@
   .gcard-purple { --g-a: var(--g-a-purple); }
   .gcard:not(.gcard-soon):hover,
   .gcard:not(.gcard-soon):focus-visible {
-    outline-color: var(--g-a);
     transform: translateY(-2px);
   }
-  /* Картинка — во всю ширину и высоту карточки: `cover` ничего не обрезает,
-     раз пропорция карточки и есть пропорция кадра, только масштабирует.
-     Сцены (торговля, покер, блэкджек, джетпак) — тот же слой: корень сцены .gscene
-     держит пропорцию кадра, и оба типа картинки ведут себя одинаково. */
-  .gcard > img,
-  .gcard > .gscene {
+  .gcard:not(.gcard-soon):hover::after,
+  .gcard:not(.gcard-soon):focus-visible::after {
+    border-color: var(--g-a);
+  }
+  /* Картинка — во всю карточку, `cover` срезает лишнюю высоту кадра. */
+  .gcard > img {
     position: absolute;
     inset: 0;
     display: block;
     width: 100%;
     height: 100%;
     object-fit: cover;
+  }
+  /* Сцена (торговля, покер, блэкджек, джетпак) сжиматься не может: слои
+     стоят в процентах кадра 384×514, и сплющенный корень перекосил бы их.
+     Поэтому корень держит полный кадр, а карточка его срезает — 6 % сверху,
+     под названием, и 4 % снизу, где у торговли стоит метка SHORT
+     (50 % карточки = 45 % кадра, 45 % − 51 % = −6 %). */
+  .gcard > .gscene {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    display: block;
+    width: 100%;
+    aspect-ratio: 384 / 514;
+    translate: 0 -51%;
   }
   /* Градиент сверху держит название и метку читаемыми на любом кадре: без
      него светлый участок картинки съедал бы текст, а тёмный красил бы
@@ -2825,9 +3132,8 @@
     gap: var(--s2);
     padding: var(--s3);
   }
-  /* На месте прежнего номера ряда: карточка называет себя сама, без разворота
-     к тексту ниже, которого теперь и нет. min-width: 0 и обрезка в многоточие
-     нужны, чтобы длинное название не наехало на бейдж. */
+  /* На месте прежнего номера ряда: карточка называет себя сама. min-width: 0
+     и обрезка в многоточие держат длинное название в ширине карточки. */
   .gcard-title {
     flex: 1;
     min-width: 0;
@@ -2844,70 +3150,6 @@
     text-transform: uppercase;
     color: var(--g-ink);
   }
-  .gbadge {
-    flex: none;
-    padding: 4px 11px;
-    border: 1px solid var(--g-line-2);
-    background: rgb(5 5 5 / 0.55);
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--g-ink-2);
-  }
-  /* Описание, чипы и вход — поверх нижней части кадра, а не под ним: карточка
-     кончается вместе с картинкой. Видны по наведению или фокусу; прячет их
-     только opacity, а не display/visibility — скринридер получает текст
-     независимо от того, наведена ли карточка мышью.
-     На тачскрине навести нечем, и это не потеря: у доступной игры кликабелен
-     весь кадр (см. GameCard.tsx), переход не заперт за состоянием наведения. */
-  .gcard-reveal {
-    position: absolute;
-    inset: auto 0 0 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--s2);
-    padding: var(--s3);
-    background: linear-gradient(to top, rgb(5 5 5 / 0.95) 60%, transparent);
-    opacity: 0;
-    transform: translateY(6px);
-    pointer-events: none;
-    transition: opacity 180ms ease, transform 180ms ease;
-  }
-  .gcard:hover .gcard-reveal,
-  .gcard:focus-visible .gcard-reveal {
-    opacity: 1;
-    transform: translateY(0);
-    pointer-events: auto;
-  }
-  .gcard-lede {
-    margin: 0;
-    font-size: var(--t-s);
-    line-height: 1.55;
-    color: var(--g-ink-2);
-  }
-  /* Чипы отвечают на «с кем и как быстро» — формат игры человек выбирает
-     раньше сюжета. */
-  .gchips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--s1);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .gchip {
-    padding: 4px 11px;
-    border: 1px solid var(--g-line);
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--g-ink-2);
-  }
-  .gcard-reveal .gbtn {
-    width: 100%;
-  }
   /* Ненаписанная игра стоит той же карточкой, но тусклее: она часть витрины,
      а не её брак. */
   .gcard-soon {
@@ -2920,7 +3162,7 @@
 
      Шкала одна на всю сцену и идёт от почти чёрного зелёного через зелёный
      продукта (--ts-4 — это `--g-a-green` раздела) к кости (--ts-7 — краска
-     всего Virex). Тон свечи берётся по её месту в тренде: чем выше цена, тем
+     всего Trade Play). Тон свечи берётся по её месту в тренде: чем выше цена, тем
      светлее тело, и последнее в ряду почти белое.
 
      Красного в теле свечи нет: падение показывает полая заливка, не второй
@@ -3447,8 +3689,9 @@
      раздача с прилётом из шуза и сходящиеся тузы здесь уже стояли, и
      исчезающая карта читалась поломкой.
 
-     Всё движение — в верхней половине кадра: нижнюю при наведении закрывает
-     .gcard-reveal, и то, что происходит под ней, никто не увидит.
+     Всё движение — в верхней половине кадра: нижнюю при наведении закрывала
+     подложка .gcard-reveal. Её сняли 2026-09-25, низ кадра теперь виден, но
+     жесты под курсором остались прежними.
 
      Селекторы — .gcard:hover без :not(.gcard-soon): карточка «Скоро» не
      ссылка, но показывать игру под курсором ей так же нужно. focus-visible —
@@ -3662,7 +3905,7 @@
      transform: transform у свечи занят анимацией, а отдельное свойство
      складывается с ней, а не заменяет её. LONG подрастает — это отдельный
      слой (.tsc-long-lift), его точку поворота ставит разметка; SHORT не
-     трогается — он внизу кадра, под .gcard-reveal. */
+     трогается (раньше его закрывала подложка .gcard-reveal, снятая 2026-09-25). */
   .tsc-bar {
     transition: translate 560ms cubic-bezier(0.3, 0.7, 0.2, 1);
     transition-delay: calc(var(--i, 0) * 30ms);
@@ -3781,14 +4024,6 @@
     .gcards {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-    .ghero {
-      grid-template-columns: minmax(0, 1fr);
-      padding: var(--s4) 0 var(--s5);
-    }
-    /* Столбец из девяти знаков на планшете — лесенка по букве в строке. */
-    .ghero-aside {
-      display: none;
-    }
     /* Шаги над кадром съезжают с нарисованной рамки, как только полоса
        обрезается по ширине: ниже этой границы они встают обычной строкой под
        текстом. */
@@ -3808,6 +4043,9 @@
   }
   @media (max-width: 767px) {
     .gcards {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .ghero {
       grid-template-columns: minmax(0, 1fr);
     }
     .gstats {
@@ -6329,30 +6567,30 @@
 }
 
 /* ── Джетпак (/games/jetpack) ─────────────────────────────────────
-   Третье исключение из нулевого радиуса и теней (как стол и витрина): поле
-   полёта, кнопки и плашки истории — предметы игры, а не строки гроссбуха.
+   Третье исключение из нулевого радиуса и теней (как стол и витрина): панели,
+   кнопки и плашки истории — предметы игры, а не строки гроссбуха. Сцена
+   идёт во весь экран без скругления: это окно, а не карточка.
    Исключение — в слое base, как у стола: там стоит глобальный сброс с
    !important, и из components оно проиграло бы молча. */
 @layer base {
-  .jpg-page :is(.jpg-stage, .jpg-panel, .jpg-side) { border-radius: 12px !important; }
-  .jpg-page :is(.jpg-go, .jpg-mini, .jpg-toggle, .in) { border-radius: 8px !important; }
-  .jpg-page :is(.jpg-hx, .jpg-dot, .jpg-burst, .jpg-bar, .jpg-bar > span) { border-radius: 999px !important; }
+  .jpg-page :is(.jpg-top, .jpg-panel, .jpg-side) { border-radius: 12px !important; }
+  .jpg-page :is(.jpg-go, .jpg-check, .jpg-stake, .in) { border-radius: 8px !important; }
+  .jpg-page :is(.jpg-step, .jpg-chip, .audio-btn, .audio-mute) { border-radius: 6px !important; }
+  .jpg-page .audio-pop { border-radius: 10px !important; box-shadow: 0 8px 28px rgb(0 0 0 / 0.45) !important; }
+  .jpg-page .jpg-box { border-radius: 4px !important; }
+  .jpg-page :is(.jpg-hx, .jpg-burst, .jpg-bar, .jpg-bar > span) { border-radius: 999px !important; }
   .jpg-page .jpg-beacon { border-radius: 50% !important; }
-  /* Свет панелей — тот же неон, что у сцены, но тише: панель обрамляет
-     полёт, а не спорит с ним. Светится только то, что можно нажать сейчас. */
-  .jpg-page :is(.jpg-panel, .jpg-side) { box-shadow: inset 0 1px 0 rgb(205 180 255 / 0.08) !important; }
-  .jpg-page .jpg-go:not(:disabled) {
-    box-shadow: 0 0 22px rgb(154 92 255 / 0.3), inset 0 1px 0 rgb(255 255 255 / 0.22) !important;
-  }
-  .jpg-page .jpg-go.jpg-cash:not(:disabled) {
-    box-shadow: 0 0 22px rgb(var(--g-a-green-rgb) / 0.32), inset 0 1px 0 rgb(255 255 255 / 0.3) !important;
-  }
-  .jpg-page .jpg-toggle.on .jpg-dot { box-shadow: 0 0 8px rgb(154 92 255 / 0.7) !important; }
-  .jpg-page .jpg-panel .in:focus { box-shadow: 0 0 0 3px rgb(154 92 255 / 0.16) !important; }
+  /* Панели отделяет от сцены тень, а не кромка. Неона на кнопках нет: свет
+     в кадре — у ракеты и множителя, и светящиеся кнопки с ними спорили. */
+  .jpg-page :is(.jpg-top, .jpg-panel, .jpg-side) { box-shadow: 0 8px 28px rgb(0 0 0 / 0.4) !important; }
 }
 @layer components {
-  /* Экран — ровно окно под шапкой, как стол: сцена забирает остаток от
-     панели ставки. Поле тёмное в обеих темах; прикладные имена темы
+  /* Экран — ровно окно под шапкой, и сцена занимает его целиком, во всю
+     ширину (решение владельца 2026-09-25): полёт в рамке посреди чёрного поля
+     читался окошком. Панели лежат поверх сцены на затемнённом стекле
+     (`.jpg-hud`), а геометрия полёта считается по свободной части кадра —
+     левее колонки ставок (`--jpg-safe-r`): иначе ракета, метки и табло
+     уходили бы под колонку. Поле тёмное в обеих темах; прикладные имена темы
      переопределены на странице — общие компоненты внутри (поле, таблица)
      берут тёмную краску. Шкала свечения ракеты — та же `--csn-*`, что у
      карточки витрины. */
@@ -6370,53 +6608,125 @@
     --csn-3: #5a2fd0;
     --csn-4: var(--g-a-purple);
     --csn-5: #cdb4ff;
-    /* Кромка поля, панелей и полей ввода — фиолетовая, как линия горизонта
-       сцены, а не серая: три блока экрана читаются одним предметом. */
-    --jpg-edge: rgb(154 92 255 / 0.24);
+    --jpg-gap: 12px;
+    --jpg-side-w: 288px;
+    /* Сколько кадра справа закрыто колонкой ставок — вместе с зазорами. */
+    --jpg-safe-r: calc(var(--jpg-side-w) + 2 * var(--jpg-gap));
+    /* Сцена уходит под шапку (решение владельца 2026-09-25): шапка
+       полупрозрачная и размывает то, что под ней, — небо полёта красит её
+       так же, как страница, прокрученная под неё. Страница поднята на
+       высоту шапки с её чертой, а панели и табло опущены на столько же. */
+    --jpg-top-inset: calc(var(--top-h) + 1px);
     position: relative;
     z-index: 1;
     color: var(--g-ink);
     color-scheme: dark;
-    max-width: 1320px;
-    margin: 0 auto;
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    height: calc(100dvh - var(--top-h) - 1px);
+    margin-top: calc(-1 * var(--jpg-top-inset));
+    height: 100dvh;
     min-height: 560px;
+    overflow: hidden;
   }
+  .jpg-page > .jpg-wait { padding-top: var(--jpg-top-inset); }
   .jpg-wait { color: var(--g-ink-2); text-align: center; margin: 8px 0; }
-  .jpg-top { display: flex; align-items: center; gap: 16px; min-width: 0; }
-  .jpg-back { color: var(--g-ink-2); text-decoration: none; font-size: 13px; white-space: nowrap; }
-  .jpg-back:hover { color: var(--g-ink); }
-  .jpg-history { display: flex; gap: 6px; margin: 0; padding: 0; list-style: none; overflow: hidden; min-width: 0; }
-  .jpg-hx { padding: 3px 10px; font-size: 12px; border: 1px solid var(--g-line); color: var(--g-ink-3); white-space: nowrap; }
-  .jpg-hx.mid { color: var(--g-a-purple); border-color: color-mix(in srgb, var(--g-a-purple) 45%, transparent); }
-  .jpg-hx.high { color: #f1e8ff; background: color-mix(in srgb, var(--g-a-purple) 35%, transparent); border-color: var(--g-a-purple); }
 
-  .jpg-body { flex: 1; min-height: 0; display: flex; gap: 16px; }
-  .jpg-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
-  /* Панели — из того же ночного неба, что и поле полёта: индиго-подложка
-     вместо серой вуали. Линейки таблицы и полей берут краску из прикладных
-     имён — они перекрашены здесь, а не правкой общих компонентов. */
+  /* Панели поверх сцены — сеткой во весь кадр: слева сверху назад и
+     история, внизу по центру свободной части ставка, справа во всю высоту
+     ставки раунда. Сама сетка клики пропускает: пустые ячейки — это сцена. */
+  .jpg-hud {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--jpg-side-w);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas: 'top side' '. side' 'dock side';
+    gap: var(--jpg-gap);
+    padding: calc(var(--jpg-top-inset) + var(--jpg-gap)) var(--jpg-gap) var(--jpg-gap);
+    pointer-events: none;
+  }
+  .jpg-hud > * { pointer-events: auto; }
+  /* Затемнение под стеклом: сцена гаснет к краям, где лежат панели, и они не
+     висят на ярком небе. Середина кадра — полёт — не трогается. */
+  .jpg-shade {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background:
+      linear-gradient(to left, rgb(3 2 10 / 0.6), rgb(3 2 10 / 0.25) var(--jpg-safe-r), transparent calc(var(--jpg-safe-r) + 16%)),
+      linear-gradient(to top, rgb(3 2 10 / 0.6), transparent 30%),
+      linear-gradient(to bottom, rgb(3 2 10 / 0.45), transparent 14%);
+  }
+  /* Стекло — одно на все панели: тёмная подложка, под которой размывается
+     сцена, и едва заметная кромка — только снаружи. Внутри рамок нет (жалоба
+     владельца 2026-09-25: «много бордеров»): ячейки различаются тоном
+     заливки, а обводка каждой превращала панель в сетку из рамок. Совсем без
+     формы — голый текст на стекле — тоже снято («странно выглядит»). Линейки
+     таблицы берут краску из прикладных имён — они перекрашены здесь, а не
+     правкой общих компонентов. Только стандартное backdrop-filter — почему,
+     см. `.top`. */
+  .jpg-top,
   .jpg-panel,
   .jpg-side {
-    --hair: rgb(154 92 255 / 0.13);
-    --rule: rgb(154 92 255 / 0.24);
-    border: 1px solid var(--jpg-edge);
-    background: linear-gradient(180deg, rgb(30 16 78 / 0.5), rgb(10 6 30 / 0.6));
+    --hair: rgb(255 255 255 / 0.06);
+    --rule: rgb(255 255 255 / 0.1);
+    --jpg-fill: rgb(255 255 255 / 0.05);
+    --jpg-fill-2: rgb(255 255 255 / 0.1);
+    border: 1px solid rgb(255 255 255 / 0.07);
+    background: rgb(10 7 24 / 0.72);
+    backdrop-filter: blur(14px) saturate(1.2);
   }
+  .jpg-top {
+    grid-area: top;
+    justify-self: start;
+    max-width: 100%;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 6px 8px 6px 14px;
+  }
+  .jpg-back { color: var(--g-ink-2); text-decoration: none; font-size: 12px; white-space: nowrap; }
+  .jpg-back:hover { color: var(--g-ink); }
+  /* Звук и музыка (AudioControl) — справа в верхней панели, в тоне стекла:
+     кнопки — тоном заливки, окошко громкости — тем же стеклом, что панели. */
+  .jpg-audio-set { display: flex; gap: 4px; margin-left: auto; flex: none; }
+  .jpg-audio-set .audio-btn { background: var(--jpg-fill); }
+  .jpg-audio-set .audio-btn:hover,
+  .jpg-audio-set .audio-mute:hover { background: var(--jpg-fill-2); }
+  .jpg-audio-set .audio-pop {
+    background: rgb(10 7 24 / 0.9);
+    border-color: rgb(255 255 255 / 0.07);
+    backdrop-filter: blur(14px) saturate(1.2);
+  }
+  /* История — плашки без обводки: величину говорят заливка и цвет числа. */
+  .jpg-history { display: flex; gap: 6px; margin: 0; padding: 0; list-style: none; overflow: hidden; min-width: 0; }
+  .jpg-hx { padding: 3px 9px; font-size: 11px; color: var(--g-ink-3); background: var(--jpg-fill); white-space: nowrap; }
+  .jpg-hx.mid { color: #c3a6ff; background: rgb(154 92 255 / 0.14); }
+  .jpg-hx.high { color: #f4ecff; background: rgb(154 92 255 / 0.36); font-weight: 700; }
+
   .jpg-side {
-    width: 340px;
-    flex: none;
+    grid-area: side;
+    min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 12px;
+    gap: 6px;
+    padding: 10px;
     overflow: auto;
   }
-  .jpg-side-head { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--g-ink-2); }
+  /* Строки ставок плотнее общих 40px гроссбуха: колонка — справка сбоку от
+     полёта, а не таблица, которую читают. Таблица — ровно по колонке, без
+     мерки: имя игрока забирает остаток ширины и режется многоточием, числа
+     стоят по содержимому. Разрядка шапки и отступы колонок — уже общих: в
+     288px общие растягивали таблицу за край, и «Итог» уезжал из панели. */
+  .jpg-side .ledger { --ledger-min: 0px; }
+  .jpg-side .ledger td { height: 30px; font-size: 12px; white-space: nowrap; }
+  .jpg-side .ledger th { letter-spacing: 0.06em; }
+  .jpg-side .ledger :is(th, td) { padding-right: 10px; }
+  .jpg-side .ledger :is(th, td):last-child { padding-right: 0; }
+  .jpg-side .ledger td:first-child { width: 100%; max-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .jpg-side-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--g-ink-2); white-space: nowrap; }
+  .jpg-side-head > :first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .jpg-rules { margin: auto 0 0; font-size: 11px; color: var(--g-ink-3); }
   .jpg-mine { color: var(--g-a-purple); }
   .jpg-won { color: var(--g-a-green); }
@@ -6427,11 +6737,10 @@
      (звёзды, планета, горы, город, облака, земля, метки, корабль), — отдельные
      слои с transform, их двигает кадр (`FlightStage` → `World`). */
   .jpg-stage {
-    position: relative;
-    flex: 1;
-    min-height: 240px;
+    position: absolute;
+    inset: 0;
     overflow: hidden;
-    border: 1px solid var(--jpg-edge);
+    isolation: isolate;
     background:
       radial-gradient(60% 50% at 70% 30%, rgb(60 30 140 / 0.35), transparent 70%),
       #03020a;
@@ -6439,6 +6748,11 @@
   .jpg-defs { position: absolute; }
   .jpg-layer { position: absolute; inset: 0; will-change: transform; pointer-events: none; }
   .jpg-art { position: absolute; left: 0; overflow: visible; }
+  /* Свободная часть кадра — левее колонки ставок. Её меряет `FlightStage`:
+     по ней стоят площадка, точка полёта и облака, а мир тянется дальше, под
+     колонку (у земли запас — три высоты кадра). Подписи меток — у её края. */
+  .jpg-frame { position: absolute; top: 0; bottom: 0; left: 0; right: var(--jpg-safe-r); pointer-events: none; }
+  .jpg-layer.marks { right: var(--jpg-safe-r); }
 
   /* Небо: у земли — ночное, как на референсе владельца: глубокий фиолет с
      сиреневым светом к горизонту; выше — индиго стратосферы. Кадр гасит
@@ -6564,19 +6878,45 @@
   .jpg-arm.late { transition-delay: 180ms; }
   .jpg-arm > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
   .jpg-arm[data-launched] { scale: 0.18 1; }
-  /* Луч радара бьёт в небо влево-вверх и медленно качается; кадр 0 % = 100 %. */
-  .jpg-radar-beam {
-    position: absolute;
-    translate: 0 -50%;
-    transform-origin: 0 50%;
-    rotate: -148deg;
-    clip-path: polygon(0 44%, 100% 0, 100% 100%, 0 56%);
-    background: linear-gradient(90deg, rgb(170 205 255 / 0.55), rgb(140 170 255 / 0.18) 60%, transparent);
-    animation: jpg-radar 7s ease-in-out infinite;
-  }
+  /* Голова радара (Spaceport → Radar): узел нулевого размера на оси тумбы.
+     Прицел — `rotate` (влево-вверх), ход — `transform` анимации: свойства
+     складываются, и под reduced-motion голова остаётся на прицеле. Тарелка
+     ведёт небо рывками с паузами, как следящая станция: плавное покачивание
+     на 9° за 7 с, стоявшее до неё, владелец не замечал (2026-09-26). Луч,
+     импульсы и сама тарелка — дети головы и ходят вместе. Кадр 0 % = 100 %. */
+  .jpg-radar, .jpg-radar-head { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+  .jpg-radar-head { rotate: -148deg; animation: jpg-radar 5s ease-in-out infinite; }
   @keyframes jpg-radar {
     0%, 100% { transform: rotate(0deg); }
-    50% { transform: rotate(9deg); }
+    22%, 36% { transform: rotate(42deg); }
+    64%, 78% { transform: rotate(-14deg); }
+  }
+  .jpg-radar-head > * { position: absolute; }
+  .jpg-radar-dish { overflow: visible; }
+  .jpg-radar-beam {
+    left: 0;
+    top: 0;
+    translate: 0 -50%;
+    clip-path: polygon(0 44%, 100% 0, 100% 100%, 0 56%);
+    background: linear-gradient(90deg, rgb(170 205 255 / 0.55), rgb(140 170 255 / 0.18) 60%, transparent);
+  }
+  /* Импульсы: дуги расходятся от тарелки вдоль луча и гаснут. Дуга — кольцо
+     градиентом под клином `clip-path`, а не скругление: глобальный сброс
+     радиусов снял бы его молча. */
+  .jpg-radar-ping {
+    left: 0;
+    top: 0;
+    translate: -50% -50%;
+    clip-path: polygon(50% 50%, 100% 34%, 100% 66%);
+    background: radial-gradient(closest-side, transparent 84%, rgb(190 225 255 / 0.9) 91%, transparent 98%);
+    opacity: 0;
+    animation: jpg-ping 1.8s ease-out infinite;
+    animation-delay: calc(var(--i) * -0.6s);
+  }
+  @keyframes jpg-ping {
+    0% { transform: scale(0.12); opacity: 0; }
+    12% { opacity: 0.9; }
+    100% { transform: scale(1); opacity: 0; }
   }
   .jpg-beacon {
     position: absolute;
@@ -6693,88 +7033,180 @@
      число не ложится ни на площадку, ни на её точку в кадре. */
   .jpg-readout {
     position: absolute;
-    inset: 0;
+    inset: 0 var(--jpg-safe-r) 0 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    padding-top: 6%;
+    /* Ниже шапки и полосы истории: обе лежат поверх сцены у верхнего края. */
+    padding-top: calc(var(--jpg-top-inset) + max(4%, 56px));
     gap: 6px;
     pointer-events: none;
   }
-  .jpg-label { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--g-ink-2); }
-  .jpg-num { font-size: clamp(40px, 8vw, 88px); font-weight: 700; color: #f1e8ff; text-shadow: 0 0 24px rgb(154 92 255 / 0.55); }
+  .jpg-label { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--g-ink-2); }
+  .jpg-num { font-size: clamp(32px, 5vw, 64px); font-weight: 700; color: #f1e8ff; text-shadow: 0 0 24px rgb(154 92 255 / 0.55); }
   .jpg-stage[data-phase='crashed'] .jpg-num { color: var(--g-a-red); text-shadow: 0 0 24px rgb(217 85 79 / 0.45); }
-  .jpg-bar { width: 180px; height: 4px; background: rgb(255 255 255 / 0.1); overflow: hidden; }
+  .jpg-bar { width: 140px; height: 3px; background: rgb(255 255 255 / 0.1); overflow: hidden; }
   .jpg-bar > span { display: block; height: 100%; background: var(--g-a-purple); transform-origin: left; }
 
-  /* Панель ставки */
+  /* Панель ставки — внизу по центру свободной части кадра, под площадкой:
+     площадка стоит на 72 % высоты, ниже неё только земля и лужи. Раскладка —
+     по образцу владельца (2026-09-25): сверху флажки и множитель автовывода,
+     слева сумма с шагом и быстрыми суммами, справа главная кнопка во всю
+     высоту суммы. Краска своя: стекло, фиолетовая кромка, моноширинные числа. */
   .jpg-panel {
+    grid-area: dock;
+    justify-self: center;
+    width: min(100%, 500px);
     display: grid;
-    grid-template-columns: 1fr minmax(200px, 280px);
-    grid-template-areas: 'fields go' 'hint hint' 'err err';
-    gap: 8px 12px;
-    align-items: center;
-    padding: 12px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: 'opts opts' 'stake go' 'hint hint' 'err err';
+    gap: 8px;
+    padding: 8px;
   }
-  .jpg-fields { grid-area: fields; display: flex; gap: 12px; flex-wrap: wrap; }
-  .jpg-fields .field { margin: 0; }
-  /* stretch: кнопки ½ и ×2 встают вровень с полем, а не ниже его рамки. */
-  .jpg-row { display: flex; align-items: stretch; gap: 6px; }
-  .jpg-row .in { width: 96px; }
-  /* Поле ставки — в рамке, а не общей чертой снизу: в панели-предмете черта
-     без рамки читалась строкой формы. */
+  /* Ячейки панели — флажки, множитель, блок суммы — светлее стекла на тон. */
+  .jpg-check,
+  .jpg-stake,
   .jpg-panel .in {
-    padding: 8px 10px;
-    border: 1px solid var(--jpg-edge);
-    background: rgb(6 4 20 / 0.7);
-    transition: border-color 120ms ease-out;
+    border: 0;
+    background: var(--jpg-fill);
+    transition: background-color 120ms ease-out;
   }
-  .jpg-panel .in:focus { border-color: var(--g-a-purple); }
-  .jpg-panel .in:disabled { opacity: 0.55; }
-  .jpg-panel .in[aria-invalid] { border-color: color-mix(in srgb, var(--g-a-red) 60%, transparent); }
-  .jpg-panel .in-adorned .in.in-has-suffix { padding-right: 2em; }
-  .jpg-panel .in-suffix { right: 10px; }
-  .jpg-mini {
-    padding: 0 10px;
+  .jpg-opts { grid-area: opts; display: flex; gap: 8px; min-width: 0; }
+  .jpg-check {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 34px;
+    padding: 0 12px 0 9px;
     font-size: 12px;
-    border: 1px solid var(--jpg-edge);
-    background: rgb(154 92 255 / 0.08);
-    color: var(--g-ink);
-    transition: background-color 120ms ease-out, border-color 120ms ease-out;
+    font-weight: 600;
+    color: var(--g-ink-2);
+    white-space: nowrap;
+    transition: color 120ms ease-out, background-color 120ms ease-out;
   }
-  .jpg-mini:not(:disabled):hover { background: rgb(154 92 255 / 0.18); border-color: rgb(154 92 255 / 0.5); }
-  .jpg-mini:disabled { opacity: 0.4; }
-  .jpg-toggle { display: inline-flex; align-items: center; padding: 8px 4px; }
-  .jpg-toggle:disabled { opacity: 0.5; }
-  .jpg-dot { width: 10px; height: 10px; border: 1px solid rgb(154 92 255 / 0.45); }
-  .jpg-toggle.on .jpg-dot { background: var(--g-a-purple); border-color: var(--g-a-purple); }
+  .jpg-check:not(:disabled):hover { color: var(--g-ink); background: var(--jpg-fill-2); }
+  .jpg-check.on { color: var(--g-ink); }
+  .jpg-check:disabled { opacity: 0.5; }
+  .jpg-box {
+    width: 16px;
+    height: 16px;
+    display: grid;
+    place-items: center;
+    background: var(--jpg-fill-2);
+    transition: background-color 120ms ease-out;
+  }
+  .jpg-check.on .jpg-box { background: var(--g-a-purple); }
+  .jpg-box svg { width: 12px; height: 12px; fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .jpg-opts .in-adorned { flex: 1; min-width: 72px; }
+  .jpg-panel .in { padding: 6px 8px; color: var(--g-ink); }
+  .jpg-panel .in:focus { background: var(--jpg-fill-2); }
+  .jpg-panel .in:disabled { opacity: 0.55; }
+  .jpg-panel .in[aria-invalid] { color: var(--g-a-red); }
+  .jpg-panel .in-adorned .in.in-has-prefix { padding-left: 1.9em; }
+  .jpg-panel .in-prefix { left: 11px; text-transform: none; font-size: 12px; }
+  .jpg-target { height: 34px; font-size: 14px; font-weight: 600; }
+
+  .jpg-stake { grid-area: stake; display: grid; gap: 6px; padding: 6px; min-width: 0; }
+  .jpg-stake:focus-within { background: var(--jpg-fill-2); }
+  .jpg-amount { display: grid; grid-template-columns: 30px minmax(0, 1fr) 30px; align-items: center; gap: 6px; }
+  .jpg-step {
+    height: 30px;
+    font-size: 18px;
+    line-height: 1;
+    color: var(--g-ink-2);
+    background: var(--jpg-fill);
+    transition: background-color 120ms ease-out, color 120ms ease-out;
+  }
+  .jpg-step:not(:disabled):hover { color: var(--g-ink); background: var(--jpg-fill-2); }
+  .jpg-step:disabled { opacity: 0.4; }
+  /* Сумма с единицей — одной строкой по центру; щелчок по единице ставит
+     курсор в поле (`label`). Поле по ширине текста, где браузер умеет
+     `field-sizing`, иначе — на шесть знаков. Рамки у поля нет: фокус
+     показывает весь блок суммы (`.jpg-stake:focus-within`). */
+  .jpg-sum { display: flex; align-items: baseline; justify-content: center; gap: 6px; min-width: 0; cursor: text; }
+  .jpg-sum .in {
+    width: 6ch;
+    min-width: 1ch;
+    padding: 2px 0;
+    border: 0;
+    background: none;
+    text-align: right;
+    font-size: 18px;
+    font-weight: 700;
+  }
+  @supports (field-sizing: content) {
+    .jpg-sum .in { field-sizing: content; width: auto; }
+  }
+  .jpg-sum .in[aria-invalid] { color: var(--g-a-red); }
+  .jpg-unit { height: 13px; color: var(--g-ink); }
+  .jpg-chips { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  .jpg-chip {
+    height: 24px;
+    font-size: 11px;
+    color: var(--g-ink-3);
+    background: none;
+    transition: background-color 120ms ease-out, color 120ms ease-out;
+  }
+  .jpg-chip:not(:disabled):hover { color: var(--g-ink); }
+  .jpg-chip.on { color: var(--g-ink); background: var(--jpg-fill); }
+  .jpg-chip:disabled { opacity: 0.4; }
+
+  /* Главная кнопка — во всю высоту блока суммы. Действия (ставка, вывод) —
+     прописными с разрядкой, как подписи табло; состояние раунда — обычным
+     текстом: прописью «Ставка 10 принята» читалась бы окриком. */
   .jpg-go {
     grid-area: go;
-    height: 52px;
-    font-size: 16px;
+    min-height: 64px;
+    padding: 0 12px;
+    font-size: 13px;
     font-weight: 600;
     color: #fff;
-    background: linear-gradient(180deg, #ad7bff, #7c44f2);
-    border: 1px solid rgb(205 180 255 / 0.45);
-    transition: filter 120ms ease-out;
+    background: #7c4dff;
+    border: 0;
+    transition: background-color 120ms ease-out;
   }
-  .jpg-go:not(:disabled):hover { filter: brightness(1.08); }
+  .jpg-act { font-size: 15px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+  .jpg-go:not(:disabled):hover { background: #8d63ff; }
   .jpg-go:disabled {
-    background: rgb(154 92 255 / 0.07);
-    border-color: var(--jpg-edge);
+    background: var(--jpg-fill);
     color: var(--g-ink-2);
     cursor: default;
   }
-  .jpg-cash { background: linear-gradient(180deg, #86e0b0, #4fb483); border-color: rgb(200 255 225 / 0.5); color: #04110a; }
-  .jpg-hint { grid-area: hint; margin: 0; font-size: 12px; color: var(--g-ink-3); }
+  .jpg-cash { background: #4fb483; color: #04110a; }
+  .jpg-cash:not(:disabled):hover { background: #5cc491; }
+  /* `Button variant="none"` курсора не задаёт — всё нажимаемое в панели
+     помечено здесь, а запертое возвращает обычную стрелку. */
+  .jpg-panel :is(.jpg-check, .jpg-step, .jpg-chip, .jpg-go) { cursor: pointer; }
+  .jpg-panel :is(.jpg-check, .jpg-step, .jpg-chip, .jpg-go):disabled { cursor: default; }
+  .jpg-hint { grid-area: hint; margin: 0; font-size: 11px; color: var(--g-ink-2); }
   .jpg-panel > .neg { grid-area: err; margin: 0; }
 
+  /* На телефоне панелям поверх сцены места нет: сцена — полосой во всю
+     ширину, панели — под ней по порядку. Сетка панелей распускается
+     (`display: contents`), и они встают в колонку страницы рядом со сценой. */
   @media (max-width: 900px) {
-    .jpg-page { height: auto; min-height: 0; }
-    .jpg-body { flex-direction: column; }
-    .jpg-stage { flex: none; aspect-ratio: 16 / 11; }
-    .jpg-side { width: auto; }
-    .jpg-panel { grid-template-columns: 1fr; grid-template-areas: 'fields' 'go' 'hint' 'err'; }
+    .jpg-page {
+      --jpg-safe-r: 0px;
+      --jpg-top-inset: 0px;
+      margin-top: 0;
+      height: auto;
+      min-height: 0;
+      overflow: visible;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding-bottom: 16px;
+    }
+    .jpg-stage { position: relative; inset: auto; order: 1; aspect-ratio: 16 / 11; }
+    .jpg-shade { display: none; }
+    .jpg-hud { display: contents; }
+    .jpg-top { order: 0; align-self: flex-start; max-width: calc(100% - 24px); margin: 12px 12px 0; }
+    .jpg-panel { order: 2; width: auto; margin: 0 12px; }
+    .jpg-opts { flex-wrap: wrap; }
+    /* Не мельче 16px: иначе Safari на iOS приближает страницу по фокусу. */
+    .jpg-target { font-size: 16px; }
+    .jpg-side { order: 3; margin: 0 12px; }
   }
 }

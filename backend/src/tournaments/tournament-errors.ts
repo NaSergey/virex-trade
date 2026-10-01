@@ -45,3 +45,34 @@ export const badPayout = () =>
     message: 'Доли призового фонда должны давать сто процентов и не расти к последнему месту',
     code: 'TOURNAMENT_BAD_PAYOUT',
   });
+
+/** Вход в законченный, отменённый или истёкший турнир: в идущий войти можно, в прошедший — нет. */
+export const tournamentClosed = () =>
+  new ConflictException({ message: 'Турнир уже закончился', code: 'TOURNAMENT_CLOSED' });
+
+/** У турнира по времени готовности нет — он начнётся сам. */
+export const scheduledStart = () =>
+  new ConflictException({
+    message: 'Турнир начнётся по времени — готовность не нужна',
+    code: 'TOURNAMENT_SCHEDULED',
+  });
+
+export const badStart = () =>
+  new BadRequestException({
+    message: 'Время старта — не раньше чем через минуту и не позже чем через 30 дней',
+    code: 'TOURNAMENT_BAD_START',
+  });
+
+/** У командного турнира вход — в конкретную команду. */
+export const teamRequired = () =>
+  new BadRequestException({ message: 'Выберите команду', code: 'TOURNAMENT_TEAM_REQUIRED' });
+
+export const teamFull = () =>
+  new ConflictException({ message: 'В этой команде нет мест', code: 'TOURNAMENT_TEAM_FULL' });
+
+export const badTeamSize = () =>
+  new BadRequestException({ message: 'Размер команды — от 2 до 15', code: 'TOURNAMENT_BAD_TEAM_SIZE' });
+
+/** Переставлять по командам можно только в командном турнире. */
+export const notTeams = () =>
+  new BadRequestException({ message: 'Это не командный турнир', code: 'TOURNAMENT_NOT_TEAMS' });

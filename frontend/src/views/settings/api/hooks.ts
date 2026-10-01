@@ -30,6 +30,12 @@ export interface ExchangesStatus {
   exchanges: ExchangeInfo[];
 }
 
+/** Что ключ умеет помимо чтения — со слов самой биржи. */
+export interface KeyPermissions {
+  canTrade: boolean;
+  canWithdraw: boolean;
+}
+
 export interface ConnectVars {
   exchange: ExchangeId;
   apiKey: string;
@@ -41,7 +47,8 @@ const SETTINGS_KEY = ['settings', 'exchanges'];
 
 // Connecting or switching changes whose account the whole app is reading, so
 // every exchange-derived query has to be refetched, not just the settings page.
-const ACCOUNT_KEYS = [SETTINGS_KEY, ['usdtBalance'], ['openPositions'], ['trades']];
+// `terminal` — доступ к биржевому терминалу и его счёт: право торговли — свойство ключа.
+const ACCOUNT_KEYS = [SETTINGS_KEY, ['usdtBalance'], ['openPositions'], ['trades'], ['terminal']];
 
 const useAccountMutation = <TVars>(fn: (vars: TVars) => Promise<unknown>) => {
   const qc = useQueryClient();
@@ -61,6 +68,25 @@ export const useExchanges = () =>
     // Три повтора с нарастающей паузой — это ещё пятнадцать секунд пустой
     // страницы поверх уже случившейся ошибки. Настройки открывают, чтобы
     // что-то починить: лучше сразу сказать, что не вышло, и дать «Повторить».
+    retry: 1,
+  });
+
+/**
+ * Права подключённого ключа. Отдельным запросом, а не полем каталога: ответ
+ * стоит обращения к бирже, и ждать его всей странице незачем. `null` —
+ * «неизвестно» (биржу не спрашивают или она не ответила), а не «только чтение».
+ * Ключ запроса начинается с `SETTINGS_KEY`, поэтому переподключение ключа
+ * перечитывает и права.
+ */
+export const useKeyPermissions = (exchange: ExchangeId) =>
+  useQuery({
+    queryKey: [...SETTINGS_KEY, exchange, 'permissions'],
+    queryFn: () =>
+      apiJson<{ success: boolean; permissions: KeyPermissions | null }>(
+        `/api/settings/exchanges/${exchange}/permissions`,
+      ),
+    select: (res) => res.permissions,
+    staleTime: 30000,
     retry: 1,
   });
 

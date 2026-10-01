@@ -184,3 +184,49 @@ describe('MarketDataController.getCandles (T19)', () => {
     expect(headers['Cache-Control']).toBeUndefined();
   });
 });
+
+describe('MarketDataController — монеты эфира', () => {
+  function make() {
+    const marketData = { getCandles: jest.fn().mockResolvedValue([]), getCoverage: jest.fn() };
+    const live = {
+      history: jest.fn().mockResolvedValue([]),
+      snapshot: jest.fn().mockResolvedValue({ at: 0, minutes: [] }),
+      prices: jest.fn().mockResolvedValue({}),
+    };
+    const controller = new MarketDataController(marketData as never, live as never);
+    return { controller, marketData, live };
+  }
+
+  it('свечи BTC — из хранилища, монеты эфира — из истории Binance', async () => {
+    const { controller, marketData, live } = make();
+
+    await controller.getCandles('60', 'BTCUSDT', undefined, undefined, '300', fakeRes().res);
+    await controller.getCandles('60', 'ETHUSDT', undefined, undefined, '300', fakeRes().res);
+
+    expect(marketData.getCandles).toHaveBeenCalledTimes(1);
+    expect(live.history).toHaveBeenCalledWith('ETHUSDT', expect.objectContaining({ timeframe: 60, limit: 300 }));
+  });
+
+  it('монета не из списка — 400, к бирже не ходим', async () => {
+    const { controller, live } = make();
+
+    await expect(controller.getCandles('60', 'PEPEUSDT', undefined, undefined, undefined, fakeRes().res)).rejects.toMatchObject({
+      status: 400,
+    });
+    await expect(controller.getLive('PEPEUSDT')).rejects.toMatchObject({ status: 400 });
+    expect(live.history).not.toHaveBeenCalled();
+    expect(live.snapshot).not.toHaveBeenCalled();
+  });
+
+  it('хвост без монеты — BTC', async () => {
+    const { controller, live } = make();
+    await controller.getLive(undefined);
+    expect(live.snapshot).toHaveBeenCalledWith('BTCUSDT');
+  });
+
+  it('цены: чужие символы и повторы отбрасываются', async () => {
+    const { controller, live } = make();
+    await controller.getLivePrices('ETHUSDT,PEPEUSDT,ETHUSDT,SOLUSDT');
+    expect(live.prices).toHaveBeenCalledWith(['ETHUSDT', 'SOLUSDT']);
+  });
+});

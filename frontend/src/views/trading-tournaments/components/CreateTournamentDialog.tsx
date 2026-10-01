@@ -4,15 +4,31 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useCoinBalance } from '@/entities/coins';
 import { useCreateTournament, type TournamentVisibility } from '@/entities/tournament';
+import { CoinIcon } from '@/shared/ui/CoinIcon';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { Field, FieldGroup, Input, Select } from '@/shared/ui/Field';
 import { Seg, type SegOption } from '@/shared/ui/Seg';
 import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader } from '@/shared/ui/dialog';
+import { defaultStartInput, earliestStartInput, startInputOk } from '../lib/start-input';
 import { defaultShares, sharesValid } from '../model/payout-shares';
 
 const DURATIONS = [60, 240, 1440, 4320, 10080] as const;
-const MIN_PLAYERS = 2;
-const MAX_PLAYERS = 10;
+/** Границы — те же, что у сервера (`tournament.config.ts`). */
+const ARENA_MIN = 3;
+const ARENA_MAX = 30;
+const MAX_WINNERS = 10;
+const TEAM_MIN = 2;
+const TEAM_MAX = 15;
+
+/**
+ * Формат в форме. Дуэль — это арена на двоих с одним победителем (сервер её
+ * отдельно не хранит), но выбирают её отдельной кнопкой: «один на один» —
+ * самое частое, что создают, и собирать его из числа мест незачем.
+ */
+type Kind = 'duel' | 'arena' | 'teams';
+
+/** Как турнир выходит из лобби: когда готовы все — или сам в назначенное время. */
+type StartMode = 'ready' | 'time';
 
 /**
  * Новый турнир — окно, а не колонка на странице. Создают турнир редко, а
@@ -32,8 +48,11 @@ const MAX_PLAYERS = 10;
  * стоит» и «кому сколько достанется», и название турнира весило в нём столько
  * же, сколько доля третьего места.
  *
- * Дуэль и общий турнир — не разные сущности, а разные значения тех же полей:
- * два места, один победитель и доля в сто процентов — это и есть дуэль.
+ * Три формата (решение владельца 2026-09-27): дуэль — один на один, арена —
+ * 3–30 игроков с победителями и долями по местам, команды — две по 2–15, фонд
+ * победившей команде поровну. Поля мест и призов зависят от формата: у дуэли
+ * их нет вовсе, у команд вместо числа мест — размер команды, а призы
+ * описаны одной строкой.
  *
  * Доли по местам подставляются готовыми (см. `defaultShares`) и правятся
  * руками: начинать с пустых полей значило бы заставить создателя решать
@@ -56,19 +75,37 @@ export function CreateTournamentDialog({
 
   const [name, setName] = useState('');
   const [visibility, setVisibility] = useState<TournamentVisibility>('private');
-  const [maxPlayers, setMaxPlayers] = useState(2);
+  const [kind, setKind] = useState<Kind>('duel');
+  const [arenaPlayers, setArenaPlayers] = useState(5);
+  const [teamSize, setTeamSize] = useState(5);
   const [deposit, setDeposit] = useState('10000');
   const [durationMin, setDurationMin] = useState<number>(240);
   const [entryFee, setEntryFee] = useState('100');
   const [prizeBonus, setPrizeBonus] = useState('0');
   const [winnersCount, setWinnersCount] = useState(1);
   const [shares, setShares] = useState<number[]>(() => defaultShares(1));
+  const [startMode, setStartMode] = useState<StartMode>('ready');
+  // Момент, от которого считаются границы времени старта. Снимается при
+  // выборе режима и при каждой правке поля, а не в рендере: форма стоит
+  // открытой минутами, и проверять «не раньше чем через две минуты» от
+  // времени, снятого вне событий, значило бы перерисовывать её по таймеру.
+  const [checkedAt, setCheckedAt] = useState(() => Date.now());
+  const [startLocal, setStartLocal] = useState(() => defaultStartInput(Date.now()));
 
   const visibilityOptions: SegOption<TournamentVisibility>[] = [
     { value: 'private', label: t('visibilityPrivate') },
     { value: 'public', label: t('visibilityPublic') },
   ];
   const durationOptions: SegOption<number>[] = DURATIONS.map((m) => ({ value: m, label: t(`duration.${m}`) }));
+  const kindOptions: SegOption<Kind>[] = [
+    { value: 'duel', label: t('kindDuel') },
+    { value: 'arena', label: t('kindArena') },
+    { value: 'teams', label: t('kindTeams') },
+  ];
+  const startModeOptions: SegOption<StartMode>[] = [
+    { value: 'ready', label: t('startByReady') },
+    { value: 'time', label: t('startByTime') },
+  ];
 
   const depositN = Number(deposit);
   const feeN = Number(entryFee);
@@ -81,8 +118,15 @@ export function CreateTournamentDialog({
     depositN >= 100 &&
     depositN <= 10_000_000;
   const nameOk = name.trim().length >= 2 && name.trim().length <= 60;
-  const sharesOk = sharesValid(shares, winnersCount);
-  const valid = nameOk && numbersOk && sharesOk && winnersCount < maxPlayers;
+  const arena = kind === 'arena';
+  const maxPlayers = kind === 'duel' ? 2 : kind === 'teams' ? teamSize * 2 : arenaPlayers;
+  // Победители и доли задаёт создатель только у арены: у дуэли победитель
+  // один, у команд фонд делит сервер поровну между победившей стороной.
+  const winnersSent = arena ? winnersCount : 1;
+  const sharesSent = arena ? shares : [100];
+  const sharesOk = !arena || sharesValid(shares, winnersCount);
+  const startOk = startMode === 'ready' || startInputOk(startLocal, checkedAt);
+  const valid = nameOk && numbersOk && sharesOk && startOk && (!arena || winnersCount < maxPlayers);
 
   // Что создатель платит прямо сейчас: свой взнос и добавку в фонд.
   const dueNow = (numbersOk ? feeN : 0) + (numbersOk ? bonusN : 0);
@@ -92,27 +136,48 @@ export function CreateTournamentDialog({
 
   // Мест стало меньше числа победителей — подвинуть победителей, иначе форма
   // молча оставалась бы невалидной без видимой причины.
-  const applyMaxPlayers = (n: number) => {
-    setMaxPlayers(n);
-    if (winnersCount >= n) applyWinners(n - 1);
+  const applyArenaPlayers = (n: number) => {
+    setArenaPlayers(n);
+    if (winnersCount >= n) applyWinners(Math.min(n - 1, MAX_WINNERS));
   };
   const applyWinners = (n: number) => {
     setWinnersCount(n);
     setShares(defaultShares(n));
   };
+  // Время подставляется заново при каждом переходе на «По времени»: прежнее
+  // значение могло уже уйти в прошлое, пока форма стояла открытой.
+  const applyStartMode = (mode: StartMode) => {
+    const now = Date.now();
+    setStartMode(mode);
+    setCheckedAt(now);
+    if (mode === 'time') setStartLocal(defaultStartInput(now));
+  };
 
-  const submit = () =>
+  const submit = () => {
+    // Границы проверяются ещё раз по часам нажатия: окно создания не
+    // размонтируется между открытиями, и время, выбранное час назад, могло
+    // уже уйти в прошлое, а `checkedAt` о нём не знает. Иначе форма звала бы
+    // «Создать» и получала отказ сервера.
+    const now = Date.now();
+    if (startMode === 'time' && !startInputOk(startLocal, now)) {
+      setCheckedAt(now);
+      return;
+    }
     create.mutate(
       {
         name: name.trim(),
         visibility,
+        format: kind === 'teams' ? 'teams' : 'arena',
+        ...(kind === 'teams' ? { teamSize } : {}),
         maxPlayers,
         startBalance: depositN,
         durationMin,
         entryFee: feeN,
         prizeBonus: bonusN,
-        winnersCount,
-        payoutShares: shares,
+        winnersCount: winnersSent,
+        payoutShares: sharesSent,
+        // Поле хранит местное время браузера; серверу — момент в ISO.
+        ...(startMode === 'time' ? { startsAt: new Date(startLocal).toISOString() } : {}),
       },
       {
         // Окно создания уходит само: на его месте открывается окно созданного
@@ -125,6 +190,7 @@ export function CreateTournamentDialog({
         },
       },
     );
+  };
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
@@ -138,7 +204,7 @@ export function CreateTournamentDialog({
           aside={
             <>
               <span className="tpool">
-                {poolFull} <span className="tpool-unit">{tc('unit')}</span>
+                {poolFull} <CoinIcon />
               </span>
               <span className="tpool-sub">{t('poolFullHint')}</span>
             </>
@@ -167,18 +233,41 @@ export function CreateTournamentDialog({
 
           <div className="fsect">
             <span className="lbl fsect-head">{t('groupSetup')}</span>
+            <FieldGroup label={t('formatLabel')}>
+              <Seg options={kindOptions} value={kind} onChange={setKind} ariaLabel={t('formatLabel')} />
+            </FieldGroup>
             <div className="fgrid">
-              <Field label={t('playersLabel')}>
-                {(id) => (
-                  <Select id={id} full value={maxPlayers} onChange={(e) => applyMaxPlayers(Number(e.target.value))}>
-                    {Array.from({ length: MAX_PLAYERS - MIN_PLAYERS + 1 }, (_, i) => i + MIN_PLAYERS).map((n) => (
-                      <option key={n} value={n}>
-                        {n === 2 ? t('playersDuel') : t('playersN', { n })}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              </Field>
+              {kind === 'arena' && (
+                <Field label={t('playersLabel')}>
+                  {(id) => (
+                    <Select
+                      id={id}
+                      full
+                      value={arenaPlayers}
+                      onChange={(e) => applyArenaPlayers(Number(e.target.value))}
+                    >
+                      {Array.from({ length: ARENA_MAX - ARENA_MIN + 1 }, (_, i) => i + ARENA_MIN).map((n) => (
+                        <option key={n} value={n}>
+                          {t('seatsN', { n })}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </Field>
+              )}
+              {kind === 'teams' && (
+                <Field label={t('teamSizeLabel')}>
+                  {(id) => (
+                    <Select id={id} full value={teamSize} onChange={(e) => setTeamSize(Number(e.target.value))}>
+                      {Array.from({ length: TEAM_MAX - TEAM_MIN + 1 }, (_, i) => i + TEAM_MIN).map((n) => (
+                        <option key={n} value={n}>
+                          {t('teamSizeN', { n })}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </Field>
+              )}
 
               <Field label={t('depositLabel')}>
                 {(id) => (
@@ -202,6 +291,35 @@ export function CreateTournamentDialog({
                 ariaLabel={t('durationLabel')}
               />
             </FieldGroup>
+
+            <FieldGroup label={t('startModeLabel')}>
+              <Seg
+                options={startModeOptions}
+                value={startMode}
+                onChange={applyStartMode}
+                ariaLabel={t('startModeLabel')}
+              />
+            </FieldGroup>
+            {startMode === 'time' && (
+              <Field label={t('startLabel')}>
+                {(id) => (
+                  <Input
+                    id={id}
+                    full
+                    type="datetime-local"
+                    value={startLocal}
+                    min={earliestStartInput(checkedAt)}
+                    onChange={(e) => {
+                      setStartLocal(e.target.value);
+                      setCheckedAt(Date.now());
+                    }}
+                  />
+                )}
+              </Field>
+            )}
+            <p className={startOk ? 'fhint' : 'fhint neg'}>
+              {startMode === 'ready' ? t('startHintReady') : startOk ? t('startHintTime') : t('startTooSoon')}
+            </p>
           </div>
 
           <div className="fsect">
@@ -212,7 +330,7 @@ export function CreateTournamentDialog({
                   <Input
                     id={id}
                     full
-                    suffix={tc('unit')}
+                    suffix={<CoinIcon />}
                     inputMode="numeric"
                     value={entryFee}
                     onChange={(e) => setEntryFee(e.target.value)}
@@ -225,7 +343,7 @@ export function CreateTournamentDialog({
                   <Input
                     id={id}
                     full
-                    suffix={tc('unit')}
+                    suffix={<CoinIcon />}
                     inputMode="numeric"
                     value={prizeBonus}
                     onChange={(e) => setPrizeBonus(e.target.value)}
@@ -245,55 +363,60 @@ export function CreateTournamentDialog({
 
           <div className="fsect">
             <span className="lbl fsect-head">{t('groupPrizes')}</span>
-            <div className="fgrid">
-              <Field label={t('winnersLabel')}>
-                {(id) => (
-                  <Select id={id} full value={winnersCount} onChange={(e) => applyWinners(Number(e.target.value))}>
-                    {Array.from({ length: maxPlayers - 1 }, (_, i) => i + 1).map((n) => (
-                      <option key={n} value={n}>
-                        {n}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              </Field>
+            {/* У дуэли и команд призы — одна строка: делить по местам там
+                нечего, и поля долей только спрашивали бы о том, что решено. */}
+            {!arena && <p className="fhint">{kind === 'duel' ? t('prizeDuelHint') : t('prizeTeamsHint')}</p>}
+            {arena && (
+              <div className="fgrid">
+                <Field label={t('winnersLabel')}>
+                  {(id) => (
+                    <Select id={id} full value={winnersCount} onChange={(e) => applyWinners(Number(e.target.value))}>
+                      {Array.from({ length: Math.min(maxPlayers - 1, MAX_WINNERS) }, (_, i) => i + 1).map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </Field>
 
-              <FieldGroup label={t('sharesLabel')}>
-                {/* Один победитель — один взгляд на цифру, и подпись места над
+                <FieldGroup label={t('sharesLabel')}>
+                  {/* Один победитель — один взгляд на цифру, и подпись места над
                     ней лишняя (100% и так значит «единственное»): та же логика,
                     по которой шапка турнира заменяет разбивку по местам
                     словом `winnerSingle`, когда мест для дележа нет. Ряд из
                     одного контрола выравнивается с выбором числа победителей
                     слева — оба одной высоты, «подпись → контрол». */}
-                {shares.length === 1 ? (
-                  <Input
-                    full
-                    suffix="%"
-                    inputMode="numeric"
-                    value={String(shares[0])}
-                    onChange={(e) => setShares([Number(e.target.value.replace(/\D/g, '')) || 0])}
-                  />
-                ) : (
-                  <div className="shares">
-                    {shares.map((share, i) => (
-                      <label key={i} className="share">
-                        <span className="lbl">{t('placeN', { n: i + 1 })}</span>
-                        <Input
-                          suffix="%"
-                          inputMode="numeric"
-                          value={String(share)}
-                          onChange={(e) => {
-                            const next = [...shares];
-                            next[i] = Number(e.target.value.replace(/\D/g, '')) || 0;
-                            setShares(next);
-                          }}
-                        />
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </FieldGroup>
-            </div>
+                  {shares.length === 1 ? (
+                    <Input
+                      full
+                      suffix="%"
+                      inputMode="numeric"
+                      value={String(shares[0])}
+                      onChange={(e) => setShares([Number(e.target.value.replace(/\D/g, '')) || 0])}
+                    />
+                  ) : (
+                    <div className="shares">
+                      {shares.map((share, i) => (
+                        <label key={i} className="share">
+                          <span className="lbl">{t('placeN', { n: i + 1 })}</span>
+                          <Input
+                            suffix="%"
+                            inputMode="numeric"
+                            value={String(share)}
+                            onChange={(e) => {
+                              const next = [...shares];
+                              next[i] = Number(e.target.value.replace(/\D/g, '')) || 0;
+                              setShares(next);
+                            }}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </FieldGroup>
+              </div>
+            )}
             {!sharesOk && <p className="fhint neg">{t('sharesInvalid')}</p>}
           </div>
 

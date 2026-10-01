@@ -109,6 +109,6 @@ export function dayNumber(t: number, start: number): number {
   return Math.round((b.getTime() - a.getTime()) / DAY) + 1;
 }
 
-/** Откуда брать свечи: реальная сессия — хранилище BTC, тренажёр — генератор этой сессии. */
-export const candlesPath = (s: { id: string; dataSource: 'real' | 'synthetic' }) =>
+/** Откуда брать свечи: тренажёр — генератор этой сессии, остальные — хранилище BTC. */
+export const candlesPath = (s: { id: string; dataSource: 'real' | 'synthetic' | 'live' }) =>
   s.dataSource === 'synthetic' ? `/api/backtest/sessions/${s.id}/candles` : '/api/market-data/candles';

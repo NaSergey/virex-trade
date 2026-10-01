@@ -26,6 +26,7 @@ import {
   useLeaveOnExit,
   useSeatPoints,
   useTableSocket,
+  useTableSound,
 } from '@/widgets/card-table';
 import { ActionBar } from './components/ActionBar';
 import { HandRankings } from './components/HandRankings';
@@ -91,6 +92,8 @@ function Table({ view }: { view: PokerView }) {
   const dealt = !!hand && track.dealtHand === hand.id;
   const potStyle = hand?.street === 'done' ? ({ animationDelay: `${track.winDelay}ms` } as CSSProperties) : undefined;
   const turnKey = `${hand?.street}:${hand?.currentBet}:${view.seats.find((s) => s.isTurn)?.seatIndex}:${view.me.legal?.minRaiseTo}`;
+  const myTurn = seated && !!bySeat.get(mySeat)?.isTurn;
+  useTableSound(track.cues, myTurn ? (hand?.deadline ?? null) : null);
 
   // Ушёл со страницы — встал из-за стола. Отдельной кнопки «Встать» нет:
   // «Столы» и любой другой переход по сайту поднимают из-за стола сами.

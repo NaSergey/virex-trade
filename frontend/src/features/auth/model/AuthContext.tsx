@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { setClientTerminalHint } from '@/entities/terminal';
 import { API_BASE_URL } from '@/shared/config/api';
 import { refreshSession, resolveApiError, setUnauthenticatedHandler } from '@/shared/api/http';
 import { tokenStore } from '@/shared/lib/tokenStore';
@@ -82,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // logout значило бы закрыть одну дверь из двух — сюда попадают, когда
       // refresh-токен истёк или отозван, а вкладка осталась открытой.
       queryClient.clear();
+      setClientTerminalHint(false);
     });
     return () => setUnauthenticatedHandler(null);
   }, [queryClient]);
@@ -141,6 +143,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
      */
     await queryClient.cancelQueries();
     queryClient.clear();
+    // Подсказка «терминал доступен» — про ключ ушедшего пользователя: следующий
+    // вошедший в этом браузере иначе увидел бы чужой пункт в шапке до первого ответа.
+    setClientTerminalHint(false);
   }, [queryClient]);
 
   return (

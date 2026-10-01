@@ -1,9 +1,11 @@
 'use client';
 
-import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
+import { useTranslations } from 'next-intl';
 import { useNonPassiveWheel } from '@/shared/lib/hooks/useNonPassiveWheel';
-import { formatMoney, formatPriceGrouped } from '@/shared/lib/utils/format';
+import { formatMoney, formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
 import { DrawingLayer } from './drawings/DrawingLayer';
+import { COLOR_VAR } from '../lib/drawings/types';
 import { useDrawingGestures, type ChartDrawingProps, type ChartGeo } from './drawings/useDrawingGestures';
 import {
   anchorTimeAt,
@@ -18,6 +20,7 @@ import {
   type ViewState,
 } from '../lib/motion';
 import type { Candle } from '../lib/candles';
+import { RSI_DEFAULTS, rsiSeries } from '../lib/rsi';
 
 const W = 720;
 /** Высота холста до первого замера коробки; дальше её задаёт сама коробка (см. H в компоненте). */
@@ -55,7 +58,8 @@ const DEFAULT_COUNT = 120;
     свечи расползалось в толстый прямоугольник без полезной детали, а само
     приближение переставало что-либо добавлять к разбору сделки. */
 const MIN_COUNT = 80;
-const MAX_COUNT = 400;
+/** Предел отдаления. Было 400 — владелец попросил сжимать сильнее (2026-09-30). */
+const MAX_COUNT = 600;
 /** Насколько близко к загруженному краю пан просит родителя догрузить историю. */
 const EDGE_THRESHOLD = 15;
 /** Наименьший экранный зазор между соседними линиями сетки цены — дальше
@@ -85,6 +89,35 @@ const PRICE_DRAG_PX = 260;
     на плотной сессии подписи сливаются в сплошную полосу и мешают читать
     сами свечи, ради которых график и открыт. */
 const MARKER_LABELS_MAX = 8;
+/** Панель RSI — доля высоты холста, как у TradingView: около четверти. */
+const RSI_FRAC = 0.24;
+/** Не ниже и не выше этого, в экранных пикселях: на низком экране линия не сплющится в полоску. */
+const RSI_MIN_PX = 64;
+const RSI_MAX_PX = 200;
+/** Зазор между полем цены и панелью RSI, экранные пиксели. */
+const RSI_GAP_PX = 10;
+/** Поля шкалы 0–100 сверху и снизу — доля высоты панели: крайние значения не прилипают к краю. */
+const RSI_PAD = 0.08;
+/** Шкала RSI по умолчанию: 0–100 с полями `RSI_PAD` — её же возвращает двойной клик по панели. */
+const RSI_AUTO = { lo: (-100 * RSI_PAD) / (1 - 2 * RSI_PAD), hi: 100 + (100 * RSI_PAD) / (1 - 2 * RSI_PAD) };
+/** Сколько единиц RSI может показать панель: уже — одна дрожь, шире — линия в нитку. */
+const RSI_MIN_SPAN = 5;
+const RSI_MAX_SPAN = 400;
+/** Шкалу RSI нельзя увести так, чтобы на панели не осталось ничего от 0–100. */
+const RSI_KEEP = 10;
+
+/** Диапазон шкалы RSI в границах: размах — от `RSI_MIN_SPAN` до `RSI_MAX_SPAN`, и хоть кусок 0–100 на виду. */
+function fitRsi(lo: number, hi: number): { lo: number; hi: number } {
+  const span = clamp(hi - lo, RSI_MIN_SPAN, RSI_MAX_SPAN);
+  const mid = clamp((lo + hi) / 2, RSI_KEEP - span / 2, 100 - RSI_KEEP + span / 2);
+  return { lo: mid - span / 2, hi: mid + span / 2 };
+}
+/**
+ * Цвет дивергенции — по смыслу, как всё в продукте: медвежья (рост слабеет)
+ * красная, бычья — зелёная. В исходном скрипте было наоборот, и на графике
+ * рядом со свечами это читалось бы обратным сигналом.
+ */
+const DIV_COLOR = { bear: 'var(--loss)', bull: 'var(--profit)' } as const;
 
 export type LevelKind =
   | 'entry'
@@ -92,10 +125,10 @@ export type LevelKind =
   | 'take'
   | 'liq'
   | 'limitClose'
-  | 'orderEntry'
+  | 'limitEntry'
   | 'gridUpper'
   | 'gridLower'
-  | 'gridPending';
+  | 'pendingEntry';
 
 /**
  * Отметка сделки на графике: где вошли и где вышли. Цена своя, а не свечная
@@ -127,7 +160,16 @@ export interface Level {
   impactAt?: (price: number) => number | null;
   /** Чья это сделка — только у уровней открытой позиции (stop/take/entry/liq того трейда). */
   tradeId?: string;
+  /** Объём в монете: позиции, которую закроет/защитит уровень, или размер по черновику. */
+  qty?: number;
+  /** Результат позиции сейчас в USDT — только у линии входа открытой сделки. */
+  pnl?: number | null;
+  /** Сторона сделки — у линии входа: красит плашку объёма. */
+  direction?: 'long' | 'short';
 }
+
+/** Лимит на вход — висящий или черновик панели: плашка «Лимит цена | объём», как у позиции. */
+const isLimit = (kind: LevelKind) => kind === 'limitEntry' || kind === 'pendingEntry';
 
 const LEVEL_COLOR: Record<LevelKind, string> = {
   entry: 'var(--color-fg)',
@@ -135,11 +177,14 @@ const LEVEL_COLOR: Record<LevelKind, string> = {
   take: 'var(--profit)',
   liq: 'var(--loss)',
   limitClose: 'var(--color-muted)',
-  orderEntry: 'var(--color-fg)',
+  limitEntry: 'var(--color-fg)',
   gridUpper: 'var(--color-fg)',
   gridLower: 'var(--color-fg)',
-  gridPending: 'var(--color-muted)',
+  pendingEntry: 'var(--color-fg)',
 };
+
+/** Id уровня, которого ещё нет: его тянут от цены кнопкой ⇅ на плашке позиции. */
+const GHOST_ID = 'ghost';
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
@@ -205,6 +250,12 @@ export const ReplayChart = memo(function ReplayChart({
   historyLoading,
   glide,
   drawing,
+  priceDecimals,
+  onCloseTrade,
+  onClearTake,
+  onCancelOrder,
+  onCloseGrid,
+  rsi = false,
 }: {
   /** ТФ свечей в `candles`, в минутах. */
   timeframe: number;
@@ -214,8 +265,9 @@ export const ReplayChart = memo(function ReplayChart({
   markers: Marker[];
   labelFor: (t: number) => string;
   levelLabel: (kind: LevelKind) => string;
-  /** Уровень отпущен на новой цене. Вызывается один раз на жест. */
-  onDragLevel?: (kind: LevelKind, price: number, tradeId?: string) => void;
+  /** Уровень отпущен на новой цене. Вызывается один раз на жест. `levelId` —
+   * id уровня (у висящего ордера — id ордера); у уровня, тянутого от ⇅, его нет. */
+  onDragLevel?: (kind: LevelKind, price: number, tradeId?: string, levelId?: string) => void;
   /** Пан подошёл к загруженному краю — время догрузить историю назад. */
   onNeedHistory?: () => void;
   historyLoading?: boolean;
@@ -223,8 +275,43 @@ export const ReplayChart = memo(function ReplayChart({
   glide: { minute: Candle; durationMs: number } | null;
   /** Рисунки и инструмент панели; без него график без разметки. Ссылка стабильная — см. memo. */
   drawing?: ChartDrawingProps;
+  /**
+   * Знаков цены у монеты графика — у монет эфира известны (шаг цены биржи).
+   * Не задано — общее правило `formatPriceGrouped`, как у истории BTC.
+   */
+  priceDecimals?: number;
+  /** ✕ на плашке позиции — закрыть её (родитель откроет окно закрытия). */
+  onCloseTrade?: (tradeId: string) => void;
+  /** ✕ на плашке тейка — снять тейк открытой сделки. */
+  onClearTake?: (tradeId: string) => void;
+  /** ✕ на плашке висящего ордера — лимита на вход или лимита закрытия: отменить его. */
+  onCancelOrder?: (kind: LevelKind, orderId: string) => void;
+  /** Кнопка-лесенка на плашке позиции — сетка фиксации (родитель откроет окно). */
+  onCloseGrid?: (tradeId: string) => void;
+  /**
+   * Панель RSI под свечами (индикатор владельца «RSI Divergence», `lib/rsi.ts`).
+   * Внутри того же холста, а не отдельным графиком: пан, зум и вертикаль
+   * перекрестия у неё общие со свечами, и колбэк на каждый кадр жеста наружу
+   * не нужен.
+   */
+  rsi?: boolean;
 }) {
+  const t = useTranslations('backtest');
   const svgRef = useRef<SVGSVGElement>(null);
+  // Перекрестие — узлы, которые двигаются напрямую в DOM (см. updateCross): мышь
+  // шлёт события чаще кадров, и рендер сотен узлов графика на каждое был бы
+  // ровно тем лагом, от которого onMove откладывает жесты на кадр.
+  const crossRef = useRef<SVGGElement>(null);
+  const crossV = useRef<SVGLineElement>(null);
+  const crossH = useRef<SVGLineElement>(null);
+  const crossPriceBox = useRef<SVGRectElement>(null);
+  const crossPriceText = useRef<SVGTextElement>(null);
+  const crossTimeBox = useRef<SVGRectElement>(null);
+  const crossTimeText = useRef<SVGTextElement>(null);
+  const crossPos = useRef<{ x: number; y: number } | null>(null);
+  /** Меню правой кнопки: место в коробке графика и цена под курсором, уже строкой для буфера. */
+  const [menu, setMenu] = useState<{ left: number; top: number; price: string; value: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   // Двоеточия из useId в url(#...) не годятся — убираем; своего счётчика не
   // заводим: два графика на странице получили бы один id и один обрезался бы
   // по чужой области.
@@ -253,15 +340,23 @@ export const ReplayChart = memo(function ReplayChart({
     lo: number;
     hi: number;
     vertical: boolean;
+    /** Где начат жест: вертикаль двигает шкалу своей панели — цену или RSI. */
+    pane: 'price' | 'rsi';
+    rsiLo: number;
+    rsiHi: number;
   } | null>(null);
   /** Драг по полосе цены справа — масштаб цены курсором, без колеса. */
   const priceDragRef = useRef<{ startY: number; lo: number; hi: number } | null>(null);
+  /** То же по полосе справа напротив панели RSI — масштаб её шкалы. */
+  const rsiDragRef = useRef<{ startY: number; lo: number; hi: number } | null>(null);
   /** Формирующаяся свеча в середине анимации — с ТФ, на котором её посчитали. */
   const [animCandle, setAnimCandle] = useState<(Candle & { tf: number }) | null>(null);
   const prevLastRef = useRef<Candle | null>(null);
   // Ручной зум цены — null, пока не тронут (тогда диапазон авто-подгоняется
   // под видимые свечи); сброс — двойной клик, как у span в RangeCheckChart.
   const [priceRange, setPriceRange] = useState<{ lo: number; hi: number } | null>(null);
+  // Ручной диапазон шкалы RSI — тем же приёмом: null — по умолчанию (0–100), сброс — двойной клик по панели.
+  const [rsiRange, setRsiRange] = useState<{ lo: number; hi: number } | null>(null);
   // Новый ТФ — окно к живому краю, зум цены сброшен: пан и зум, набранные на одних
   // свечах, на другом наборе бессмысленны. Прямо в рендере — тот же кадр уже с новым видом.
   const [viewTf, setViewTf] = useState(timeframe);
@@ -269,6 +364,7 @@ export const ReplayChart = memo(function ReplayChart({
     setViewTf(timeframe);
     setView({ count: DEFAULT_COUNT, anchorTime: null });
     setPriceRange(null);
+    setRsiRange(null);
     setAnimCandle(null);
   }
   // Плавный сдвиг «живого» окна (FLIP через CSS-transition) — группа свечей
@@ -303,6 +399,13 @@ export const ReplayChart = memo(function ReplayChart({
     autoHi: 1,
     pw: W - DEFAULT_PR,
     h: DEFAULT_H,
+    /** Низ поля цены: при панели RSI он выше низа холста. */
+    bottom: DEFAULT_H - PB,
+    /** Панель RSI: верх, высота и диапазон шкалы — для колеса над её полосой. */
+    rsiTop: DEFAULT_H - PB,
+    rsiH: 0,
+    rsiLo: RSI_AUTO.lo,
+    rsiHi: RSI_AUTO.hi,
   });
 
   // До отрисовки: с box.w = 0 первый кадр шёл бы в масштабе u = 1 — крупные подписи и
@@ -373,11 +476,23 @@ export const ReplayChart = memo(function ReplayChart({
     // полосы (`pw`) теперь сама зависит от рендера (см. PR у return-выражения
     // компонента) — колбэк стабилен (deps: []), поэтому читает её из
     // latestRef, а не из замыкания, как и остальные быстро устаревающие поля.
-    if (xFrac > latestRef.current.pw / W) {
+    const { h, bottom, rsiTop: rTop, rsiH: rH, rsiLo: rLo, rsiHi: rHi } = latestRef.current;
+    const yCanvas = ((e.clientY - rect.top) / rect.height) * h;
+    // Полоса справа напротив панели RSI — своя шкала, тот же жест, что у цены:
+    // вниз по колесу — шире, вверх — уже, значение под курсором остаётся на месте.
+    if (xFrac > latestRef.current.pw / W && rH > 0 && yCanvas >= rTop && yCanvas <= rTop + rH) {
+      const yFrac = (yCanvas - rTop) / rH;
+      const anchor = rHi - yFrac * (rHi - rLo);
+      const span = clamp((rHi - rLo) * (e.deltaY > 0 ? ZOOM_STEP : 1 / ZOOM_STEP), RSI_MIN_SPAN, RSI_MAX_SPAN);
+      const newHi = anchor + yFrac * span;
+      setRsiRange(fitRsi(newHi - span, newHi));
+      return;
+    }
+    // Полоса цены — только напротив поля цены: напротив панели RSI колесо двигает время.
+    if (xFrac > latestRef.current.pw / W && yCanvas <= bottom) {
       const { lo: curLo, hi: curHi, autoLo, autoHi } = latestRef.current;
-      const h = latestRef.current.h;
-      const plotH = h - PT - PB;
-      const yFrac = clamp(((e.clientY - rect.top) / rect.height) * h - PT, 0, plotH) / plotH;
+      const plotH = bottom - PT;
+      const yFrac = clamp(yCanvas - PT, 0, plotH) / plotH;
       const anchor = curHi - yFrac * (curHi - curLo);
       const autoRange = autoHi - autoLo;
       // Направление развёрнуто относительно горизонтального зума нарочно:
@@ -535,14 +650,21 @@ export const ReplayChart = memo(function ReplayChart({
     hi = autoHi;
   }
 
-  const plotH = H - PT - PB;
+  // Панель RSI отнимает высоту у поля цены снизу; подписи времени остаются под ней.
+  const rsiH = rsi ? clamp(H * RSI_FRAC, px(RSI_MIN_PX), px(RSI_MAX_PX)) : 0;
+  const rsiBottom = H - PB;
+  const rsiTop = rsiBottom - rsiH;
+  const plotBottom = rsi ? rsiTop - px(RSI_GAP_PX) : H - PB;
+  const plotH = plotBottom - PT;
+  const rsiLo = rsiRange?.lo ?? RSI_AUTO.lo;
+  const rsiHi = rsiRange?.hi ?? RSI_AUTO.hi;
   const y = (p: number) => PT + ((hi - p) / (hi - lo)) * plotH;
   const priceAt = (yy: number) => clamp(hi - ((yy - PT) / plotH) * (hi - lo), lo, hi);
 
   // Сетка цены — раньше slot/cx/bodyW ниже: та зависит от PW, а PW теперь
   // сам зависит от того, сколько места нужно самим цифрам (см. PR).
   const ticks = priceTicks(lo, hi, ((hi - lo) * px(MIN_TICK_GAP_PX)) / plotH);
-  const tickLabels: [number, string][] = ticks.map((p) => [p, formatPriceGrouped(p)]);
+  const tickLabels: [number, string][] = ticks.map((p) => [p, formatPriceGrouped(p, priceDecimals)]);
   // Полоса цены — по размеру самих цифр, не фиксированной константой: та
   // либо теснила крупную монету, либо впустую отъедала место у свечей ради
   // мелкой. Знак моноширинный, так что ширину даёт готовая арифметика
@@ -557,7 +679,22 @@ export const ReplayChart = memo(function ReplayChart({
 
   const slot = count > 0 ? PW / count : PW;
   useEffect(() => {
-    latestRef.current = { frameStart, count, candles, lo, hi, autoLo, autoHi, pw: PW, h: H };
+    latestRef.current = {
+      frameStart,
+      count,
+      candles,
+      lo,
+      hi,
+      autoLo,
+      autoHi,
+      pw: PW,
+      h: H,
+      bottom: plotBottom,
+      rsiTop,
+      rsiH,
+      rsiLo,
+      rsiHi,
+    };
   });
   // Позиция свечи по её АБСОЛЮТНОМУ индексу в candles — всегда «верная»
   // (без анимационного отставания): сам сдвиг окна визуально доигрывает FLIP
@@ -606,7 +743,166 @@ export const ReplayChart = memo(function ReplayChart({
     };
   });
 
-  const startDrag = (level: Level) => (e: PointerEvent<SVGRectElement>) => {
+  /**
+   * Перекрестие по мыши, как в TradingView: пунктир по горизонтали и вертикали,
+   * цена на полосе справа и время внизу. Вертикаль липнет к центру свечи под
+   * курсором; правее последней свечи времени нет — там линия идёт за курсором,
+   * а плашка времени прячется. Координаты берутся из последнего положения мыши,
+   * поэтому после каждого рендера (новая свеча, пан, зум) эффект ниже ставит
+   * перекрестие заново, а не оставляет старое.
+   */
+  const updateCross = () => {
+    const g = crossRef.current;
+    const pos = crossPos.current;
+    if (!g) return;
+    const x = pos ? svgX(pos.x) : -1;
+    const yy = pos ? svgY(pos.y) : -1;
+    // Пока тянут уровень, его линия и плашка цены — единственное, что на виду: белая
+    // плашка перекрестия закрывала бы цветную цену уровня на полосе справа.
+    // Горизонталь и подпись — в той панели, над которой курсор: в поле цены — цена,
+    // в панели RSI — его значение. В зазоре между ними горизонтали нет.
+    const inPrice = yy >= PT && yy <= plotBottom;
+    const inRsi = rsi && yy >= rsiTop && yy <= rsiBottom;
+    if (drag || !pos || x < 0 || x > PW || (!inPrice && !inRsi)) {
+      g.style.visibility = 'hidden';
+      return;
+    }
+    g.style.visibility = 'visible';
+    const f = Math.round(frameStart + (x - slot / 2) / slot);
+    const candle = f >= 0 && f < candles.length ? candles[f] : null;
+    const xs = candle ? cx(f) : x;
+    crossV.current?.setAttribute('x1', String(xs));
+    crossV.current?.setAttribute('x2', String(xs));
+    crossH.current?.setAttribute('y1', String(yy));
+    crossH.current?.setAttribute('y2', String(yy));
+
+    const boxH = px(16);
+    crossPriceBox.current?.setAttribute('y', String(yy - boxH / 2));
+    crossPriceText.current?.setAttribute('y', String(yy + px(3.5)));
+    if (crossPriceText.current) {
+      crossPriceText.current.textContent = inPrice ? formatPriceGrouped(priceAt(yy), priceDecimals) : rsiAt(yy).toFixed(2);
+    }
+
+    const timeBox = crossTimeBox.current;
+    const timeText = crossTimeText.current;
+    if (!timeBox || !timeText) return;
+    if (!candle) {
+      timeBox.style.display = 'none';
+      timeText.style.display = 'none';
+      return;
+    }
+    const label = labelFor(candle.t);
+    const w = label.length * charRatio * px(10) + px(14);
+    const x0 = clamp(xs - w / 2, 0, Math.max(0, PW - w));
+    timeBox.style.display = '';
+    timeText.style.display = '';
+    timeBox.setAttribute('x', String(x0));
+    timeBox.setAttribute('width', String(w));
+    timeText.setAttribute('x', String(x0 + w / 2));
+    timeText.textContent = label;
+  };
+  useLayoutEffect(updateCross);
+
+  const onSvgMove = (e: PointerEvent<SVGSVGElement>) => {
+    if (e.pointerType === 'mouse') {
+      crossPos.current = { x: e.clientX, y: e.clientY };
+      updateCross();
+    }
+    onMove(e);
+  };
+
+  const onSvgLeave = () => {
+    crossPos.current = null;
+    updateCross();
+  };
+
+  /** Правая кнопка — меню «Копировать цену» на уровне курсора. */
+  const openMenu = (e: MouseEvent<SVGSVGElement>) => {
+    e.preventDefault();
+    const wrap = svgRef.current?.parentElement;
+    if (!wrap) return;
+    const yy = svgY(e.clientY);
+    if (yy < PT || yy > plotBottom) return;
+    const rect = wrap.getBoundingClientRect();
+    const price = formatPriceGrouped(priceAt(yy), priceDecimals).replace(/\s/g, '');
+    setMenu({ left: e.clientX - rect.left, top: e.clientY - rect.top, price, value: priceAt(yy) });
+  };
+
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    const onDown = (e: globalThis.PointerEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) close();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
+    };
+    document.addEventListener('pointerdown', onDown);
+    document.addEventListener('keydown', onKey);
+    window.addEventListener('wheel', close, { passive: true });
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('wheel', close);
+    };
+  }, [menu]);
+
+  // Пункты «поставить тейк/стоп сюда» — по каждой открытой сделке монеты графика,
+  // только на верной стороне текущей цены (та же проверка, что checkLevels).
+  const lastClose = candles.length ? candles[candles.length - 1].c : null;
+  const levelItems =
+    menu && onDragLevel && lastClose != null
+      ? levels
+          .filter((l) => l.kind === 'entry' && l.tradeId != null && l.direction != null)
+          .flatMap((l) => {
+            const long = l.direction === 'long';
+            const items: { kind: 'stop' | 'take'; tradeId: string; direction: 'long' | 'short' }[] = [];
+            if (long ? menu.value < lastClose : menu.value > lastClose) items.push({ kind: 'stop', tradeId: l.tradeId!, direction: l.direction! });
+            if (long ? menu.value > lastClose : menu.value < lastClose) items.push({ kind: 'take', tradeId: l.tradeId!, direction: l.direction! });
+            return items;
+          })
+      : [];
+  const placeLevel = (kind: 'stop' | 'take', tradeId: string) => {
+    if (!menu) return;
+    onDragLevel?.(kind, menu.value, tradeId);
+    setMenu(null);
+  };
+
+  const copyPrice = async () => {
+    if (!menu) return;
+    try {
+      await navigator.clipboard.writeText(menu.price);
+    } catch {
+      // Буфера нет (страница не по HTTPS) — цену всё равно видно на полосе справа.
+    }
+    setMenu(null);
+  };
+
+  /**
+   * Сторона уровня, который тянут от цены: вверх от неё у лонга — тейк, вниз —
+   * стоп; у шорта наоборот. Сторону сделки берём с её линии входа.
+   */
+  const ghostKind = (tradeId: string, p: number): 'stop' | 'take' => {
+    const dir = levels.find((l) => l.kind === 'entry' && l.tradeId === tradeId)?.direction;
+    const last = candles.length ? candles[candles.length - 1].c : p;
+    const above = p > last;
+    return (dir === 'short' ? !above : above) ? 'take' : 'stop';
+  };
+
+  /** Зажали ⇅ на плашке позиции — от текущей цены идёт стоп или тейк, пока держим. */
+  const startGhost = (tradeId: string) => (e: PointerEvent<SVGElement>) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const last = candles.length ? candles[candles.length - 1].c : null;
+    if (last == null) return;
+    svgRef.current?.setPointerCapture(e.pointerId);
+    frozen.current = { lo, hi };
+    dragPointerId.current = e.pointerId;
+    lastDrag.current = null;
+    setDrag({ id: GHOST_ID, kind: 'take', tradeId, price: last });
+  };
+
+  const startDrag = (level: Level) => (e: PointerEvent<SVGElement>) => {
     // Не пускаем событие к фоновому пану — иначе на одном клике начались бы
     // сразу оба жеста. preventDefault — иначе браузер начинает своё выделение
     // текста рядом с курсором вместо перетаскивания уровня.
@@ -620,7 +916,11 @@ export const ReplayChart = memo(function ReplayChart({
   };
 
   const startPan = (e: PointerEvent<SVGSVGElement>) => {
-    if (draw.down(e)) return;
+    // Правая кнопка — меню (openMenu), а не пан.
+    if (e.button === 2) return;
+    // Рисунки живут в поле цены: в панели RSI нажатие — просто сдвиг графика.
+    const inRsiPane = svgY(e.clientY) > plotBottom;
+    if (!inRsiPane && draw.down(e)) return;
     // Без этого браузер начинает нативное выделение текста (подписи цен и
     // времени внутри SVG) вместо сдвига графика — драг визуально «залипает».
     e.preventDefault();
@@ -644,7 +944,8 @@ export const ReplayChart = memo(function ReplayChart({
     // — иначе одна и та же ось отвечала бы на два жеста по-разному.
     if (svgX(e.clientX) > PW) {
       panRef.current = null;
-      priceDragRef.current = { startY: svgY(e.clientY), lo, hi };
+      if (inRsiPane) rsiDragRef.current = { startY: svgY(e.clientY), lo: rsiLo, hi: rsiHi };
+      else priceDragRef.current = { startY: svgY(e.clientY), lo, hi };
       return;
     }
     panRef.current = {
@@ -656,6 +957,10 @@ export const ReplayChart = memo(function ReplayChart({
       lo,
       hi,
       vertical: false,
+      // Вертикаль жеста двигает шкалу той панели, где он начат: из панели RSI — RSI, а не цену.
+      pane: inRsiPane ? 'rsi' : 'price',
+      rsiLo,
+      rsiHi,
     };
   };
 
@@ -669,10 +974,19 @@ export const ReplayChart = memo(function ReplayChart({
       // В ref — для отпускания: endDrag читает цену в том же обработчике, где
       // обновление состояния ниже ещё не применено.
       lastDrag.current = p;
-      setDrag((d) => (d ? { ...d, price: p } : d));
+      setDrag((d) => (d ? { ...d, price: p, kind: d.id === GHOST_ID && d.tradeId ? ghostKind(d.tradeId, p) : d.kind } : d));
     }
     const pts = [...pointersRef.current.values()];
     if (pts.length === 0) return;
+    const rsiDrag = rsiDragRef.current;
+    if (rsiDrag) {
+      // Тот же жест, что у полосы цены: вниз — шире, вверх — уже, от середины.
+      const dy = svgY(pts[0].y) - rsiDrag.startY;
+      const span = clamp((rsiDrag.hi - rsiDrag.lo) * Math.exp(dy / px(PRICE_DRAG_PX)), RSI_MIN_SPAN, RSI_MAX_SPAN);
+      const mid = (rsiDrag.hi + rsiDrag.lo) / 2;
+      setRsiRange(fitRsi(mid - span / 2, mid + span / 2));
+      return;
+    }
     const priceDrag = priceDragRef.current;
     if (priceDrag) {
       // Вниз — растянуть (диапазон шире, вид отдаляется), вверх — сжать:
@@ -715,8 +1029,14 @@ export const ReplayChart = memo(function ReplayChart({
       pan.startY = svgY(pt.y);
       pan.lo = lo;
       pan.hi = hi;
+      pan.rsiLo = rsiLo;
+      pan.rsiHi = rsiHi;
     }
-    if (pan.vertical) {
+    if (pan.vertical && pan.pane === 'rsi') {
+      // Значение RSI под курсором остаётся под курсором — как цена в поле цены.
+      const shift = ((svgY(pt.y) - pan.startY) / rsiH) * (pan.rsiHi - pan.rsiLo);
+      setRsiRange(fitRsi(pan.rsiLo + shift, pan.rsiHi + shift));
+    } else if (pan.vertical) {
       // Цена под курсором обязана остаться под курсором: сдвигаем обе границы
       // на то же расстояние в ценах, что курсор прошёл в долях поля.
       const shift = ((svgY(pt.y) - pan.startY) / plotH) * (pan.hi - pan.lo);
@@ -788,12 +1108,16 @@ export const ReplayChart = memo(function ReplayChart({
     if (draw.up(e)) return;
     flushMove();
     priceDragRef.current = null;
+    rsiDragRef.current = null;
     pointersRef.current.delete(e.pointerId);
     const remaining = [...pointersRef.current.entries()];
     if (remaining.length < 2) pinchRef.current = null;
     if (remaining.length === 0) setGrabbing(false);
     if (drag && e.pointerId === dragPointerId.current) {
-      if (onDragLevel && lastDrag.current != null) onDragLevel(drag.kind, lastDrag.current, drag.tradeId);
+      if (onDragLevel && lastDrag.current != null) {
+        const kind = drag.id === GHOST_ID && drag.tradeId ? ghostKind(drag.tradeId, lastDrag.current) : drag.kind;
+        onDragLevel(kind, lastDrag.current, drag.tradeId, drag.id === GHOST_ID ? undefined : drag.id);
+      }
       setDrag(null);
       frozen.current = null;
       lastDrag.current = null;
@@ -813,6 +1137,9 @@ export const ReplayChart = memo(function ReplayChart({
         lo,
         hi,
         vertical: false,
+        pane: 'price',
+        rsiLo,
+        rsiHi,
       };
     } else {
       panRef.current = null;
@@ -823,9 +1150,9 @@ export const ReplayChart = memo(function ReplayChart({
 
   /**
    * Свечи — четыре пути на весь кадр (фитили и тела, отдельно по цвету), а не
-   * `<g><line/><rect/></g>` на свечу. Отдалённый график — это до 400 свечей, то
+   * `<g><line/><rect/></g>` на свечу. Отдалённый график — это до 600 свечей, то
    * есть больше тысячи SVG-узлов, которые React сверял бы и браузер
-   * перекладывал бы в каждом кадре пана. Строка пути на 400 свечей
+   * перекладывал бы в каждом кадре пана. Строка пути на 600 свечей
    * собирается за доли миллисекунды, а узлов остаётся четыре при любом
    * масштабе — тот же принцип, по которому терминалы рисуют весь ряд одним
    * проходом.
@@ -841,7 +1168,7 @@ export const ReplayChart = memo(function ReplayChart({
   const anim = animCandle != null && animCandle.tf === timeframe && animCandle.t === lastT ? animCandle : null;
   const animT = anim?.t ?? null;
   const candlePaths = useMemo(() => {
-    const plotHeight = H - PT - PB;
+    const plotHeight = plotBottom - PT;
     const yOf = (p: number) => PT + ((hi - p) / (hi - lo)) * plotHeight;
     const r = (v: number) => Math.round(v * 100) / 100;
     const minBody = u; // один экранный пиксель в единицах холста
@@ -866,7 +1193,67 @@ export const ReplayChart = memo(function ReplayChart({
       }
     }
     return { upWicks, upBodies, downWicks, downBodies };
-  }, [candles, startIdx, endIdx, frameStart, slot, lo, hi, bodyW, u, animT, H]);
+  }, [candles, startIdx, endIdx, frameStart, slot, lo, hi, bodyW, u, animT, plotBottom]);
+
+  /**
+   * RSI — по всем загруженным свечам таймфрейма, как у TradingView по всем
+   * барам графика (иначе у левого края кадра был бы разгон), а пути — только
+   * по видимым, тем же приёмом, что свечи: несколько узлов на весь кадр.
+   */
+  const rsiData = useMemo(() => (rsi ? rsiSeries(candles) : null), [rsi, candles]);
+  const yRsi = (v: number) => rsiTop + ((rsiHi - v) / (rsiHi - rsiLo)) * rsiH;
+  const rsiAt = (yy: number) => rsiHi - ((yy - rsiTop) / rsiH) * (rsiHi - rsiLo);
+  // Сетка шкалы RSI — тем же шагом 1/2/5, что у цены: при зуме деления добавляются и убираются.
+  const rsiTicks = rsi && rsiH > 0 ? priceTicks(rsiLo, rsiHi, ((rsiHi - rsiLo) * px(MIN_TICK_GAP_PX)) / rsiH) : [];
+  const rsiPaths = useMemo(() => {
+    if (!rsiData) return null;
+    const r = (v: number) => Math.round(v * 100) / 100;
+    const xOf = (i: number) => (i - frameStart) * slot + slot / 2;
+    const yOf = (v: number) => rsiTop + ((rsiHi - v) / (rsiHi - rsiLo)) * rsiH;
+    // Одна свеча запаса с каждой стороны: линия входит в кадр от края, а не обрывается у первой видимой.
+    const from = Math.max(0, startIdx - 1);
+    const to = Math.min(candles.length, endIdx + 1);
+    const line = (values: number[]) => {
+      let d = '';
+      let pen = false;
+      for (let i = from; i < to; i++) {
+        const v = values[i];
+        if (Number.isNaN(v)) {
+          pen = false;
+          continue;
+        }
+        d += `${pen ? 'L' : 'M'}${r(xOf(i))} ${r(yOf(v))}`;
+        pen = true;
+      }
+      return d;
+    };
+    // Подсветка зоны — на всю высоту панели, прямоугольником на подряд идущие свечи.
+    const zone = (inside: (v: number) => boolean) => {
+      let d = '';
+      let run = -1;
+      for (let i = from; i <= to; i++) {
+        const hit = i < to && !Number.isNaN(rsiData.rsi[i]) && inside(rsiData.rsi[i]);
+        if (hit && run < 0) run = i;
+        if (!hit && run >= 0) {
+          const x0 = r(xOf(run) - slot / 2);
+          const x1 = r(xOf(i - 1) + slot / 2);
+          d += `M${x0} ${r(rsiTop)}H${x1}V${r(rsiTop + rsiH)}H${x0}z`;
+          run = -1;
+        }
+      }
+      return d;
+    };
+    return {
+      rsi: line(rsiData.rsi),
+      avg: line(rsiData.avg),
+      over: zone((v) => v > RSI_DEFAULTS.overbought),
+      under: zone((v) => v < RSI_DEFAULTS.oversold),
+      divergences: rsiData.divergences
+        .filter((dv) => dv.to >= from && dv.from < to)
+        .map((dv) => ({ ...dv, x1: xOf(dv.from), y1: yOf(dv.fromValue), x2: xOf(dv.to), y2: yOf(dv.toValue) })),
+    };
+  }, [rsiData, candles.length, startIdx, endIdx, frameStart, slot, rsiTop, rsiH, rsiLo, rsiHi]);
+  const rsiLast = rsiData ? rsiData.rsi[rsiData.rsi.length - 1] : NaN;
 
   let animBar: { x: number; wickTop: number; wickBottom: number; top: number; height: number; color: string } | null = null;
   if (anim) {
@@ -906,6 +1293,16 @@ export const ReplayChart = memo(function ReplayChart({
       ]
     : [];
 
+  // Уровень, который тянут от ⇅, — новый тейк или стоп: рисуется тем же кодом и с той же
+  // плашкой, что и настоящий. Прежний стоит на месте, пока новый не отпустят.
+  const drawnLevels: Level[] = (() => {
+    if (drag?.id !== GHOST_ID || !drag.tradeId) return levels;
+    const entry = levels.find((l) => l.kind === 'entry' && l.tradeId === drag.tradeId);
+    const impactAt = levels.find((l) => l.tradeId === drag.tradeId && l.impactAt)?.impactAt;
+    const ghost: Level = { id: GHOST_ID, kind: drag.kind, price: drag.price, draggable: false, tradeId: drag.tradeId, qty: entry?.qty, impactAt };
+    return [...levels, ghost];
+  })();
+
   const timeIdx = shown.length ? [...new Set([0.15, 0.5, 0.85].map((f) => Math.floor(f * (shown.length - 1))))] : [];
 
   return (
@@ -913,14 +1310,21 @@ export const ReplayChart = memo(function ReplayChart({
       <svg
         ref={svgRef}
         className="replay-chart"
-        style={{ cursor: drawing?.tool ? 'crosshair' : grabbing ? 'grabbing' : 'grab' }}
+        style={{ cursor: grabbing ? 'grabbing' : 'crosshair' }}
         viewBox={`0 0 ${W} ${H}`}
         onPointerDown={startPan}
-        onPointerMove={onMove}
+        onPointerMove={onSvgMove}
+        onPointerLeave={onSvgLeave}
+        onContextMenu={openMenu}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
         onDoubleClick={(e) => {
           if (draw.blocksDoubleClick()) return;
+          // Панель RSI — сброс её шкалы к 0–100, и в поле, и на полосе справа.
+          if (rsi && svgY(e.clientY) > plotBottom) {
+            setRsiRange(null);
+            return;
+          }
           // Полоса цены — сбрасывает только ручной зум цены, независимо от
           // того, live график или нет: та же граница, что у startPan
           // (svgX > PW), и тот же жест, каким RangeCheckChart сбрасывает span.
@@ -947,6 +1351,28 @@ export const ReplayChart = memo(function ReplayChart({
           <clipPath id={clipId}>
             <rect x={0} y={0} width={PW} height={H} />
           </clipPath>
+          {/* Поле цены по высоте — внутри сдвигаемой группы, поэтому по ширине с
+              запасом в обе стороны: FLIP двигает группу вбок, и узкая обрезка
+              уехала бы вместе с ней. Ширину режет внешняя обрезка выше. */}
+          <clipPath id={`${clipId}-price`}>
+            <rect x={-W} y={0} width={W * 3} height={plotBottom} />
+          </clipPath>
+          {/* Уровни и их плашки на полосе цены — неподвижны, ширина полная. */}
+          <clipPath id={`${clipId}-levels`}>
+            <rect x={0} y={0} width={W} height={plotBottom} />
+          </clipPath>
+          {rsi && (
+            <clipPath id={`${clipId}-rsi`}>
+              <rect x={-W} y={rsiTop} width={W * 3} height={rsiH} />
+            </clipPath>
+          )}
+          {/* Неподвижная часть панели RSI: при зуме её шкалы коридор и подписи
+              уходят за край панели — и не должны заходить на свечи. */}
+          {rsi && (
+            <clipPath id={`${clipId}-rsi-static`}>
+              <rect x={0} y={rsiTop} width={W} height={rsiH} />
+            </clipPath>
+          )}
         </defs>
 
         {/* Невидимая (за пределами viewBox) калибровка ширины символа —
@@ -986,6 +1412,9 @@ export const ReplayChart = memo(function ReplayChart({
               всё, чья x зависит от frameStart. Сетка цены и уровни снаружи —
               они привязаны к 0..PW, а не к окну свечей. */}
           <g ref={shiftGroupRef}>
+            {/* Всё, что относится к цене, — в поле цены: при ручном зуме свечи и
+                рисунки иначе заходили бы на панель RSI. */}
+            <g clipPath={`url(#${clipId}-price)`}>
             <path d={candlePaths.upWicks} stroke="var(--profit)" strokeWidth={px(1)} fill="none" />
             <path d={candlePaths.downWicks} stroke="var(--loss)" strokeWidth={px(1)} fill="none" />
             <path d={candlePaths.upBodies} fill="var(--profit)" />
@@ -1014,7 +1443,7 @@ export const ReplayChart = memo(function ReplayChart({
                 selectedId={drawing.selectedId}
                 interactive={!drawing.tool}
                 ruler={draw.ruler}
-                geo={{ xOf: xOfTime, yOf: y, px, PW, top: PT, bottom: H - PB, tfMs, candles }}
+                geo={{ xOf: xOfTime, yOf: y, px, PW, top: PT, bottom: plotBottom, tfMs, candles, priceDecimals }}
                 onShapeDown={draw.startShape}
                 onAnchorDown={draw.startAnchor}
               />
@@ -1063,6 +1492,52 @@ export const ReplayChart = memo(function ReplayChart({
               );
             })}
 
+            {/* Дивергенция на самих свечах — между максимумами (минимумами) тех же
+                двух свечей, что и на панели RSI: расхождение видно там, где его и
+                ищут, — цена идёт в одну сторону, индикатор в другую. */}
+            {rsiPaths?.divergences.map((dv) => (
+              <line
+                key={`p-${dv.kind}-${dv.from}-${dv.to}`}
+                x1={dv.x1}
+                y1={y(dv.fromPrice)}
+                x2={dv.x2}
+                y2={y(dv.toPrice)}
+                stroke={DIV_COLOR[dv.kind]}
+                strokeWidth={px(1.5)}
+                strokeDasharray={`${px(5)} ${px(3)}`}
+                pointerEvents="none"
+              />
+            ))}
+            </g>
+
+            {/* Панель RSI — по скрипту владельца: RSI цветом текста в 2 (белый на
+                тёмной теме, на светлой он бы пропал), средняя серая в 1, подсветка
+                зон на 80 % прозрачности. Дивергенции — линией в 2 и отметкой у
+                второй вершины: ▼ над медвежьей, ▲ под бычьей. */}
+            {rsiPaths && (
+              <g clipPath={`url(#${clipId}-rsi)`} pointerEvents="none">
+                <path d={rsiPaths.over} fill="var(--profit)" fillOpacity={0.2} />
+                <path d={rsiPaths.under} fill="var(--loss)" fillOpacity={0.2} />
+                <path d={rsiPaths.avg} stroke="var(--color-muted)" strokeWidth={px(1)} fill="none" />
+                <path d={rsiPaths.rsi} stroke="var(--color-fg)" strokeWidth={px(2)} fill="none" strokeLinejoin="round" />
+                {rsiPaths.divergences.map((dv) => {
+                  const bear = dv.kind === 'bear';
+                  // Отметка снаружи вершины и смотрит на неё — как стрелки сделок на свечах.
+                  const tip = bear ? dv.y2 - px(4) : dv.y2 + px(4);
+                  const tail = bear ? tip - px(6) : tip + px(6);
+                  return (
+                    <g key={`${dv.kind}-${dv.from}-${dv.to}`}>
+                      <line x1={dv.x1} y1={dv.y1} x2={dv.x2} y2={dv.y2} stroke={DIV_COLOR[dv.kind]} strokeWidth={px(2)} />
+                      <polygon
+                        points={`${dv.x2},${tip} ${dv.x2 - px(4)},${tail} ${dv.x2 + px(4)},${tail}`}
+                        fill={DIV_COLOR[dv.kind]}
+                      />
+                    </g>
+                  );
+                })}
+              </g>
+            )}
+
             {timeIdx.map((i) => (
               <text
                 key={i}
@@ -1078,7 +1553,88 @@ export const ReplayChart = memo(function ReplayChart({
           </g>
         </g>
 
-        {levels.map((l) => {
+        {/* Неподвижная часть панели RSI: разделитель, коридор 30–70 с заливкой,
+            подписи шкалы и текущее значение — плашкой на полосе справа, как цена. */}
+        {rsi && (
+          <line
+            x1={0}
+            x2={W}
+            y1={plotBottom + px(RSI_GAP_PX) / 2}
+            y2={plotBottom + px(RSI_GAP_PX) / 2}
+            stroke="var(--color-line)"
+            strokeWidth={px(1)}
+            pointerEvents="none"
+          />
+        )}
+        {rsi && (
+          <g pointerEvents="none" clipPath={`url(#${clipId}-rsi-static)`}>
+            {rsiTicks.map((v) => (
+              <g key={v}>
+                <line x1={0} x2={PW} y1={yRsi(v)} y2={yRsi(v)} stroke="var(--color-line)" strokeWidth={px(1)} />
+                <text x={PW + px(PRICE_LABEL_GAP_PX)} y={yRsi(v) + px(3.5)} fill="var(--color-muted)" fontSize={px(10)} fontFamily="var(--font-mono)">
+                  {v.toFixed(2)}
+                </text>
+              </g>
+            ))}
+            <rect
+              x={0}
+              y={yRsi(RSI_DEFAULTS.overbought)}
+              width={PW}
+              height={yRsi(RSI_DEFAULTS.oversold) - yRsi(RSI_DEFAULTS.overbought)}
+              fill="var(--color-fg)"
+              fillOpacity={0.08}
+            />
+            {[RSI_DEFAULTS.overbought, RSI_DEFAULTS.oversold].map((v) => (
+              <line key={v} x1={0} x2={PW} y1={yRsi(v)} y2={yRsi(v)} stroke="var(--color-fg)" strokeOpacity={0.24} strokeWidth={px(1)} />
+            ))}
+            <text x={px(6)} y={rsiTop + px(11)} fontSize={px(10)} fontFamily="var(--font-mono)">
+              <tspan fill="var(--color-muted)">RSI {RSI_DEFAULTS.length} </tspan>
+              {!Number.isNaN(rsiLast) && <tspan fill="var(--color-fg)">{rsiLast.toFixed(2)}</tspan>}
+            </text>
+            {!Number.isNaN(rsiLast) && (
+              <>
+                <rect x={PW} y={yRsi(rsiLast) - px(8)} width={W - PW} height={px(16)} fill="var(--color-fg)" />
+                <text
+                  x={PW + px(PRICE_LABEL_GAP_PX)}
+                  y={yRsi(rsiLast) + px(3.5)}
+                  fill="var(--color-background)"
+                  fontSize={px(10)}
+                  fontFamily="var(--font-mono)"
+                >
+                  {rsiLast.toFixed(2)}
+                </text>
+              </>
+            )}
+          </g>
+        )}
+
+        {/* Уровни, линии разметки и их плашки — в поле цены: далёкий стоп иначе
+            лёг бы линией поперёк панели RSI. */}
+        <g clipPath={`url(#${clipId}-levels)`}>
+        {/* Горизонтальные линии разметки: цена — плашкой на полосе цены, как у уровней сделки. */}
+        {drawing &&
+          !drawing.hidden &&
+          shownDrawings.map((d) => {
+            if (d.kind !== 'hline') return null;
+            const yy = y(d.points[0].p);
+            if (yy < PT || yy > plotBottom) return null;
+            return (
+              <g key={`hline-tag-${d.id}`} pointerEvents="none">
+                <rect x={PW} y={yy - px(8)} width={W - PW} height={px(16)} fill={COLOR_VAR[d.color]} />
+                <text
+                  x={PW + px(PRICE_LABEL_GAP_PX)}
+                  y={yy + px(3.5)}
+                  fill="var(--color-background)"
+                  fontSize={px(10)}
+                  fontFamily="var(--font-mono)"
+                >
+                  {formatPriceGrouped(d.points[0].p, priceDecimals)}
+                </text>
+              </g>
+            );
+          })}
+
+        {drawnLevels.map((l) => {
           const price = drag?.id === l.id ? drag.price : l.price;
           const impact = l.impactAt?.(price) ?? null;
           return (
@@ -1092,42 +1648,231 @@ export const ReplayChart = memo(function ReplayChart({
                 strokeWidth={px(1.25)}
                 strokeDasharray={l.kind === 'entry' ? undefined : `${px(5)} ${px(4)}`}
               />
-              <text x={px(4)} y={y(price) - px(4)} fill={LEVEL_COLOR[l.kind]} fontSize={px(10)} fontFamily="var(--font-mono)">
-                {/* Вход и ликвидация подписаны ценой — это точки отсчёта, не
-                    результат. Стоп, тейк и лимит-ордер подписаны результатом в
-                    USDT: цену и так видно по линии и высоте над свечами. Уровни
-                    сетки на вход — тоже ценой: сделки ещё нет, посчитать
-                    результат не от чего. */}
-                {l.kind === 'entry' ||
-                l.kind === 'liq' ||
-                l.kind === 'orderEntry' ||
-                l.kind === 'gridUpper' ||
-                l.kind === 'gridLower' ||
-                l.kind === 'gridPending'
-                  ? `${levelLabel(l.kind)} ${formatPriceGrouped(price)}`
-                  : `${levelLabel(l.kind)}${impact != null ? ` ${formatMoney(impact)} USDT` : ''}`}
-              </text>
-              {l.draggable && onDragLevel && (
-                <rect
-                  className="lvl-hit"
-                  x={0}
-                  y={y(price) - px(8)}
-                  width={PW}
-                  height={px(16)}
-                  fill="transparent"
-                  onPointerDown={startDrag(l)}
-                />
+              <rect
+                className={l.draggable && onDragLevel ? 'lvl-hit' : 'lvl-static'}
+                x={0}
+                y={y(price) - px(8)}
+                width={PW}
+                height={px(16)}
+                fill="transparent"
+                onPointerDown={l.draggable && onDragLevel ? startDrag(l) : undefined}
+              />
+              {l.qty != null || l.pnl != null || isLimit(l.kind) ? (
+                (() => {
+                  // Плашка на линии, как у бирж: результат | объём в монете | ⇅ | ✕.
+                  // Вход — белая, стоп — красная, тейк — зелёная: цвет уровня. Цена слева
+                  // не нужна — она на полосе справа. Исключение — лимит на вход: результата
+                  // у него ещё нет, и первым полем стоит его цена («Лимит 95 000»).
+                  const yy = y(price);
+                  const h = px(15);
+                  const pad = px(5);
+                  const fs = px(9);
+                  const charW = charRatio * fs;
+                  const isEntry = l.kind === 'entry';
+                  const first = isEntry
+                    ? `P&L ${l.pnl != null ? formatMoney(l.pnl) : '—'}`
+                    : isLimit(l.kind)
+                      ? `${levelLabel(l.kind)} ${formatPriceGrouped(price, priceDecimals)}`
+                      : `${levelLabel(l.kind)}${impact != null ? ` ${formatMoney(impact)}` : ''}`;
+                  const qtyText = l.qty != null ? formatQty(Number(l.qty.toFixed(4))) : '';
+                  const onX: (() => void) | null =
+                    (l.kind === 'pendingEntry' || l.kind === 'limitClose') && onCancelOrder
+                      ? () => onCancelOrder(l.kind, l.id)
+                      : l.tradeId == null
+                        ? null
+                        : isEntry && onCloseTrade
+                          ? () => onCloseTrade(l.tradeId!)
+                          : l.kind === 'take' && onClearTake
+                            ? () => onClearTake(l.tradeId!)
+                            : null;
+                  const tone = isEntry ? 'var(--color-fg)' : LEVEL_COLOR[l.kind];
+                  const canPick = l.tradeId != null && onDragLevel != null && (isEntry || l.kind === 'stop' || l.kind === 'take');
+                  const w1 = first.length * charW + pad * 2;
+                  const w2 = qtyText ? qtyText.length * charW + pad * 2 : 0;
+                  const wBtn = px(17);
+                  const x0 = px(4);
+                  const top = yy - h / 2;
+                  const textY = yy + fs * 0.35;
+                  const edge = { fill: 'var(--color-background)', stroke: tone, strokeWidth: px(1) };
+                  const hasGrid = isEntry && l.tradeId != null && onCloseGrid != null;
+                  const xPick = x0 + w1 + w2;
+                  const xGrid = xPick + (canPick ? wBtn : 0);
+                  const xClose = xGrid + (hasGrid ? wBtn : 0);
+                  const cxp = xPick + wBtn / 2;
+                  const cxg = xGrid + wBtn / 2;
+                  const a = px(1);
+                  // Плашка перетаскиваемого уровня — сама ручка, как у биржи: её берут
+                  // первой, и нажатие по ней уходило в сдвиг графика — уровень можно было
+                  // взять только за линию правее плашки.
+                  const bodyDrag = l.draggable && onDragLevel != null;
+                  return (
+                    <g>
+                      <g
+                        className={bodyDrag ? 'lvl-hit' : undefined}
+                        onPointerDown={bodyDrag ? startDrag(l) : undefined}
+                      >
+                        <rect x={x0} y={top} width={w1} height={h} {...edge} />
+                        <text x={x0 + pad} y={textY} fill={tone} fontSize={fs} fontFamily="var(--font-mono)">
+                          {first}
+                        </text>
+                        {w2 > 0 && (
+                          <>
+                            <rect x={x0 + w1} y={top} width={w2} height={h} fill={tone} />
+                            <text x={x0 + w1 + pad} y={textY} fill="var(--color-background)" fontSize={fs} fontFamily="var(--font-mono)">
+                              {qtyText}
+                            </text>
+                          </>
+                        )}
+                      </g>
+                      {canPick && (
+                        <g
+                          style={{ cursor: 'pointer' }}
+                          // Зажать и тянуть: у входа — от цены, стоп или тейк по стороне сделки
+                          // (startGhost); у стопа и тейка — сам уровень.
+                          onPointerDown={isEntry ? startGhost(l.tradeId!) : startDrag(l)}
+                        >
+                          <rect x={xPick} y={top} width={wBtn} height={h} {...edge} />
+                          {/* Стрелки вверх и вниз — «потяни и поставь стоп или тейк». */}
+                          <path
+                            d={`M${cxp - 3 * a} ${yy + 3.5 * a}V${yy - 3.5 * a}M${cxp - 5 * a} ${yy - 1.5 * a}L${cxp - 3 * a} ${yy - 3.5 * a}L${cxp - a} ${yy - 1.5 * a}M${cxp + 3 * a} ${yy - 3.5 * a}V${yy + 3.5 * a}M${cxp + a} ${yy + 1.5 * a}L${cxp + 3 * a} ${yy + 3.5 * a}L${cxp + 5 * a} ${yy + 1.5 * a}`}
+                            fill="none"
+                            stroke={tone}
+                            strokeWidth={px(1)}
+                          />
+                        </g>
+                      )}
+                      {hasGrid && (
+                        <g
+                          style={{ cursor: 'pointer' }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={() => onCloseGrid!(l.tradeId!)}
+                        >
+                          <title>{t('closeGrid')}</title>
+                          <rect x={xGrid} y={top} width={wBtn} height={h} {...edge} />
+                          {/* Три растущих столбика — лесенка тейков, та же иконка, что в таблице позиций. */}
+                          <path
+                            d={`M${cxg - 3 * a} ${yy + 3.5 * a}V${yy + 1.5 * a}M${cxg} ${yy + 3.5 * a}V${yy - 0.5 * a}M${cxg + 3 * a} ${yy + 3.5 * a}V${yy - 3.5 * a}`}
+                            fill="none"
+                            stroke={tone}
+                            strokeWidth={px(1.5)}
+                          />
+                        </g>
+                      )}
+                      {onX && (
+                        <g
+                          style={{ cursor: 'pointer' }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={onX}
+                        >
+                          <rect x={xClose} y={top} width={wBtn} height={h} {...edge} />
+                          <text x={xClose + wBtn / 2} y={textY} fill={tone} fontSize={fs} fontFamily="var(--font-mono)" textAnchor="middle">
+                            ✕
+                          </text>
+                        </g>
+                      )}
+                    </g>
+                  );
+                })()
+              ) : (
+                // Сквозь подпись — к линии под ней: иначе нажатие по тексту уходило
+                // в сдвиг графика, а не в перетаскивание уровня.
+                <text
+                  x={px(4)}
+                  y={y(price) - px(4)}
+                  fill={LEVEL_COLOR[l.kind]}
+                  fontSize={px(10)}
+                  fontFamily="var(--font-mono)"
+                  pointerEvents="none"
+                >
+                  {l.kind === 'stop' || l.kind === 'take' || l.kind === 'limitClose'
+                    ? `${levelLabel(l.kind)}${impact != null ? ` ${formatMoney(impact)} USDT` : ''}`
+                    : levelLabel(l.kind)}
+                </text>
               )}
+              {/* Цена уровня на полосе цены — плашкой в цвете линии, как у бирж. */}
+              <rect x={PW} y={y(price) - px(8)} width={W - PW} height={px(16)} fill={LEVEL_COLOR[l.kind]} pointerEvents="none" />
+              <text
+                x={PW + px(PRICE_LABEL_GAP_PX)}
+                y={y(price) + px(3.5)}
+                fill="var(--color-background)"
+                fontSize={px(10)}
+                fontFamily="var(--font-mono)"
+                pointerEvents="none"
+              >
+                {formatPriceGrouped(price, priceDecimals)}
+              </text>
             </g>
           );
         })}
+        </g>
 
         {/* Полоса цены ловит жест масштаба — прозрачный прямоугольник поверх
             подписей: иначе про то, что шкалу можно тянуть, сообщал бы только
             курсор над самими цифрами. Событие всплывает к svg, где startPan сам
-            разбирает, что жест начался на полосе. */}
-        <rect x={PW} y={0} width={W - PW} height={H} fill="transparent" style={{ cursor: 'ns-resize' }} />
+            разбирает, что жест начался на полосе. Напротив панели RSI её нет:
+            шкала RSI не тянется. */}
+        <rect x={PW} y={0} width={W - PW} height={plotBottom} fill="transparent" style={{ cursor: 'ns-resize' }} />
+        {rsi && <rect x={PW} y={rsiTop} width={W - PW} height={rsiH} fill="transparent" style={{ cursor: 'ns-resize' }} />}
+
+        {/* Перекрестие — поверх всего, событий не ловит; положение пишет updateCross. */}
+        <g ref={crossRef} pointerEvents="none" style={{ visibility: 'hidden' }}>
+          <line
+            ref={crossV}
+            y1={PT}
+            y2={H - PB}
+            stroke="var(--color-muted)"
+            strokeWidth={px(1)}
+            strokeDasharray={`${px(4)} ${px(3)}`}
+          />
+          <line
+            ref={crossH}
+            x1={0}
+            x2={PW}
+            stroke="var(--color-muted)"
+            strokeWidth={px(1)}
+            strokeDasharray={`${px(4)} ${px(3)}`}
+          />
+          <rect ref={crossPriceBox} x={PW} width={W - PW} height={px(16)} fill="var(--color-fg)" />
+          <text
+            ref={crossPriceText}
+            x={PW + px(PRICE_LABEL_GAP_PX)}
+            fill="var(--color-background)"
+            fontSize={px(10)}
+            fontFamily="var(--font-mono)"
+          />
+          <rect ref={crossTimeBox} y={H - PB + px(3)} height={px(16)} fill="var(--color-fg)" />
+          <text
+            ref={crossTimeText}
+            y={H - PB + px(14.5)}
+            fill="var(--color-background)"
+            fontSize={px(10)}
+            fontFamily="var(--font-mono)"
+            textAnchor="middle"
+          />
+        </g>
       </svg>
+      {menu && (
+        <div ref={menuRef} className="chart-menu" style={{ left: menu.left, top: menu.top }} role="menu">
+          <button type="button" role="menuitem" className="chart-menu-item" onClick={copyPrice}>
+            {t('copyPrice', { price: menu.price })}
+          </button>
+          {levelItems.map((it) => (
+            <button
+              key={`${it.kind}-${it.tradeId}`}
+              type="button"
+              role="menuitem"
+              className="chart-menu-item"
+              onClick={() => placeLevel(it.kind, it.tradeId)}
+            >
+              {t('setLevelHere', {
+                level: levelLabel(it.kind),
+                price: menu.price,
+                side: levels.filter((l) => l.kind === 'entry').length > 1 ? ` (${t(`direction.${it.direction}`)})` : '',
+              })}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 });

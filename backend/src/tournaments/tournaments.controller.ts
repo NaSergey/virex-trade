@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CreateTournamentDto, ReadyDto } from './dto/tournament.dto';
+import { CreateTournamentDto, JoinDto, MoveTeamDto, ReadyDto } from './dto/tournament.dto';
 import { TournamentsService } from './tournaments.service';
 
 /**
@@ -10,8 +10,8 @@ import { TournamentsService } from './tournaments.service';
  * ссылки). Закрытым турнир делает не проверка доступа, а отсутствие в общем
  * списке.
  *
- * `public` и `rating` объявлены раньше `:id` — иначе Nest примет эти слова за
- * идентификатор турнира.
+ * `board`, `rating` и `feed` объявлены раньше `:id` — иначе Nest примет эти
+ * слова за идентификатор турнира.
  */
 @UseGuards(JwtAuthGuard)
 @Controller('api/tournaments')
@@ -23,14 +23,10 @@ export class TournamentsController {
     return this.tournaments.create(userId, dto);
   }
 
-  @Get()
-  listMine(@CurrentUser('userId') userId: string) {
-    return this.tournaments.listMine(userId);
-  }
-
-  @Get('public')
-  listPublic(@CurrentUser('userId') userId: string) {
-    return this.tournaments.listPublic(userId);
+  /** Общая таблица турниров: свои и чужие публичные — см. `TournamentsService.board`. */
+  @Get('board')
+  board(@CurrentUser('userId') userId: string) {
+    return this.tournaments.board(userId);
   }
 
   @Get('rating')
@@ -38,14 +34,33 @@ export class TournamentsController {
     return this.tournaments.rating(userId);
   }
 
+  /** Лента сделок идущих турниров — см. `TournamentsService.feed`. */
+  @Get('feed')
+  feed(@CurrentUser('userId') userId: string) {
+    return this.tournaments.feed(userId);
+  }
+
   @Get(':id')
   get(@CurrentUser('userId') userId: string, @Param('id') id: string) {
     return this.tournaments.get(userId, id);
   }
 
+  /** Сделки одного турнира — блок «Сделки» в его окне. */
+  @Get(':id/trades')
+  trades(@Param('id') id: string) {
+    return this.tournaments.trades(id);
+  }
+
+  /** У командного турнира в теле — команда (`{ team: 0 | 1 }`). */
   @Post(':id/join')
-  join(@CurrentUser('userId') userId: string, @Param('id') id: string) {
-    return this.tournaments.join(userId, id);
+  join(@CurrentUser('userId') userId: string, @Param('id') id: string, @Body() dto: JoinDto) {
+    return this.tournaments.join(userId, id, dto.team);
+  }
+
+  /** Создатель переставляет игрока в другую команду — только в наборе. */
+  @Post(':id/team')
+  moveTeam(@CurrentUser('userId') userId: string, @Param('id') id: string, @Body() dto: MoveTeamDto) {
+    return this.tournaments.moveTeam(userId, id, dto.userId, dto.team);
   }
 
   @Post(':id/leave')

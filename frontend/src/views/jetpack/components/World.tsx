@@ -42,6 +42,12 @@ const STARS = [
   { cls: 'near', k: 1.3, tile: 360 },
 ] as const;
 
+/**
+ * Забор — в единицах ракеты (корпус — 182): `ahead` — насколько основание
+ * ближе к зрителю, чем плита, `height` — столбики, `curb` — бортик под ними.
+ */
+const FENCE = { ahead: 10, height: 20, curb: 6 } as const;
+
 /** Клубы стартового дыма: разлетаются от площадки в стороны. */
 const PUFFS = [-3, -2, -1, 0, 1, 2, 3, -1.5, 1.5];
 
@@ -74,6 +80,10 @@ function useScene(w: number, h: number, hull: number) {
     const floorDepth = 1.2 * h;
     // Глубина земли — от горизонта до низа плиты: на ней земля едет с камерой.
     const groundDepth = padTop + (SITE_GROUND * hull) / 182 - horizon;
+    // Мера размеров облаков и луж — ширина кадра, но не шире 1.15 его
+    // высоты: во весь экран от чистой ширины они выходили в полтора раза
+    // крупнее, чем в окне. Разброс по x по-прежнему от ширины.
+    const u = Math.min(w, 1.15 * h);
     return {
       pad,
       padTop,
@@ -83,17 +93,18 @@ function useScene(w: number, h: number, hull: number) {
       floorDepth,
       groundDepth,
       hills: hills(ext, hillBand, 5, [0.18 * w, 0.36 * w], [0.25, 0.85]),
-      // Лужицы — перед площадкой, от забора до края поля, по ширине кадра.
-      water: puddles(w * 1.3, h - padTop, 14, 9, [0.035 * w, 0.085 * w]),
+      // Лужицы — перед забором, от его бортика до края поля, по ширине кадра.
+      fenceFoot: ((FENCE.ahead + FENCE.curb) * hull) / 182,
+      water: puddles(w * 1.3, h - padTop, 14, 9, [0.028 * u, 0.068 * u]),
       back: cloudField(10, 21, [0.3 * h, 2.1 * h], (a) => passAt(a, K.clouds, w, h), {
         dx: [-0.55 * w, 0.3 * w],
         dy: [-0.1 * h, 0.1 * h],
-        w: [0.22 * w, 0.5 * w],
+        w: [0.18 * u, 0.4 * u],
       }),
       front: cloudField(4, 42, [0.7 * h, 1.9 * h], (a) => passAt(a, K.front, w, h), {
         dx: [-0.3 * w, 0.15 * w],
         dy: [-0.06 * h, 0.06 * h],
-        w: [0.4 * w, 0.65 * w],
+        w: [0.32 * u, 0.52 * u],
       }),
     };
   }, [w, h, hull]);
@@ -176,7 +187,7 @@ export const World = forwardRef<WorldHandle, Props>(function World({ w, h, hull,
         ))}
       </div>
       <div ref={moon} className="jpg-layer" aria-hidden>
-        <i className="jpg-moon" style={{ left: 0.84 * w, top: 0.2 * h, width: 0.24 * h, height: 0.24 * h }} />
+        <i className="jpg-moon" style={{ left: 0.84 * w, top: 0.2 * h, width: 0.18 * h, height: 0.18 * h }} />
       </div>
 
       {/* Пологие холмы за горизонтом в сиреневой дымке. */}
@@ -249,7 +260,7 @@ export const World = forwardRef<WorldHandle, Props>(function World({ w, h, hull,
             </linearGradient>
           </defs>
           <rect width={ext} height={floorDepth} fill="url(#jpg-ground)" />
-          <g transform="translate(0 8)">
+          <g transform={`translate(0 ${scene.fenceFoot + 4})`}>
             {scene.water.map((p) => (
               <g key={p.d}>
                 <path d={p.d} fill="url(#jpg-water)" opacity="0.9" />
@@ -273,7 +284,6 @@ export const World = forwardRef<WorldHandle, Props>(function World({ w, h, hull,
       {/* Площадка и дым — стоят на плите, едут с камерой. */}
       <div ref={near} className="jpg-layer" aria-hidden>
         <LaunchSite x={pad.x} top={padTop} hull={hull} launched={launched} />
-        <Fence width={ext} ground={padTop} hull={hull} />
         {launched ? (
           <div key={launched} className="jpg-smoke" style={{ left: pad.x, top: padTop + hull * 0.1 }}>
             {PUFFS.map((p, i) => (
@@ -300,15 +310,16 @@ export const World = forwardRef<WorldHandle, Props>(function World({ w, h, hull,
 });
 
 /**
- * Забор по линии земли, как на референсе космодрома: столбики с перилами на
- * всю ширину. Столбики — узором (`pattern`), а не сотней узлов.
+ * Забор перед площадкой, как на референсе космодрома: столбики с перилами на
+ * всю ширину. Столбики — узором (`pattern`), а не сотней узлов. `ground` —
+ * линия основания столбиков, под ней бортик.
  */
 function Fence({ width, ground, hull }: { width: number; ground: number; hull: number }) {
   const u = hull / 182;
-  const hgt = 20 * u;
+  const hgt = FENCE.height * u;
   const step = 16 * u;
   return (
-    <svg className="jpg-art" width={width} height={hgt + 6 * u} viewBox={`0 0 ${width} ${hgt + 6 * u}`} style={{ top: ground - hgt }}>
+    <svg className="jpg-art" width={width} height={hgt + FENCE.curb * u} viewBox={`0 0 ${width} ${hgt + FENCE.curb * u}`} style={{ top: ground - hgt }}>
       <defs>
         <pattern id="jpg-fence" width={step} height={hgt} patternUnits="userSpaceOnUse">
           <rect x="0" y={2 * u} width={3 * u} height={hgt - 2 * u} fill="#3a5ad8" />
@@ -318,10 +329,34 @@ function Fence({ width, ground, hull }: { width: number; ground: number; hull: n
       <rect x="0" y="0" width={width} height={hgt} fill="url(#jpg-fence)" />
       <rect x="0" y={3 * u} width={width} height={2.2 * u} fill="#6ec2ff" />
       <rect x="0" y={11 * u} width={width} height={1.6 * u} fill="#4a86e6" />
-      <rect x="0" y={hgt} width={width} height={6 * u} fill="#120c34" />
+      <rect x="0" y={hgt} width={width} height={FENCE.curb * u} fill="#120c34" />
     </svg>
   );
 }
+
+/**
+ * Передний план над ракетой — забор. Он ближе к зрителю, чем плита, и на
+ * земле закрывает низ стабилизаторов; в слое площадки под кораблём он
+ * читался стоящим позади ракеты (владелец 2026-09-26). Едет вместе с плитой.
+ */
+export const Foreground = forwardRef<WorldHandle, { w: number; h: number; hull: number }>(function Foreground(
+  { w, h, hull },
+  ref,
+) {
+  const layer = useRef<HTMLDivElement>(null);
+  const scene = useScene(w, h, hull);
+  useImperativeHandle(ref, () => ({
+    place(f: Flight) {
+      onGround(layer.current, f, 1);
+    },
+  }));
+  if (!scene) return null;
+  return (
+    <div ref={layer} className="jpg-layer" aria-hidden>
+      <Fence width={scene.ext} ground={scene.padTop + (FENCE.ahead * hull) / 182} hull={hull} />
+    </div>
+  );
+});
 
 /** Передние облака — над ракетой: она пролетает сквозь них, а не за ними. */
 export const FrontClouds = forwardRef<WorldHandle, { w: number; h: number; hull: number }>(function FrontClouds(

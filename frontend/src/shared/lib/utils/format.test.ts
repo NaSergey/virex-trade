@@ -38,6 +38,13 @@ describe('formatPriceGrouped', () => {
   it('пустое значение — прочерк', () => {
     expect(formatPriceGrouped(null)).toBe('—');
   });
+
+  it('с числом знаков инструмента — ровно столько, независимо от величины', () => {
+    expect(formatPriceGrouped(2.51347, 4)).toBe('2.5135');
+    expect(formatPriceGrouped(0.123456, 5)).toBe('0.12346');
+    expect(formatPriceGrouped(118420.5, 2)).toBe(`118${T}420.50`);
+    expect(formatPriceGrouped(undefined, 4)).toBe('—');
+  });
 });
 
 describe('moneyClass', () => {

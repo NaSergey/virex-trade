@@ -169,7 +169,7 @@ export function ProductDemoScene() {
           <div className="ls-demo-sticky">
             <div className="ls-panel" data-focus={SECTIONS[active]} ref={panelRef}>
               <div className="ls-panel-head">
-                <span className="ls-panel-brand">Virex</span>
+                <span className="ls-panel-brand">Trade Play</span>
                 <span className="ls-panel-where">{t(`section_${SECTIONS[active]}_title`)}</span>
               </div>
 

@@ -7,8 +7,7 @@ import { EmptyState } from '@/shared/ui/EmptyState';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import { Money } from '@/shared/ui/Money';
 import { SectionHead } from '@/shared/ui/SectionHead';
-import { Seg, type SegOption } from '@/shared/ui/Seg';
-import type { DataSource, SessionListItem } from '@/widgets/backtest-session';
+import type { SessionListItem } from '@/widgets/backtest-session';
 import { formatR } from '@/widgets/backtest-session/lib/money';
 
 /**
@@ -21,32 +20,24 @@ import { formatR } from '@/widgets/backtest-session/lib/money';
  * терминале намеренно нет — так сессию можно бросить недосмотренной ошибкой
  * клика; отдельный шаг в списке сессий с подтверждением этого не допускает.
  *
- * Переключатель «реальные / тренажёр» стоит в шапке этого раздела, а меняет
- * срез статистики ниже: раздел читается сверху вниз, и выбор источника —
- * первое, что человек делает, прежде чем смотреть числа.
+ * Переключателя «реальные / тренажёр» здесь нет: он повторял выбор «График» в
+ * форме новой сессии и читался как второй такой же. Статистика ниже считается по
+ * реальным сессиям и эфиру, тренажёр в неё не входит (тренды заложены в генератор).
  */
 export function SessionsList({
   sessions,
   isLoading,
   onOpen,
   onDelete,
-  source,
-  onSource,
 }: {
   sessions: SessionListItem[];
   isLoading: boolean;
   onOpen: (id: string) => void;
   onDelete: (session: SessionListItem) => void;
-  source: DataSource;
-  onSource: (source: DataSource) => void;
 }) {
   const t = useTranslations('backtest');
   const { locale } = useLocaleControl();
   const intl = locale === 'en' ? 'en-US' : 'ru-RU';
-  const sources: SegOption<DataSource>[] = [
-    { value: 'real', label: t('statsReal') },
-    { value: 'synthetic', label: t('statsSynthetic') },
-  ];
 
   const columns: LedgerColumn<SessionListItem>[] = [
     {
@@ -75,7 +66,10 @@ export function SessionsList({
       key: 'blind',
       header: t('colBlind'),
       render: (s) =>
-        [s.dataSource === 'synthetic' ? t('syntheticTag') : s.hideDate && t('blindDate'), s.hidePrice && t('blindPrice')]
+        [
+          s.dataSource === 'synthetic' ? t('syntheticTag') : s.dataSource === 'live' ? t('liveTag') : s.hideDate && t('blindDate'),
+          s.hidePrice && t('blindPrice'),
+        ]
           .filter(Boolean)
           .join(', ') || <span className="muted">—</span>,
     },
@@ -97,9 +91,7 @@ export function SessionsList({
 
   return (
     <section data-tour="bt-sessions">
-      <SectionHead title={t('sessionsTitle')}>
-        <Seg options={sources} value={source} onChange={onSource} ariaLabel={t('statsSource')} />
-      </SectionHead>
+      <SectionHead title={t('sessionsTitle')} />
       <LedgerTable
         columns={columns}
         rows={sessions}

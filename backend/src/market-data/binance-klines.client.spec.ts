@@ -105,6 +105,43 @@ describe('BinanceKlinesClient', () => {
     await expect(client.fetchKlines('BTCUSDT', 60, 1)).rejects.toThrow(/429/);
   });
 
+  it('диапазон: startTime, endTime и limit — только заданные', async () => {
+    const fetchMock = mockFetch({ body: [] }, { body: [] });
+    const { client } = makeClient();
+
+    await client.fetchRange('ETHUSDT', 1, { endTime: 1_700_000_000_000, limit: 300 });
+    await client.fetchRange('ETHUSDT', 15, { startTime: 5, endTime: 9, limit: 1000 });
+
+    const back = fetchMock.mock.calls[0][0] as string;
+    expect(back).toContain('symbol=ETHUSDT');
+    expect(back).toContain('endTime=1700000000000');
+    expect(back).toContain('limit=300');
+    expect(back).not.toContain('startTime');
+    const fwd = fetchMock.mock.calls[1][0] as string;
+    expect(fwd).toContain('interval=15m');
+    expect(fwd).toContain('startTime=5');
+    expect(fwd).toContain('endTime=9');
+  });
+
+  it('после 429 пауза общая: параллельный запрос ждёт её, а не идёт к бирже', async () => {
+    mockFetch({ status: 429 }, { body: [] }, { body: [] });
+    const { client, sleep } = makeClient();
+    let wake!: () => void;
+    sleep.mockImplementation(() => new Promise<void>((r) => (wake = r)));
+
+    const first = client.fetchKlines('BTCUSDT', 1, 1);
+    // Первый запрос получил 429 и встал в паузу.
+    await new Promise((r) => setImmediate(r));
+    const second = client.fetchKlines('ETHUSDT', 1, 1);
+    await new Promise((r) => setImmediate(r));
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    wake();
+    await Promise.all([first, second]);
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
   it('на прочую ошибку HTTP падает сразу, не пряча её пустым массивом', async () => {
     mockFetch({ status: 500 });
     const { client } = makeClient();

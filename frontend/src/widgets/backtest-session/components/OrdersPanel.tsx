@@ -12,9 +12,14 @@ import { toScreen } from '../lib/money';
 
 /**
  * Ещё не сработавшие ордера сессии — своя вкладка, а не часть «Открытых
- * позиций»: до срабатывания это не позиция (сетка на вход) и не окончательный
+ * позиций»: до срабатывания это не позиция (ордер на вход) и не окончательный
  * выход (лимит закрытия), а обещание сделки. На настоящей бирже это тоже
  * разные вкладки терминала.
+ *
+ * Ордера на вход — одним списком, по строке на ордер, как «Текущие ордера» у
+ * биржи. Сеткой они только ставятся; дальше каждый живёт сам по себе, и
+ * ордеров в одну сторону может стоять сколько угодно, в том числе из разных
+ * отправок, — группа «сетка на сторону» сказала бы о них неправду.
  *
  * Та же `LedgerTable`, что у «Открытых позиций» и «Истории сделок» — раньше
  * список был голыми `<ul>/<li>` без единого класса разметки, и подпись с
@@ -27,24 +32,32 @@ export function OrdersPanel({
   entryOrders,
   onCancelOrder,
   onCancelEntryOrder,
+  showSymbol = false,
+  decimalsOf,
 }: {
   trades: BacktestTrade[];
   scale: number;
   closeOrders: BacktestCloseOrder[];
-  /** Сетка на вход (Scaled order) — до первого срабатывания сделки ещё нет,
-   * поэтому эти строки показываются здесь и тогда, когда trades пуст. */
+  /** Ордера на вход — до срабатывания сделки ещё нет, поэтому эти строки
+   * показываются здесь и тогда, когда trades пуст. */
   entryOrders: BacktestEntryOrder[];
   onCancelOrder: (orderId: string) => void;
   onCancelEntryOrder: (orderId: string) => void;
+  /** Колонка монеты — в эфире, где монет несколько. */
+  showSymbol?: boolean;
+  /** Знаков цены монеты; не задано — общее правило формата. */
+  decimalsOf?: (symbol: string) => number | undefined;
 }) {
   const t = useTranslations('backtest');
   const tradeById = new Map(trades.map((x) => [x.id, x]));
+  const price = (p: number, symbol: string | undefined) =>
+    formatPriceGrouped(toScreen(p, scale), symbol ? decimalsOf?.(symbol) : undefined);
 
-  const entryGrids = (['long', 'short'] as const)
-    .map((direction) => ({ direction, orders: entryOrders.filter((o) => o.direction === direction) }))
-    .filter((g) => g.orders.length > 0);
+  // Сервер отдаёт ордера по цене; монета — первой, чтобы в эфире строки одной
+  // монеты стояли рядом.
+  const entryRows = [...entryOrders].sort((a, b) => a.symbol.localeCompare(b.symbol) || a.price - b.price);
 
-  if (closeOrders.length === 0 && entryGrids.length === 0) {
+  if (closeOrders.length === 0 && entryRows.length === 0) {
     return <EmptyState title={t('noOrders')}>{t('noOrdersHint')}</EmptyState>;
   }
 
@@ -53,6 +66,15 @@ export function OrdersPanel({
   // У BacktestCloseOrder своего направления нет в модели — он закрывает уже
   // открытую сделку, поэтому направление колонки берётся у неё же (tradeById).
   const closeColumns: LedgerColumn<BacktestCloseOrder>[] = [
+    ...(showSymbol
+      ? [
+          {
+            key: 'symbol',
+            header: t('colOrderSymbol'),
+            render: (o: BacktestCloseOrder) => <span className="sym">{tradeById.get(o.tradeId)?.symbol ?? '—'}</span>,
+          } satisfies LedgerColumn<BacktestCloseOrder>,
+        ]
+      : []),
     {
       key: 'direction',
       header: t('colOrderDirection'),
@@ -66,7 +88,7 @@ export function OrdersPanel({
       header: t('colOrderPrice'),
       align: 'right',
       cellClassName: 'n',
-      render: (o) => formatPriceGrouped(toScreen(o.price, scale)),
+      render: (o) => price(o.price, tradeById.get(o.tradeId)?.symbol),
     },
     { key: 'qty', header: t('colOrderQty'), align: 'right', cellClassName: 'n', render: (o) => formatQty(o.qty) },
     {
@@ -87,12 +109,39 @@ export function OrdersPanel({
   ];
 
   const entryColumns: LedgerColumn<BacktestEntryOrder>[] = [
+    ...(showSymbol
+      ? [
+          {
+            key: 'symbol',
+            header: t('colOrderSymbol'),
+            render: (o: BacktestEntryOrder) => <span className="sym">{o.symbol}</span>,
+          } satisfies LedgerColumn<BacktestEntryOrder>,
+        ]
+      : []),
+    { key: 'direction', header: t('colOrderDirection'), render: (o) => dir(o.direction) },
     {
       key: 'price',
       header: t('colOrderPrice'),
       align: 'right',
       cellClassName: 'n',
-      render: (o) => formatPriceGrouped(toScreen(o.price, scale)),
+      render: (o) => price(o.price, o.symbol),
+    },
+    // Стоп и тейк ордера — те, с которыми он откроет позицию. Если позиция этой
+    // стороны уже открыта, ордер её доливает, и уровни остаются её собственные.
+    {
+      key: 'stop',
+      header: t('stop'),
+      align: 'right',
+      cellClassName: 'n',
+      // Ноль — стопа у ордера нет: так бывает у лимита биржи, выставленного мимо терминала.
+      render: (o) => (o.stopLoss > 0 ? price(o.stopLoss, o.symbol) : '—'),
+    },
+    {
+      key: 'take',
+      header: t('take'),
+      align: 'right',
+      cellClassName: 'n',
+      render: (o) => (o.takeProfit != null ? price(o.takeProfit, o.symbol) : '—'),
     },
     {
       key: 'risk',
@@ -126,18 +175,18 @@ export function OrdersPanel({
           <LedgerTable columns={closeColumns} rows={closeOrders} rowKey={(o) => o.id} />
         </>
       )}
-      {entryGrids.map(({ direction, orders }) => (
-        <div key={direction}>
-          <SectionHead title={t('pendingEntryOrdersTitle', { direction: t(`direction.${direction}`) })}>
-            {orders.length > 1 && (
-              <Button tight onClick={() => orders.forEach((o) => onCancelEntryOrder(o.id))}>
-                {t('cancelGrid')}
+      {entryRows.length > 0 && (
+        <>
+          <SectionHead title={t('pendingEntryOrdersTitle')}>
+            {entryRows.length > 1 && (
+              <Button tight onClick={() => entryRows.forEach((o) => onCancelEntryOrder(o.id))}>
+                {t('cancelAllOrders')}
               </Button>
             )}
           </SectionHead>
-          <LedgerTable columns={entryColumns} rows={orders} rowKey={(o) => o.id} />
-        </div>
-      ))}
+          <LedgerTable columns={entryColumns} rows={entryRows} rowKey={(o) => o.id} />
+        </>
+      )}
     </div>
   );
 }

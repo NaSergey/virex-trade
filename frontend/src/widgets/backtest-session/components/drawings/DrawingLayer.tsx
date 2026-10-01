@@ -23,6 +23,8 @@ export interface LayerGeo {
   tfMs: number;
   /** Все показанные свечи, в экранной цене — по ним long/short видит, чем кончилась позиция. */
   candles: { t: number; o: number; h: number; l: number; c: number }[];
+  /** Знаков цены у монеты графика; не задано — общее правило `formatPriceGrouped`. */
+  priceDecimals?: number;
 }
 
 /**
@@ -86,9 +88,7 @@ export function DrawingLayer({
         return (
           <>
             <line x1={-reach} x2={reach} y1={y} y2={y} {...line} />
-            <text x={PW - px(4)} y={y - px(4)} fill={color} textAnchor="end" pointerEvents="none" {...font}>
-              {formatPriceGrouped(a.p)}
-            </text>
+            {/* Цену горизонтали рисует график плашкой на полосе цены — как у уровней сделки. */}
             {hitLine(d, -reach, y, reach, y)}
           </>
         );
@@ -186,7 +186,7 @@ export function DrawingLayer({
               <g key={level}>
                 <line x1={xL} x2={xR} y1={y} y2={y} stroke={c} strokeWidth={sw} pointerEvents="none" />
                 <text x={xL - px(4)} y={y + px(3.5)} fill={c} textAnchor="end" pointerEvents="none" {...font}>
-                  {level} ({formatPriceGrouped(price)})
+                  {level} ({formatPriceGrouped(price, geo.priceDecimals)})
                 </text>
                 {hitLine(d, xL, y, xR, y)}
               </g>
@@ -323,7 +323,7 @@ function RulerShape({ ruler, geo }: { ruler: Ruler; geo: LayerGeo }) {
   const m = mins % 60;
   const dur = [d && `${d}${t('unitD')}`, h && `${h}${t('unitH')}`, (m || mins === 0) && `${m}${t('unitM')}`].filter(Boolean).join(' ');
   const lines = [
-    `${s.dp >= 0 ? '+' : '−'}${formatPriceGrouped(Math.abs(s.dp))} (${s.pct >= 0 ? '+' : ''}${s.pct.toFixed(2)}%)`,
+    `${s.dp >= 0 ? '+' : '−'}${formatPriceGrouped(Math.abs(s.dp), geo.priceDecimals)} (${s.pct >= 0 ? '+' : ''}${s.pct.toFixed(2)}%)`,
     `${Math.abs(s.bars)} ${t('bars')} · ${dur}`,
   ];
   const boxW = px(8) + Math.max(...lines.map((l) => l.length)) * px(6.2);

@@ -3,10 +3,11 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader, useDialogFade } from '@/shared/ui/dialog';
+import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { Field, Input } from '@/shared/ui/Field';
 import { Slider } from '@/shared/ui/Slider';
 import { formatMoney, formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
-import type { BacktestTrade } from '../api/types';
+import type { PositionLike } from '../api/types';
 import { levelImpact } from '../lib/money';
 
 const clampPct = (v: number) => Math.max(0, Math.min(100, v));
@@ -21,8 +22,9 @@ export function MarketCloseModal({
   onClose,
   isPending,
   error,
+  decimals,
 }: {
-  trade: BacktestTrade;
+  trade: PositionLike;
   remaining: number;
   screenPrice: number;
   /** Как и раньше у «Закрыть по рынку» в OrderPanel: сделку нельзя закрыть в тот же
@@ -33,6 +35,8 @@ export function MarketCloseModal({
   onClose: () => void;
   isPending: boolean;
   error: unknown;
+  /** Знаков цены монеты сделки; не задано — общее правило формата. */
+  decimals?: number;
 }) {
   const t = useTranslations('backtest');
   const { closing, close } = useDialogFade(onClose);
@@ -45,7 +49,7 @@ export function MarketCloseModal({
   return (
     <Dialog open={!closing} onOpenChange={(v) => !v && close()}>
       <DialogContent>
-        <DialogHeader title={t('marketCloseTitle')} subtitle={`${t('unrealized')} ${formatPriceGrouped(screenPrice)}`} />
+        <DialogHeader title={t('marketCloseTitle')} subtitle={`${trade.symbol} · ${t('unrealized')} ${formatPriceGrouped(screenPrice, decimals)}`} />
         <DialogBody>
           <Field label={t('closedQtyCoin')}>
             {(id) => (
@@ -63,7 +67,7 @@ export function MarketCloseModal({
           </Field>
           <Slider value={pct} min={0} max={100} step={1} onChange={(v) => setPct(clampPct(v))} aria-label={t('closedQtyCoin')} />
           <p className="muted">{t('marketCloseHint', { qty: formatQty(qty), pnl: formatMoney(impact.usdt) })}</p>
-          {error != null && <p className="neg">{t('actionFailed')}</p>}
+          <ErrorNote error={error} fallback={t('actionFailed')} />
         </DialogBody>
         <DialogActions
           confirmLabel={t('marketCloseConfirm')}

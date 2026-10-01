@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { liveAnchor, mergeMinutes } from './live';
+import { liveAnchor, mergeMinutes, mergeTagged, ofSymbol } from './live';
 
 const MIN = 60_000;
 const T = Date.UTC(2026, 8, 19, 12, 0, 0);
@@ -76,5 +76,31 @@ describe('liveAnchor', () => {
     // Хранилище почему-то содержит свечу, которая ещё не должна была закрыться.
     const current = Date.UTC(2026, 8, 19, 12, 0, 0);
     expect(liveAnchor([c(current, 100)], 60, T + 30_000)).toBe(current);
+  });
+});
+
+/**
+ * Лента эфира переключается между монетами: ответ, пришедший по прежней монете
+ * уже после переключения, не должен лечь свечами на график новой.
+ */
+describe('минутки, помеченные монетой', () => {
+  it('слияние в ту же монету дописывает', () => {
+    const next = mergeTagged({ symbol: 'ETHUSDT', rows: [c(T, 100)] }, 'ETHUSDT', [c(T + MIN, 101)]);
+
+    expect(next).toEqual({ symbol: 'ETHUSDT', rows: [c(T, 100), c(T + MIN, 101)] });
+  });
+
+  it('слияние в другую монету начинает с чистого листа', () => {
+    const next = mergeTagged({ symbol: 'BTCUSDT', rows: [c(T, 70_000)] }, 'ETHUSDT', [c(T + MIN, 2_500)]);
+
+    expect(next).toEqual({ symbol: 'ETHUSDT', rows: [c(T + MIN, 2_500)] });
+  });
+
+  it('чужая монета читается как пусто', () => {
+    const state = { symbol: 'BTCUSDT', rows: [c(T, 70_000)] };
+
+    expect(ofSymbol(state, 'ETHUSDT')).toBeNull();
+    expect(ofSymbol(state, 'BTCUSDT')).toBe(state);
+    expect(ofSymbol(null, 'BTCUSDT')).toBeNull();
   });
 });

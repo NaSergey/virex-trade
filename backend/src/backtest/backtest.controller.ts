@@ -7,10 +7,12 @@ import {
   AddToTradeDto,
   AdvanceDto,
   CloseTradeDto,
+  CreateCloseGridDto,
   CreateCloseOrderDto,
   CreateEntryOrdersDto,
   CreateSessionDto,
   ModifyTradeDto,
+  MoveOrderDto,
   OpenTradeDto,
   SetBacktestTagsDto,
   SetLeverageDto,
@@ -82,7 +84,7 @@ export class BacktestController {
 
   @Patch('sessions/:id/leverage')
   setLeverage(@CurrentUser('userId') userId: string, @Param('id') id: string, @Body() dto: SetLeverageDto) {
-    return this.backtest.setLeverage(userId, id, dto.leverage);
+    return this.backtest.setLeverage(userId, id, dto.leverage, dto.symbol);
   }
 
   @Post('trades/:id/close')
@@ -100,6 +102,16 @@ export class BacktestController {
     return this.backtest.createCloseOrder(userId, id, dto);
   }
 
+  @Post('trades/:id/close-grid')
+  createCloseGrid(@CurrentUser('userId') userId: string, @Param('id') id: string, @Body() dto: CreateCloseGridDto) {
+    return this.backtest.createCloseGrid(userId, id, dto);
+  }
+
+  @Patch('close-orders/:id')
+  moveCloseOrder(@CurrentUser('userId') userId: string, @Param('id') id: string, @Body() dto: MoveOrderDto) {
+    return this.backtest.moveCloseOrder(userId, id, dto.price);
+  }
+
   @Delete('close-orders/:id')
   cancelCloseOrder(@CurrentUser('userId') userId: string, @Param('id') id: string) {
     return this.backtest.cancelCloseOrder(userId, id);
@@ -108,6 +120,11 @@ export class BacktestController {
   @Post('sessions/:id/entry-orders')
   createEntryOrders(@CurrentUser('userId') userId: string, @Param('id') id: string, @Body() dto: CreateEntryOrdersDto) {
     return this.backtest.createEntryOrders(userId, id, dto);
+  }
+
+  @Patch('entry-orders/:id')
+  moveEntryOrder(@CurrentUser('userId') userId: string, @Param('id') id: string, @Body() dto: MoveOrderDto) {
+    return this.backtest.moveEntryOrder(userId, id, dto.price);
   }
 
   @Delete('entry-orders/:id')

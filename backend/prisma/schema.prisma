@@ -341,8 +341,13 @@ model BacktestSession {
   hidePrice    Boolean
   /// Коэффициент показа цен; 1, если цена не скрыта. В базе цены настоящие.
   priceScale   Float
-  /// Откуда свечи: 'real' — отрезок price_candles, 'synthetic' — рынок строит генератор (backtest/synthetic).
+  /// Откуда свечи: 'real' — отрезок price_candles, 'synthetic' — рынок строит генератор (backtest/synthetic),
+  /// 'live' — живой рынок в эфире: цену и время ставит сервер, уровни исполняет движок эфира.
   dataSource   String      @default("real")
+  /// Эфир ('live'): до какого момента движок проверил уровни сессии. Не cursorTime:
+  /// тот двигают вход и выход сделки, и чтение от него пропускало бы кусок у
+  /// остальных позиций. У турнирной сессии курсор общий — Tournament.processedUntil.
+  processedUntil DateTime?
   /// Зерно генератора; только у synthetic.
   seed         Int?
   /// Версия генератора (SYNTH_VERSION), которой построена сессия; только у synthetic.
@@ -374,14 +379,20 @@ model Tournament {
   /// (отрезок истории, каждый в своём темпе), который вынесен из первого этапа:
   /// второй режим тогда станет значением, а не миграцией.
   mode           String    @default("live")
-  /// 'lobby' — набор участников; 'running' — идёт; 'finished' — итоги подведены.
+  /// 'lobby' — набор участников; 'running' — идёт; 'finished' — итоги подведены;
+  /// 'cancelled' — назначенное время пришло, а участник один (взнос возвращён).
   status         String    @default("lobby")
-  /// 'public' — виден в общем списке, пока в лобби и есть места, войти может
+  /// 'arena' — каждый сам за себя (на двоих это дуэль); 'teams' — две команды по
+  /// `teamSize`, фонд — победившей команде поровну.
+  format         String    @default("arena")
+  /// Размер команды (2–15) — только у 'teams'; maxPlayers = 2 × teamSize.
+  teamSize       Int?
+  /// 'public' — виден в общем списке, пока идёт набор или турнир и есть места, войти может
   /// любой; 'private' — только по ссылке. Умолчание закрытое: публикация —
   /// осознанный выбор создателя.
   visibility     String    @default("private")
   startBalance   Float
-  /// Число мест: 2–10. Два — дуэль.
+  /// Число мест: 2–30. Два — дуэль; у команд — 2 × teamSize.
   maxPlayers     Int       @default(10)
   /// Взнос каждого участника в монетах; 0 — бесплатный турнир.
   entryFee       Int       @default(0)
@@ -394,6 +405,9 @@ model Tournament {
   payoutShares   Int[]     @default([100])
   /// От старта до конца, минуты: 60, 240, 1440, 4320, 10080.
   durationMin    Int
+  /// Назначенное время старта. Пусто — турнир стартует, когда готовы все; задано —
+  /// только по времени, шагом `startDue` движка турниров, и готовность не нужна.
+  startsAt       DateTime?
   /// SetNull: удаление аккаунта создателя не должно стирать идущий турнир у остальных.
   creatorId      String?
   creator        User?     @relation("TournamentCreator", fields: [creatorId], references: [id], onDelete: SetNull)
@@ -408,6 +422,8 @@ model Tournament {
   sessions     BacktestSession[]
 
   @@index([status, endsAt])
+  /// Лобби, чьё время старта пришло, — их ищет движок турниров каждый тик.
+  @@index([status, startsAt])
   /// Общий список открытых турниров: публичные лобби, новые сверху.
   @@index([visibility, status, createdAt])
   @@map("tournaments")
@@ -419,6 +435,9 @@ model TournamentParticipant {
   userId       String
   user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   joinedAt     DateTime   @default(now())
+  /// Команда у командного турнира: 0 — A, 1 — B; у арены пусто. Выбирает игрок при
+  /// входе, в наборе переставляет создатель.
+  team         Int?
   /// Готов ли участник начать. Турнир выходит из лобби сам, когда готовы все,
   /// — кнопки старта у создателя нет. Колонкой, а не отдельной таблицей: у
   /// готовности нет ни истории, ни времени, это одно «да/нет» в лобби, и после
@@ -446,6 +465,9 @@ model BacktestTrade {
   id         String          @id @default(uuid())
   sessionId  String
   session    BacktestSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  /// Монета сделки (market-data/symbols.ts). Не-BTC бывает только в эфире: у истории
+  /// и тренажёра свечей другой монеты нет. Дефолт — прежние сделки, все по BTC.
+  symbol     String          @default("BTCUSDT")
   direction  String // 'long' | 'short'
   entryTime  DateTime
   entryPrice Float
@@ -462,6 +484,10 @@ model BacktestTrade {
   leverage   Float           @default(1)
   /// Сколько уже закрыто частями (BacktestTradeExit.qty). qty - closedQty = остаток.
   closedQty  Float           @default(0)
+  /// Стоп за тейками: исполнился лимит закрытия — стоп подтягивается в безубыток
+  /// (первый), дальше — на цену предыдущего исполненного лимита. Ставится сеткой
+  /// фиксации (BacktestService.createCloseGrid), исполняется в applyClose.
+  stopFollow Boolean         @default(false)
   exitTime   DateTime?
   exitPrice  Float?
   exitReason String? // 'stop' | 'take' | 'manual' | 'finish' | 'limit'
@@ -538,6 +564,8 @@ model BacktestEntryOrder {
   id         String          @id @default(uuid())
   sessionId  String
   session    BacktestSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  /// Монета уровня — та же, что у сделки, которую он откроет или доберёт.
+  symbol     String          @default("BTCUSDT")
   direction  String // 'long' | 'short'
   price      Float
   riskPct    Float

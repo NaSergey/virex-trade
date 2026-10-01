@@ -115,29 +115,10 @@ export class SettingsController {
       });
     }
 
-    // Virex only reads. A key that can also trade or withdraw turns a leaked
-    // database from an exposed trade history into drained accounts, so such a
-    // key is refused here rather than stored and trusted to go unused.
-    // `permissions` is absent when the exchange cannot be asked — unknown, not
-    // safe, and the reason this is enforceable on Bybit and nowhere else yet.
-    if (check.permissions) {
-      const excess = [
-        check.permissions.canTrade ? 'торговлю' : null,
-        check.permissions.canWithdraw ? 'вывод средств' : null,
-      ].filter(Boolean);
-
-      if (excess.length > 0) {
-        throw new BadRequestException({
-          message:
-            `Этот ключ разрешает ${excess.join(' и ')}. Virex только читает историю сделок, ` +
-            `поэтому принимает ключи с правом «только чтение». Создайте на ${meta.label} ` +
-            `новый ключ без прав на торговлю и вывод и подключите его.`,
-          code: 'EXCHANGE_KEY_EXCESS_PERMISSIONS',
-          params: { label: meta.label },
-        });
-      }
-    }
-
+    // Whatever the key may do, it is stored: a key that can trade or withdraw
+    // used to be refused here, and the owner dropped the refusal (2026-09-30)
+    // — it kept people from connecting at all. The rights are shown on the
+    // settings page instead (see permissions() below).
     await this.credentials.save(userId, id, credentials);
     // T20 (B4): drop the cached creds/active-exchange snapshot right now — the
     // activeExchange() read below, and the very next positions/balance poll,
@@ -155,7 +136,29 @@ export class SettingsController {
       exchange: id,
       apiKeyMasked: this.credentials.maskKey(dto.apiKey),
       activeExchange: await this.credentials.activeExchange(userId),
+      permissions: check.permissions ?? null,
     };
+  }
+
+  /**
+   * What the connected key may do, as the exchange reports it right now.
+   *
+   * Its own endpoint rather than a field of the list above: the answer costs a
+   * call to the exchange, and the settings page should not wait on it to draw.
+   * `null` is "unknown" — the exchange is not asked, did not answer, or is not
+   * connected — and the page must not show it as read-only.
+   */
+  @Get('exchanges/:exchange/permissions')
+  async permissions(
+    @CurrentUser('userId') userId: string,
+    @Param('exchange') exchange: string,
+  ) {
+    const id = this.parseExchange(exchange);
+    const credentials = await this.credentials.get(userId, id);
+    const permissions = credentials
+      ? await this.exchanges.get(id).getKeyPermissions?.(credentials)
+      : undefined;
+    return { success: true, exchange: id, permissions: permissions ?? null };
   }
 
   @Delete('exchanges/:exchange')

@@ -35,10 +35,16 @@ export function formatMoney(v: number, digits = 2): string {
 /**
  * Цена без знака, но с разбитыми разрядами и той же точностью, что и
  * formatPrice (мелкие инструменты — 4 знака, остальные — 2).
+ *
+ * `decimals` — точность, известная про инструмент (шаг цены монеты эфира):
+ * правило «меньше единицы — 4 знака» слепляет XRP по 2.51 в одинаковые подписи.
+ * Без него — прежнее правило.
  * @param value - цена числом или строкой с биржи
+ * @param decimals - знаков после точки у инструмента
  */
-export function formatPriceGrouped(value: string | number | null | undefined): string {
-  const plain = formatPrice(value);
+export function formatPriceGrouped(value: string | number | null | undefined, decimals?: number): string {
+  const num = typeof value === 'string' ? parseFloat(value) : value;
+  const plain = decimals != null && num != null && Number.isFinite(num) ? num.toFixed(decimals) : formatPrice(value);
   if (plain === '-') return '—';
   const [int, frac] = plain.split('.');
   return `${group(int)}${frac ? `.${frac}` : ''}`;

@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useBattlePass } from '@/entities/battle-pass';
 import { CoinBalance } from '@/entities/coins';
+import { useTerminalAccess } from '@/entities/terminal';
 import { useAuth } from '@/features/auth';
 import { DonateDialog } from '@/features/donation';
 import { useOnboarding } from '@/features/onboarding';
@@ -13,12 +14,19 @@ import { ReferralDialog } from '@/features/referrals';
 import { Button } from '@/shared/ui/Button';
 import { LocaleSwitch } from '@/shared/ui/LocaleSwitch';
 import { ThemeToggle } from '@/shared/ui/ThemeToggle';
-// import { VirexLogo } from '@/shared/ui/VirexLogo';
+import { TradePlayMark } from '@/shared/ui/TradePlayMark';
 import { useLocaleControl } from '@/shared/i18n';
 
-type Tab = 'overview' | 'tags' | 'analytics' | 'market' | 'backtest' | 'games' | 'settings' | 'admin';
+type Tab = 'terminal' | 'overview' | 'tags' | 'analytics' | 'market' | 'backtest' | 'games' | 'settings' | 'admin';
 
 type NavItem = { id: Tab; labelKey: Tab };
+
+/**
+ * Биржевой терминал — первым, перед «Обзором», и только у того, чей ключ
+ * умеет ставить ордера (решение владельца 2026-09-30). В общем списке его нет:
+ * пункт, обещающий торговлю ключу «только чтение», вёл бы на страницу отказа.
+ */
+const TERMINAL: NavItem = { id: 'terminal', labelKey: 'terminal' };
 
 const NAV: NavItem[] = [
   { id: 'overview', labelKey: 'overview' },
@@ -56,7 +64,16 @@ const isActive = (pathname: string, id: Tab) => pathname === `/${id}` || pathnam
  * единственный источник этого знания, и передавать его сверху значило бы
  * завести второй, способный с ним разойтись.
  */
-export function TopNav() {
+export function TopNav({
+  initialTerminal = false,
+}: {
+  /**
+   * Был ли биржевой терминал доступен при последнем ответе — из куки, которую
+   * читает серверный layout. Только подсказка первого кадра: как только придёт
+   * ответ `useTerminalAccess`, решает он.
+   */
+  initialTerminal?: boolean;
+}) {
   const { user, logout } = useAuth();
   const { restart } = useOnboarding();
   const t = useTranslations('nav');
@@ -75,6 +92,12 @@ export function TopNav() {
   const hasRewards = Boolean(
     battlePass.data && (battlePass.data.pendingCoins > 0 || !battlePass.data.daily.claimedToday),
   );
+  // Пока ответа нет, рейка стоит так, как стояла при прошлом ответе
+  // (`initialTerminal` — кука, прочитанная сервером): пункт есть уже в
+  // присланной разметке, а не появляется после запроса, сдвигая остальные.
+  const access = useTerminalAccess().data;
+  const hasTerminal = access ? access.available : initialTerminal;
+  const nav = hasTerminal ? [TERMINAL, ...NAV] : NAV;
   const [donateOpen, setDonateOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
@@ -123,7 +146,9 @@ export function TopNav() {
     document.fonts?.ready?.then(settle);
     window.addEventListener('resize', settle);
     return () => window.removeEventListener('resize', settle);
-  }, [pathname, locale]);
+    // `hasTerminal`: появившийся первым пункт сдвигает все остальные, и плашка
+    // обязана переехать вместе со своим.
+  }, [pathname, locale, hasTerminal]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -137,10 +162,9 @@ export function TopNav() {
   return (
     <header className="top">
       <div className="top-in">
-        <div className="mark">
-          {/* <VirexLogo width={42} height={42} /> */}
-          Virex
-        </div>
+        <Link href="/overview" className="mark">
+          <TradePlayMark width={56} height={34} />
+        </Link>
 
         {/* role="tablist" здесь больше нет: вкладки не меняют адрес, а эти
             пункты меняют. Скринридер должен услышать навигацию по разделам
@@ -163,7 +187,7 @@ export function TopNav() {
               aria-hidden
             />
           )}
-          {NAV.map((item) => (
+          {nav.map((item) => (
             <Link
               key={item.id}
               href={`/${item.id}`}

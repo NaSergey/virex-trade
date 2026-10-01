@@ -27,6 +27,7 @@ import { PokerModule } from './poker/poker.module';
 import { BlackjackModule } from './blackjack/blackjack.module';
 import { JetpackModule } from './jetpack/jetpack.module';
 import { BattlePassModule } from './battlepass/battlepass.module';
+import { TerminalModule } from './terminal/terminal.module';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { BattlePassModule } from './battlepass/battlepass.module';
     BlackjackModule,
     JetpackModule,
     BattlePassModule,
+    TerminalModule,
   ],
   controllers: [AppController],
   providers: [AppService],

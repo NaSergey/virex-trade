@@ -35,7 +35,7 @@ export function VirexLogo({ className, ...props }: SVGProps<SVGSVGElement>) {
       preserveAspectRatio="xMidYMid meet"
       shapeRendering="geometricPrecision"
       className={['virex-logo', className].filter(Boolean).join(' ')}
-      aria-label="Virex"
+      aria-label="Trade Play"
       {...props}
     >
       <g fill="#fff">

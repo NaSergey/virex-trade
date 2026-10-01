@@ -37,16 +37,19 @@ export function TradeDetails({
   trade,
   scale,
   labelFor,
+  decimals,
 }: {
   trade: BacktestTrade;
   /** Масштаб показа; у завершённой сессии — 1, цены раскрыты. */
   scale: number;
   labelFor: (ms: number) => string;
+  /** Знаков цены монеты сделки; не задано — общее правило формата. */
+  decimals?: number;
 }) {
   const t = useTranslations('backtest');
   const { locale } = useLocaleControl();
   const units = durationUnitLabels(locale);
-  const price = (p: number) => formatPriceGrouped(toScreen(p, scale));
+  const price = (p: number) => formatPriceGrouped(toScreen(p, scale), decimals);
 
   return (
     <div className="order-ctx">

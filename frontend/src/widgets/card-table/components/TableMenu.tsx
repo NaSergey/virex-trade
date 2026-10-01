@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { cn } from '@/shared/lib/utils/css';
 import { Button } from '@/shared/ui/Button';
+import { useSoundOn } from '../model/useTableSound';
 
 /** Пункт-переключатель меню: у покера — справка по комбинациям. */
 export interface MenuToggle {
@@ -13,12 +14,15 @@ export interface MenuToggle {
 }
 
 /**
- * Меню стола за «⋯»: ссылка на стол и переключатели, которые даёт игра.
+ * Меню стола за «⋯»: ссылка на стол, звук и переключатели, которые даёт игра.
+ * Звук — общий у обеих игр, поэтому его пункт стоит здесь, а не в игре.
  * Закрытия стола здесь нет — оно в строке «Мои столы» лобби: за столом идёт
  * игра, и необратимое действие рядом с ней лишнее.
  */
 export function TableMenu({ toggles = [] }: { toggles?: MenuToggle[] }) {
   const t = useTranslations('cardTable');
+  const [sound, setSound] = useSoundOn();
+  const items: MenuToggle[] = [{ label: t('sound'), on: sound, onToggle: () => setSound(!sound) }, ...toggles];
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -74,7 +78,7 @@ export function TableMenu({ toggles = [] }: { toggles?: MenuToggle[] }) {
           <Button variant="none" role="menuitem" className="ct-menu-item" onClick={copy}>
             {t('invite')}
           </Button>
-          {toggles.map((x) => (
+          {items.map((x) => (
             <Button
               key={x.label}
               variant="none"

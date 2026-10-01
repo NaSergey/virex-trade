@@ -1,8 +1,8 @@
 /**
  * Стол карточных игр — общий у покера и блэкджека: сцена с овалом сукна и
  * крупье во главе, оболочка страницы стола, карты, фишки, реплики крупье,
- * летящие предметы, места, окно посадки, меню и лобби-список, сокет стола и
- * «ушёл со страницы — встал из-за стола».
+ * летящие предметы, места, окно посадки, меню и лобби-список, сокет стола,
+ * звук и «ушёл со страницы — встал из-за стола».
  *
  * Живёт в `widgets/`, а не в `views/poker-table/`, потому что его рисуют две
  * страницы игр. Правил ни одной игры внутри нет: что лежит в центре сукна и
@@ -24,7 +24,9 @@ export { Toggle } from './components/Toggle';
 export { chipsFor, DENOMS, type Denom } from './lib/chips';
 export { betPoint, initials, seatPoint, slotOf, STAGE_TALL, STAGE_WIDE, type SeatPoint } from './lib/layout';
 export { CENTER, COLLECT, DEAL_FLY, DEAL_STEP, DEALER, FLIP, offsetFrom, WIN_FLY } from './lib/motion';
+export { NO_CUES, type Cue, type TableSound } from './lib/sounds';
 export { standUp, useLeaveOnExit } from './model/useLeaveOnExit';
 export { useSeatPoints } from './model/useSeatPoints';
 export { useStageAspect } from './model/useStageAspect';
 export { useTableSocket } from './model/useTableSocket';
+export { useTableSound } from './model/useTableSound';

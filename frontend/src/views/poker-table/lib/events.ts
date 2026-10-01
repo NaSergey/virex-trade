@@ -1,5 +1,5 @@
 import type { HandCategory, PokerView } from '@/entities/game-table';
-import { COLLECT, DEAL_FLY, FLIP, WIN_FLY, type Ghost } from '@/widgets/card-table';
+import { COLLECT, DEAL_FLY, DEAL_STEP, FLIP, NO_CUES, WIN_FLY, type Cue, type Ghost, type TableSound } from '@/widgets/card-table';
 import { BOARD_BASE, BOARD_STEP } from './motion';
 
 /**
@@ -9,7 +9,7 @@ import { BOARD_BASE, BOARD_STEP } from './motion';
  * переподключившийся клиент не пропускает ходов. Движение же — это разница
  * между соседними снимками, и выводится она здесь, в одном месте, чистой
  * функцией: какие фишки съехали в банк, чьи карты ушли в колоду, что открыто
- * на борде, кому уехал банк и что об этом сказать.
+ * на борде, кому уехал банк, что об этом сказать и как это звучит.
  */
 
 /**
@@ -48,6 +48,8 @@ export interface Track {
   revealDelay: number;
   ghosts: Ghost[];
   lines: DealerLine[];
+  /** Звуки этого снимка — новый список на каждый снимок, прошлые не копятся. */
+  cues: readonly Cue[];
   seq: number;
 }
 
@@ -55,10 +57,12 @@ export interface Track {
 const MAX_LINES = 3;
 
 export function initTrack(view: PokerView): Track {
-  return { view, dealtHand: null, board: {}, winDelay: 0, revealDelay: 0, ghosts: [], lines: [], seq: 0 };
+  return { view, dealtHand: null, board: {}, winDelay: 0, revealDelay: 0, ghosts: [], lines: [], cues: NO_CUES, seq: 0 };
 }
 
 const bySeat = (v: PokerView) => new Map(v.seats.map((s) => [s.seatIndex, s]));
+const myTurn = (v: PokerView) =>
+  !!v.hand && v.me.seatIndex !== null && v.seats.some((s) => s.isTurn && s.seatIndex === v.me.seatIndex);
 
 /** Следующий снимок: какие предметы поехали и что сказал крупье. */
 export function advance(track: Track, next: PokerView): Track {
@@ -69,8 +73,16 @@ export function advance(track: Track, next: PokerView): Track {
   let seq = track.seq;
   const ghosts: Ghost[] = [];
   const lines: DealerLine[] = [];
+  const cues: Cue[] = [];
+  const cue = (sound: TableSound, delay = 0) => cues.push({ sound, delay });
   const say = (l: Omit<DealerLine, 'id'>) => lines.push({ ...l, id: ++seq });
-  const ghost = (g: Omit<Ghost, 'id'>) => ghosts.push({ ...g, id: ++seq });
+  const ghost = (g: Omit<Ghost, 'id'>) => {
+    ghosts.push({ ...g, id: ++seq });
+    // Предмет поехал — он и звучит: карты в колоду, ставка в банк, банк к месту.
+    if (g.what === 'cards') cue('fold', g.delay);
+    else if (g.to === 'center') cue('sweep', g.delay);
+    else cue('win', g.delay + (g.ms ?? WIN_FLY));
+  };
 
   if (!nh) {
     out.board = {};
@@ -81,6 +93,13 @@ export function advance(track: Track, next: PokerView): Track {
     out.board = {};
     out.winDelay = 0;
     out.revealDelay = 0;
+    // Колода тасуется, карты летят по кругу (как их раскладывает `Seat`), блайнды ложатся.
+    cue('shuffle');
+    const order = dealOrder(next);
+    for (const o of order.values()) {
+      for (let round = 0; round < 2; round++) cue('deal', (round * order.size + o) * DEAL_STEP);
+    }
+    if (next.seats.some((s) => s.bet > 0)) cue('chip');
   } else {
     const prevSeats = bySeat(prev);
     const nextSeats = bySeat(next);
@@ -97,6 +116,8 @@ export function advance(track: Track, next: PokerView): Track {
     }
 
     const streetChanged = ph.street !== nh.street;
+    // Блайнд, колл, рейз: ставка места выросла. На смене улицы ставки уходят в банк.
+    if (!streetChanged && next.seats.some((n) => n.bet > (prevSeats.get(n.seatIndex)?.bet ?? 0))) cue('chip');
     if (streetChanged) {
       for (const p of prev.seats) {
         if (p.bet > 0) ghost({ what: 'chips', from: { bet: p.seatIndex }, to: 'center', delay: 0, amount: p.bet });
@@ -107,7 +128,10 @@ export function advance(track: Track, next: PokerView): Track {
     const added = nh.board.slice(ph.board.length);
     const board = { ...track.board };
     const base = streetChanged ? BOARD_BASE : 0;
-    added.forEach((card, i) => (board[card] = base + i * BOARD_STEP));
+    added.forEach((card, i) => {
+      board[card] = base + i * BOARD_STEP;
+      cue('deal', board[card]);
+    });
     out.board = board;
     if (nh.street === 'flop' || nh.street === 'turn' || nh.street === 'river') {
       if (streetChanged) say({ key: nh.street });
@@ -121,7 +145,10 @@ export function advance(track: Track, next: PokerView): Track {
       );
       out.revealDelay = boardEnd;
       out.winDelay = boardEnd + (showdown ? FLIP + 200 : 120);
-      if (showdown) say({ key: 'showdown' });
+      if (showdown) {
+        say({ key: 'showdown' });
+        cue('flip', out.revealDelay);
+      }
       for (const w of nh.winners) {
         ghost({
           what: 'chips',
@@ -137,10 +164,22 @@ export function advance(track: Track, next: PokerView): Track {
     }
   }
 
+  // Сигнал хода — когда легла последняя карта снимка, а не в шелесте сдачи.
+  // Новый ход — и тот, что остался у меня на новой улице: в хедз-апе большой
+  // блайнд закрывает префлоп чеком и первым же ходит на флопе.
+  const sameTurn = myTurn(prev) && ph?.id === nh?.id && ph?.street === nh?.street;
+  if (myTurn(next) && !sameTurn) cue('turn', cardsEnd(cues));
+
   out.ghosts = ghosts.length ? [...track.ghosts, ...ghosts] : track.ghosts;
   out.lines = lines.length ? [...track.lines, ...lines].slice(-MAX_LINES) : track.lines;
+  out.cues = cues.length ? cues : NO_CUES;
   out.seq = seq;
   return out;
+}
+
+function cardsEnd(cues: readonly Cue[]): number {
+  const deals = cues.filter((c) => c.sound === 'deal').map((c) => c.delay);
+  return deals.length ? Math.max(...deals) + DEAL_FLY : 0;
 }
 
 /** Порядок сдачи: с малого блайнда по кругу (в хедз-апе малый блайнд — кнопка). */

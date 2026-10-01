@@ -19,7 +19,9 @@ import {
   draftTakeFits,
   fromScreen,
   gridPrices,
+  gridTakeProfit,
   impliedDirection,
+  levelImpact,
   levelSliderRange,
   previewGrid,
   previewSize,
@@ -31,6 +33,24 @@ import {
   toInputPrice,
   toScreen,
 } from '../lib/money';
+
+/** Заголовок тейка: прибыль по нему, пока он стоит, иначе «(по желанию)». */
+function TakeTitle({ profit }: { profit: number | null }) {
+  const t = useTranslations('backtest');
+  return (
+    <span>
+      {t('take')}{' '}
+      {profit != null ? (
+        <span className="pos">
+          {profit >= 0 ? '+' : '−'}
+          {formatPriceGrouped(Math.abs(profit))} USDT
+        </span>
+      ) : (
+        t('takeOptional')
+      )}
+    </span>
+  );
+}
 
 /** Поля панели — строками, как их набирает человек, и в экранных ценах. */
 export interface Draft {
@@ -62,7 +82,7 @@ export interface ScaledDraft {
 
 /** Какой тикет открыт. Живёт у родителя: переключение чистит уровни
  * остальных вкладок, чтобы их линии не оставались на графике. */
-export type OrderTab = 'market' | 'order' | 'scaled';
+export type OrderTab = 'market' | 'limit' | 'scaled';
 
 const MIN_GRID_ORDERS = 1;
 const MAX_GRID_ORDERS = 10;
@@ -75,10 +95,11 @@ const MAX_RISK_PCT = 10;
 const LEVERAGE_OPTIONS = [1, 3, 5, 10, 25, 50, 100];
 
 /**
- * Вход, уровни, риск и плечо — панель никогда не смотрит на то, что уже открыто: сама
- * открытая позиция (хедж — до двух сделок разом), её закрытие и добор существующей
- * сделки живут в `OpenPositionsPanel` под графиком. Кнопки Лонг/Шорт здесь всегда
- * открывают новую независимую сделку — им нечем и незачем знать про уже открытые.
+ * Вход, уровни, риск и плечо. Про открытые сделки панель знает одно — какие
+ * стороны заняты (`lockedSides`): для них стоп и тейк «Маркета» не ставятся,
+ * потому что «Лонг/Шорт» по занятой стороне доливает позицию по её стопу (развилка
+ * — в `open` у `SessionScreen`). Сама открытая позиция (хедж — до двух сделок
+ * разом), её уровни и закрытие живут в `OpenPositionsPanel` под графиком.
  *
  * Слайдер стопа задаёт направление и дистанцию одним движением: центр — цена,
  * вправо (плюс) — лонг, влево (минус) — шорт, по 7% в каждую сторону
@@ -109,6 +130,8 @@ export function OrderPanel({
   onOpenLimit,
   onOpenScaled,
   onLeverageCommit,
+  priceDecimals,
+  lockedSides,
 }: {
   tab: OrderTab;
   onTab: (tab: OrderTab) => void;
@@ -136,6 +159,15 @@ export function OrderPanel({
    * Общее на все вкладки: плечо — настройка сессии, не конкретного ордера
    * (см. setLeverage на сервере). */
   onLeverageCommit: (leverage: number) => void;
+  /** Знаков цены монеты графика (эфир); не задано — общее правило формата. */
+  priceDecimals?: number;
+  /**
+   * Стороны, по которым у монеты графика уже открыта позиция. Стоп и тейк
+   * «Маркета» туда не ставятся (решение владельца 2026-09-26); заняты обе —
+   * ползунки уровней выключены. Черновик приходит уже без уровней этих сторон
+   * (`withoutLockedLevels`).
+   */
+  lockedSides: readonly Direction[];
 }) {
   const t = useTranslations('backtest');
   const setScaled = (key: keyof ScaledDraft) => (e: ChangeEvent<HTMLInputElement>) =>
@@ -161,9 +193,14 @@ export function OrderPanel({
   const risk = Number(draft.risk);
   const leverage = clamp(Number(draft.leverage) || MIN_LEVERAGE, MIN_LEVERAGE, MAX_LEVERAGE);
   const screenPrice = price != null ? toScreen(price, scale) : null;
-  // Панель больше не привязана ни к какой открытой сделке — направление всегда решают
-  // только уже набранные стоп/тейк (см. impliedDirection).
+  // Направление решают уже набранные стоп/тейк (см. impliedDirection), а не открытые сделки.
   const direction = screenPrice != null ? impliedDirection(null, stop, take, screenPrice) : null;
+  // Занятая сторона закрывает свою половину обоих ползунков; свободная остаётся
+  // одна — тейку сторона известна и без стопа.
+  const longLocked = lockedSides.includes('long');
+  const shortLocked = lockedSides.includes('short');
+  const levelsLocked = longLocked && shortLocked;
+  const freeSide: Direction | null = longLocked && !shortLocked ? 'short' : shortLocked && !longLocked ? 'long' : null;
   // Диапазон тейка сужается по стороне СТОПА, а не общего `direction`: тот, пока
   // стоп не поставлен, угадывает направление по самому тейку (см. impliedDirection).
   // Возьми диапазон оттуда — и первое же движение ползунка задавало бы новое
@@ -172,7 +209,7 @@ export function OrderPanel({
   // оказывалась в другом конце трека, и тейк выглядел стартующим не от цены,
   // а от края диапазона.
   const stopDirection = screenPrice != null ? impliedDirection(null, stop, null, screenPrice) : null;
-  const takeRange = screenPrice != null ? levelSliderRange('take', screenPrice, stopDirection) : null;
+  const takeRange = screenPrice != null ? levelSliderRange('take', screenPrice, stopDirection ?? freeSide) : null;
   const stopSignedPct = screenPrice != null ? clamp(signedPctFromStop(stop || screenPrice, screenPrice), -STOP_RISK_PCT, STOP_RISK_PCT) : null;
   const stopPct = stopSignedPct != null ? -stopSignedPct : null;
   const takeValue = takeRange ? clamp(take ?? screenPrice!, takeRange.min, takeRange.max) : null;
@@ -200,6 +237,9 @@ export function OrderPanel({
   // половины, то есть на глаз ровно посередине трека.
   const takeSliderMin = takeRange && screenPrice != null && takeRange.min === screenPrice ? 0 : -100;
   const takeSliderMax = takeRange && screenPrice != null && takeRange.max === screenPrice ? 0 : 100;
+  // Трек стопа — знаковый: плюс (стоп ниже цены) — лонг, минус — шорт.
+  const stopSliderMin = shortLocked && !levelsLocked ? 0 : -100;
+  const stopSliderMax = longLocked && !levelsLocked ? 0 : 100;
 
   /** Стоп получил новую цену — тейк зеркалится тут же, если новый стоп сделал его неверным. */
   const setStop = (newStopScreen: number) => {
@@ -223,6 +263,12 @@ export function OrderPanel({
       ? previewSize(balance, risk, price, fromScreen(stop, scale), leverage, direction ?? 'long')
       : null;
   const riskUsd = riskAmount(balance, risk);
+  // Прибыль по тейку — та же формула, что «Сейчас» у открытой позиции (с комиссиями),
+  // на размере предпросмотра. Пока тейк не стоит или не подходит стороне стопа — нет.
+  const takeProfit =
+    preview && takeSet && takeFits && price != null
+      ? levelImpact(direction ?? 'long', price, fromScreen(take, scale), preview.qty).usdt
+      : null;
 
   // Одиночный отложенный ордер: то же, что сетка из одного уровня, поэтому
   // цена входа здесь одна, а не диапазон — сторону она же и задаёт.
@@ -273,6 +319,10 @@ export function OrderPanel({
   const lPreview =
     lEntry != null && lEntry > 0 && lStop > 0 && lDirection
       ? previewSize(balance, lRisk, fromScreen(lEntry, scale), fromScreen(lStop, scale), leverage, lDirection)
+      : null;
+  const lTakeProfit =
+    lPreview && lTakeSet && lTakeFits && lEntry != null && lDirection
+      ? levelImpact(lDirection, fromScreen(lEntry, scale), fromScreen(lTake, scale), lPreview.qty).usdt
       : null;
 
   // Сетка на вход (Scaled): риск, стоп и тейк — те же поля, что у Market, но
@@ -341,6 +391,17 @@ export function OrderPanel({
     sPrices.length > 0 && sStop > 0 && sDirection
       ? previewGrid(balance, sRisk, sPrices, fromScreen(sStop, scale), leverage, sDirection)
       : null;
+  const sTakeProfit =
+    sPreview && sTakeSet && sTakeFits && sDirection
+      ? gridTakeProfit(
+          balance,
+          sRisk,
+          sPrices,
+          fromScreen(sStop, scale),
+          fromScreen(sTake, scale),
+          sDirection,
+        )
+      : null;
 
   return (
     <div className="order-panel">
@@ -382,7 +443,7 @@ export function OrderPanel({
         className="order-tabs"
         options={[
           { value: 'market' as const, label: t('orderTabMarket') },
-          { value: 'order' as const, label: t('orderTabOrder') },
+          { value: 'limit' as const, label: t('orderTabLimit') },
           { value: 'scaled' as const, label: t('orderTabScaled') },
         ]}
         value={tab}
@@ -418,7 +479,7 @@ export function OrderPanel({
       <Field
         label={
           <span className="fld-head">
-            <span>{t('take')}</span>
+            <TakeTitle profit={takeProfit} />
             {takePct != null && <span className={cn('fld-val', !takeFits && 'neg')}>{fmtPctSigned(takePct)}</span>}
           </span>
         }
@@ -432,6 +493,7 @@ export function OrderPanel({
               min={takeSliderMin}
               max={takeSliderMax}
               step={0.5}
+              disabled={levelsLocked}
               onChange={(pos) =>
                 onDraft({ ...draft, take: pos === 0 ? '' : toInputPrice(curvedSliderValue(pos, takeRange.min, takeRange.max, screenPrice)) })
               }
@@ -453,9 +515,10 @@ export function OrderPanel({
           stopPos != null && (
             <Slider
               value={stopPos}
-              min={-100}
-              max={100}
+              min={stopSliderMin}
+              max={stopSliderMax}
               step={0.5}
+              disabled={levelsLocked}
               onChange={(pos) => setStop(stopFromSignedPct(curvedSliderValue(pos, -STOP_RISK_PCT, STOP_RISK_PCT, 0), screenPrice))}
               aria-label={t('stop')}
             />
@@ -480,7 +543,7 @@ export function OrderPanel({
         </>
       )}
 
-      {tab === 'order' && (
+      {tab === 'limit' && (
         <>
           <Field
             label={
@@ -537,7 +600,7 @@ export function OrderPanel({
           <Field
             label={
               <span className="fld-head">
-                <span>{t('take')}</span>
+                <TakeTitle profit={lTakeProfit} />
                 {lTakePct != null && <span className={cn('fld-val', !lTakeFits && 'neg')}>{fmtPctSigned(lTakePct)}</span>}
               </span>
             }
@@ -671,7 +734,7 @@ export function OrderPanel({
           <Field
             label={
               <span className="fld-head">
-                <span>{t('take')}</span>
+                <TakeTitle profit={sTakeProfit} />
                 {sTakePct != null && <span className={cn('fld-val', !sTakeFits && 'neg')}>{fmtPctSigned(sTakePct)}</span>}
               </span>
             }
@@ -732,7 +795,7 @@ export function OrderPanel({
                 aria-label={t('ordersCount')}
               />
             </KeyValue>
-            <KeyValue label={t('gridAvgEntry')}>{sAvgEntry != null ? formatPriceGrouped(sAvgEntry) : '—'}</KeyValue>
+            <KeyValue label={t('gridAvgEntry')}>{sAvgEntry != null ? formatPriceGrouped(sAvgEntry, priceDecimals) : '—'}</KeyValue>
           </div>
           <div className="size-preview">
             <KeyValue label={t('sizeCoin')}>{sPreview ? formatQty(Number(sPreview.qty.toFixed(3))) : '—'}</KeyValue>

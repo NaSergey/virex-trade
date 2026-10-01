@@ -29,7 +29,7 @@ export interface TradeStats {
   avgExitQuality: number | null;
 }
 
-// Порог значимости самой SQN (Van Tharp) — не число, придуманное для Virex.
+// Порог значимости самой SQN (Van Tharp) — не число, придуманное для Trade Play.
 export const MIN_SQN_POSITIONS = 30;
 
 /**

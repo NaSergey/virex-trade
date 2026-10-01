@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useCreateTable, type TableVisibility } from '@/entities/game-table';
+import { CoinIcon } from '@/shared/ui/CoinIcon';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { Field, Input, Select } from '@/shared/ui/Field';
 import { Seg, type SegOption } from '@/shared/ui/Seg';
@@ -29,7 +30,6 @@ export function CreateTableDialog({
 }) {
   const t = useTranslations('blackjack');
   const tt = useTranslations('cardTable');
-  const tc = useTranslations('coins');
   const create = useCreateTable();
 
   const [name, setName] = useState('');
@@ -91,7 +91,7 @@ export function CreateTableDialog({
   const coinInput = (value: string, onChange: (v: string) => void) =>
     function CoinInput(id: string) {
       return (
-        <Input id={id} full suffix={tc('unit')} inputMode="numeric" value={value} onChange={(e) => onChange(e.target.value)} />
+        <Input id={id} full suffix={<CoinIcon />} inputMode="numeric" value={value} onChange={(e) => onChange(e.target.value)} />
       );
     };
 

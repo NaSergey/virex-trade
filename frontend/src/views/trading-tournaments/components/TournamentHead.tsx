@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl';
 import type { TournamentDetail } from '@/entities/tournament';
 import { formatTradeDate } from '@/shared/lib/utils/format';
+import { CoinIcon } from '@/shared/ui/CoinIcon';
 import { MetricCell } from '@/shared/ui/MetricCell';
 
 /**
@@ -19,11 +20,11 @@ import { MetricCell } from '@/shared/ui/MetricCell';
  *
  * Конец турнира — подписью под длительностью, а не шестой величиной: это одно
  * и то же знание на двух уровнях («сколько идёт» и «когда кончится»), и в
- * лобби второго ещё не существует — турнир не начат.
+ * лобби второго ещё не существует — турнир не начат. У лобби по времени на
+ * этом месте стоит старт: он и задаёт, когда кончится.
  */
 export function TournamentHead({ detail }: { detail: TournamentDetail }) {
   const t = useTranslations('tournaments');
-  const tc = useTranslations('coins');
   const { tournament: x } = detail;
 
   return (
@@ -33,11 +34,25 @@ export function TournamentHead({ detail }: { detail: TournamentDetail }) {
       <MetricCell
         label={t('durationLabel')}
         value={t(`duration.${x.durationMin}`)}
-        sub={x.endsAt ? `${t('endsAtLabel')} ${formatTradeDate(x.endsAt)}` : undefined}
+        sub={
+          x.endsAt
+            ? `${t('endsAtLabel')} ${formatTradeDate(x.endsAt)}`
+            : x.status === 'lobby' && x.startsAt
+              ? `${t('startsAtLabel')} ${formatTradeDate(x.startsAt)}`
+              : undefined
+        }
       />
       <MetricCell
         label={t('colEntryFee')}
-        value={x.entryFee > 0 ? `${x.entryFee} ${tc('unit')}` : t('free')}
+        value={
+          x.entryFee > 0 ? (
+            <>
+              {x.entryFee} <CoinIcon />
+            </>
+          ) : (
+            t('free')
+          )
+        }
       />
     </div>
   );

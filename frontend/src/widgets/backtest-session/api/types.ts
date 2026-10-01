@@ -4,8 +4,14 @@ import type { Direction } from '../lib/fills';
 export type { Direction };
 export type ExitReason = 'stop' | 'take' | 'manual' | 'finish' | 'limit';
 
-/** Откуда свечи сессии: отрезок истории BTC или сгенерированный рынок тренажёра. */
-export type DataSource = 'real' | 'synthetic';
+/**
+ * Откуда свечи сессии: отрезок истории BTC, сгенерированный рынок тренажёра
+ * или живой рынок в эфире (цену и время ставит сервер, уровни исполняет он же).
+ */
+export type DataSource = 'real' | 'synthetic' | 'live';
+
+/** Статистика бектеста: эфир считается вместе с реальной историей — это тот же рынок. */
+export type StatsSource = Exclude<DataSource, 'live'>;
 
 /** Как её отдаёт `/api/backtest/sessions*`. Цены везде настоящие, без масштаба показа. */
 export interface BacktestSession {
@@ -52,9 +58,12 @@ export interface BacktestTradeEntry {
 export interface BacktestTrade {
   id: string;
   sessionId: string;
+  /** Монета сделки; не-BTC бывает только в эфире. */
+  symbol: string;
   direction: Direction;
   entryTime: string;
   entryPrice: number;
+  /** У сделки сессии стоп есть всегда; 0 — стопа нет (позиция биржи, открытая мимо терминала). */
   stopLoss: number;
   takeProfit: number | null;
   riskPct: number;
@@ -62,6 +71,8 @@ export interface BacktestTrade {
   qty: number;
   leverage: number;
   closedQty: number;
+  /** Стоп за тейками — ставит сетка фиксации; двигает стоп сервер. */
+  stopFollow: boolean;
   exitTime: string | null;
   exitPrice: number | null;
   exitReason: ExitReason | null;
@@ -71,7 +82,20 @@ export interface BacktestTrade {
   tags: TagItem[];
   /** По времени входа — то же, что задаёт порядок стрелок на графике. */
   entries: BacktestTradeEntry[];
+  /**
+   * Цена ликвидации, как её сообщает биржа, — только у позиции биржевого
+   * терминала; null — биржа её не называет. У сделки сессии поля нет, и цена
+   * считается по упрощённой формуле (`liquidationPrice`).
+   */
+  liqPrice?: number | null;
 }
+
+/**
+ * Что окнам позиции (уровни, закрытие) нужно от сделки. Биржевой терминал
+ * отдаёт им позицию биржи в этой же форме: окна одни на оба терминала.
+ * `stopLoss: 0` — стопа у позиции нет (у сделки бектеста он есть всегда).
+ */
+export type PositionLike = Pick<BacktestTrade, 'symbol' | 'direction' | 'entryPrice' | 'stopLoss' | 'takeProfit'>;
 
 export interface BacktestCloseOrder {
   id: string;
@@ -86,6 +110,7 @@ export interface BacktestCloseOrder {
 export interface BacktestEntryOrder {
   id: string;
   sessionId: string;
+  symbol: string;
   direction: Direction;
   price: number;
   riskPct: number;
@@ -93,7 +118,25 @@ export interface BacktestEntryOrder {
   takeProfit: number | null;
   leverage: number;
   createdAt: string;
+  /**
+   * Объём ордера, если он уже зафиксирован, — так у лимита на бирже. У ордера
+   * сессии поля нет: объём посчитает сервер на срабатывании, от риска и стопа.
+   */
+  qty?: number;
 }
+
+/**
+ * Монета эфира, как её отдаёт `/api/market-data/live/symbols`: список живёт на
+ * сервере, своей копии фронт не держит. `decimals` — шаг цены монеты.
+ */
+export interface LiveSymbol {
+  symbol: string;
+  base: string;
+  decimals: number;
+}
+
+/** Монета истории и тренажёра — единственная, и с неё же начинается график эфира. */
+export const DEFAULT_SYMBOL = 'BTCUSDT';
 
 export interface Summary {
   trades: number;

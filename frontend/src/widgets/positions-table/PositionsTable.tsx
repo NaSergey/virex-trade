@@ -31,6 +31,7 @@ export function PositionsTable({
   renderTags,
   extraColumns,
   flush,
+  priceDecimals,
 }: {
   positions: ExchangePosition[];
   title: string;
@@ -50,8 +51,14 @@ export function PositionsTable({
    * `.wrap` там были бы полями внутри полей.
    */
   flush?: boolean;
+  /**
+   * Знаков цены у инструмента строки — у монет эфира бектеста они известны.
+   * Не задано — общее правило `formatPriceGrouped`, как на обзоре.
+   */
+  priceDecimals?: (p: ExchangePosition) => number | undefined;
 }) {
   const t = useTranslations('positionsTable');
+  const price = (p: ExchangePosition, v: string | undefined) => formatPriceGrouped(v, priceDecimals?.(p));
 
   const columns: LedgerColumn<ExchangePosition>[] = [
     { key: 'symbol', header: t('colSymbol'), render: (p) => <span className="sym">{p.symbol}</span> },
@@ -69,14 +76,14 @@ export function PositionsTable({
       // (positionValue), пересчитывать его из размера и цены незачем.
       render: (p) => <span title={t('qtyTitle', { qty: formatQty(p.size) })}>{formatPriceGrouped(p.positionValue)}</span>,
     },
-    { key: 'entry', header: t('colEntry'), align: 'right', cellClassName: 'n', render: (p) => formatPriceGrouped(p.avgPrice) },
-    { key: 'mark', header: t('colMark'), align: 'right', cellClassName: 'n', render: (p) => formatPriceGrouped(p.markPrice) },
+    { key: 'entry', header: t('colEntry'), align: 'right', cellClassName: 'n', render: (p) => price(p, p.avgPrice) },
+    { key: 'mark', header: t('colMark'), align: 'right', cellClassName: 'n', render: (p) => price(p, p.markPrice) },
     {
       key: 'liq',
       header: t('colLiq'),
       align: 'right',
       cellClassName: 'n neg',
-      render: (p) => (parseFloat(p.liqPrice ?? '') > 0 ? formatPriceGrouped(p.liqPrice) : '—'),
+      render: (p) => (parseFloat(p.liqPrice ?? '') > 0 ? price(p, p.liqPrice) : '—'),
     },
     { key: 'age', header: t('colInPosition'), align: 'right', cellClassName: 'n', render: renderAge },
     ...(renderRange ? [{ key: 'range', header: t('colRangeEntry'), width: 150, render: renderRange } satisfies LedgerColumn<ExchangePosition>] : []),

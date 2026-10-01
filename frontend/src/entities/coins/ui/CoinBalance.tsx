@@ -2,6 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { useCoinBalance } from '../api/hooks';
+import { CoinIcon } from '@/shared/ui/CoinIcon';
 
 /**
  * Монеты в шапке. Кнопка, а не подпись: клик открывает ту же модалку доната —
@@ -14,7 +15,7 @@ export function CoinBalance({ onBuy }: { onBuy: () => void }) {
   return (
     <button type="button" className="coins" onClick={onBuy} title={t('buyHint')}>
       <span className="coins-n">{data ? data.balance.toLocaleString('ru-RU') : '—'}</span>
-      <span className="coins-unit">{t('unit')}</span>
+      <CoinIcon />
     </button>
   );
 }

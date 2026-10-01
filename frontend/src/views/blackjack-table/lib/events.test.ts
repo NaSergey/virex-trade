@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { BjHand, BjSeat, BlackjackView } from '@/entities/game-table';
-import { DEAL_FLY, DEAL_STEP, FLIP } from '@/widgets/card-table';
-import { advance, cardKey, dealerKey, initTrack } from './events';
-import { COLLECT_MS, COLLECT_STEP, DEAL_BASE } from './motion';
+import { DEAL_FLY, DEAL_STEP, FLIP, WIN_FLY, type Cue } from '@/widgets/card-table';
+import { advance, cardKey, dealerKey, initTrack, type Track } from './events';
+import { COLLECT_MS, COLLECT_STEP, DEAL_BASE, WIN_HOLD } from './motion';
 
 const hand = (cards: string[], over: Partial<BjHand> = {}): BjHand => ({
   cards,
@@ -159,5 +159,78 @@ describe('blackjack events', () => {
   it('ушедший — крупье говорит об этом по имени', () => {
     const t = advance(initTrack(dealt), view({ seats: [seat(0, [hand(['Td', '6c'])])] }));
     expect(t.lines).toMatchObject([{ key: 'left', name: 'P2' }]);
+  });
+});
+
+/** Звуки снимка словами, по времени: `deal@620`. */
+const heard = (t: Track) =>
+  [...t.cues].sort((a: Cue, b: Cue) => a.delay - b.delay || a.sound.localeCompare(b.sound)).map((c) => `${c.sound}@${c.delay}`);
+const count = (t: Track, sound: Cue['sound']) => t.cues.filter((c) => c.sound === sound).length;
+
+describe('blackjack cues — звук идёт за движением стола', () => {
+  it('сдача: тасовка, потом каждая карта — мест и обе крупье', () => {
+    const t = advance(initTrack(betting), dealt);
+    expect(heard(t)[0]).toBe('shuffle@0');
+    expect(count(t, 'deal')).toBe(6);
+    expect(Math.min(...t.cues.filter((c) => c.sound === 'deal').map((c) => c.delay))).toBe(DEAL_BASE);
+    expect(count(t, 'turn')).toBe(0);
+  });
+
+  it('мой ход после сдачи — сигнал вместе с панелью хода', () => {
+    const mine = view({ seats: [seat(0, [hand(['Td', '6c'])], { isTurn: true }), seat(2, [hand(['8d', '7h'])])] });
+    const t = advance(initTrack(betting), mine);
+    expect(t.cues).toContainEqual({ sound: 'turn', delay: t.enter });
+  });
+
+  it('один за столом — стол ждёт его сам, сигнала хода нет', () => {
+    const solo = view({ seats: [seat(0, [], { bet: 10 })], phase: 'betting', roundId: null, dealer: null });
+    const mine = view({ seats: [seat(0, [hand(['Td', '6c'])], { isTurn: true })] });
+    expect(count(advance(initTrack(solo), mine), 'turn')).toBe(0);
+  });
+
+  it('ставка соседа в окне звучит, своя — нет: она звучит, когда долетели фишки из панели', () => {
+    const empty = view({ ...betting, seats: [seat(0), seat(2)] });
+    const both = view({ ...betting, seats: [seat(0, [], { bet: 10 }), seat(2, [], { bet: 10 })] });
+    expect(heard(advance(initTrack(empty), both))).toEqual(['chip@0']);
+  });
+
+  it('дабл — к ставке добавились фишки', () => {
+    const doubled = view({
+      seats: [seat(0, [hand(['Td', '6c', '5d'], { bet: 20, doubled: true })]), seat(2, [hand(['8d', '7h'])])],
+    });
+    const t = advance(initTrack(dealt), doubled);
+    expect(heard(t)).toEqual(['chip@0', 'deal@0']);
+  });
+
+  it('расчёт: закрытая щёлкает, добор шуршит, проигранное уезжает, выигрыш прилетает и уходит в плашку', () => {
+    const before = view({ seats: [seat(0, [hand(['Td', '8c'])]), seat(2, [hand(['8d', '7h', 'Kd'])])] });
+    const done = view({
+      phase: 'done',
+      dealer: { cards: ['9s', '7h', '8c'], total: 24 },
+      seats: [
+        seat(0, [hand(['Td', '8c'], { outcome: 'win', payout: 20 })], { stack: 510 }),
+        seat(2, [hand(['8d', '7h', 'Kd'], { outcome: 'bust', payout: 0 })]),
+      ],
+    });
+    const t = advance(initTrack(before), done);
+    const pay = t.payAt;
+    expect(heard(t)).toEqual([
+      'flip@0',
+      `deal@${FLIP}`,
+      `sweep@${pay}`,
+      `win@${pay + WIN_FLY}`,
+      `sweep@${pay + WIN_FLY + WIN_HOLD}`,
+    ]);
+  });
+
+  it('уборка стола: руки уезжают к колоде место за местом, карты крупье последними', () => {
+    const done = view({
+      phase: 'done',
+      dealer: { cards: ['9s', '7h'], total: 16 },
+      seats: [seat(0, [hand(['Td', '8c'], { outcome: 'win', payout: 20 })]), seat(2, [hand(['8d', '7h', 'Kd'], { outcome: 'bust' })])],
+    });
+    const open = view({ ...betting, seats: [seat(0), seat(2)] });
+    const t = advance(advance(initTrack(dealt), done), open);
+    expect(heard(t)).toEqual(['fold@0', `fold@${COLLECT_STEP}`, `fold@${2 * COLLECT_STEP}`]);
   });
 });

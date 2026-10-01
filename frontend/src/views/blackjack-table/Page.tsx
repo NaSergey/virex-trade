@@ -26,6 +26,7 @@ import {
   useLeaveOnExit,
   useSeatPoints,
   useTableSocket,
+  useTableSound,
   type Ghost,
 } from '@/widgets/card-table';
 import { ActionBar } from './components/ActionBar';
@@ -119,6 +120,10 @@ function Table({ view }: { view: BlackjackView }) {
   // Один за столом: ждать некого — у него нет срока на ход и незачем
   // «пропускать раунд» (сервер снимает таймеры сам).
   const solo = view.seats.length <= 1;
+  const sfx = useTableSound(
+    track.cues,
+    view.phase === 'playing' && me?.isTurn && !solo ? view.deadline : null,
+  );
   const cap = Math.min(view.table.maxBet, (me?.stack ?? 0) + (me?.bet ?? 0));
   // Ставка лежит перед игроком, над плашкой, — туда и летят фишки.
   const betOf = (i: number) => {
@@ -157,7 +162,10 @@ function Table({ view }: { view: BlackjackView }) {
   };
   const flightDone = (fid: number) => {
     const f = flights.find((x) => x.id === fid);
-    if (f) setLanded((l) => Math.max(l, f.total));
+    if (f) {
+      setLanded((l) => Math.max(l, f.total));
+      sfx('chip');
+    }
     setFlights((fs) => fs.filter((x) => x.id !== fid));
   };
   const settled = !!view.roundId && track.settledRound === view.roundId;

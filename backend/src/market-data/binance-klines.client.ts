@@ -52,8 +52,34 @@ export class BinanceKlinesClient {
     return this.request(`${BASE_URL}?symbol=${symbol}&interval=${toBinanceInterval(timeframe)}&limit=${limit}`);
   }
 
+  /**
+   * Свечи диапазона — для истории монет эфира, которых нет в хранилище. Только
+   * `endTime` — последние `limit` свечей, открытых не позже него (листать назад);
+   * со `startTime` — первые `limit` от него (листать вперёд).
+   */
+  async fetchRange(
+    symbol: string,
+    timeframe: number,
+    range: { startTime?: number; endTime?: number; limit: number },
+  ): Promise<BinanceCandle[]> {
+    const params =
+      `symbol=${symbol}&interval=${toBinanceInterval(timeframe)}` +
+      (range.startTime != null ? `&startTime=${range.startTime}` : '') +
+      (range.endTime != null ? `&endTime=${range.endTime}` : '') +
+      `&limit=${range.limit}`;
+    return this.request(`${BASE_URL}?${params}`);
+  }
+
+  /**
+   * Пауза после 429/418 — общая на все запросы процесса. Историю монет эфира
+   * запрашивают пользователи, и параллельные запросы не должны долбить биржу,
+   * пока один из них ждёт: 418 — это бан IP, и он остановил бы и синк BTC.
+   */
+  private pause: Promise<void> | null = null;
+
   private async request(url: string): Promise<BinanceCandle[]> {
     for (let attempt = 0; ; attempt++) {
+      if (this.pause) await this.pause;
       // Умолчания undici — 300 секунд: зависший запрос держал бы флаг
       // занятости синка до пяти минут и съедал бы тик таймера. 15 секунд
       // хватает публичному klines с запасом и не путается с ретраями на 429.
@@ -66,7 +92,12 @@ export class BinanceKlinesClient {
         }
         const wait = this.backoffMs(res, attempt);
         this.logger.warn(`Binance ответил ${res.status}, повтор через ${wait} мс`);
-        await this.sleep(wait);
+        // Уже идущую паузу не продлеваем: её поставил запрос, получивший отказ
+        // раньше, и до её конца к бирже не ходит никто.
+        this.pause ??= this.sleep(wait).finally(() => {
+          this.pause = null;
+        });
+        await this.pause;
         continue;
       }
 

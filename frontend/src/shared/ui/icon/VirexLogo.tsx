@@ -42,7 +42,7 @@ export function VirexLogo(props: SVGProps<SVGSVGElement>) {
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 742 742"
       fill="currentColor"
-      aria-label="Virex"
+      aria-label="Trade Play"
       {...props}
     >
       <g transform="translate(0,742) scale(0.1, -0.1)">

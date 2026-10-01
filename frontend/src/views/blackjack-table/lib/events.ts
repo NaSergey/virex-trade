@@ -1,13 +1,13 @@
 import type { BjSeat, BlackjackView } from '@/entities/game-table';
-import { DEAL_FLY, DEAL_STEP, FLIP } from '@/widgets/card-table';
-import { COLLECT_MS, COLLECT_STEP, DEAL_BASE, DEALER_DRAW } from './motion';
+import { DEAL_FLY, DEAL_STEP, FLIP, NO_CUES, WIN_FLY, type Cue, type TableSound } from '@/widgets/card-table';
+import { COLLECT_MS, COLLECT_STEP, DEAL_BASE, DEALER_DRAW, WIN_HOLD } from './motion';
 
 /**
  * Что произошло между двумя снимками стола — глазами крупье, как у покера
  * (`views/poker-table/lib/events.ts`): сервер присылает состояние, а не
  * события, и движение выводится здесь одной чистой функцией — какие карты
  * летят от колоды, когда переворачивается закрытая карта крупье, куда едут
- * фишки расчёта и что об этом сказать.
+ * фишки расчёта, что об этом сказать и как это звучит.
  */
 
 /**
@@ -67,6 +67,8 @@ export interface Track {
    */
   enter: number;
   lines: BjLine[];
+  /** Звуки этого снимка — новый список на каждый снимок, прошлые не копятся. */
+  cues: readonly Cue[];
   seq: number;
 }
 
@@ -92,11 +94,16 @@ export function initTrack(view: BlackjackView): Track {
     leaving: null,
     enter: 0,
     lines: [],
+    cues: NO_CUES,
     seq: 0,
   };
 }
 
 const inRound = (v: BlackjackView): BjSeat[] => v.seats.filter((s) => s.hands.length > 0);
+const staked = (s: BjSeat) => s.hands.reduce((a, h) => a + h.bet, 0);
+/** Ход мой и за столом есть кто-то ещё: одинокого стол ждёт сам, звать его незачем. */
+const myTurn = (v: BlackjackView) =>
+  v.seats.length > 1 && v.me.seatIndex !== null && v.seats.some((s) => s.isTurn && s.seatIndex === v.me.seatIndex);
 
 /** Следующий снимок: какие карты и фишки поехали и что сказал крупье. */
 export function advance(track: Track, next: BlackjackView): Track {
@@ -104,14 +111,29 @@ export function advance(track: Track, next: BlackjackView): Track {
   const out: Track = { ...track, view: next };
   let seq = track.seq;
   const lines: BjLine[] = [];
+  const cues: Cue[] = [];
   const say = (l: Omit<BjLine, 'id'>) => lines.push({ ...l, id: ++seq });
+  const cue = (sound: TableSound, delay = 0) => cues.push({ sound, delay });
 
   const nextBySeat = new Map(next.seats.map((s) => [s.seatIndex, s]));
+  const prevBySeat = new Map(prev.seats.map((s) => [s.seatIndex, s]));
+  /** То же место в прошлом снимке, если за ним тот же игрок. */
+  const before = (s: BjSeat) => {
+    const p = prevBySeat.get(s.seatIndex);
+    return p && p.userId === s.userId ? p : undefined;
+  };
   for (const p of prev.seats) {
     const n = nextBySeat.get(p.seatIndex);
     if (!n || n.userId !== p.userId) say({ key: 'left', name: p.name, seat: p.seatIndex });
   }
   if (next.phase === 'betting' && prev.phase !== 'betting') say({ key: 'placeBets' });
+  if (next.phase === 'betting') {
+    // Ставка соседа легла. Свои фишки звучат, когда долетели из панели, — это
+    // событие страницы, а не снимка.
+    for (const s of next.seats) {
+      if (s.seatIndex !== next.me.seatIndex && s.bet > (before(s)?.bet ?? 0)) cue('chip');
+    }
+  }
 
   const newRound = !!next.roundId && next.roundId !== prev.roundId;
   const cleared = !!prev.roundId && !next.roundId;
@@ -130,6 +152,8 @@ export function advance(track: Track, next: BlackjackView): Track {
       dealer: prev.dealer,
       dealerDelay: players.length * COLLECT_STEP,
     };
+    out.leaving.seats.forEach((x) => cue('fold', x.delay));
+    if (prev.dealer?.cards.length) cue('fold', out.leaving.dealerDelay);
     enter = players.length * COLLECT_STEP + COLLECT_MS;
   }
 
@@ -137,6 +161,7 @@ export function advance(track: Track, next: BlackjackView): Track {
     if (prev.phase === 'betting') say({ key: 'noMoreBets' });
     out.dealtRound = next.roundId;
     out.leaving = null;
+    cue('shuffle');
     // Сначала крупье тасует (`DEAL_BASE`), потом сдаёт по кругу, как живой:
     // первая карта каждому, крупье, вторая каждому, закрытая крупье. Сдача,
     // начатая в кадр нажатия «Поставить», читалась рывком.
@@ -156,8 +181,10 @@ export function advance(track: Track, next: BlackjackView): Track {
     landed = holeDelay + LAND;
     enter = holeDelay + DEAL_FLY;
   } else if (next.roundId) {
-    const prevBySeat = new Map(prev.seats.map((s) => [s.seatIndex, s]));
     for (const s of inRound(next)) {
+      // Дабл и сплит: к ставке места добавились фишки.
+      const p = before(s);
+      if (p && staked(s) > staked(p)) cue('chip');
       // Новые — карты, которых у места не было: при сплите вторая карта пары
       // переезжает во вторую руку и летать не должна.
       const had = new Map<string, number>();
@@ -206,13 +233,31 @@ export function advance(track: Track, next: BlackjackView): Track {
     // приблизительную точку, садились рядом со ставкой криво.
     for (const s of inRound(next)) {
       if (s.hands.some((h) => h.outcome === 'blackjack')) say({ key: 'blackjack', name: s.name, seat: s.seatIndex });
+      // Звучит то же, что делает ставка у места (`BjSeat`): проигранная
+      // уезжает к крупье; выигрыш прилетает и встаёт рядом, и всё уходит в плашку.
+      const back = s.hands.reduce((a, h) => a + h.payout, 0);
+      const won = s.hands.reduce((a, h) => a + Math.max(0, h.payout - h.bet), 0);
+      if (back === 0) cue('sweep', end);
+      else {
+        if (won > 0) cue('win', end + WIN_FLY);
+        cue('sweep', won > 0 ? end + WIN_FLY + WIN_HOLD : end);
+      }
     }
   }
+
+  // Карты, которым в этом снимке назначено движение: полёт шуршит, переворот щёлкает.
+  const moved = next.roundId && !newRound ? track.cards : {};
+  for (const [k, m] of Object.entries(cards)) {
+    if (!(k in moved)) cue(m.kind === 'flip' ? 'flip' : 'deal', m.delay);
+  }
+  // Сигнал хода — вместе с панелью хода, когда стол доиграл снимок.
+  if (myTurn(next) && !myTurn(prev)) cue('turn', enter);
 
   if (!next.roundId) out.settledRound = null;
   out.enter = enter;
   out.cards = cards;
   out.lines = lines.length ? [...track.lines, ...lines].slice(-MAX_LINES) : track.lines;
+  out.cues = cues.length ? cues : NO_CUES;
   out.seq = seq;
   return out;
 }

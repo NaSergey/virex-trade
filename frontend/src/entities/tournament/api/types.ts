@@ -1,5 +1,8 @@
-export type TournamentStatus = 'lobby' | 'running' | 'finished';
+/** `cancelled` — назначенное время пришло, а участник один: взнос возвращён. */
+export type TournamentStatus = 'lobby' | 'running' | 'finished' | 'cancelled';
 export type TournamentVisibility = 'public' | 'private';
+/** Арена (на двоих — дуэль) или две команды. */
+export type TournamentFormat = 'arena' | 'teams';
 
 /** Общие поля турнира — одни у списка, общего каталога и самой страницы. */
 export interface TournamentBase {
@@ -7,6 +10,9 @@ export interface TournamentBase {
   name: string;
   status: TournamentStatus;
   visibility: TournamentVisibility;
+  format: TournamentFormat;
+  /** Размер команды — только у команд; мест тогда 2 × teamSize. */
+  teamSize: number | null;
   maxPlayers: number;
   startBalance: number;
   durationMin: number;
@@ -15,22 +21,26 @@ export interface TournamentBase {
   winnersCount: number;
   payoutShares: number[];
   createdAt: string;
+  /** Назначенное время старта; null — турнир стартует, когда готовы все. */
+  startsAt: string | null;
   startedAt: string | null;
   endsAt: string | null;
+  /** Когда подведены итоги или турнир отменён. */
+  finishedAt: string | null;
 }
 
-/** Строка «моих турниров». */
-export interface MyTournament extends TournamentBase {
-  players: number;
-  /** Нужен, чтобы решить, показывать ли кнопку досрочного финала прямо в строке. */
-  creatorId: string | null;
-}
+/** Как смотрящий связан с турниром: создал, играет или смотрит со стороны. */
+export type BoardRelation = 'created' | 'joined' | 'other';
 
-/** Строка общего списка открытых турниров. */
-export interface PublicTournament extends TournamentBase {
+/**
+ * Строка общей таблицы турниров. Порядок строк задаёт сервер: созданные мной,
+ * потом где я играю, потом чужие публичные.
+ */
+export interface BoardTournament extends TournamentBase {
+  relation: BoardRelation;
   players: number;
   creatorName: string | null;
-  /** Фонд при полном наборе мест — сколько турнир обещает, а не собрал. */
+  /** Собранный сейчас — то же число, что в шапке окна турнира. */
   prizePool: number;
 }
 
@@ -45,9 +55,8 @@ export interface TournamentWinner extends TournamentParticipantView {
 }
 
 /**
- * Сводка участника по ЗАКРЫТЫМ сделкам. Ни направлений, ни открытых позиций
- * здесь нет намеренно: сторона чужой открытой сделки — это подсказка, по
- * которой играют вместо своей системы.
+ * Сводка участника по закрытым сделкам — итог, в который открытое не входит.
+ * Сами сделки, открытые тоже, видны в ленте (`FeedTrade`).
  */
 export interface TournamentPlayerStats {
   trades: number;
@@ -61,6 +70,8 @@ export interface TournamentPlayerStats {
 export interface TournamentPlayer extends TournamentParticipantView {
   /** Нажал ли «Я готов». Значит что-то только в лобби: турнир стартует, когда готовы все. */
   ready: boolean;
+  /** Команда: 0 — A, 1 — B; у арены — null. */
+  team: number | null;
   /** null — сессии ещё нет, турнир в лобби. Это не то же самое, что нулевая сводка. */
   stats: TournamentPlayerStats | null;
 }
@@ -77,6 +88,7 @@ export interface TournamentDetail {
     finalEquity: number | null;
     prizeWon: number | null;
     ready: boolean;
+    team: number | null;
   } | null;
   isParticipant: boolean;
   isCreator: boolean;
@@ -99,9 +111,33 @@ export interface Rating {
   me: RatingRow | null;
 }
 
+/**
+ * Строка ленты «Сделки игроков»: сделка идущего турнира — публичного или
+ * того, где смотрящий играет. Открытая — без `exitTime` и `pnl`.
+ */
+export interface FeedTrade {
+  id: string;
+  tournamentId: string;
+  tournamentName: string;
+  userId: string;
+  playerName: string | null;
+  symbol: string;
+  direction: 'long' | 'short';
+  leverage: number;
+  entryTime: string;
+  entryPrice: number;
+  stopLoss: number;
+  takeProfit: number | null;
+  exitTime: string | null;
+  pnl: number | null;
+}
+
 export interface CreateTournamentInput {
   name: string;
   visibility: TournamentVisibility;
+  format: TournamentFormat;
+  /** Только у команд. */
+  teamSize?: number;
   maxPlayers: number;
   startBalance: number;
   durationMin: number;
@@ -109,4 +145,6 @@ export interface CreateTournamentInput {
   prizeBonus: number;
   winnersCount: number;
   payoutShares: number[];
+  /** ISO; нет — старт по готовности всех. */
+  startsAt?: string;
 }

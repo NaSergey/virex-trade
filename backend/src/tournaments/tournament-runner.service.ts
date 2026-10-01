@@ -1,49 +1,38 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
-import type { Direction } from '../backtest/backtest-math';
 import { BacktestService } from '../backtest/backtest.service';
-import { checkMinute } from '../backtest/fills';
+import { LiveEngineService } from '../backtest/live-engine.service';
 import { LiveMarketService } from '../market-data/live-market.service';
-import type { Candle } from '../market-data/market-data.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { runsBackgroundJobs } from '../role';
-import { barForTrade, buildSegments, type Bar, type Snapshot } from './live-segments';
 import { TournamentsService } from './tournaments.service';
 
 const TICK_MS = 2_000;
 const MINUTE_MS = 60_000;
 
-/**
- * Хранилище отдаёт свечи именованными полями, правила исполнения работают с
- * короткими `t/o/h/l/c` — теми же, что и в браузере, потому что `checkMinute`
- * перенесён оттуда без изменений.
- */
-const toBar = (c: Candle): Bar => ({ t: c.time.getTime(), o: c.open, h: c.high, l: c.low, c: c.close });
+/** Ключ потока турнира в движке эфира. */
+const stream = (id: string) => `t:${id}`;
 
 /**
- * Движок турниров в эфире: исполняет стопы, тейки и лимит-ордера по живым
- * минуткам и подводит итоги.
+ * Эфир турниров: раз в две секунды гоняет каждый идущий турнир через движок
+ * эфира (`LiveEngineService` — стопы, тейки, лимитки, уровни на вход),
+ * запускает турниры, чьё назначенное время пришло, и подводит итоги тех, у
+ * кого вышел срок.
  *
- * Существует потому, что время идёт и без участника: у закрытой вкладки стоп
- * обязан сработать, иначе результат врёт, а финал нечем подвести. Браузеру
- * турнира не верят вовсе — на кону призовой фонд.
- *
- * Снимок недоформированной минутки живёт в памяти процесса, а `processedUntil`
- * — в базе. Перезапуск теряет снимок, и первая минутка после старта
- * проверяется целиком: это осознанная цена за то, чтобы не хранить в базе
- * состояние, которое меняется каждые две секунды. Позиции, открытые в этой
- * минутке, по-прежнему проверяются от своего входа.
+ * Исполнение у турнира и у своей сессии эфира одно; турнир отличается курсором
+ * (`Tournament.processedUntil`, общий на всех участников), границей (дальше
+ * `endsAt` движок не смотрит) и финалом. Браузеру турнира не верят вовсе — на
+ * кону призовой фонд.
  */
 @Injectable()
 export class TournamentRunnerService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(TournamentRunnerService.name);
   private timer?: NodeJS.Timeout;
   private busy = false;
-  /** Незакрытая минутка каждого турнира, какой её видел прошлый тик. */
-  private snapshots = new Map<string, Snapshot>();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly live: LiveMarketService,
+    private readonly engine: LiveEngineService,
     private readonly backtest: BacktestService,
     private readonly tournaments: TournamentsService,
   ) {}
@@ -65,10 +54,28 @@ export class TournamentRunnerService implements OnApplicationBootstrap, OnModule
     if (this.busy) return;
     this.busy = true;
     try {
+      await this.startDue();
       await this.finishDue();
       await this.processRunning();
     } finally {
       this.busy = false;
+    }
+  }
+
+  /**
+   * Лобби, чьё назначенное время пришло: старт или отмена — решает
+   * `TournamentsService.startScheduled`. Первым шагом тика: турнир, начатый
+   * здесь, тем же тиком попадает в эфир.
+   */
+  private async startDue(): Promise<void> {
+    const now = new Date();
+    for (const t of await this.tournaments.dueForStart(now)) {
+      try {
+        await this.tournaments.startScheduled(t.id, now);
+      } catch (e) {
+        // Как у финала: чужая упавшая транзакция не должна задерживать остальных.
+        this.logger.error(`старт турнира ${t.id} упал`, e as Error);
+      }
     }
   }
 
@@ -78,21 +85,22 @@ export class TournamentRunnerService implements OnApplicationBootstrap, OnModule
     for (const t of due) {
       try {
         if (!t.endsAt) continue;
-        // Цена финала — закрытие минутки, которой турнир кончается. Пока её
-        // нет (Binance молчит), турнир ждёт следующего тика: сделки после
-        // endsAt сервер всё равно не принимает, и ожидание ничего не меняет.
-        const price = await this.finalPrice(t.endsAt);
-        if (price == null) continue;
+        // Цена финала — закрытие минутки, которой турнир кончается, у каждой
+        // монеты открытых позиций своя. Пока хоть одной нет (Binance молчит),
+        // турнир ждёт следующего тика: сделки после endsAt сервер всё равно не
+        // принимает, и ожидание ничего не меняет.
+        const prices = await this.finalPrices(t.id, t.endsAt);
+        if (prices == null) continue;
 
         const sessions = await this.prisma.backtestSession.findMany({
           where: { tournamentId: t.id, status: 'active' },
           select: { id: true },
         });
         for (const s of sessions) {
-          await this.backtest.finishTournamentSession(s.id, t.endsAt, price);
+          await this.backtest.finishTournamentSession(s.id, t.endsAt, prices);
         }
         await this.tournaments.finalize(t);
-        this.snapshots.delete(t.id);
+        this.engine.forget(stream(t.id));
       } catch (e) {
         // Один турнир не должен лишить остальных финала: у каждого свои
         // деньги, и падение чужой транзакции их не касается.
@@ -101,10 +109,29 @@ export class TournamentRunnerService implements OnApplicationBootstrap, OnModule
     }
   }
 
-  /** Закрытие минутки, в которую попадает конец турнира. */
-  private async finalPrice(endsAt: Date): Promise<number | null> {
+  /**
+   * Цены финала по монетам открытых позиций турнира; `null` — хоть одной ещё
+   * нет. Позиций нет вовсе — закрывать нечего, и цены не нужны.
+   */
+  private async finalPrices(tournamentId: string, endsAt: Date): Promise<Record<string, number> | null> {
+    const open = await this.prisma.backtestTrade.findMany({
+      where: { session: { tournamentId, status: 'active' }, exitTime: null },
+      select: { symbol: true },
+      distinct: ['symbol'],
+    });
+    const prices: Record<string, number> = {};
+    for (const { symbol } of open) {
+      const price = await this.finalPrice(symbol, endsAt);
+      if (price == null) return null;
+      prices[symbol] = price;
+    }
+    return prices;
+  }
+
+  /** Закрытие минутки монеты, в которую попадает конец турнира. */
+  private async finalPrice(symbol: string, endsAt: Date): Promise<number | null> {
     const from = endsAt.getTime() - MINUTE_MS;
-    const minutes = await this.live.minutesSince(from, endsAt.getTime());
+    const minutes = await this.live.minutesSince(symbol, from, endsAt.getTime());
     const last = minutes.at(-1);
     return last ? last.close : null;
   }
@@ -131,73 +158,7 @@ export class TournamentRunnerService implements OnApplicationBootstrap, OnModule
     // Дальше конца турнира движок не смотрит: то, что случилось после, к
     // результату отношения не имеет — его подведёт финал.
     const until = Math.min(now, t.endsAt?.getTime() ?? now);
-    const snap = this.snapshots.get(t.id) ?? null;
-    const from = snap?.minuteT ?? t.processedUntil?.getTime() ?? until - MINUTE_MS;
-    if (until <= from) return;
-
-    const minutes = await this.live.minutesSince(from, until);
-    const { segments, next } = buildSegments(snap, minutes.map(toBar), until);
-
-    for (const seg of segments) {
-      const trades = await this.prisma.backtestTrade.findMany({
-        where: { session: { tournamentId: t.id }, exitTime: null },
-        include: { closeOrders: true },
-      });
-      for (const trade of trades) {
-        await this.applySegment(seg, trade);
-      }
-    }
-
-    if (next) this.snapshots.set(t.id, next);
-    else this.snapshots.delete(t.id);
+    if (!(await this.engine.run(stream(t.id), t.processedUntil, until, { tournamentId: t.id }))) return;
     await this.prisma.tournament.update({ where: { id: t.id }, data: { processedUntil: new Date(until) } });
-  }
-
-  /**
-   * Уровни одной позиции на одном отрезке. После частичного закрытия лимиткой
-   * тот же отрезок проверяется снова: сработать может следующий ордер или
-   * стоп, и откладывать это до следующего тика значило бы исполнить их по
-   * цене, до которой рынок уже ушёл.
-   */
-  private async applySegment(
-    seg: ReturnType<typeof buildSegments>['segments'][number],
-    trade: {
-      id: string;
-      direction: string;
-      entryTime: Date;
-      entryPrice: number;
-      stopLoss: number;
-      takeProfit: number | null;
-      closeOrders: { id: string; price: number; qty: number }[];
-    },
-  ): Promise<void> {
-    const bar = barForTrade(seg, { entryTime: trade.entryTime.getTime(), entryPrice: trade.entryPrice });
-    if (!bar) return;
-
-    let orders = trade.closeOrders;
-    // Ограничение на число проходов — страховка от неожиданного зацикливания:
-    // ордеров у сделки конечное число, и каждый проход снимает хотя бы один.
-    for (let pass = 0; pass <= orders.length; pass++) {
-      const exit = checkMinute(
-        { direction: trade.direction as Direction, stopLoss: trade.stopLoss, takeProfit: trade.takeProfit },
-        bar,
-        orders,
-      );
-      if (!exit) return;
-
-      const closed = await this.backtest.systemClose(trade.id, {
-        // Время выхода — конец отрезка: закрытие минутки или время тика.
-        exitTime: new Date(seg.to),
-        exitPrice: exit.price,
-        reason: exit.reason,
-        qty: exit.qty,
-        closeOrderId: exit.closeOrderId,
-      });
-      // Сделку успели закрыть иначе — перечитается на следующем тике.
-      if (!closed) return;
-      // Стоп и тейк закрывают позицию целиком: проверять дальше нечего.
-      if (exit.reason !== 'limit') return;
-      orders = orders.filter((o) => o.id !== exit.closeOrderId);
-    }
   }
 }

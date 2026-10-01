@@ -6,9 +6,14 @@ import type { JetpackView } from '@/entities/jetpack';
 import { flightAt, formatX, hullCenter, mAt, shipSize, thrustAt, x100At } from '../lib/flight';
 import { useFrames } from '../model/useFrames';
 import { Ship, ShipDefs } from './Ship';
-import { FrontClouds, World, type WorldHandle } from './World';
+import { Foreground, FrontClouds, World, type WorldHandle } from './World';
 
-/** Размер поля — ResizeObserver: мир и ракета раскладываются в его пикселях. */
+/**
+ * Размер свободной части кадра — ResizeObserver: мир и ракета раскладываются
+ * в её пикселях. Сцена идёт во весь экран, но справа её закрывает колонка
+ * ставок, поэтому меряется не сцена, а `.jpg-frame` левее колонки: площадка,
+ * точка полёта, облака, метки и табло остаются на виду, а мир тянется дальше.
+ */
 function useBoxSize(ref: RefObject<HTMLDivElement | null>) {
   const [size, setSize] = useState({ w: 0, h: 0 });
   useLayoutEffect(() => {
@@ -38,6 +43,7 @@ export function FlightStage({ view }: { view: JetpackView }) {
   const box = useRef<HTMLDivElement>(null);
   const ship = useRef<HTMLDivElement>(null);
   const world = useRef<WorldHandle>(null);
+  const fore = useRef<WorldHandle>(null);
   const front = useRef<WorldHandle>(null);
   const num = useRef<HTMLSpanElement>(null);
   const bar = useRef<HTMLSpanElement>(null);
@@ -55,6 +61,7 @@ export function FlightStage({ view }: { view: JetpackView }) {
     const f = flightAt(m, w, h);
     if (ship.current) ship.current.style.transform = `translate(${f.x}px, ${f.y}px) rotate(${f.deg}deg)`;
     world.current?.place(f);
+    fore.current?.place(f);
     front.current?.place(f);
   };
 
@@ -102,7 +109,8 @@ export function FlightStage({ view }: { view: JetpackView }) {
           : '';
 
   return (
-    <div ref={box} className="jpg-stage" data-phase={view.phase}>
+    <div className="jpg-stage" data-phase={view.phase}>
+      <div ref={box} className="jpg-frame" aria-hidden />
       <ShipDefs />
       <World ref={world} w={w} h={h} hull={size.hull} launched={launched} />
       <Ship
@@ -112,6 +120,7 @@ export function FlightStage({ view }: { view: JetpackView }) {
         hidden={view.phase === 'crashed' || !w}
         flying={view.phase === 'flying'}
       />
+      <Foreground ref={fore} w={w} h={h} hull={size.hull} />
       <FrontClouds ref={front} w={w} h={h} hull={size.hull} />
       {burst && <i className="jpg-burst" style={{ left: burst.x, top: burst.y }} />}
       <div className="jpg-readout">

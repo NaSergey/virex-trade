@@ -66,13 +66,27 @@ export function saveDrawings(storage: DrawingStorage, userId: string, sessionId:
   }
 }
 
-/** Удаляет рисунки сессий, которых больше нет: иначе удалённые копятся и съедают лимит. */
+/**
+ * «Сессия» рисунков биржевого терминала. Настоящей сессии у него нет — график
+ * один и живёт, пока подключена биржа, — поэтому чистка сирот его не трогает.
+ */
+export const EXCHANGE_DRAWINGS = 'exchange';
+
+/**
+ * Удаляет рисунки сессий, которых больше нет: иначе удалённые копятся и съедают лимит.
+ *
+ * Судит по сессии, а не по ключу целиком: у монеты эфира ключ — «сессия:монета»
+ * (см. `useDrawingTools` в терминале), и сверка всего ключа со списком сессий
+ * стирала рисунки всех монет, кроме BTC, при каждом открытии списка бектеста.
+ */
 export function pruneDrawings(storage: DrawingStorage, userId: string, keepIds: ReadonlySet<string>): void {
   const own = `${PREFIX}${userId}:`;
   const stale: string[] = [];
   for (let i = 0; i < storage.length; i++) {
     const key = storage.key(i);
-    if (key?.startsWith(own) && !keepIds.has(key.slice(own.length))) stale.push(key);
+    if (!key?.startsWith(own)) continue;
+    const session = key.slice(own.length).split(':')[0];
+    if (session !== EXCHANGE_DRAWINGS && !keepIds.has(session)) stale.push(key);
   }
   stale.forEach((key) => storage.removeItem(key));
 }

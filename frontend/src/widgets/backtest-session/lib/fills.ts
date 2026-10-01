@@ -35,6 +35,18 @@ export interface Exit {
   closeOrderId?: string;
 }
 
+/** Допуск на погрешность сложения долей — тот же, что `QTY_EPS` на сервере. */
+const QTY_EPS = 1e-8;
+
+/**
+ * Частичное закрытие — лимит закрытия на часть остатка (ступень сетки
+ * фиксации): позиция после него остаётся открытой, и прятать её до перечитки
+ * нельзя. Стоп и тейк закрывают остаток целиком.
+ */
+export function isPartialExit(trade: { qty: number; closedQty: number }, exit: Exit): boolean {
+  return exit.reason === 'limit' && exit.qty != null && exit.qty < trade.qty - trade.closedQty - QTY_EPS;
+}
+
 /** Уровень сетки на вход (Scaled order) — до срабатывания цены сделки ещё нет. */
 export interface EntryOrder {
   id: string;

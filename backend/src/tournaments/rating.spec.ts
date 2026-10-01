@@ -90,3 +90,25 @@ describe('ratingRows', () => {
     expect(ratingRows([], 'a')).toEqual({ rows: [], me: null });
   });
 });
+
+describe('ratingRows — командный турнир', () => {
+  it('победителю — столько очков, сколько игроков у соперника; проигравшему — ноль', () => {
+    const input = [
+      { tournamentId: 't', userId: 'a1', name: 'A1', place: 1, team: 0 },
+      { tournamentId: 't', userId: 'a2', name: 'A2', place: 1, team: 0 },
+      { tournamentId: 't', userId: 'b1', name: 'B1', place: 2, team: 1 },
+      { tournamentId: 't', userId: 'b2', name: 'B2', place: 2, team: 1 },
+      { tournamentId: 't', userId: 'b3', name: 'B3', place: 2, team: 1 },
+    ];
+
+    const { rows } = ratingRows(input, 'x');
+
+    expect(Object.fromEntries(rows.map((r) => [r.userId, [r.points, r.wins]]))).toEqual({
+      a1: [3, 1],
+      a2: [3, 1],
+      b1: [0, 0],
+      b2: [0, 0],
+      b3: [0, 0],
+    });
+  });
+});

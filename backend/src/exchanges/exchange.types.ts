@@ -150,11 +150,12 @@ export interface FillsResult extends RangeResult<Fill> {
 /**
  * What an API key is allowed to do, as the exchange reports it.
  *
- * Virex only ever reads: a key that can trade or withdraw turns a leaked
- * database from an exposed trade history into drained accounts, so connect
- * refuses such keys. Adapters that cannot ask the exchange about permissions
- * return undefined — unknown, which is not the same as safe, and is why the
- * check can only be enforced where the exchange answers.
+ * Reported, not enforced: connect takes a key whatever it may do, and the
+ * settings page shows these rights so the user sees what they handed over.
+ * (Connect used to refuse keys that could trade or withdraw; the owner dropped
+ * the refusal on 2026-09-30 — it kept people from connecting at all.)
+ * Adapters that cannot ask the exchange about permissions return undefined —
+ * unknown, which is not the same as read-only, and must be shown as unknown.
  */
 export interface KeyPermissions {
   canTrade: boolean;
@@ -176,6 +177,14 @@ export interface ExchangeAdapter {
    * connect time rather than on the first sync.
    */
   verifyCredentials(creds: ExchangeCredentials): Promise<VerifyResult>;
+
+  /**
+   * What the exchange says this key may do right now. Absent on adapters whose
+   * exchange is not asked; undefined when it was asked and did not answer.
+   * Read live rather than stored at connect: the rights of a key are edited on
+   * the exchange, and a stored copy would go on saying what was true once.
+   */
+  getKeyPermissions?(creds: ExchangeCredentials): Promise<KeyPermissions | undefined>;
 
   getBalance(creds: ExchangeCredentials): Promise<BalanceResult>;
 

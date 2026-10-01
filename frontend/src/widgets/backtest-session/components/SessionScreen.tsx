@@ -1,33 +1,31 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { Settings as SettingsIcon } from 'lucide-react';
+import { Check, Settings as SettingsIcon, Volume2, VolumeX } from 'lucide-react';
 import { TagsDialog } from '@/entities/tag';
 import { useAuth } from '@/features/auth';
 import { useLocaleControl } from '@/shared/i18n';
 import { Button } from '@/shared/ui/Button';
 import { ConfirmDialog, type ConfirmRequest } from '@/shared/ui/ConfirmDialog';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
+import { Select } from '@/shared/ui/Field';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { Seg, type SegOption } from '@/shared/ui/Seg';
 import { Wrap } from '@/shared/ui/Wrap';
 import { formatPriceGrouped } from '@/shared/lib/utils/format';
+import { useBacktestSession, isLiveSession, useDecimalsOf, useFinishSession, useLivePrices, useLiveSymbols } from '../api/hooks';
 import {
-  useAddToTrade,
-  useBacktestSession,
-  useCancelCloseOrder,
-  useCancelEntryOrder,
-  useCloseTrade,
-  useCreateCloseOrder,
-  useCreateEntryOrders,
-  useFinishSession,
-  useModifyTrade,
-  useOpenTrade,
-  useSetBacktestTags,
-} from '../api/hooks';
-import type { BacktestTrade, Direction, ExitReason, SessionDetail } from '../api/types';
+  DEFAULT_SYMBOL,
+  type BacktestTrade,
+  type Direction,
+  type ExitReason,
+  type LiveSymbol,
+  type SessionDetail,
+} from '../api/types';
 import { TIMEFRAMES, dayNumber, scaleCandle } from '../lib/candles';
+import { draftLevels } from '../lib/draft-levels';
+import { isPartialExit } from '../lib/fills';
 import {
   applyEntryChange,
   applyStopChange,
@@ -37,22 +35,28 @@ import {
   draftTakeFits,
   fromScreen,
   gridPrices,
-  impliedDirection,
+  levelDirection,
   levelImpact,
   liquidationPrice,
-  previewGrid,
   previewSize,
   toInput,
   toInputPrice,
   toScreen,
+  unrealizedPnl,
+  withoutLockedLevels,
 } from '../lib/money';
+import type { TerminalSound } from '../lib/sounds';
+import { useSessionActions, type TerminalActions } from '../model/actions';
+import { useRsiOn } from '../model/useChartSettings';
 import { useDefaultLeverage } from '../model/useDefaultLeverage';
 import { useDrawingTools } from '../model/useDrawingTools';
-import { useLiveFeed } from '../model/useLiveFeed';
+import { useLiveFeed, type LiveSource } from '../model/useLiveFeed';
 import { SPEEDS, useReplay } from '../model/useReplay';
+import { sessionSounds, useSnapshotSound, useTerminalSoundOn } from '../model/useTerminalSound';
 import { DrawingStyleBar } from './drawings/DrawingStyleBar';
 import { DrawingToolbar } from './drawings/DrawingToolbar';
 import { ChangeLevelsModal } from './ChangeLevelsModal';
+import { CloseGridModal } from './CloseGridModal';
 import { LimitCloseModal } from './LimitCloseModal';
 import { MarketCloseModal } from './MarketCloseModal';
 import { OpenPositionsPanel } from './OpenPositionsPanel';
@@ -135,7 +139,59 @@ function OutdatedSession({ detail, onLeave }: { detail: SessionDetail; onLeave: 
   );
 }
 
+/** Активная сессия бектеста или турнира: терминал с действиями нашего сервера. */
 function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: () => void }) {
+  const actions = useSessionActions(detail.session.id);
+  return <Terminal detail={detail} actions={actions} onLeave={onLeave} />;
+}
+
+/**
+ * Чем терминал биржи отличается от терминала сессии — всё необязательное.
+ * Экран один: у бектеста и турнира этих пропсов нет, и он работает как раньше.
+ */
+export interface TerminalProps {
+  /** Счёт в форме сессии: баланс, сделки, ордера. */
+  detail: SessionDetail;
+  /** Куда уходят действия: наш сервер (сессия) или биржа. */
+  actions: TerminalActions;
+  /** «К списку» / «К турниру». Не задан — уходить некуда, кнопки нет. */
+  onLeave?: () => void;
+  /** Откуда лента берёт свечи; не задан — рынок продукта. */
+  source?: LiveSource;
+  /** Монеты графика; не заданы — монеты эфира с сервера. */
+  symbols?: LiveSymbol[];
+  /** Знаков цены монеты; не задано — по списку монет эфира. */
+  decimalsOf?: (symbol: string) => number | undefined;
+  /** Цена монеты, которой нет на графике; не задано — цены эфира с сервера. */
+  priceOf?: (symbol: string) => number | null;
+  /** Подпись у переключателя таблиц вместо «Эфир». */
+  badge?: string;
+  /** Сигналы по разнице снимков; не задано — правила сессии (`soundsOf`). Ссылка — стабильная. */
+  soundsOf?: (was: SessionDetail, next: SessionDetail) => readonly TerminalSound[];
+  /** Вкладка «История»; не задана — сделки сессии. */
+  history?: ReactNode;
+  /** Есть ли кому двигать стоп за тейками в сетке фиксации (у биржи — нет). */
+  canFollow?: boolean;
+}
+
+/**
+ * Терминал — один на бектест, турнир и биржу. Состояние приходит снимком счёта
+ * в форме сессии (`detail`), действия — набором `actions`; сам экран не знает,
+ * исполняет ли их наш движок или биржа.
+ */
+export function Terminal({
+  detail,
+  actions,
+  onLeave,
+  source,
+  symbols,
+  decimalsOf: decimalsOfProp,
+  priceOf: priceOfProp,
+  badge,
+  soundsOf,
+  history,
+  canFollow = true,
+}: TerminalProps) {
   const t = useTranslations('backtest');
   const { locale } = useLocaleControl();
   const intl = locale === 'en' ? 'en-US' : 'ru-RU';
@@ -143,11 +199,11 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   const scale = session.priceScale;
   const startMs = Date.parse(session.startTime);
   /**
-   * Сессия турнира в прямом эфире. Здесь браузер не ведёт время и не проверяет
-   * срабатывания: и то и другое делает сервер (см. `useLiveFeed`), поэтому нет
-   * ни «Шага», ни скоростей, ни «Завершить».
+   * Сессия в прямом эфире — своя или турнирная. Здесь браузер не ведёт время и
+   * не проверяет срабатывания: и то и другое делает сервер (см. `useLiveFeed`),
+   * поэтому нет ни «Шага», ни скоростей.
    */
-  const isLive = detail.tournament?.mode === 'live';
+  const isLive = isLiveSession(detail);
 
   /**
    * Сделки, чьё закрытие уже отправлено на сервер, но сессия ещё не перечитана —
@@ -169,22 +225,88 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   // включая тик слайдера риска, который к открытым сделкам отношения не имеет.
   const openTrades = useMemo(() => trades.filter((x) => x.exitTime == null && !closingIds.has(x.id)), [trades, closingIds]);
 
-  const openM = useOpenTrade(session.id);
-  const addToTradeM = useAddToTrade(session.id);
-  const modifyM = useModifyTrade(session.id);
-  const closeM = useCloseTrade(session.id);
-  const createOrderM = useCreateCloseOrder(session.id);
-  const cancelOrderM = useCancelCloseOrder(session.id);
-  const createEntryOrdersM = useCreateEntryOrders(session.id);
-  const cancelEntryOrderM = useCancelEntryOrder(session.id);
-  const finishM = useFinishSession(session.id);
-  const tagsM = useSetBacktestTags(session.id);
+  /**
+   * Монета графика. У истории и тренажёра она одна — BTC; в эфире монет
+   * несколько, и график, черновики и уровни на нём — одной монеты, а таблицы
+   * позиций, ордеров и истории — всех (спека 2026-09-26).
+   */
+  const [symbol, setSymbol] = useState(DEFAULT_SYMBOL);
+  // Своим useMemo — по той же причине, что и openTrades: levels сверяет по ссылке.
+  const chartTrades = useMemo(() => openTrades.filter((x) => x.symbol === symbol), [openTrades, symbol]);
+  // Стороны монеты графика с открытой позицией: «Лонг/Шорт» по ним доливает
+  // позицию по её стопу, и стоп с тейком черновика туда не ставятся.
+  const lockedSides = useMemo(() => [...new Set(chartTrades.map((x) => x.direction))], [chartTrades]);
+
+  const {
+    open: openM,
+    addToTrade: addToTradeM,
+    modify: modifyM,
+    close: closeM,
+    createCloseOrder: createOrderM,
+    cancelCloseOrder: cancelOrderM,
+    createEntryOrders: createEntryOrdersM,
+    cancelEntryOrder: cancelEntryOrderM,
+    moveEntryOrder: moveEntryOrderM,
+    moveCloseOrder: moveCloseOrderM,
+    closeGrid: closeGridM,
+    finish: finishM,
+    tags: tagsM,
+  } = actions;
+
+  // Звук терминала: исполнения — из разницы снимков сессии, отказ — по ошибке
+  // любого действия над сделками и ордерами.
+  const tAudio = useTranslations('audio');
+  const [soundOn, setSoundOn] = useTerminalSoundOn();
+
+  // Настройки графика — окошко под шестерёнкой: пока в нём один пункт, RSI.
+  const [rsiOn, setRsiOn] = useRsiOn();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const onDown = (e: PointerEvent) => {
+      if (!settingsRef.current?.contains(e.target as Node)) setSettingsOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSettingsOpen(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [settingsOpen]);
+  useSnapshotSound(
+    detail,
+    soundsOf ?? sessionSounds,
+    [
+      openM.error,
+      addToTradeM.error,
+      modifyM.error,
+      closeM.error,
+      createOrderM.error,
+      cancelOrderM.error,
+      createEntryOrdersM.error,
+      cancelEntryOrderM.error,
+      moveEntryOrderM.error,
+      moveCloseOrderM.error,
+      closeGridM.error,
+    ],
+    soundOn,
+  );
 
   const closeTrade = (trade: BacktestTrade, time: number, price: number, reason: ExitReason, qty?: number, closeOrderId?: string) =>
     closeM.mutateAsync({ tradeId: trade.id, exitTime: new Date(time).toISOString(), exitPrice: price, reason, qty, closeOrderId });
 
   const { user } = useAuth();
-  const drawings = useDrawingTools(user?.id ?? 'anon', session.id, scale);
+  // Рисунки — у каждой монеты свои: линия по цене ETH на графике BTC ничего не
+  // значит. Ключ BTC прежний — рисунки, сделанные до монет, не теряются.
+  const drawings = useDrawingTools(
+    user?.id ?? 'anon',
+    symbol === DEFAULT_SYMBOL ? session.id : `${session.id}:${symbol}`,
+    scale,
+  );
 
   const replayFeed = useReplay(
     detail,
@@ -196,7 +318,10 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
     (trade, exit) => {
       // closingIds выставляется тут же, синхронно с отправкой: см. комментарий
       // у самого стейта выше про разрыв между ответом сервера и перечиткой сессии.
-      setClosingIds((prev) => new Set(prev).add(trade.id));
+      // Только полное закрытие: после частичного (лимит закрытия, ступень сетки
+      // фиксации) позиция остаётся открытой, и прятать её — значит потерять её с
+      // графика и из таблицы до перезагрузки.
+      if (!isPartialExit(trade, exit)) setClosingIds((prev) => new Set(prev).add(trade.id));
       void closeTrade(trade, exit.time, exit.price, exit.reason, exit.qty, exit.closeOrderId).catch(() => {
         // Отказ подтверждён — сделка на самом деле осталась открытой, снимаем
         // пометку немедленно: иначе она бы пряталась до конца сессии без единой
@@ -209,33 +334,24 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
         });
       });
     },
-    // Уровень сетки на вход сработал: если сделка этого направления уже есть —
-    // это добор (тем же приёмом, что ручной добор раньше делал addToTrade),
-    // если нет — она эту сделку и открывает, со стопом/тейком/плечом самой
-    // сетки. entryOrderId удаляет сработавшую строку в той же транзакции —
-    // см. комментарий у OpenTradeDto.entryOrderId на сервере.
+    // Ордер на вход сработал. Открыть позицию или долить уже открытую той же
+    // стороны, решает сервер под замком сессии, а не этот экран: `detail.trades`
+    // догоняет ответ сервера только перечиткой, и два ордера одной стороны,
+    // сработавшие подряд, оба решили бы здесь «позиции нет». entryOrderId
+    // удаляет сработавшую строку в той же транзакции — см. комментарий у
+    // OpenTradeDto.entryOrderId на сервере.
     (order, fill) => {
-      const existing = openTrades.find((t) => t.direction === order.direction);
-      if (existing) {
-        addToTradeM.mutate({
-          tradeId: existing.id,
-          entryTime: new Date(fill.time).toISOString(),
-          entryPrice: fill.price,
-          riskPct: order.riskPct,
-          entryOrderId: order.id,
-        });
-      } else {
-        openM.mutate({
-          direction: order.direction,
-          entryTime: new Date(fill.time).toISOString(),
-          entryPrice: fill.price,
-          stopLoss: order.stopLoss,
-          takeProfit: order.takeProfit ?? undefined,
-          riskPct: order.riskPct,
-          leverage: order.leverage,
-          entryOrderId: order.id,
-        });
-      }
+      openM.mutate({
+        symbol: order.symbol,
+        direction: order.direction,
+        entryTime: new Date(fill.time).toISOString(),
+        entryPrice: fill.price,
+        stopLoss: order.stopLoss,
+        takeProfit: order.takeProfit ?? undefined,
+        riskPct: order.riskPct,
+        leverage: order.leverage,
+        entryOrderId: order.id,
+      });
     },
     // Открытие/добор/срабатывание сетки/закрытие в полёте — сервер ещё не ответил,
     // и открытая позиция ещё не в `detail.trades`: курсор придержан внутри advance()
@@ -246,8 +362,30 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   );
   // Хуки нельзя вызывать по условию, поэтому вызываются оба, а спит тот, чья
   // очередь не настала: в эфире свечи идут живым хвостом, а не прокруткой.
-  const liveFeed = useLiveFeed(detail, isLive);
+  const liveFeed = useLiveFeed(detail, isLive, symbol, source);
   const replay = isLive ? liveFeed : replayFeed;
+
+  // Рынок — свой у того, кто его передал (биржа); иначе монеты и цены эфира с сервера.
+  const { data: symbolsData } = useLiveSymbols(isLive && !symbols);
+  const coins = symbols ?? symbolsData?.symbols;
+  const liveDecimalsOf = useDecimalsOf(isLive && !decimalsOfProp);
+  const decimalsOf = decimalsOfProp ?? liveDecimalsOf;
+  const chartDecimals = decimalsOf(symbol);
+  // Цены монет, по которым есть позиции, но которых нет на графике: отметка
+  // позиции и окна её закрытия берут цену своей монеты, а не графика.
+  const otherSymbols = useMemo(
+    () => [...new Set(openTrades.map((x) => x.symbol))].filter((x) => x !== symbol),
+    [openTrades, symbol],
+  );
+  const { data: otherPrices } = useLivePrices(otherSymbols, isLive && !priceOfProp);
+  const priceOf = (sym: string): number | null => {
+    if (sym === symbol) return replay.price;
+    return priceOfProp ? priceOfProp(sym) : (otherPrices?.prices[sym] ?? null);
+  };
+  const screenPriceOf = (sym: string): number | null => {
+    const p = priceOf(sym);
+    return p != null ? toScreen(p, scale) : null;
+  };
 
   // Плечо новой сделки берёт последнее сохранённое (см. useDefaultLeverage) —
   // только на посев начального состояния: экран монтируется, когда `detail`
@@ -265,6 +403,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   const [limitModalFor, setLimitModalFor] = useState<string | null>(null);
   const [marketModalFor, setMarketModalFor] = useState<string | null>(null);
   const [levelsModalFor, setLevelsModalFor] = useState<string | null>(null);
+  const [closeGridFor, setCloseGridFor] = useState<string | null>(null);
   const [tagsModalFor, setTagsModalFor] = useState<string | null>(null);
   /** Теги закрытой сделки из истории — отдельно от tagsModalFor: тот ищет среди
       openTrades, а история правит сделки, которых там уже нет. */
@@ -277,10 +416,16 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   // сессия не перечиталась: без него линия на это время откатывалась бы на старую
   // цену и прыгала обратно (см. onDragLevel и onSettled у useModifyTrade).
   const [pendingLevel, setPendingLevel] = useState<{ tradeId: string; kind: 'stop' | 'take'; price: number } | null>(null);
+  // То же для висящего ордера (лимит на вход или закрытия), перенесённого на графике:
+  // экранная цена, пока сервер не сохранил её и сессия не перечиталась.
+  const [pendingOrder, setPendingOrder] = useState<{ id: string; price: number } | null>(null);
 
   const screenPrice = replay.price != null ? toScreen(replay.price, scale) : null;
-  const stopN = Number(draft.stop);
-  const takeN = draft.take.trim() ? Number(draft.take) : null;
+  // Черновик «Маркета» без уровней занятых сторон — его видят панель, график,
+  // жесты и отправка. Сырой `draft` остаётся только для записи.
+  const marketDraft = screenPrice != null ? withoutLockedLevels(draft, screenPrice, lockedSides) : draft;
+  const stopN = Number(marketDraft.stop);
+  const takeN = marketDraft.take.trim() ? Number(marketDraft.take) : null;
   const lStopN = Number(limitDraft.stop);
   const lTakeN = limitDraft.take.trim() ? Number(limitDraft.take) : null;
   const lEntryN = limitDraft.entry.trim() ? Number(limitDraft.entry) : null;
@@ -308,136 +453,56 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   // сделке без стопа — там числа на графике вообще не меняются, но график всё
   // равно перерисовывался бы целиком.
   const levels = useMemo<Level[]>(() => {
-    const list: Level[] = [];
+    // Черновик следующего ордера — первым: под уровнями позиций (см. `draftLevels`).
+    const list: Level[] = draftLevels({
+      tab: orderTab,
+      market: { stop: stopN, take: takeN, risk: draftRisk },
+      limit: { entry: lEntryN, stop: lStopN, take: lTakeN, risk: Number(limitDraft.risk) },
+      scaled: { upper: sUpperN, lower: sLowerN, stop: sStopN, take: sTakeN, count: sCountN, risk: Number(scaledDraft.risk) },
+      livePrice,
+      screenPrice,
+      balance,
+      leverage: draftLeverage,
+      scale,
+    });
 
-    // Черновик следующего ордера — первым: SVG рисует последующее поверх, и там,
-    // где черновая линия легла рядом с уровнем открытой сделки, захват достаётся
-    // сделке. Иначе жест «подвинуть стоп позиции» тянул бы черновик панели.
-    //
-    // Рисуется только черновик ОТКРЫТОЙ вкладки тикета: у каждой свои стоп и
-    // тейк, и линии закрытых вкладок висели бы на графике уровнями ордера,
-    // которого никто не собирается отправлять.
-    if (orderTab === 'market' && stopN > 0 && livePrice != null && screenPrice != null) {
-      list.push({
-        id: 'draft-stop',
-        kind: 'stop',
-        price: stopN,
-        draggable: true,
-        // Размер позиции зависит от самого стопа, а сторона — от того, по какую
-        // сторону цены он стоит: на цене под курсором считается и то и другое.
-        impactAt: (p) => {
-          const dir = p < screenPrice ? 'long' : 'short';
-          const qty = previewSize(balance, draftRisk, livePrice, fromScreen(p, scale), draftLeverage, dir)?.qty;
-          return qty != null ? levelImpact(dir, livePrice, fromScreen(p, scale), qty).usdt : null;
-        },
-      });
-    }
-    // Тейк не по ту сторону цены не рисуется вовсе: подпись «тейк −2.68 USDT» под
-    // стопом — не цель сделки, а противоречие. Проверка здесь, а не только в правках:
-    // черновик хранит цены, и цена прокрутки выводит тейк из строя сама, без действия
-    // пользователя. Значение в поле остаётся, линия вернётся, как только тейк снова верен.
-    if (
-      orderTab === 'market' &&
-      takeN != null &&
-      takeN > 0 &&
-      livePrice != null &&
-      screenPrice != null &&
-      draftTakeFits(stopN, takeN, screenPrice)
-    ) {
-      const qty = stopN > 0 ? previewSize(balance, draftRisk, livePrice, fromScreen(stopN, scale), draftLeverage, 'long')?.qty : null;
-      list.push({
-        id: 'draft-take',
-        kind: 'take',
-        price: takeN,
-        draggable: true,
-        impactAt: (p) => {
-          const dir = impliedDirection(null, stopN, p, screenPrice);
-          return dir != null && qty != null ? levelImpact(dir, livePrice, fromScreen(p, scale), qty).usdt : null;
-        },
-      });
-    }
-
-    // Черновик одиночного отложенного ордера: своя цена входа плюс стоп и тейк,
-    // которые считаются от неё, а не от рыночной цены (см. lAnchor в OrderPanel).
-    if (orderTab === 'order' && livePrice != null && screenPrice != null) {
-      const entryReal = lEntryN != null && lEntryN > 0 ? fromScreen(lEntryN, scale) : null;
-      if (lEntryN != null && lEntryN > 0) {
-        list.push({ id: 'draft-order-entry', kind: 'orderEntry', price: lEntryN, draggable: true });
-      }
-      // Результат уровня — от цены самого ордера: сделка откроется по ней.
-      const impactAt = (p: number) => {
-        if (entryReal == null) return null;
-        const levelReal = fromScreen(p, scale);
-        const dir = levelReal < entryReal ? 'long' : 'short';
-        const qty = previewSize(balance, Number(limitDraft.risk), entryReal, levelReal, draftLeverage, dir)?.qty;
-        return qty != null ? levelImpact(dir, entryReal, levelReal, qty).usdt : null;
-      };
-      if (lStopN > 0) list.push({ id: 'draft-order-stop', kind: 'stop', price: lStopN, draggable: true, impactAt });
-      // Якорь тейка — цена входа, а пока её не задали, текущая цена: тот же приём,
-      // что и у lAnchor в OrderPanel (см. его комментарий). Без этого падения на
-      // цену тейк, поставленный раньше входа, не показывался бы вовсе — хотя стоп
-      // выше уже не требует входа для показа.
-      const lAnchor = lEntryN != null && lEntryN > 0 ? lEntryN : screenPrice;
-      if (lTakeN != null && lTakeN > 0 && draftTakeFits(lStopN, lTakeN, lAnchor)) {
-        list.push({ id: 'draft-order-take', kind: 'take', price: lTakeN, draggable: true, impactAt });
-      }
-    }
-    // Черновик сетки на вход (Scaled) — до отправки просто верх/низ диапазона,
-    // без отдельных уровней: их сервер разложит равномерно только на отправке.
-    // Граница рисуется только тронутая: обе, прибитые к текущей цене, ложились
-    // бы двумя подписанными линиями поверх свечей у всякого, кто просто открыл
-    // вкладку и ничего ещё не решил.
-    if (orderTab === 'scaled' && livePrice != null) {
-      if (sUpperN != null && sUpperN > 0) {
-        list.push({ id: 'draft-grid-upper', kind: 'gridUpper', price: sUpperN, draggable: true });
-      }
-      if (sLowerN != null && sLowerN > 0) {
-        list.push({ id: 'draft-grid-lower', kind: 'gridLower', price: sLowerN, draggable: true });
-      }
-      // Стоп и тейк сетки — на весь её результат, поэтому и считаются от
-      // среднего входа при полном исполнении (previewGrid), а не от одного уровня.
-      const pricesReal =
-        sUpperN != null && sLowerN != null
-          ? gridPrices(Math.min(sLowerN, sUpperN), Math.max(sLowerN, sUpperN), sCountN).map((p) => fromScreen(p, scale))
-          : [];
-      const impactAt = (p: number) => {
-        if (pricesReal.length === 0) return null;
-        const levelReal = fromScreen(p, scale);
-        const dir = levelReal < Math.min(...pricesReal) ? 'long' : 'short';
-        const grid = previewGrid(balance, Number(scaledDraft.risk), pricesReal, levelReal, draftLeverage, dir);
-        return grid ? levelImpact(dir, grid.avgEntry, levelReal, grid.qty).usdt : null;
-      };
-      if (sStopN > 0) list.push({ id: 'draft-grid-stop', kind: 'stop', price: sStopN, draggable: true, impactAt });
-      if (sTakeN != null && sTakeN > 0) {
-        list.push({ id: 'draft-grid-take', kind: 'take', price: sTakeN, draggable: true, impactAt });
-      }
-    }
-
-    // Уровни уже открытых сделок — от их собственных stopLoss/takeProfit, не от
-    // черновика панели: с хеджем сделок может быть две, у каждой свои уровни.
-    for (const trade of openTrades) {
+    // Уровни уже открытых сделок монеты графика — от их собственных
+    // stopLoss/takeProfit, не от черновика панели: с хеджем сделок может быть
+    // две, у каждой свои уровни.
+    for (const trade of chartTrades) {
       const remaining = trade.qty - trade.closedQty;
       const impactAt = (qty: number) => (p: number) => levelImpact(trade.direction, trade.entryPrice, fromScreen(p, scale), qty).usdt;
       const pending = pendingLevel?.tradeId === trade.id ? pendingLevel : null;
-      list.push({ id: `entry-${trade.id}`, kind: 'entry', tradeId: trade.id, price: toScreen(trade.entryPrice, scale), draggable: false });
       list.push({
-        id: `liq-${trade.id}`,
-        kind: 'liq',
+        id: `entry-${trade.id}`,
+        kind: 'entry',
         tradeId: trade.id,
-        price: toScreen(liquidationPrice(trade.direction, trade.entryPrice, trade.leverage), scale),
+        price: toScreen(trade.entryPrice, scale),
         draggable: false,
+        qty: remaining,
+        direction: trade.direction,
+        pnl: livePrice != null ? unrealizedPnl(trade.direction, trade.entryPrice, livePrice, remaining) : null,
       });
-      list.push({
-        id: `stop-${trade.id}`,
-        kind: 'stop',
-        tradeId: trade.id,
-        price: pending?.kind === 'stop' ? pending.price : toScreen(trade.stopLoss, scale),
-        draggable: true,
-        impactAt: impactAt(remaining),
-      });
+      // Биржа называет цену ликвидации сама (или не называет вовсе — null); у сделки сессии она считается.
+      const liq = trade.liqPrice !== undefined ? trade.liqPrice : liquidationPrice(trade.direction, trade.entryPrice, trade.leverage);
+      if (liq != null) {
+        list.push({ id: `liq-${trade.id}`, kind: 'liq', tradeId: trade.id, price: toScreen(liq, scale), draggable: false });
+      }
+      // Стопа у позиции биржи может не быть (0): линии тогда нет, пока её не потянут от плашки.
+      if (trade.stopLoss > 0 || pending?.kind === 'stop') {
+        list.push({
+          id: `stop-${trade.id}`,
+          kind: 'stop',
+          tradeId: trade.id,
+          price: pending?.kind === 'stop' ? pending.price : toScreen(trade.stopLoss, scale),
+          draggable: true,
+          qty: remaining,
+          impactAt: impactAt(remaining),
+        });
+      }
       const take = pending?.kind === 'take' ? pending.price : trade.takeProfit != null ? toScreen(trade.takeProfit, scale) : null;
       if (take != null) {
-        list.push({ id: `take-${trade.id}`, kind: 'take', tradeId: trade.id, price: take, draggable: true, impactAt: impactAt(remaining) });
+        list.push({ id: `take-${trade.id}`, kind: 'take', tradeId: trade.id, price: take, draggable: true, qty: remaining, impactAt: impactAt(remaining) });
       }
       for (const o of detail.closeOrders) {
         if (o.tradeId !== trade.id) continue;
@@ -445,20 +510,31 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
           id: o.id,
           kind: 'limitClose',
           tradeId: o.tradeId,
-          price: toScreen(o.price, scale),
-          draggable: false,
+          price: pendingOrder?.id === o.id ? pendingOrder.price : toScreen(o.price, scale),
+          draggable: true,
+          qty: o.qty,
           impactAt: impactAt(o.qty),
         });
       }
     }
-    // Ещё не сработавшие уровни сетки — независимо от того, есть ли уже
-    // сделка этого направления: до срабатывания это не её уровень.
+    // Ещё не сработавшие лимиты на вход — независимо от того, есть ли уже
+    // сделка этого направления: до срабатывания это не её уровень. Объём — тот,
+    // что сервер посчитает на срабатывании (`openChecked`): риск лимита от стопа
+    // позиции, если она этой стороны уже открыта, иначе от стопа самого лимита.
+    // Депозит к срабатыванию может смениться, поэтому число — на сейчас.
     for (const o of detail.entryOrders) {
-      list.push({ id: o.id, kind: 'gridPending', price: toScreen(o.price, scale), draggable: false });
+      if (o.symbol !== symbol) continue;
+      const stop = chartTrades.find((x) => x.direction === o.direction)?.stopLoss ?? o.stopLoss;
+      // У лимита биржи объём уже зафиксирован — пересчитывать его от риска нечего.
+      const qty = o.qty ?? previewSize(balance, o.riskPct, o.price, stop, o.leverage, o.direction)?.qty;
+      const price = pendingOrder?.id === o.id ? pendingOrder.price : toScreen(o.price, scale);
+      list.push({ id: o.id, kind: 'pendingEntry', price, draggable: true, qty });
     }
     return list;
   }, [
-    openTrades,
+    pendingOrder,
+    chartTrades,
+    symbol,
     scale,
     orderTab,
     stopN,
@@ -490,6 +566,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   const markers = useMemo<Marker[]>(() => {
     const list: Marker[] = [];
     for (const trade of trades) {
+      if (trade.symbol !== symbol) continue;
       // Одна стрелка на каждое исполнение (открытие + каждый добор сеткой), а
       // не одна на entryPrice/entryTime сделки — те усреднены по всем входам и
       // держат только время самого первого. У сделок, заведённых до этой
@@ -497,6 +574,8 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
       // иначе старые сессии остались бы вовсе без стрелки входа.
       const entries = trade.entries.length > 0 ? trade.entries : [{ id: trade.id, qty: trade.qty, price: trade.entryPrice, time: trade.entryTime }];
       for (const entry of entries) {
+        // Время открытия позиции биржи бывает неизвестно — стрелку ставить некуда.
+        if (!Number.isFinite(Date.parse(entry.time))) continue;
         list.push({
           id: `m-entry-${trade.id}-${entry.id}`,
           kind: 'entry',
@@ -520,7 +599,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
       }
     }
     return list;
-  }, [trades, scale, t]);
+  }, [trades, scale, symbol, t]);
 
   // Скрытая дата: день недели и время суток видны (биржевые сессии, выходные),
   // год и число — нет; вместо даты — номер дня от старта. useCallback по той же
@@ -539,10 +618,11 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   const levelLabel = useCallback((kind: LevelKind) => t(`level.${kind}`), [t]);
 
   // Панель ордера ждёт только своего: открытия. Правки, доборы и закрытия уже
-  // открытых сделок её не блокируют — вторую сделку в сторону, где позиция ещё
-  // открыта, сервер не примет сам (BACKTEST_OPEN_TRADE).
+  // открытых сделок её не блокируют.
   const orderBusy = openM.isPending || finishM.isPending || !replay.ready;
-  const canClose = (trade: BacktestTrade) => replay.cursor > Date.parse(trade.entryTime);
+  // «Не раньше входа» — отрицанием: у позиции биржи время входа бывает неизвестно
+  // (NaN), и запирать её закрытие из-за этого нельзя.
+  const canClose = (trade: BacktestTrade) => !(Date.parse(trade.entryTime) >= replay.cursor);
 
   /**
    * Смена типа тикета чистит уровни всех черновиков — иначе стоп «Маркета» и
@@ -550,14 +630,28 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
    * они не относятся. Риск, плечо и число ордеров переживают переключение:
    * это настройки, а не уровни, и набирать их заново незачем.
    */
-  const switchOrderTab = (next: OrderTab) => {
-    setOrderTab(next);
+  const clearDraftLevels = () => {
     setDraft((prev) => ({ ...prev, stop: '', take: '' }));
     setLimitDraft((prev) => ({ ...prev, stop: '', take: '', entry: '' }));
     setScaledDraft((prev) => ({ ...prev, stop: '', take: '', upper: '', lower: '' }));
     setHint(null);
     setLimitHint(null);
     setScaledHint(null);
+  };
+
+  const switchOrderTab = (next: OrderTab) => {
+    setOrderTab(next);
+    clearDraftLevels();
+  };
+
+  /**
+   * Смена монеты чистит уровни черновиков тем же приёмом, что смена вкладки
+   * тикета: стоп, выставленный по цене BTC, на графике ETH — не уровень, а
+   * число из другого рынка. Риск и плечо переживают переключение.
+   */
+  const switchSymbol = (next: string) => {
+    setSymbol(next);
+    clearDraftLevels();
   };
 
   const open = (direction: Direction) => {
@@ -567,12 +661,29 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
       setHint(t('riskInvalid'));
       return;
     }
+    // Позиция в эту сторону уже открыта — рыночный ордер её доливает, тем же
+    // приёмом, что сработавший уровень сетки: объём — от риска панели и стопа
+    // позиции, уровни позиции не трогаются, и стоп панели для добора не нужен
+    // (решение владельца 2026-09-26). Сама панель об открытых сделках так и не
+    // знает: развилка здесь, а не в её пропсах.
+    const existing = openTrades.find((x) => x.symbol === symbol && x.direction === direction);
+    if (existing) {
+      setHint(null);
+      addToTradeM.mutate({
+        tradeId: existing.id,
+        entryTime: new Date(replay.cursor).toISOString(),
+        entryPrice: replay.price,
+        riskPct: risk,
+      });
+      return;
+    }
     const err = checkLevels(direction, screenPrice, stopN, takeN);
     setHint(err ? t(err) : null);
     if (err) return;
     // Открытие в полёте — advance() придержан через `pending` (openM.isPending),
     // явную остановку автопрокрутки здесь не ставим.
     openM.mutate({
+      symbol,
       direction,
       entryTime: new Date(replay.cursor).toISOString(),
       // Настоящая цена минутки, а не обратный пересчёт экранной: без округлений.
@@ -606,6 +717,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
     if (err) return;
     createEntryOrdersM.mutate(
       {
+        symbol,
         direction,
         stopLoss: fromScreen(lStopN, scale),
         takeProfit: lTakeN != null ? fromScreen(lTakeN, scale) : undefined,
@@ -636,6 +748,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
     if (err) return;
     createEntryOrdersM.mutate(
       {
+        symbol,
         direction,
         stopLoss: fromScreen(sStopN, scale),
         takeProfit: sTakeN != null ? fromScreen(sTakeN, scale) : undefined,
@@ -666,15 +779,48 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
     );
   };
 
+  /**
+   * Висящий ордер отпущен на графике на новой цене (экранной). Лимит на вход
+   * проверяется так же, как при выставлении: покупка — ниже цены, продажа — выше
+   * (иначе это уже рынок), и свои стоп с тейком он не перепрыгивает. Отказ —
+   * линия возвращается на место, причина — над таблицей. Лимит закрытия, как и
+   * при выставлении, ставится на любую цену.
+   */
+  const moveOrder = (kind: 'pendingEntry' | 'limitClose', orderId: string, price: number) => {
+    if (kind === 'pendingEntry') {
+      const order = detail.entryOrders.find((o) => o.id === orderId);
+      if (!order || screenPrice == null) return;
+      const take = order.takeProfit != null ? toScreen(order.takeProfit, scale) : null;
+      // Свой стоп есть не у каждого лимита биржи (0 — нет): сверять тогда не с чем.
+      const err =
+        checkEntrySide(order.direction, [price], screenPrice) ??
+        (order.stopLoss > 0 ? checkGridLevels(order.direction, [price], toScreen(order.stopLoss, scale), take) : null);
+      setPositionHint(err ? t(err) : null);
+      if (err) return;
+    } else {
+      setPositionHint(null);
+    }
+    setPendingOrder({ id: orderId, price });
+    const mutation = kind === 'pendingEntry' ? moveEntryOrderM : moveCloseOrderM;
+    mutation.mutate(
+      { orderId, price: fromScreen(price, scale) },
+      { onSettled: () => setPendingOrder((prev) => (prev?.id === orderId ? null : prev)) },
+    );
+  };
+
   // Свежие значения для onDragLevel: тот стабилен ради memo(ReplayChart) и читает их
   // отсюда. Пишется в эффекте, а не в рендере — жест случается уже после коммита.
-  const dragCtxRef = useRef({ draft, openTrades, screenPrice, applyLevels, orderTab });
+  const dragCtxRef = useRef({ draft: marketDraft, openTrades, screenPrice, applyLevels, orderTab, lockedSides, moveOrder });
   useLayoutEffect(() => {
-    dragCtxRef.current = { draft, openTrades, screenPrice, applyLevels, orderTab };
+    dragCtxRef.current = { draft: marketDraft, openTrades, screenPrice, applyLevels, orderTab, lockedSides, moveOrder };
   });
 
-  const onDragLevel = useCallback((kind: LevelKind, price: number, tradeId?: string) => {
-    if (kind === 'orderEntry') {
+  const onDragLevel = useCallback((kind: LevelKind, price: number, tradeId?: string, levelId?: string) => {
+    if ((kind === 'pendingEntry' || kind === 'limitClose') && levelId != null) {
+      dragCtxRef.current.moveOrder(kind, levelId, price);
+      return;
+    }
+    if (kind === 'limitEntry') {
       const { screenPrice: sp } = dragCtxRef.current;
       const nextEntry = toInputPrice(price);
       setLimitDraft((prev) => (sp == null ? { ...prev, entry: nextEntry } : { ...prev, ...applyEntryChange(prev, nextEntry, sp) }));
@@ -687,12 +833,13 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
       return;
     }
     if (kind !== 'stop' && kind !== 'take') return;
-    const { draft: d, openTrades: ots, screenPrice: sp, applyLevels: apply, orderTab: activeTab } = dragCtxRef.current;
+    const { draft: d, openTrades: ots, screenPrice: sp, applyLevels: apply, orderTab: activeTab, lockedSides: locked } =
+      dragCtxRef.current;
     if (sp == null) return;
     // Стоп и тейк отложенных тикетов — просто новая цена в их черновике, без
     // зеркалирования: сторону они берут от цены ордера, а не от рыночной, и
     // проверяются целиком при отправке (checkGridLevels).
-    if (tradeId == null && activeTab === 'order') {
+    if (tradeId == null && activeTab === 'limit') {
       setLimitDraft((prev) => ({ ...prev, [kind]: toInputPrice(price) }));
       return;
     }
@@ -714,6 +861,13 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
       );
       return;
     }
+    // Уровень черновика, отпущенный на стороне с открытой позицией, не
+    // принимается: там «Лонг/Шорт» доливает позицию по её стопу. Линия
+    // возвращается на прежнюю цену, ползунки панели туда и так не пускают.
+    if (locked.includes(levelDirection(kind, price, sp))) {
+      setHint(t('sideLocked'));
+      return;
+    }
     // Черновик следующего ордера — направление ещё не зафиксировано, стоп может
     // поменять сторону и утянуть за собой уже введённый тейк (applyStopChange).
     if (kind === 'stop') {
@@ -733,13 +887,32 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
     setDraft((prev) => ({ ...prev, take }));
   }, [scale, t]);
 
+  // ✕ на плашках графика — стабильные ради memo(ReplayChart), свежее берут из dragCtxRef.
+  const onCloseTrade = useCallback((tradeId: string) => setMarketModalFor(tradeId), []);
+  const onCloseGrid = useCallback((tradeId: string) => setCloseGridFor(tradeId), []);
+  const onClearTake = useCallback((tradeId: string) => {
+    const { openTrades: ots, screenPrice: sp, applyLevels: apply } = dragCtxRef.current;
+    const trade = ots.find((x) => x.id === tradeId);
+    if (!trade || sp == null) return;
+    apply(trade, sp, toScreen(trade.stopLoss, scale), null);
+  }, [scale]);
+
+  // ✕ на плашке ордера. `mutate` у мутаций стабилен — колбэк тоже, ради memo(ReplayChart).
+  const cancelCloseOrder = cancelOrderM.mutate;
+  const cancelEntryOrder = cancelEntryOrderM.mutate;
+  const onCancelOrder = useCallback(
+    (kind: LevelKind, orderId: string) => (kind === 'limitClose' ? cancelCloseOrder(orderId) : cancelEntryOrder(orderId)),
+    [cancelCloseOrder, cancelEntryOrder],
+  );
+
   const submitLimit = (trade: BacktestTrade, price: number, qty: number) => {
     createOrderM.mutate({ tradeId: trade.id, price, qty }, { onSuccess: () => setLimitModalFor(null) });
   };
 
   const submitMarket = (trade: BacktestTrade, qty: number) => {
-    if (replay.price == null || !canClose(trade)) return;
-    void closeTrade(trade, replay.cursor, replay.price, 'manual', qty).then(() => setMarketModalFor(null)).catch(() => undefined);
+    const price = priceOf(trade.symbol);
+    if (price == null || !canClose(trade)) return;
+    void closeTrade(trade, replay.cursor, price, 'manual', qty).then(() => setMarketModalFor(null)).catch(() => undefined);
   };
 
   const finishing = useRef(false);
@@ -749,10 +922,9 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
     replay.setSpeed(null);
     try {
       // Позицию закрывает браузер — он знает цену момента; сервер лишь проверяет, что открытых нет.
-      if (replay.price != null) {
-        for (const trade of openTrades) {
-          if (canClose(trade)) await closeTrade(trade, replay.cursor, replay.price, 'finish');
-        }
+      for (const trade of openTrades) {
+        const price = priceOf(trade.symbol);
+        if (price != null && canClose(trade)) await closeTrade(trade, replay.cursor, price, 'finish');
       }
       await replay.flush();
       await finishM.mutateAsync();
@@ -773,7 +945,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
   const leave = async () => {
     replay.setSpeed(null);
     await replay.flush().catch(() => undefined);
-    onLeave();
+    onLeave?.();
   };
 
   const tfOptions: SegOption<number>[] = TIMEFRAMES.map((tf) => ({ value: tf, label: t(`tf.${tf}`) }));
@@ -794,10 +966,59 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
                 Разметка та же, что у SectionHead (.h2row: линейка снизу, выключка вправо),
                 но без <h2>: он тут просто нечем заполнить. */}
             <div className="h2row">
-              <Seg options={tfOptions} value={replay.tf} onChange={replay.setTf} ariaLabel={t('timeframe')} />
-              <Button variant="bare" tight aria-label={t('chartSettings')} title={t('chartSettings')}>
-                <SettingsIcon size={16} />
-              </Button>
+              <div className="flex items-center gap-3">
+                {/* Монета — только в эфире: у истории и тренажёра она одна. */}
+                {isLive && coins && coins.length > 0 && (
+                  <Select value={symbol} onChange={(e) => switchSymbol(e.target.value)} aria-label={t('coin')}>
+                    {coins.map((s) => (
+                      <option key={s.symbol} value={s.symbol}>
+                        {s.base}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+                <Seg options={tfOptions} value={replay.tf} onChange={replay.setTf} ariaLabel={t('timeframe')} />
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="bare"
+                  tight
+                  aria-label={tAudio('sound')}
+                  aria-pressed={soundOn}
+                  title={soundOn ? tAudio('mute') : tAudio('unmute')}
+                  onClick={() => setSoundOn(!soundOn)}
+                >
+                  {soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />}
+                </Button>
+                <div className="chart-settings" ref={settingsRef}>
+                  <Button
+                    variant="bare"
+                    tight
+                    aria-label={t('chartSettings')}
+                    title={t('chartSettings')}
+                    aria-haspopup="menu"
+                    aria-expanded={settingsOpen}
+                    onClick={() => setSettingsOpen((v) => !v)}
+                  >
+                    <SettingsIcon size={16} />
+                  </Button>
+                  {settingsOpen && (
+                    <div className="chart-menu chart-settings-menu" role="menu" aria-label={t('chartSettings')}>
+                      <div className="chart-menu-head">{t('indicators')}</div>
+                      <Button
+                        variant="none"
+                        role="menuitemcheckbox"
+                        aria-checked={rsiOn}
+                        className="chart-menu-item chart-menu-check"
+                        onClick={() => setRsiOn(!rsiOn)}
+                      >
+                        <span className="chart-menu-mark">{rsiOn && <Check size={12} />}</span>
+                        {t('indicatorRsi')}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
             <div className="chart-tools">
               <DrawingToolbar
@@ -834,9 +1055,15 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
                     levelLabel={levelLabel}
                     glide={screenGlide}
                     onDragLevel={onDragLevel}
+                    onCloseTrade={onCloseTrade}
+                    onClearTake={onClearTake}
+                    onCancelOrder={onCancelOrder}
+                    onCloseGrid={onCloseGrid}
                     onNeedHistory={replay.loadMoreHistory}
                     historyLoading={replay.historyLoading}
                     drawing={drawings.chart}
+                    priceDecimals={chartDecimals}
+                    rsi={rsiOn}
                   />
                 ) : (
                   <ChartSkeleton />
@@ -869,11 +1096,13 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
                   />
                 </>
               )}
-              {isLive && <span className="muted">{t('liveBadge')}</span>}
+              {isLive && <span className="muted">{badge ?? t('liveBadge')}</span>}
               {session.dataSource === 'synthetic' && <span className="muted">{t('syntheticBadge')}</span>}
-              <Button tight onClick={() => void leave()}>
-                {isLive ? t('backToTournament') : t('backToList')}
-              </Button>
+              {onLeave && (
+                <Button tight onClick={() => void leave()}>
+                  {detail.tournament ? t('backToTournament') : t('backToList')}
+                </Button>
+              )}
               <Seg
                 className="view-switch"
                 options={[
@@ -895,7 +1124,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
           <OrderPanel
             tab={orderTab}
             onTab={switchOrderTab}
-            draft={draft}
+            draft={marketDraft}
             onDraft={setDraft}
             limitDraft={limitDraft}
             onLimitDraft={setLimitDraft}
@@ -912,6 +1141,8 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
             onOpenLimit={openLimit}
             onOpenScaled={openScaled}
             onLeverageCommit={setDefaultLeverage}
+            priceDecimals={chartDecimals}
+            lockedSides={lockedSides}
           />
           <ErrorNote error={openM.error ?? addToTradeM.error ?? createEntryOrdersM.error ?? finishM.error} fallback={t('actionFailed')} />
         </div>
@@ -927,18 +1158,24 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
       )}
 
       <div className="bt-table">
-        {tab === 'open' && positionHint && <p className="neg">{positionHint}</p>}
-        {tab === 'open' && <ErrorNote error={modifyM.error} fallback={t('actionFailed')} />}
-        {tab === 'orders' && <ErrorNote error={cancelOrderM.error ?? cancelEntryOrderM.error} fallback={t('actionFailed')} />}
+        {/* Над любой вкладкой: уровни и ордера двигают и снимают прямо на графике,
+            какая бы таблица ни была открыта под ним. */}
+        {positionHint && <p className="neg">{positionHint}</p>}
+        <ErrorNote
+          error={modifyM.error ?? moveEntryOrderM.error ?? moveCloseOrderM.error ?? cancelOrderM.error ?? cancelEntryOrderM.error}
+          fallback={t('actionFailed')}
+        />
         {tab === 'open' && (
           <OpenPositionsPanel
             trades={openTrades}
             scale={scale}
-            price={replay.price}
+            priceOf={priceOf}
+            decimalsOf={decimalsOf}
             cursor={replay.cursor}
             onLimit={(trade) => setLimitModalFor(trade.id)}
             onMarket={(trade) => setMarketModalFor(trade.id)}
             onChangeLevels={(trade) => setLevelsModalFor(trade.id)}
+            onCloseGrid={(trade) => setCloseGridFor(trade.id)}
             onTags={(trade) => setTagsModalFor(trade.id)}
           />
         )}
@@ -950,40 +1187,69 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
             entryOrders={detail.entryOrders}
             onCancelOrder={(id) => cancelOrderM.mutate(id)}
             onCancelEntryOrder={(id) => cancelEntryOrderM.mutate(id)}
+            showSymbol={isLive}
+            decimalsOf={decimalsOf}
           />
         )}
-        {tab === 'history' && (
-          <SessionTrades
-            trades={trades}
-            scale={scale}
-            labelFor={labelFor}
-            onEditTags={(trade) => setHistoryTagsFor(trade.id)}
-          />
-        )}
+        {tab === 'history' &&
+          (history ?? (
+            <SessionTrades
+              trades={trades}
+              scale={scale}
+              labelFor={labelFor}
+              onEditTags={(trade) => setHistoryTagsFor(trade.id)}
+              decimalsOf={decimalsOf}
+            />
+          ))}
       </div>
 
-      {levelsModalFor != null && screenPrice != null && (() => {
+      {/* Окна позиции берут цену монеты своей сделки, а не графика. */}
+      {levelsModalFor != null && (() => {
         const trade = openTrades.find((x) => x.id === levelsModalFor);
-        return trade ? (
+        const tradePrice = trade ? screenPriceOf(trade.symbol) : null;
+        return trade && tradePrice != null ? (
           <ChangeLevelsModal
             trade={trade}
             scale={scale}
-            screenPrice={screenPrice}
-            onApply={(stop, take) => applyLevels(trade, screenPrice, stop, take)}
+            screenPrice={tradePrice}
+            decimals={decimalsOf(trade.symbol)}
+            onApply={(stop, take) => applyLevels(trade, tradePrice, stop, take)}
             onClose={() => setLevelsModalFor(null)}
             isPending={modifyM.isPending}
             error={modifyM.error}
           />
         ) : null;
       })()}
-      {limitModalFor != null && screenPrice != null && (() => {
+      {closeGridFor != null && (() => {
+        const trade = openTrades.find((x) => x.id === closeGridFor);
+        const tradePrice = trade ? screenPriceOf(trade.symbol) : null;
+        return trade && tradePrice != null ? (
+          <CloseGridModal
+            trade={trade}
+            scale={scale}
+            screenPrice={tradePrice}
+            closeOrdersCount={detail.closeOrders.filter((o) => o.tradeId === trade.id).length}
+            decimals={decimalsOf(trade.symbol)}
+            canFollow={canFollow}
+            onSubmit={(prices, stopFollow) =>
+              closeGridM.mutate({ tradeId: trade.id, prices, stopFollow }, { onSuccess: () => setCloseGridFor(null) })
+            }
+            onClose={() => setCloseGridFor(null)}
+            isPending={closeGridM.isPending}
+            error={closeGridM.error}
+          />
+        ) : null;
+      })()}
+      {limitModalFor != null && (() => {
         const trade = openTrades.find((x) => x.id === limitModalFor);
-        return trade ? (
+        const tradePrice = trade ? screenPriceOf(trade.symbol) : null;
+        return trade && tradePrice != null ? (
           <LimitCloseModal
             trade={trade}
             remaining={trade.qty - trade.closedQty}
             scale={scale}
-            screenPrice={screenPrice}
+            screenPrice={tradePrice}
+            decimals={decimalsOf(trade.symbol)}
             onSubmit={(price, qty) => submitLimit(trade, price, qty)}
             onClose={() => setLimitModalFor(null)}
             isPending={createOrderM.isPending}
@@ -991,13 +1257,15 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
           />
         ) : null;
       })()}
-      {marketModalFor != null && screenPrice != null && (() => {
+      {marketModalFor != null && (() => {
         const trade = openTrades.find((x) => x.id === marketModalFor);
-        return trade ? (
+        const tradePrice = trade ? screenPriceOf(trade.symbol) : null;
+        return trade && tradePrice != null ? (
           <MarketCloseModal
             trade={trade}
             remaining={trade.qty - trade.closedQty}
-            screenPrice={screenPrice}
+            screenPrice={tradePrice}
+            decimals={decimalsOf(trade.symbol)}
             canClose={canClose(trade)}
             onSubmit={(qty) => submitMarket(trade, qty)}
             onClose={() => setMarketModalFor(null)}
@@ -1011,7 +1279,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
         return trade ? (
           <TagsDialog
             title={t('positionTagsTitle')}
-            subtitle={`${t(`direction.${trade.direction}`)} · ${formatPriceGrouped(toScreen(trade.entryPrice, scale))}`}
+            subtitle={`${trade.symbol} · ${t(`direction.${trade.direction}`)} · ${formatPriceGrouped(toScreen(trade.entryPrice, scale), decimalsOf(trade.symbol))}`}
             initialTagIds={trade.tags.map((g) => g.id)}
             isPending={tagsM.isPending}
             error={tagsM.error}
@@ -1025,7 +1293,7 @@ function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: ()
         return trade ? (
           <TagsDialog
             title={t('tradeTagsTitle')}
-            subtitle={`${t(`direction.${trade.direction}`)} · ${formatPriceGrouped(toScreen(trade.entryPrice, scale))}`}
+            subtitle={`${trade.symbol} · ${t(`direction.${trade.direction}`)} · ${formatPriceGrouped(toScreen(trade.entryPrice, scale), decimalsOf(trade.symbol))}`}
             initialTagIds={trade.tags.map((g) => g.id)}
             isPending={tagsM.isPending}
             error={tagsM.error}

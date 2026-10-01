@@ -4,8 +4,10 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useTournament } from '@/entities/tournament';
+import { CoinIcon } from '@/shared/ui/CoinIcon';
 import { DIALOG_EXIT_MS, Dialog, DialogBody, DialogContent, DialogHeader } from '@/shared/ui/dialog';
 import { TournamentActions } from './TournamentActions';
+import { TournamentBadge } from './TournamentBadge';
 import { TournamentView } from './TournamentView';
 
 /**
@@ -51,7 +53,6 @@ export function TournamentDialog({ open, onClose }: { open: string | null; onClo
 
 function Body({ id, onClose }: { id: string; onClose: () => void }) {
   const t = useTranslations('tournaments');
-  const tc = useTranslations('coins');
   const router = useRouter();
   // Тот же ключ запроса, что и внутри TournamentView, — второго обращения к
   // серверу нет. Нужен здесь только ради имени, состояния и фонда в шапке окна.
@@ -67,29 +68,25 @@ function Body({ id, onClose }: { id: string; onClose: () => void }) {
           требует Title у окна, и имя читалось бы дважды. */}
       <DialogHeader
         title={x?.name ?? t('loadFailed')}
-        subtitle={
-          x && (
-            <span className="tstate" data-s={x.status}>
-              {t(`status.${x.status}`)}
-            </span>
-          )
-        }
+        subtitle={x && <TournamentBadge status={x.status} startsAt={x.startsAt} long />}
         aside={
           x && (
             <>
               <span className="tpool">
-                {x.prizePool} <span className="tpool-unit">{tc('unit')}</span>
+                {x.prizePool} <CoinIcon />
               </span>
               {/* Делить фонд не на кого — значит и говорить не о делении:
                   «фонд делится так — 1: 100%» описывает распределение, которого
                   нет. Разбивка по местам остаётся там, где мест правда
                   несколько. */}
               <span className="tpool-sub">
-                {x.payoutShares.length === 1
-                  ? t('winnerSingle')
-                  : t('sharesSummary', {
-                      shares: x.payoutShares.map((s, i) => `${i + 1}: ${s}%`).join(' · '),
-                    })}
+                {x.format === 'teams'
+                  ? t('prizeTeamsShort')
+                  : x.payoutShares.length === 1
+                    ? t('winnerSingle')
+                    : t('sharesSummary', {
+                        shares: x.payoutShares.map((s, i) => `${i + 1}: ${s}%`).join(' · '),
+                      })}
               </span>
             </>
           )
@@ -101,11 +98,7 @@ function Body({ id, onClose }: { id: string; onClose: () => void }) {
       {/* Подвал отдельным узлом, а не последним блоком тела: линейка над
           действиями — это край окна, и рисовать её изнутри содержимого
           значит подделывать рамку. */}
-      <TournamentActions
-        id={id}
-        onTrade={() => router.push(`/games/trading/${id}`)}
-        onRemoved={onClose}
-      />
+      <TournamentActions id={id} onTrade={() => router.push(`/games/trading/${id}`)} onRemoved={onClose} />
     </DialogContent>
   );
 }

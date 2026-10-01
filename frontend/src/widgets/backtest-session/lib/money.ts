@@ -216,6 +216,33 @@ export function impliedDirection(
   return null;
 }
 
+/** Сторона сделки, которую подразумевает уровень черновика: стоп ниже цены и тейк выше — лонг. */
+export function levelDirection(kind: 'stop' | 'take', level: number, price: number): Direction {
+  const below = level < price;
+  if (kind === 'stop') return below ? 'long' : 'short';
+  return below ? 'short' : 'long';
+}
+
+/**
+ * Черновик «Маркета» без уровней занятых сторон. По стороне, где у монеты уже
+ * открыта позиция, панель стоп и тейк не ставит: «Лонг/Шорт» там доливает
+ * позицию по её стопу, и уровень черновика был бы ничьим (решение владельца
+ * 2026-09-26). Снимать нечего — возвращается тот же объект.
+ */
+export function withoutLockedLevels<T extends { stop: string; take: string }>(
+  draft: T,
+  price: number,
+  locked: readonly Direction[],
+): T {
+  if (locked.length === 0) return draft;
+  const stop = Number(draft.stop);
+  const take = draft.take.trim() ? Number(draft.take) : null;
+  const dropStop = stop > 0 && locked.includes(levelDirection('stop', stop, price));
+  const dropTake = take != null && take > 0 && locked.includes(levelDirection('take', take, price));
+  if (!dropStop && !dropTake) return draft;
+  return { ...draft, stop: dropStop ? '' : draft.stop, take: dropTake ? '' : draft.take };
+}
+
 /**
  * Диапазон слайдера стопа/тейка — по правильную сторону от цены. Стоп зажат
  * ±7%: шире слайдер уже не «риск на сделку», а «половина депозита одним
@@ -364,6 +391,28 @@ export function applyEntryChange(
   };
 
   return { entry: nextEntry, stop: moveLevel('stop', prev.stop), take: moveLevel('take', prev.take) };
+}
+
+/**
+ * Прибыль сетки, если все уровни исполнятся и цена дойдёт до тейка: сумма по
+ * уровням, размер каждого — как в `previewGrid` (риск поровну).
+ */
+export function gridTakeProfit(
+  balance: number,
+  riskPctTotal: number,
+  prices: number[],
+  stop: number,
+  take: number,
+  direction: Direction,
+): number | null {
+  if (prices.length === 0) return null;
+  let total = 0;
+  for (const price of prices) {
+    const one = previewSize(balance, riskPctTotal / prices.length, price, stop, 1, direction);
+    if (!one) return null;
+    total += levelImpact(direction, price, take, one.qty).usdt;
+  }
+  return total;
 }
 
 /**

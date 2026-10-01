@@ -41,3 +41,26 @@ export function liveAnchor(closed: Candle[], tf: number, now: number): number {
   if (!last) return current;
   return Math.min(last.t + tf * MINUTE, current);
 }
+
+/** Минутки одной монеты: лента эфира держит их вместе с монетой, к которой они относятся. */
+export interface TaggedMinutes {
+  symbol: string;
+  rows: Candle[];
+}
+
+/**
+ * Состояние ленты, если оно про эту монету; иначе null. Переключение монеты
+ * не чистит состояние эффектом — оно просто перестаёт относиться к графику.
+ */
+export const ofSymbol = <T extends { symbol: string }>(state: T | null, symbol: string): T | null =>
+  state?.symbol === symbol ? state : null;
+
+/**
+ * Слияние свежих минуток монеты: в ту же монету — `mergeMinutes`, в другую —
+ * с чистого листа. Первый ответ после переключения монеты иначе дописался бы к
+ * минуткам прежней, и график собрал бы свечи из двух рынков. Поздние ответы
+ * прежней монеты сюда не доходят — их отсекает уборка эффекта ленты.
+ */
+export function mergeTagged(prev: TaggedMinutes, symbol: string, fresh: Candle[]): TaggedMinutes {
+  return { symbol, rows: mergeMinutes(prev.symbol === symbol ? prev.rows : [], fresh) };
+}

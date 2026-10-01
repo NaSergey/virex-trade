@@ -1,4 +1,4 @@
-import { checkMinute, type Bar, type Position } from './fills';
+import { checkMinute, touchedEntries, type Bar, type Position } from './fills';
 
 // Случаи из frontend/src/widgets/backtest-session/lib/fills.test.ts: правила одни, копий две
 // (историю исполняет браузер, эфир турнира — сервер), и расходиться им нельзя.
@@ -83,5 +83,25 @@ describe('checkMinute — лимит-ордера на закрытие', () => 
 
   it('без лимит-ордеров ведёт себя как раньше', () => {
     expect(checkMinute(LONG_WIDE, m(100, 105, 95, 100))).toBeNull();
+  });
+});
+
+describe('touchedEntries — уровни на вход', () => {
+  const orders = [
+    { id: 'far', price: 95 },
+    { id: 'near', price: 98 },
+    { id: 'miss', price: 90 },
+  ];
+
+  it('задетые уровни — от ближайшего к открытию', () => {
+    expect(touchedEntries(orders, m(100, 101, 94, 96)).map((o) => o.id)).toEqual(['near', 'far']);
+  });
+
+  it('уровень ровно на минимуме — задет', () => {
+    expect(touchedEntries(orders, m(100, 101, 95, 99)).map((o) => o.id)).toEqual(['near', 'far']);
+  });
+
+  it('гэпа нет: диапазон не задел уровень — ждёт', () => {
+    expect(touchedEntries(orders, m(99, 101, 98.5, 100))).toEqual([]);
   });
 });

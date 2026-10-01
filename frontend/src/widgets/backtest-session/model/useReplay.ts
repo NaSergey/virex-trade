@@ -17,7 +17,7 @@ import {
   visibleCandles,
   type Candle,
 } from '../lib/candles';
-import type { CloseOrder, EntryFill, Exit } from '../lib/fills';
+import { isPartialExit, type CloseOrder, type EntryFill, type Exit } from '../lib/fills';
 
 /** Сколько минуток держать загруженными впереди момента сессии. */
 const LOOKAHEAD_MS = 3 * DAY;
@@ -127,8 +127,15 @@ export function useReplay(
   const loading = useRef<Promise<void> | null>(null);
   const busy = useRef(false);
   const endedRef = useRef(false);
-  /** Сделки, чьё закрытие уже отправлено: пока сессия не перечитана, второй раз их не закрываем. */
+  /** Сделки, чьё полное закрытие уже отправлено: пока сессия не перечитана, второй раз их не закрываем. */
   const closing = useRef(new Set<string>());
+  /**
+   * Лимиты закрытия, чьё частичное исполнение уже отправлено. Сделку при этом
+   * в `closing` не кладём: она остаётся открытой, и её стоп, тейк и остальные
+   * лимиты (сетка фиксации) обязаны проверяться дальше. Исключается только
+   * сработавший лимит — чтобы не исполниться второй раз до перечитки.
+   */
+  const firedCloseOrders = useRef(new Set<string>());
   const openTradesRef = useRef<BacktestTrade[]>([]);
   openTradesRef.current = detail.trades.filter((x) => x.exitTime == null);
   const closeOrdersRef = useRef<BacktestCloseOrder[]>([]);
@@ -284,7 +291,9 @@ export function useReplay(
           minutes: minutesRef.current,
           loadedUntil: loadedUntil(minutesRef.current),
           positions,
-          closeOrders: closeOrdersRef.current.map((o): CloseOrder => ({ id: o.id, price: o.price, qty: o.qty, tradeId: o.tradeId })),
+          closeOrders: closeOrdersRef.current
+            .filter((o) => !firedCloseOrders.current.has(o.id))
+            .map((o): CloseOrder => ({ id: o.id, price: o.price, qty: o.qty, tradeId: o.tradeId })),
           entryOrders: pendingEntryOrders.map((o) => ({ id: o.id, direction: o.direction, price: o.price })),
         });
         if (reach > from) {
@@ -292,7 +301,8 @@ export function useReplay(
             for (const exit of exits) {
               const trade = openTrades.find((t) => t.id === exit.tradeId);
               if (!trade) continue;
-              closing.current.add(trade.id);
+              if (isPartialExit(trade, exit) && exit.closeOrderId) firedCloseOrders.current.add(exit.closeOrderId);
+              else closing.current.add(trade.id);
               onExitRef.current(trade, exit);
             }
             if (entryFill) {

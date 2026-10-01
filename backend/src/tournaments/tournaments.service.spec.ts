@@ -53,7 +53,14 @@ function makeService() {
           .filter(
             (t) =>
               (!where?.visibility || t.visibility === where.visibility) &&
-              (!where?.status || t.status === where.status) &&
+              (!where?.status ||
+                (typeof where.status === 'string' ? t.status === where.status : where.status.in.includes(t.status))) &&
+              (!where?.startsAt?.lte || (t.startsAt != null && t.startsAt <= where.startsAt.lte)) &&
+              // participants: { some: { userId } } — «где я есть».
+              (!where?.participants?.some ||
+                participants.some(
+                  (p) => p.tournamentId === t.id && p.userId === where.participants.some.userId,
+                )) &&
               // participants: { none: { userId } } — «где меня нет».
               (!where?.participants?.none ||
                 !participants.some(
@@ -103,7 +110,12 @@ function makeService() {
         const key = where.tournamentId_userId;
         return participants.find((p) => p.tournamentId === key.tournamentId && p.userId === key.userId) ?? null;
       }),
-      count: jest.fn(async ({ where }: any) => participants.filter((p) => p.tournamentId === where.tournamentId).length),
+      count: jest.fn(
+        async ({ where }: any) =>
+          participants.filter(
+            (p) => p.tournamentId === where.tournamentId && (where.team === undefined || p.team === where.team),
+          ).length,
+      ),
       delete: jest.fn(async ({ where }: any) => {
         const key = where.tournamentId_userId;
         const i = participants.findIndex((p) => p.tournamentId === key.tournamentId && p.userId === key.userId);
@@ -141,6 +153,9 @@ function makeService() {
     },
     backtestTrade: { findMany: jest.fn(async () => []) },
     user: { findMany: jest.fn(async () => participants.map((p) => ({ id: p.userId, name: p.userId.toUpperCase() }))) },
+    // Замок строки турнира (`SELECT … FOR UPDATE`): в памяти гонок нет, но
+    // вызов проверяется — без него вход и старт по времени расходятся.
+    $queryRaw: jest.fn(async () => []),
     $transaction: jest.fn(),
   };
   // Транзакция откатывает состояние: без этого проверка «не хватило монет — и
@@ -255,6 +270,33 @@ describe('TournamentsService.create', () => {
     expect(h.charges).toEqual([]);
   });
 
+  it('время старта сохраняется по минуте', async () => {
+    const h = makeService();
+
+    await h.service.create('u1', { ...CREATE, startsAt: new Date(NOW + 2 * 3_600_000).toISOString() });
+
+    expect(h.tournaments.get('tn1').startsAt).toEqual(new Date(Date.UTC(2026, 8, 18, 14, 0, 0)));
+  });
+
+  it('без времени старта поле пустое — турнир стартует по готовности', async () => {
+    const h = makeService();
+
+    await h.service.create('u1', CREATE);
+
+    expect(h.tournaments.get('tn1').startsAt).toBeNull();
+  });
+
+  it('негодное время старта отклоняется до всякого списания', async () => {
+    const h = makeService();
+
+    const e = await rejection(h.service.create('u1', { ...CREATE, startsAt: new Date(NOW + 10_000).toISOString() }));
+
+    expect(e).toBeInstanceOf(BadRequestException);
+    expect(e.response.code).toBe('TOURNAMENT_BAD_START');
+    expect(h.charges).toEqual([]);
+    expect(h.tournaments.size).toBe(0);
+  });
+
   it('по умолчанию турнир закрытый', async () => {
     const h = makeService();
 
@@ -356,15 +398,31 @@ describe('TournamentsService.join / leave', () => {
     expect(e.response.code).toBe('TOURNAMENT_CREATOR_LEAVE');
   });
 
-  it('после старта войти нельзя', async () => {
+  // Решение владельца 2026-09-27: после старта войти нельзя, даже при
+  // свободных местах, — ни взноса, ни сессии.
+  it('в начавшийся турнир войти нельзя, даже если места есть', async () => {
     const h = makeService();
-    await h.service.create('u1', CREATE);
+    await h.service.create('u1', { ...CREATE, maxPlayers: 3 });
     await h.service.join('u2', 'tn1');
     await allReady(h);
 
     const e = await rejection(h.service.join('u3', 'tn1'));
 
+    expect(e).toBeInstanceOf(ConflictException);
     expect(e.response.code).toBe('TOURNAMENT_NOT_LOBBY');
+    expect(h.charges.filter((c) => c.userId === 'u3')).toEqual([]);
+    expect(h.sessions.map((s) => s.userId)).not.toContain('u3');
+  });
+
+  it('в завершённый и отменённый турнир войти нельзя', async () => {
+    const h = makeService();
+    await h.service.create('u1', CREATE);
+
+    for (const status of ['finished', 'cancelled']) {
+      h.tournaments.set('tn1', { ...h.tournaments.get('tn1'), status });
+      const e = await rejection(h.service.join('u2', 'tn1'));
+      expect(e.response.code).toBe('TOURNAMENT_CLOSED');
+    }
   });
 
   it('несуществующий турнир — 404', async () => {
@@ -475,6 +533,30 @@ describe('TournamentsService.setReady', () => {
     expect(e.response.code).toBe('TOURNAMENT_NOT_PARTICIPANT');
   });
 
+  it('у турнира по времени готовности нет — он начнётся сам', async () => {
+    const h = makeService();
+    await h.service.create('u1', { ...CREATE, startsAt: new Date(NOW + 3_600_000).toISOString() });
+
+    const e = await rejection(h.service.setReady('u1', 'tn1', true));
+
+    expect(e).toBeInstanceOf(ConflictException);
+    expect(e.response.code).toBe('TOURNAMENT_SCHEDULED');
+  });
+
+  it('турнир по времени не стартует по готовности, даже если все отмечены', async () => {
+    const h = makeService();
+    await h.service.create('u1', { ...CREATE, maxPlayers: 3, startsAt: new Date(NOW + 3_600_000).toISOString() });
+    await h.service.join('u2', 'tn1');
+    await h.service.join('u3', 'tn1');
+    // Отметки не из API (там готовность запрещена) — проверяется сам запуск.
+    for (const p of h.participants) p.ready = p.userId !== 'u3';
+
+    await h.service.leave('u3', 'tn1');
+
+    expect(h.tournaments.get('tn1').status).toBe('lobby');
+    expect(h.sessions).toEqual([]);
+  });
+
   it('в идущем турнире готовность уже ничего не значит', async () => {
     const h = makeService();
     await h.service.create('u1', CREATE);
@@ -487,6 +569,81 @@ describe('TournamentsService.setReady', () => {
   });
 });
 
+describe('TournamentsService.startScheduled', () => {
+  const AT = new Date(Date.UTC(2026, 8, 18, 13, 0, 0));
+  const scheduled = async (over: Partial<typeof CREATE> = {}) => {
+    const h = makeService();
+    await h.service.create('u1', { ...CREATE, maxPlayers: 3, startsAt: AT.toISOString(), ...over });
+    return h;
+  };
+
+  it('ищет лобби, чьё время пришло', async () => {
+    const h = makeService();
+
+    await h.service.dueForStart(AT);
+
+    expect(h.prisma.tournament.findMany).toHaveBeenCalledWith({ where: { status: 'lobby', startsAt: { lte: AT } } });
+  });
+
+  it('двое без готовности — старт тем же путём, что и по готовности', async () => {
+    const h = await scheduled();
+    await h.service.join('u2', 'tn1');
+
+    expect(await h.service.startScheduled('tn1', AT)).toBe('started');
+
+    expect(h.tournaments.get('tn1').status).toBe('running');
+    expect(h.sessions.map((s) => s.userId).sort()).toEqual(['u1', 'u2']);
+    expect(h.prisma.$queryRaw).toHaveBeenCalled();
+  });
+
+  it('стартует, даже если призовых мест не меньше, чем участников', async () => {
+    const h = await scheduled({ maxPlayers: 4, winnersCount: 3, payoutShares: [50, 30, 20] });
+    await h.service.join('u2', 'tn1');
+
+    expect(await h.service.startScheduled('tn1', AT)).toBe('started');
+    expect(h.sessions).toHaveLength(2);
+  });
+
+  it('участник один — отмена, взнос и добавка возвращаются', async () => {
+    const h = await scheduled({ prizeBonus: 300 });
+
+    expect(await h.service.startScheduled('tn1', AT)).toBe('cancelled');
+
+    expect(h.tournaments.get('tn1')).toMatchObject({ status: 'cancelled', finishedAt: AT });
+    expect(h.sessions).toEqual([]);
+    expect(h.credits).toEqual([
+      { userId: 'u1', amount: 100, kind: 'TOURNAMENT_REFUND', refId: `tn1:${NOW}` },
+      { userId: 'u1', amount: 300, kind: 'TOURNAMENT_REFUND', refId: 'tn1:bonus' },
+    ]);
+  });
+
+  it('раньше времени ничего не происходит', async () => {
+    const h = await scheduled();
+    await h.service.join('u2', 'tn1');
+
+    expect(await h.service.startScheduled('tn1', new Date(AT.getTime() - 1_000))).toBeNull();
+    expect(h.tournaments.get('tn1').status).toBe('lobby');
+  });
+
+  it('повторный вызов после старта ничего не делает', async () => {
+    const h = await scheduled();
+    await h.service.join('u2', 'tn1');
+    await h.service.startScheduled('tn1', AT);
+
+    expect(await h.service.startScheduled('tn1', AT)).toBeNull();
+    expect(h.sessions).toHaveLength(2);
+  });
+
+  it('турнир без времени старта по расписанию не запускается', async () => {
+    const h = makeService();
+    await h.service.create('u1', CREATE);
+    await h.service.join('u2', 'tn1');
+
+    expect(await h.service.startScheduled('tn1', AT)).toBeNull();
+    expect(h.tournaments.get('tn1').status).toBe('lobby');
+  });
+});
+
 describe('TournamentsService.get — сводка участников', () => {
   it('в лобби сводки нет: сессий ещё не существует', async () => {
     const h = makeService();
@@ -494,7 +651,7 @@ describe('TournamentsService.get — сводка участников', () => {
 
     const view = await h.service.get('u1', 'tn1');
 
-    expect(view.participants).toEqual([{ userId: 'u1', name: 'U1', ready: false, stats: null }]);
+    expect(view.participants).toEqual([{ userId: 'u1', name: 'U1', ready: false, team: null, stats: null }]);
   });
 
   it('считает закрытые сделки каждого участника', async () => {
@@ -671,6 +828,30 @@ describe('TournamentsService.finalize', () => {
     expect(h.credits.filter((c) => c.kind === 'TOURNAMENT_PRIZE')).toHaveLength(1);
   });
 
+  it('игроков меньше призовых мест — доли пустых мест уходят первому, фонд раздан целиком', async () => {
+    const h = makeService();
+    const AT = new Date(Date.UTC(2026, 8, 18, 13, 0, 0));
+    await h.service.create('u1', {
+      ...CREATE,
+      maxPlayers: 4,
+      winnersCount: 3,
+      payoutShares: [50, 30, 20],
+      startsAt: AT.toISOString(),
+    });
+    await h.service.join('u2', 'tn1');
+    await h.service.startScheduled('tn1', AT);
+    h.sessions.find((s) => s.userId === 'u1').balance = 9_000;
+    h.sessions.find((s) => s.userId === 'u2').balance = 11_000;
+
+    await h.service.finalize(h.tournaments.get('tn1'));
+
+    const prizes = h.credits.filter((c) => c.kind === 'TOURNAMENT_PRIZE');
+    expect(prizes).toEqual([
+      { userId: 'u2', amount: 140, kind: 'TOURNAMENT_PRIZE', refId: 'tn1' },
+      { userId: 'u1', amount: 60, kind: 'TOURNAMENT_PRIZE', refId: 'tn1' },
+    ]);
+  });
+
   it('нулевой фонд не выплачивается, но места проставляются', async () => {
     const h = await runTournament({ entryFee: 0, prizeBonus: 0 });
 
@@ -701,34 +882,297 @@ describe('TournamentsService.finalize', () => {
   });
 });
 
-describe('TournamentsService.listPublic', () => {
-  it('отдаёт только публичные лобби со свободными местами и без меня', async () => {
+describe('TournamentsService.board', () => {
+  const ids = (rows: { id: string }[]) => rows.map((r) => r.id);
+
+  it('свои — в любом статусе, с отношением «создал» или «играю»', async () => {
     const h = makeService();
+    await h.service.create('u1', { ...CREATE, maxPlayers: 3 });
+    await h.service.join('u2', 'tn1');
+    h.tournaments.set('tn1', { ...h.tournaments.get('tn1'), status: 'finished' });
 
-    await h.service.listPublic('u9');
-
-    expect(h.prisma.tournament.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { visibility: 'public', status: 'lobby', participants: { none: { userId: 'u9' } } },
-      }),
-    );
+    expect((await h.service.board('u1')).map((r: any) => [r.id, r.relation])).toEqual([['tn1', 'created']]);
+    expect((await h.service.board('u2')).map((r: any) => [r.id, r.relation])).toEqual([['tn1', 'joined']]);
   });
 
-  it('заполненное лобби в общем списке не показывается', async () => {
+  it('чужие — только публичные в наборе и идущие, заполненные тоже', async () => {
     const h = makeService();
     await h.service.create('u1', { ...CREATE, visibility: 'public' });
     await h.service.join('u2', 'tn1');
 
-    expect(await h.service.listPublic('u3')).toEqual([]);
+    // Дуэль заполнена — в неё не войти, но за ней можно смотреть.
+    expect(ids(await h.service.board('u9'))).toEqual(['tn1']);
+
+    h.tournaments.set('tn1', { ...h.tournaments.get('tn1'), status: 'finished' });
+    expect(await h.service.board('u9')).toEqual([]);
   });
 
-  // Свой турнир виден в «Моих» — вторая его строка здесь была бы тем же
-  // турниром под видом чужого.
-  it('своё лобби в общем списке не показывается, чужое — показывается', async () => {
+  it('закрытый чужой турнир в таблицу не попадает', async () => {
     const h = makeService();
-    await h.service.create('u1', { ...CREATE, visibility: 'public' });
+    await h.service.create('u1', CREATE);
 
-    expect(await h.service.listPublic('u1')).toEqual([]);
-    expect((await h.service.listPublic('u2')).map((t: { id: string }) => t.id)).toEqual(['tn1']);
+    expect(await h.service.board('u9')).toEqual([]);
+  });
+
+  it('фонд — собранный сейчас, как в шапке окна', async () => {
+    const h = makeService();
+    await h.service.create('u1', { ...CREATE, maxPlayers: 5, winnersCount: 1, prizeBonus: 50, visibility: 'public' });
+    await h.service.join('u2', 'tn1');
+
+    const [row] = await h.service.board('u9');
+
+    expect(row).toMatchObject({ players: 2, prizePool: 250, creatorName: 'U1', relation: 'other' });
+  });
+
+  it('чужие берутся одним ограниченным запросом без меня', async () => {
+    const h = makeService();
+
+    await h.service.board('u9');
+
+    expect(h.prisma.tournament.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          visibility: 'public',
+          status: { in: ['lobby', 'running'] },
+          participants: { none: { userId: 'u9' } },
+        },
+        take: 50,
+      }),
+    );
+  });
+});
+
+describe('TournamentsService.trades', () => {
+  it('сделки одного турнира, свежие сверху', async () => {
+    const h = makeService();
+    await h.service.create('u1', CREATE);
+
+    await h.service.trades('tn1');
+
+    expect(h.prisma.backtestTrade.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { session: { tournamentId: 'tn1' } },
+        orderBy: { entryTime: 'desc' },
+        take: 50,
+      }),
+    );
+  });
+
+  it('несуществующий турнир — 404', async () => {
+    const h = makeService();
+
+    const e = await rejection(h.service.trades('нет'));
+
+    expect(e).toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe('TournamentsService.feed', () => {
+  const TRADE = {
+    id: 'tr1',
+    symbol: 'BTCUSDT',
+    direction: 'long',
+    leverage: 10,
+    entryTime: new Date(NOW),
+    entryPrice: 70_000,
+    stopLoss: 69_000,
+    takeProfit: 72_000,
+    exitTime: null,
+    pnl: null,
+    session: { userId: 'u2', user: { name: 'Вася' }, tournament: { id: 'tn1', name: 'Дуэль' } },
+  };
+
+  // Закрытый турнир — только по ссылке, и лента не должна его раскрывать:
+  // кроме тех, где смотрящий сам играет.
+  it('берёт свежие сделки идущих турниров — публичных или где я участник', async () => {
+    const h = makeService();
+
+    await h.service.feed('u9');
+
+    expect(h.prisma.backtestTrade.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          session: {
+            tournament: {
+              is: {
+                status: 'running',
+                OR: [{ visibility: 'public' }, { participants: { some: { userId: 'u9' } } }],
+              },
+            },
+          },
+        },
+        orderBy: { entryTime: 'desc' },
+        take: 50,
+      }),
+    );
+  });
+
+  it('открытая сделка отдаётся со стороной, входом и уровнями', async () => {
+    const h = makeService();
+    h.prisma.backtestTrade.findMany.mockResolvedValueOnce([TRADE]);
+
+    expect(await h.service.feed('u9')).toEqual([
+      {
+        id: 'tr1',
+        tournamentId: 'tn1',
+        tournamentName: 'Дуэль',
+        userId: 'u2',
+        playerName: 'Вася',
+        symbol: 'BTCUSDT',
+        direction: 'long',
+        leverage: 10,
+        entryTime: new Date(NOW),
+        entryPrice: 70_000,
+        stopLoss: 69_000,
+        takeProfit: 72_000,
+        exitTime: null,
+        pnl: null,
+      },
+    ]);
+  });
+});
+
+describe('Командный турнир', () => {
+  const TEAMS = { ...CREATE, format: 'teams' as const, teamSize: 2, maxPlayers: 2, winnersCount: 1, payoutShares: [100] };
+
+  const teamLobby = async (over: Partial<typeof TEAMS> & { startsAt?: string } = {}) => {
+    const h = makeService();
+    await h.service.create('u1', { ...TEAMS, ...over });
+    return h;
+  };
+
+  it('места, победители и доли выводятся из размера команды; создатель — в команде A', async () => {
+    const h = await teamLobby({ teamSize: 5, maxPlayers: 2, winnersCount: 3, payoutShares: [50, 30, 20] });
+
+    expect(h.tournaments.get('tn1')).toMatchObject({
+      format: 'teams',
+      teamSize: 5,
+      maxPlayers: 10,
+      winnersCount: 1,
+      payoutShares: [100],
+    });
+    expect(h.participants[0]).toMatchObject({ userId: 'u1', team: 0 });
+  });
+
+  it('без размера команды — 400', async () => {
+    const h = makeService();
+
+    const e = await rejection(h.service.create('u1', { ...TEAMS, teamSize: undefined }));
+
+    expect(e.response.code).toBe('TOURNAMENT_BAD_TEAM_SIZE');
+    expect(h.charges).toEqual([]);
+  });
+
+  it('вход — в выбранную команду; без команды — 400', async () => {
+    const h = await teamLobby();
+
+    const e = await rejection(h.service.join('u2', 'tn1'));
+    expect(e.response.code).toBe('TOURNAMENT_TEAM_REQUIRED');
+
+    await h.service.join('u2', 'tn1', 1);
+    expect(h.participants.find((p) => p.userId === 'u2')).toMatchObject({ team: 1 });
+  });
+
+  it('в полную команду не войти, в другую — можно', async () => {
+    const h = await teamLobby();
+    await h.service.join('u2', 'tn1', 0);
+
+    const e = await rejection(h.service.join('u3', 'tn1', 0));
+    expect(e.response.code).toBe('TOURNAMENT_TEAM_FULL');
+    expect(h.charges.filter((c) => c.userId === 'u3')).toEqual([]);
+
+    await h.service.join('u3', 'tn1', 1);
+    expect(h.participants.find((p) => p.userId === 'u3')).toMatchObject({ team: 1 });
+  });
+
+  it('создатель переставляет игрока в команду со свободным местом', async () => {
+    const h = await teamLobby();
+    await h.service.join('u2', 'tn1', 0);
+
+    await h.service.moveTeam('u1', 'tn1', 'u2', 1);
+
+    expect(h.participants.find((p) => p.userId === 'u2')).toMatchObject({ team: 1 });
+  });
+
+  it('переставлять может только создатель, только в наборе и только в команду с местом', async () => {
+    const h = await teamLobby();
+    await h.service.join('u2', 'tn1', 1);
+    await h.service.join('u3', 'tn1', 1);
+
+    expect((await rejection(h.service.moveTeam('u2', 'tn1', 'u3', 0))).response.code).toBe('TOURNAMENT_NOT_CREATOR');
+    expect((await rejection(h.service.moveTeam('u1', 'tn1', 'u1', 1))).response.code).toBe('TOURNAMENT_TEAM_FULL');
+
+    h.tournaments.set('tn1', { ...h.tournaments.get('tn1'), status: 'running' });
+    expect((await rejection(h.service.moveTeam('u1', 'tn1', 'u3', 0))).response.code).toBe('TOURNAMENT_NOT_LOBBY');
+  });
+
+  it('в арене переставлять некого', async () => {
+    const h = makeService();
+    await h.service.create('u1', { ...CREATE, maxPlayers: 3 });
+    await h.service.join('u2', 'tn1');
+
+    expect((await rejection(h.service.moveTeam('u1', 'tn1', 'u2', 1))).response.code).toBe('TOURNAMENT_NOT_TEAMS');
+  });
+
+  it('по готовности не стартует, пока одна из команд пуста', async () => {
+    const h = await teamLobby();
+    await h.service.join('u2', 'tn1', 0);
+    await allReady(h);
+    expect(h.tournaments.get('tn1').status).toBe('lobby');
+
+    await h.service.join('u3', 'tn1', 1);
+    await allReady(h);
+    expect(h.tournaments.get('tn1').status).toBe('running');
+    expect(h.sessions).toHaveLength(3);
+  });
+
+  it('по времени: хотя бы по одному в команде — старт; все в одной — отмена с возвратом', async () => {
+    const AT = new Date(Date.UTC(2026, 8, 18, 13, 0, 0));
+
+    const ok = await teamLobby({ startsAt: AT.toISOString() });
+    await ok.service.join('u2', 'tn1', 1);
+    expect(await ok.service.startScheduled('tn1', AT)).toBe('started');
+
+    const one = await teamLobby({ startsAt: AT.toISOString() });
+    await one.service.join('u2', 'tn1', 0);
+    expect(await one.service.startScheduled('tn1', AT)).toBe('cancelled');
+    expect(one.credits.filter((c) => c.kind === 'TOURNAMENT_REFUND').map((c) => c.userId).sort()).toEqual(['u1', 'u2']);
+  });
+
+  it('финал: побеждает средний результат команды, фонд — победителям поровну', async () => {
+    const h = await teamLobby({ teamSize: 3, entryFee: 100 });
+    await h.service.join('u2', 'tn1', 1);
+    await h.service.join('u3', 'tn1', 1);
+    await allReady(h);
+    // A (u1): +300. B (u2, u3): +250 и +250 — сумма больше, среднее меньше.
+    h.sessions.find((s) => s.userId === 'u1').balance = 10_300;
+    h.sessions.find((s) => s.userId === 'u2').balance = 10_250;
+    h.sessions.find((s) => s.userId === 'u3').balance = 10_250;
+
+    await h.service.finalize(h.tournaments.get('tn1'));
+
+    const byUser = Object.fromEntries(h.participants.map((p) => [p.userId, p]));
+    expect(byUser.u1).toMatchObject({ place: 1, prizeWon: 300 });
+    expect(byUser.u2).toMatchObject({ place: 2, prizeWon: 0 });
+    expect(byUser.u3).toMatchObject({ place: 2, prizeWon: 0 });
+    expect(h.awards).toContainEqual({ userId: 'u1', source: 'game.tournament', refId: 'tn1', xp: 125 });
+    expect(h.awards).toContainEqual({ userId: 'u2', source: 'game.tournament', refId: 'tn1', xp: 100 });
+  });
+
+  it('финал: остаток деления фонда — лучшему в победившей команде', async () => {
+    const h = await teamLobby({ teamSize: 2, entryFee: 0, prizeBonus: 101 });
+    await h.service.join('u2', 'tn1', 0);
+    await h.service.join('u3', 'tn1', 1);
+    await allReady(h);
+    h.sessions.find((s) => s.userId === 'u1').balance = 10_100;
+    h.sessions.find((s) => s.userId === 'u2').balance = 10_500;
+    h.sessions.find((s) => s.userId === 'u3').balance = 10_000;
+
+    await h.service.finalize(h.tournaments.get('tn1'));
+
+    const byUser = Object.fromEntries(h.participants.map((p) => [p.userId, p]));
+    expect(byUser.u2.prizeWon).toBe(51);
+    expect(byUser.u1.prizeWon).toBe(50);
+    expect(byUser.u3.prizeWon).toBe(0);
   });
 });

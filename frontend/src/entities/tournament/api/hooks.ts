@@ -4,16 +4,18 @@ import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { apiJson } from '@/shared/api/http';
 import type {
+  BoardTournament,
   CreateTournamentInput,
-  MyTournament,
-  PublicTournament,
+  FeedTrade,
   Rating,
+  TournamentBase,
   TournamentDetail,
 } from './types';
 
-const listKey = ['tournaments', 'mine'] as const;
-const publicKey = ['tournaments', 'public'] as const;
+const boardKey = ['tournaments', 'board'] as const;
 const ratingKey = ['tournaments', 'rating'] as const;
+const feedKey = ['tournaments', 'feed'] as const;
+const tradesKey = (id: string) => ['tournaments', 'trades', id] as const;
 const detailKey = (id: string) => ['tournaments', 'detail', id] as const;
 
 /**
@@ -32,26 +34,63 @@ const detailKey = (id: string) => ['tournaments', 'detail', id] as const;
  */
 const DETAIL_POLL_MS = 5000;
 
+/**
+ * Таблица турниров перечитывается раз в десять секунд: турнир по времени
+ * стартует сам, и строка, дошедшая отсчётом до нуля, должна сменить OPEN на
+ * LIVE без перезагрузки страницы. Чаще незачем — старт ждёт тика движка, а не
+ * секунды.
+ */
+const BOARD_POLL_MS = 10_000;
+
+/** Лента сделок — «в прямом эфире», но не чаще тика движка турниров (2 с). */
+const FEED_POLL_MS = 3000;
+
 const json = (method: string, body?: unknown): RequestInit => ({
   method,
   body: body === undefined ? undefined : JSON.stringify(body),
 });
 
-/** После любой правки: турнир, оба списка, рейтинг и баланс монет. */
+/** После любой правки: турнир, его сделки, таблица, рейтинг, лента и баланс монет. */
 function refresh(qc: QueryClient, id?: string) {
   if (id) void qc.invalidateQueries({ queryKey: detailKey(id) });
-  void qc.invalidateQueries({ queryKey: listKey });
-  void qc.invalidateQueries({ queryKey: publicKey });
+  if (id) void qc.invalidateQueries({ queryKey: tradesKey(id) });
+  void qc.invalidateQueries({ queryKey: boardKey });
   void qc.invalidateQueries({ queryKey: ratingKey });
+  void qc.invalidateQueries({ queryKey: feedKey });
   // Взнос, возврат и приз меняют баланс в шапке — он же и должен это показать.
   void qc.invalidateQueries({ queryKey: ['coins'] });
 }
 
-export const useMyTournaments = () =>
-  useQuery({ queryKey: listKey, queryFn: () => apiJson<MyTournament[]>('/api/tournaments') });
+/** Общая таблица турниров: свои и чужие публичные — одним запросом, в порядке сервера. */
+export const useTournamentBoard = () =>
+  useQuery({
+    queryKey: boardKey,
+    queryFn: () => apiJson<BoardTournament[]>('/api/tournaments/board'),
+    refetchInterval: BOARD_POLL_MS,
+  });
 
-export const usePublicTournaments = () =>
-  useQuery({ queryKey: publicKey, queryFn: () => apiJson<PublicTournament[]>('/api/tournaments/public') });
+/**
+ * Сделки одного турнира — блок в его окне. `live` — турнир идёт: тогда опрос
+ * с тем же шагом, что у ленты; у завершённого сделки больше не меняются.
+ */
+export const useTournamentTrades = (id: string, live: boolean) =>
+  useQuery({
+    queryKey: tradesKey(id),
+    queryFn: () => apiJson<FeedTrade[]>(`/api/tournaments/${id}/trades`),
+    refetchInterval: live ? FEED_POLL_MS : false,
+  });
+
+/**
+ * Лента «Сделки игроков». Опрашивается, только пока открыта её вкладка
+ * (`enabled`): в фоне рейтинга она никому не видна.
+ */
+export const useTournamentFeed = (enabled: boolean) =>
+  useQuery({
+    queryKey: feedKey,
+    queryFn: () => apiJson<FeedTrade[]>('/api/tournaments/feed'),
+    enabled,
+    refetchInterval: FEED_POLL_MS,
+  });
 
 export const useTournamentRating = () =>
   useQuery({ queryKey: ratingKey, queryFn: () => apiJson<Rating>('/api/tournaments/rating') });
@@ -98,7 +137,7 @@ export const useCreateTournament = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateTournamentInput) =>
-      apiJson<{ tournament: MyTournament }>('/api/tournaments', json('POST', input)),
+      apiJson<{ tournament: TournamentBase }>('/api/tournaments', json('POST', input)),
     onSettled: (data) => refresh(qc, data?.tournament.id),
   });
 };
@@ -109,8 +148,25 @@ function useTournamentAction(id: string, request: () => Promise<unknown>) {
   return useMutation({ mutationFn: request, onSettled: () => refresh(qc, id) });
 }
 
-export const useJoinTournament = (id: string) =>
-  useTournamentAction(id, () => apiJson<unknown>(`/api/tournaments/${id}/join`, json('POST')));
+/** Вход; у командного турнира — в выбранную команду (0 — A, 1 — B). */
+export const useJoinTournament = (id: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (team?: number) =>
+      apiJson<unknown>(`/api/tournaments/${id}/join`, json('POST', team === undefined ? {} : { team })),
+    onSettled: () => refresh(qc, id),
+  });
+};
+
+/** Создатель переставляет игрока в другую команду — только в наборе. */
+export const useMoveTeam = (id: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (move: { userId: string; team: number }) =>
+      apiJson<unknown>(`/api/tournaments/${id}/team`, json('POST', move)),
+    onSettled: () => refresh(qc, id),
+  });
+};
 
 export const useLeaveTournament = (id: string) =>
   useTournamentAction(id, () => apiJson<unknown>(`/api/tournaments/${id}/leave`, json('POST')));

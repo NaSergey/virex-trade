@@ -7,11 +7,12 @@ import { Skeleton } from '@/shared/ui/Skeleton';
 import { InviteLink } from './InviteLink';
 import { Participants } from './Participants';
 import { TournamentHead } from './TournamentHead';
+import { TournamentTrades } from './TournamentTrades';
 import { Winners } from './Winners';
 
 /**
- * Турнир без терминала и без действий: условия, ссылка-приглашение, состав и
- * сводка. Всё, что с турниром можно сделать, стоит подвалом окна
+ * Турнир без терминала и без действий: условия, ссылка-приглашение, состав,
+ * сводка и сделки. Всё, что с турниром можно сделать, стоит подвалом окна
  * (`TournamentActions`) — здесь только то, что читают.
  *
  * Терминал сюда не входит намеренно: ему нужен весь экран, и в окне на 860
@@ -25,13 +26,16 @@ export function TournamentView({ id }: { id: string }) {
   if (error) return <ErrorNote error={error} fallback={t('loadFailed')} />;
   if (!data) return <Skeleton height={200} />;
 
-  const lobby = data.tournament.status === 'lobby';
+  const { status } = data.tournament;
 
   return (
     <>
       <TournamentHead detail={data} />
-      {lobby && data.isParticipant && <InviteLink id={id} />}
-      {data.tournament.status === 'finished' ? <Winners detail={data} /> : <Participants detail={data} />}
+      {status === 'lobby' && data.isParticipant && <InviteLink id={id} />}
+      {status === 'finished' ? <Winners detail={data} /> : <Participants detail={data} />}
+      {/* Сделки есть только у турнира, который шёл: в наборе и у отменённого
+          сессий нет. */}
+      {(status === 'running' || status === 'finished') && <TournamentTrades detail={data} />}
     </>
   );
 }

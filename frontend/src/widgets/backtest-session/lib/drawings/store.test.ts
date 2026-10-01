@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { drawingsKey, parseDrawings, pruneDrawings, saveDrawings, serializeDrawings, type DrawingStorage } from './store';
+import {
+  drawingsKey,
+  EXCHANGE_DRAWINGS,
+  parseDrawings,
+  pruneDrawings,
+  saveDrawings,
+  serializeDrawings,
+  type DrawingStorage,
+} from './store';
 import type { Drawing } from './types';
 
 function memoryStorage(quota = Infinity): DrawingStorage & { data: Map<string, string> } {
@@ -52,5 +60,16 @@ describe('store', () => {
     s.setItem('virex:theme', 'dark');
     pruneDrawings(s, 'u', new Set(['keep']));
     expect([...s.data.keys()].sort()).toEqual([drawingsKey('u', 'keep'), drawingsKey('other', 'gone'), 'virex:theme'].sort());
+  });
+  it('prune судит по сессии, а не по ключу целиком: рисунки монет живой сессии и биржевого терминала остаются', () => {
+    // У монеты эфира ключ — «сессия:монета», у терминала биржи сессии нет вовсе.
+    const s = memoryStorage();
+    saveDrawings(s, 'u', 'keep:ETHUSDT', [line]);
+    saveDrawings(s, 'u', 'gone:ETHUSDT', [line]);
+    saveDrawings(s, 'u', `${EXCHANGE_DRAWINGS}:BTCUSDT`, [line]);
+    pruneDrawings(s, 'u', new Set(['keep']));
+    expect([...s.data.keys()].sort()).toEqual(
+      [drawingsKey('u', 'keep:ETHUSDT'), drawingsKey('u', `${EXCHANGE_DRAWINGS}:BTCUSDT`)].sort(),
+    );
   });
 });

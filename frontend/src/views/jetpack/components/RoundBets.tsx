@@ -35,9 +35,10 @@ export function RoundBets({ view }: { view: JetpackView }) {
       header: t('colWin'),
       align: 'right',
       cellClassName: 'n',
+      // Итог — чистый: выигрыш без ставки, как и проигрыш — без выплаты.
       render: (r) =>
         r.payout !== null ? (
-          <span className="jpg-won">+{r.payout.toLocaleString()}</span>
+          <span className="jpg-won">+{(r.payout - r.amount).toLocaleString()}</span>
         ) : crashed ? (
           <span className="jpg-lost">−{r.amount.toLocaleString()}</span>
         ) : null,
@@ -51,12 +52,12 @@ export function RoundBets({ view }: { view: JetpackView }) {
           {t('players', { n: view.players })} · {t('total', { n: view.totalBet.toLocaleString() })}
         </span>
       </div>
-      {/* Мерка — под колонку, а не общие 760px таблицы: иначе в колонку шириной
-          340px помещалось только «Игрок», а сумма, вывод и итог уезжали за край. */}
+      {/* Мерки у таблицы нет — она ровно по колонке (`.jpg-side .ledger`):
+          любая заданная ширина расходилась с колонкой при её правке. Мерка 280
+          осталась от колонки в 340px, и в нынешние 288 «Итог» уезжал за край. */}
       <LedgerTable
         columns={columns}
         rows={rows}
-        minWidth={280}
         rowKey={(r) => r.key}
         empty={<p className="jpg-wait">{t('noBets')}</p>}
       />

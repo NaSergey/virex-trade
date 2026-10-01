@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { Pencil, Tag as TagIcon, Target, Zap } from 'lucide-react';
+import { ChartNoAxesColumnIncreasing, Pencil, Tag as TagIcon, Target, Zap } from 'lucide-react';
 import type { ExchangePosition } from '@/entities/position';
 import { Tags } from '@/entities/tag';
 import { useLocaleControl } from '@/shared/i18n';
@@ -17,13 +17,11 @@ import { liquidationPrice, toScreen, unrealizedPnl } from '../lib/money';
 /** В полтора раза крупнее прежних 14: по этим кнопкам целятся в терминале. */
 const ICON_SIZE = 21;
 
-/** Сессия идёт по одному инструменту — по BTC (см. StartSession). */
-const SESSION_SYMBOL = 'BTCUSDT';
-
 /** Время в позиции — по симулированному моменту сессии (`cursor`), не по настоящим часам.
  * Тот же приём отказа, что у `fmtAge` в `views/overview/components/OpenPositions.tsx`:
  * «—» на некорректном значении, а не молчаливое зажатие в 0 — вход позже курсора
- * сигнализирует баг в другом месте, и прятать его не нужно. */
+ * сигнализирует баг в другом месте, и прятать его не нужно. Так же читается и
+ * позиция биржи, время открытия которой ещё не известно (пустая строка). */
 function fmtSimAge(entryTime: string, cursor: number, units: { d: string; h: string; m: string }): string {
   const min = Math.floor((cursor - Date.parse(entryTime)) / 60_000);
   if (!Number.isFinite(min) || min < 0) return '—';
@@ -34,7 +32,8 @@ function fmtSimAge(entryTime: string, cursor: number, units: { d: string; h: str
 }
 
 /**
- * Открытые позиции сессии — до двух, лонг и шорт разом (хедж). Ещё не
+ * Открытые позиции сессии — по лонгу и шорту на монету (хедж); монет в эфире
+ * бывает несколько, у истории и тренажёра — одна, BTC. Ещё не
  * сработавшие ордера (сетка на вход, лимиты закрытия) сюда не входят — у них
  * своя вкладка («Ордера», см. OrdersPanel): до срабатывания это не позиция.
  *
@@ -51,22 +50,31 @@ function fmtSimAge(entryTime: string, cursor: number, units: { d: string; h: str
 export function OpenPositionsPanel({
   trades,
   scale,
-  price,
+  priceOf,
+  decimalsOf,
   cursor,
   onLimit,
   onMarket,
   onChangeLevels,
+  onCloseGrid,
   onTags,
 }: {
   trades: BacktestTrade[];
   scale: number;
-  /** Настоящая цена последней показанной минутки. */
-  price: number | null;
+  /**
+   * Настоящая цена монеты сейчас: у монеты графика — последней показанной
+   * минутки, у остальных монет эфира — последняя цена сервера. null — ещё нет.
+   */
+  priceOf: (symbol: string) => number | null;
+  /** Знаков цены монеты; не задано — общее правило формата. */
+  decimalsOf?: (symbol: string) => number | undefined;
   /** Момент симуляции — для «В позиции». */
   cursor: number;
   onLimit: (trade: BacktestTrade) => void;
   onMarket: (trade: BacktestTrade) => void;
   onChangeLevels: (trade: BacktestTrade) => void;
+  /** Сетка фиксации — лимиты закрытия и стоп за тейками. */
+  onCloseGrid: (trade: BacktestTrade) => void;
   onTags: (trade: BacktestTrade) => void;
 }) {
   const t = useTranslations('backtest');
@@ -78,14 +86,17 @@ export function OpenPositionsPanel({
   }
 
   // Ключ строки в PositionsTable — символ и направление: с хеджем этого хватает,
-  // лонг и шорт по одному инструменту у сессии не повторяются.
+  // лонг и шорт по одной монете у сессии не повторяются.
   const byKey = new Map<string, BacktestTrade>();
   const positions: ExchangePosition[] = trades.map((trade) => {
     const remaining = trade.qty - trade.closedQty;
     const entry = toScreen(trade.entryPrice, scale);
-    byKey.set(`${SESSION_SYMBOL}-${trade.direction}`, trade);
+    const price = priceOf(trade.symbol);
+    byKey.set(`${trade.symbol}-${trade.direction}`, trade);
+    // Биржа называет цену ликвидации сама — тогда формула не нужна (и не верна: она про изолированную маржу).
+    const liq = trade.liqPrice !== undefined ? trade.liqPrice : liquidationPrice(trade.direction, trade.entryPrice, trade.leverage);
     return {
-      symbol: SESSION_SYMBOL,
+      symbol: trade.symbol,
       direction: trade.direction,
       size: String(remaining),
       avgPrice: String(entry),
@@ -93,15 +104,17 @@ export function OpenPositionsPanel({
       positionValue: String(remaining * entry),
       unrealisedPnl: price != null ? String(unrealizedPnl(trade.direction, trade.entryPrice, price, remaining)) : undefined,
       leverage: String(trade.leverage),
-      liqPrice: String(toScreen(liquidationPrice(trade.direction, trade.entryPrice, trade.leverage), scale)),
+      liqPrice: liq != null ? String(toScreen(liq, scale)) : undefined,
     };
   });
   const tradeOf = (p: ExchangePosition) => byKey.get(`${p.symbol}-${p.direction}`)!;
 
-  const totalPnl =
-    price != null
-      ? trades.reduce((s, x) => s + unrealizedPnl(x.direction, x.entryPrice, price, x.qty - x.closedQty), 0)
-      : null;
+  // Сумма — только когда известны цены всех монет: без одной она была бы не суммой.
+  const pnls = trades.map((x) => {
+    const price = priceOf(x.symbol);
+    return price != null ? unrealizedPnl(x.direction, x.entryPrice, price, x.qty - x.closedQty) : null;
+  });
+  const totalPnl = pnls.every((v) => v != null) ? pnls.reduce<number>((s, v) => s + v!, 0) : null;
 
   const actions: LedgerColumn<ExchangePosition>[] = [
     {
@@ -118,6 +131,11 @@ export function OpenPositionsPanel({
             <Tooltip text={t('limitClose')}>
               <Button tight aria-label={t('limitClose')} onClick={() => onLimit(trade)}>
                 <Target size={ICON_SIZE} />
+              </Button>
+            </Tooltip>
+            <Tooltip text={t('closeGrid')}>
+              <Button tight aria-label={t('closeGrid')} onClick={() => onCloseGrid(trade)}>
+                <ChartNoAxesColumnIncreasing size={ICON_SIZE} />
               </Button>
             </Tooltip>
             <Tooltip text={t('marketClose')}>
@@ -150,6 +168,7 @@ export function OpenPositionsPanel({
         );
       }}
       extraColumns={actions}
+      priceDecimals={decimalsOf && ((p) => decimalsOf(p.symbol))}
       flush
     />
   );

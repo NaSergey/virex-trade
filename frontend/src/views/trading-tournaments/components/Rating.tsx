@@ -4,7 +4,6 @@ import { useTranslations } from 'next-intl';
 import { useTournamentRating, type RatingRow } from '@/entities/tournament';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
-import { SectionHead } from '@/shared/ui/SectionHead';
 
 /**
  * Сколько строк рейтинга показывать в боковой колонке. Сервер отдаёт до
@@ -21,6 +20,9 @@ const TOP = 10;
  *
  * Колонки «турниров» здесь нет намеренно: в боковой колонке помещаются четыре,
  * и число попыток — справка, а очки с победами — сам результат.
+ *
+ * Своего заголовка нет: рейтинг — вкладка панели игроков (`PlayersPanel`), и
+ * её название стоит на вкладке.
  */
 export function Rating({ viewerId }: { viewerId: string | undefined }) {
   const t = useTranslations('tournaments');
@@ -40,11 +42,7 @@ export function Rating({ viewerId }: { viewerId: string | undefined }) {
   ];
 
   return (
-    <section>
-      <SectionHead title={t('ratingTitle')}>
-        {all.length > TOP && <span className="subtle rating-note">{t('ratingTop', { n: TOP })}</span>}
-      </SectionHead>
-      <p className="subtle rating-note">{t('ratingLead')}</p>
+    <>
       <LedgerTable
         columns={columns}
         rows={rows}
@@ -65,6 +63,6 @@ export function Rating({ viewerId }: { viewerId: string | undefined }) {
           {t('ratingMe', { place: data.me.place, points: data.me.points, wins: data.me.wins })}
         </p>
       )}
-    </section>
+    </>
   );
 }

@@ -46,3 +46,7 @@ yarn-error.log*
 
 # Лог dev-сервера, если его перенаправляют в файл рядом с проектом.
 .devlog.txt
+
+# Кука-джар curl/Playwright с живым refresh_token — не секрет .env, но так же
+# не для гита.
+cookies.txt

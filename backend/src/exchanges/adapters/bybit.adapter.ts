@@ -12,6 +12,7 @@ import {
   Fill,
   FillsResult,
   FundingRow,
+  KeyPermissions,
   PositionsResult,
   RangeResult,
   TimeRange,
@@ -47,17 +48,16 @@ export class BybitAdapter implements ExchangeAdapter {
     const res = await this.balance.getUSDTBalance(creds);
     if (!res.success) return { success: false, error: res.error };
 
-    // Bybit is the one exchange here that will say what a key may do, so it is
-    // the one place the read-only rule can be enforced instead of trusted.
-    // A key that reads fine but cannot be interrogated is reported without
-    // permissions rather than as safe.
-    const info = await this.apiKeys.getApiKeyInfo(creds);
-    if (!info.success) return { success: true };
+    return { success: true, permissions: await this.getKeyPermissions(creds) };
+  }
 
-    return {
-      success: true,
-      permissions: { canTrade: info.canTrade, canWithdraw: info.canWithdraw },
-    };
+  // Bybit is the one exchange here that will say what a key may do. A key
+  // that reads fine but cannot be interrogated comes back without permissions
+  // rather than as read-only.
+  async getKeyPermissions(creds: ExchangeCredentials): Promise<KeyPermissions | undefined> {
+    const info = await this.apiKeys.getApiKeyInfo(creds);
+    if (!info.success) return undefined;
+    return { canTrade: info.canTrade, canWithdraw: info.canWithdraw };
   }
 
   async getBalance(creds: ExchangeCredentials): Promise<BalanceResult> {

@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import { useCloseTable, useMyTables, usePublicTables, type GameTableRow, type GameType } from '@/entities/game-table';
 import { useAuth } from '@/features/auth';
 import { Button } from '@/shared/ui/Button';
+import { CoinIcon } from '@/shared/ui/CoinIcon';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
@@ -31,7 +32,6 @@ export function TablesList({
   stakes: { header: string; render: (row: GameTableRow) => string };
 }) {
   const t = useTranslations('cardTable');
-  const tc = useTranslations('coins');
   const { user } = useAuth();
   const mine = useMyTables();
   const pub = usePublicTables(gameType);
@@ -69,7 +69,11 @@ export function TablesList({
       header: t('colBuyIn'),
       align: 'right',
       cellClassName: 'n',
-      render: (x) => `${x.minBuyIn}–${x.maxBuyIn} ${tc('unit')}`,
+      render: (x) => (
+        <>
+          {x.minBuyIn}–{x.maxBuyIn} <CoinIcon />
+        </>
+      ),
     },
     {
       key: 'players',

@@ -3,10 +3,11 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader, useDialogFade } from '@/shared/ui/dialog';
+import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { Field, Input } from '@/shared/ui/Field';
 import { Slider } from '@/shared/ui/Slider';
 import { fmtPctSigned, formatPriceGrouped } from '@/shared/lib/utils/format';
-import type { BacktestTrade } from '../api/types';
+import type { PositionLike } from '../api/types';
 import { checkLevels, levelSliderRange, toInputPrice, toScreen } from '../lib/money';
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -24,8 +25,9 @@ export function ChangeLevelsModal({
   onClose,
   isPending,
   error,
+  decimals,
 }: {
-  trade: BacktestTrade;
+  trade: PositionLike;
   scale: number;
   /** Текущая экранная цена — источник для диапазонов и процентов. */
   screenPrice: number;
@@ -33,10 +35,14 @@ export function ChangeLevelsModal({
   onClose: () => void;
   isPending: boolean;
   error: unknown;
+  /** Знаков цены монеты сделки; не задано — общее правило формата. */
+  decimals?: number;
 }) {
   const t = useTranslations('backtest');
   const { closing, close } = useDialogFade(onClose);
-  const [stop, setStop] = useState(() => toScreen(trade.stopLoss, scale));
+  // Позиция без стопа (бывает только на бирже) начинает с цены: это заведомо неверный
+  // стоп, и окно не даст применить его, пока человек не поставит свой.
+  const [stop, setStop] = useState(() => (trade.stopLoss > 0 ? toScreen(trade.stopLoss, scale) : screenPrice));
   const [take, setTake] = useState<number | null>(() => (trade.takeProfit != null ? toScreen(trade.takeProfit, scale) : null));
   const takeRange = levelSliderRange('take', screenPrice, trade.direction);
   const stopRange = levelSliderRange('stop', screenPrice, trade.direction);
@@ -49,7 +55,7 @@ export function ChangeLevelsModal({
       <DialogContent>
         <DialogHeader
           title={t('changeLevelsTitle')}
-          subtitle={`${t(`direction.${trade.direction}`)} · ${formatPriceGrouped(toScreen(trade.entryPrice, scale))}`}
+          subtitle={`${trade.symbol} · ${t(`direction.${trade.direction}`)} · ${formatPriceGrouped(toScreen(trade.entryPrice, scale), decimals)}`}
         />
         <DialogBody>
           <Field
@@ -103,7 +109,7 @@ export function ChangeLevelsModal({
             )}
           </Field>
           {err && <p className="neg">{t(err)}</p>}
-          {error != null && <p className="neg">{t('actionFailed')}</p>}
+          <ErrorNote error={error} fallback={t('actionFailed')} />
         </DialogBody>
         <DialogActions
           confirmLabel={t('apply')}

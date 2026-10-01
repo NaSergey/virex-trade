@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { useTerminalAccess } from '@/entities/terminal';
 import { Wrap } from '@/shared/ui/Wrap';
 import { Button } from '@/shared/ui/Button';
 import { Field, Input } from '@/shared/ui/Field';
@@ -15,8 +16,10 @@ import {
   useConnectExchange,
   useDisconnectExchange,
   useExchanges,
+  useKeyPermissions,
   useSetActiveExchange,
   type ExchangeInfo,
+  type KeyPermissions,
 } from './api/hooks';
 import { TelegramCard } from './components/TelegramCard';
 
@@ -210,6 +213,9 @@ function ConnectedExchange({
   onActivate: () => void;
 }) {
   const t = useTranslations('settings');
+  const rights = useKeyPermissions(exchange.id);
+  const perms = rights.data;
+  const hasTerminal = useTerminalAccess().data?.available === true;
   return (
     <>
       <h2>
@@ -227,6 +233,23 @@ function ConnectedExchange({
           ••••••••••••
         </KeyValue>
       )}
+      {/* Подключается ключ с любыми правами — вместо отказа страница говорит,
+          что он умеет. Неизвестное так и названо неизвестным: «биржа не
+          сказала» не значит «только чтение». */}
+      <KeyValue label={t('keyRightsLabel')} valueClassName="">
+        {rights.isLoading ? (
+          <Skeleton as="span" flush height={9} width={120} />
+        ) : perms ? (
+          t(rightsKey(perms))
+        ) : (
+          t('keyRightsUnknown')
+        )}
+      </KeyValue>
+      {/* Торговля — не лишнее право: оно открывает терминал. Сказано это только
+          там, где терминал и правда открыт (активная биржа, право на ордера), —
+          ответом самого терминала, а не догадкой по правам. Лишний только вывод. */}
+      {isActive && hasTerminal && <p className="foot">{t('keyRightsTradeNote', { label: exchange.label })}</p>}
+      {perms?.canWithdraw && <p className="foot">{t('keyRightsWithdrawNote', { label: exchange.label })}</p>}
       <p className="foot">{t('keysStorageNote')}</p>
 
       {/* Кнопка появляется, только когда подключено больше одной биржи:
@@ -238,6 +261,14 @@ function ConnectedExchange({
       )}
     </>
   );
+}
+
+/** Ключ перевода для строки «Права ключа»: чтение есть всегда, остальное — что сказала биржа. */
+function rightsKey({ canTrade, canWithdraw }: KeyPermissions) {
+  if (canTrade && canWithdraw) return 'keyRightsAll';
+  if (canTrade) return 'keyRightsTrade';
+  if (canWithdraw) return 'keyRightsWithdraw';
+  return 'keyRightsReadOnly';
 }
 
 /**

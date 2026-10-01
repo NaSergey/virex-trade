@@ -3,10 +3,11 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader, useDialogFade } from '@/shared/ui/dialog';
+import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { Field, Input } from '@/shared/ui/Field';
 import { Slider } from '@/shared/ui/Slider';
 import { formatMoney, formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
-import type { BacktestTrade } from '../api/types';
+import type { PositionLike } from '../api/types';
 import { fromScreen, levelImpact, toInputPrice, toScreen } from '../lib/money';
 
 const clampPct = (v: number) => Math.max(0, Math.min(100, v));
@@ -25,8 +26,9 @@ export function LimitCloseModal({
   onClose,
   isPending,
   error,
+  decimals,
 }: {
-  trade: BacktestTrade;
+  trade: PositionLike;
   /** Остаток открытой позиции в монете (qty - closedQty). */
   remaining: number;
   scale: number;
@@ -35,6 +37,8 @@ export function LimitCloseModal({
   onClose: () => void;
   isPending: boolean;
   error: unknown;
+  /** Знаков цены монеты сделки; не задано — общее правило формата. */
+  decimals?: number;
 }) {
   const t = useTranslations('backtest');
   const { closing, close } = useDialogFade(onClose);
@@ -48,7 +52,7 @@ export function LimitCloseModal({
       <DialogContent>
         <DialogHeader
           title={t('limitCloseTitle')}
-          subtitle={`${t('entry')} ${formatPriceGrouped(toScreen(trade.entryPrice, scale))} · ${t('unrealized')} ${formatPriceGrouped(screenPrice)}`}
+          subtitle={`${trade.symbol} · ${t('entry')} ${formatPriceGrouped(toScreen(trade.entryPrice, scale), decimals)} · ${t('unrealized')} ${formatPriceGrouped(screenPrice, decimals)}`}
         />
         <DialogBody>
           <Field label={t('closingPrice')}>
@@ -72,9 +76,9 @@ export function LimitCloseModal({
           </Field>
           <Slider value={pct} min={0} max={100} step={1} onChange={(v) => setPct(clampPct(v))} aria-label={t('closedQtyCoin')} />
           <p className="muted">
-            {t('limitCloseHint', { qty: formatQty(qty), price: formatPriceGrouped(price), pnl: formatMoney(impact.usdt) })}
+            {t('limitCloseHint', { qty: formatQty(qty), price: formatPriceGrouped(price, decimals), pnl: formatMoney(impact.usdt) })}
           </p>
-          {error != null && <p className="neg">{t('actionFailed')}</p>}
+          <ErrorNote error={error} fallback={t('actionFailed')} />
         </DialogBody>
         <DialogActions
           confirmLabel={t('limitCloseConfirm')}

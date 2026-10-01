@@ -1,6 +1,5 @@
-'use client';
-
 import type { ReactNode } from 'react';
+import { getServerTerminalHint } from '@/entities/terminal/server-access';
 import { AuthGuard } from '@/features/auth';
 import { DailyRewardPrompt } from '@/features/daily-reward';
 import { OnboardingProvider, TourOverlay } from '@/features/onboarding';
@@ -26,11 +25,18 @@ import { TopNav } from '@/widgets/top-nav';
  * Прокрутка — документа, а не внутренних панелей: страница-гроссбух кончается
  * там, где кончаются записи, и кривая может выйти в край вьюпорта (см. .bleed).
  * Возврат наверх при переходе между разделами делает сам роутер.
+ *
+ * Серверный компонент — ради одной куки: пункт «Терминал» в рейке зависит от
+ * права ключа, которое знает только запрос к API, и без подсказки он появлялся
+ * бы после ответа, сдвигая всю рейку. Тот же приём «кука + серверный
+ * компонент», что у темы и локали в корневом layout. Всё, что внутри, —
+ * клиентские компоненты, как и раньше.
  */
-export default function AppLayout({ children }: { children: ReactNode }) {
+export default async function AppLayout({ children }: { children: ReactNode }) {
+  const initialTerminal = await getServerTerminalHint();
   return (
     <OnboardingProvider>
-      <TopNav />
+      <TopNav initialTerminal={initialTerminal} />
       <AuthGuard>{children}</AuthGuard>
       {/* Обучение — последним слоем и снаружи защиты: рейка, которую оно
           подсвечивает первым шагом, тоже стоит снаружи. Провайдер обнимает

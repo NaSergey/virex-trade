@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MINUTE, type Candle } from './candles';
-import { checkMinute, findExit, type Position } from './fills';
+import { checkMinute, findExit, isPartialExit, type Position } from './fills';
 
 const T = Date.UTC(2024, 2, 5, 12, 0);
 const m = (o: number, h: number, l: number, c: number, t = T): Candle => ({ t, o, h, l, c });
@@ -118,5 +118,22 @@ describe('findExit', () => {
 
   it('минутка, которая закрывается после to, не проверяется', () => {
     expect(findExit(LONG, series, T, T + MINUTE)).toBeNull();
+  });
+});
+
+describe('isPartialExit', () => {
+  const trade = { qty: 3, closedQty: 1 };
+  const at = { price: 105, time: T };
+
+  it('лимит закрытия на часть остатка — частичное: позиция остаётся открытой', () => {
+    expect(isPartialExit(trade, { ...at, reason: 'limit', qty: 1, closeOrderId: 'o1' })).toBe(true);
+  });
+
+  it('лимит на весь остаток, стоп и тейк — полное закрытие', () => {
+    expect(isPartialExit(trade, { ...at, reason: 'limit', qty: 2, closeOrderId: 'o1' })).toBe(false);
+    // Погрешность сложения долей сетки полным закрытием не мешает.
+    expect(isPartialExit(trade, { ...at, reason: 'limit', qty: 2 - 1e-12, closeOrderId: 'o1' })).toBe(false);
+    expect(isPartialExit(trade, { ...at, reason: 'stop' })).toBe(false);
+    expect(isPartialExit(trade, { ...at, reason: 'take' })).toBe(false);
   });
 });

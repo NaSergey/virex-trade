@@ -169,10 +169,10 @@ describe('wrap', () => {
 });
 
 describe('shipSize', () => {
-  it('корпус — четверть поля, в пределах 70–170 px', () => {
-    expect(shipSize(100).hull).toBe(70);
-    expect(shipSize(2000).hull).toBe(170);
-    expect(shipSize(400).hull).toBeCloseTo(104);
+  it('корпус — пятая часть поля, в пределах 56–136 px', () => {
+    expect(shipSize(100).hull).toBe(56);
+    expect(shipSize(2000).hull).toBe(136);
+    expect(shipSize(400).hull).toBeCloseTo(80);
   });
 });
 

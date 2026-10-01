@@ -12,6 +12,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
+import { LIVE_SYMBOL_IDS } from '../../market-data/symbols';
 import type { Direction, ExitReason } from '../backtest-math';
 
 export class CreateSessionDto {
@@ -28,8 +29,8 @@ export class CreateSessionDto {
 
   /** Не задан — реальная история. */
   @IsOptional()
-  @IsIn(['real', 'synthetic'])
-  dataSource?: 'real' | 'synthetic';
+  @IsIn(['real', 'synthetic', 'live'])
+  dataSource?: 'real' | 'synthetic' | 'live';
 }
 
 export class AdvanceDto {
@@ -38,6 +39,11 @@ export class AdvanceDto {
 }
 
 export class OpenTradeDto {
+  /** Монета сделки; не задана — BTC. Не-BTC принимает только эфир. */
+  @IsOptional()
+  @IsIn(LIVE_SYMBOL_IDS)
+  symbol?: string;
+
   @IsIn(['long', 'short'])
   direction: Direction;
 
@@ -103,6 +109,11 @@ export class AddToTradeDto {
 }
 
 export class SetLeverageDto {
+  /** Плечо задаётся на монету, как на бирже; не задана — BTC. */
+  @IsOptional()
+  @IsIn(LIVE_SYMBOL_IDS)
+  symbol?: string;
+
   @IsNumber()
   @Min(1)
   @Max(100)
@@ -115,6 +126,24 @@ export class CreateCloseOrderDto {
 
   @IsPositive()
   qty: number;
+}
+
+/** Сетка фиксации позиции: цены лимитов закрытия и «стоп за тейками». */
+export class CreateCloseGridDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(10)
+  @IsPositive({ each: true })
+  prices: number[];
+
+  @IsBoolean()
+  stopFollow: boolean;
+}
+
+/** Новая цена висящего ордера — перенос жестом на графике. */
+export class MoveOrderDto {
+  @IsPositive()
+  price: number;
 }
 
 export class CloseTradeDto {
@@ -137,6 +166,11 @@ export class CloseTradeDto {
 }
 
 export class CreateEntryOrdersDto {
+  /** Монета сетки; не задана — BTC. */
+  @IsOptional()
+  @IsIn(LIVE_SYMBOL_IDS)
+  symbol?: string;
+
   @IsIn(['long', 'short'])
   direction: Direction;
 

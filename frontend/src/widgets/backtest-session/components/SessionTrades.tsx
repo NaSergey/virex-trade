@@ -14,9 +14,6 @@ import { TradeDetails } from './TradeDetails';
 /** Столько же записей на лист, сколько в журнале обзора (см. OverviewPage). */
 const PAGE_SIZE = 10;
 
-/** Сессия идёт по одному инструменту — по BTC (см. StartSession). */
-const SESSION_SYMBOL = 'BTCUSDT';
-
 /**
  * Сделка сессии в форме журнальной записи. Цены переводятся в показ (`toScreen`):
  * пока сессия идёт, настоящие цены могут быть скрыты, и таблица обязана
@@ -25,7 +22,7 @@ const SESSION_SYMBOL = 'BTCUSDT';
 function toTrade(x: BacktestTrade, scale: number): Trade {
   return {
     id: x.id,
-    symbol: SESSION_SYMBOL,
+    symbol: x.symbol,
     direction: x.direction,
     qty: x.qty,
     avgEntryPrice: toScreen(x.entryPrice, scale),
@@ -61,6 +58,7 @@ export function SessionTrades({
   scale,
   labelFor,
   onEditTags,
+  decimalsOf,
 }: {
   trades: BacktestTrade[];
   /** Масштаб показа; у завершённой сессии — 1, цены раскрыты. */
@@ -68,6 +66,8 @@ export function SessionTrades({
   labelFor: (t: number) => string;
   /** Без обработчика тег из таблицы не завести — плашки останутся только на чтение. */
   onEditTags?: (trade: BacktestTrade) => void;
+  /** Знаков цены монеты (эфир); не задано — общее правило формата. */
+  decimalsOf?: (symbol: string) => number | undefined;
 }) {
   const t = useTranslations('backtest');
   const [page, setPage] = useState(1);
@@ -86,7 +86,10 @@ export function SessionTrades({
         trades={pageRows.map((x) => toTrade(x, scale))}
         formatClosed={(iso) => labelFor(Date.parse(iso))}
         chart={false}
-        renderExpanded={(tr) => <TradeDetails trade={byId.get(tr.id)!} scale={scale} labelFor={labelFor} />}
+        priceDecimals={decimalsOf && ((tr) => decimalsOf(tr.symbol))}
+        renderExpanded={(tr) => (
+          <TradeDetails trade={byId.get(tr.id)!} scale={scale} labelFor={labelFor} decimals={decimalsOf?.(tr.symbol)} />
+        )}
         onEditTags={onEditTags && ((tr) => onEditTags(byId.get(tr.id)!))}
         empty={<EmptyState title={t('noTrades')} />}
       />

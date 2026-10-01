@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useCoinBalance } from '@/entities/coins';
 import { useJoinTable } from '@/entities/game-table';
+import { CoinIcon } from '@/shared/ui/CoinIcon';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { Field, Input } from '@/shared/ui/Field';
 import { Slider } from '@/shared/ui/Slider';
@@ -43,7 +44,7 @@ export function BuyInDialog({
               <Input
                 id={id}
                 full
-                suffix={tc('unit')}
+                suffix={<CoinIcon />}
                 inputMode="numeric"
                 value={String(amount)}
                 disabled={!enough}

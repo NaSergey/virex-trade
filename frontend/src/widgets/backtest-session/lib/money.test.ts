@@ -11,6 +11,7 @@ import {
   formatR,
   fromScreen,
   impliedDirection,
+  levelDirection,
   levelImpact,
   levelSliderRange,
   liquidationPrice,
@@ -23,6 +24,7 @@ import {
   toInputPrice,
   toScreen,
   unrealizedPnl,
+  withoutLockedLevels,
 } from './money';
 
 describe('previewSize', () => {
@@ -405,5 +407,43 @@ describe('levelImpact', () => {
     const { pct, usdt } = levelImpact('long', 100, 105, 50);
     expect(pct).toBeCloseTo(5, 6);
     expect(usdt).toBeGreaterThan(0);
+  });
+});
+
+describe('levelDirection', () => {
+  it('стоп ниже цены и тейк выше — лонг, наоборот — шорт', () => {
+    expect(levelDirection('stop', 95, 100)).toBe('long');
+    expect(levelDirection('stop', 105, 100)).toBe('short');
+    expect(levelDirection('take', 110, 100)).toBe('long');
+    expect(levelDirection('take', 90, 100)).toBe('short');
+  });
+});
+
+/**
+ * По стороне с открытой позицией «Лонг/Шорт» доливает её по стопу позиции, и
+ * стоп с тейком черновика для этой стороны были бы ничьими.
+ */
+describe('withoutLockedLevels', () => {
+  const d = (stop: string, take: string) => ({ risk: '1', stop, take, leverage: '1' });
+
+  it('без открытых позиций — тот же объект', () => {
+    const draft = d('95', '110');
+    expect(withoutLockedLevels(draft, 100, [])).toBe(draft);
+  });
+
+  it('открыт лонг — стоп и тейк лонга сняты, шорта остаются', () => {
+    expect(withoutLockedLevels(d('95', '110'), 100, ['long'])).toEqual(d('', ''));
+    const short = d('105', '90');
+    expect(withoutLockedLevels(short, 100, ['long'])).toBe(short);
+  });
+
+  it('открыт шорт — зеркально', () => {
+    expect(withoutLockedLevels(d('105', '90'), 100, ['short'])).toEqual(d('', ''));
+    const long = d('95', '110');
+    expect(withoutLockedLevels(long, 100, ['short'])).toBe(long);
+  });
+
+  it('открыты обе стороны — уровней нет вовсе', () => {
+    expect(withoutLockedLevels(d('95', '90'), 100, ['long', 'short'])).toEqual(d('', ''));
   });
 });

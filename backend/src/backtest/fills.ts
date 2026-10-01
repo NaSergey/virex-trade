@@ -5,7 +5,7 @@ import type { Direction } from './backtest-math';
  * `frontend/src/widgets/backtest-session/lib/fills.ts`, те же правила и те же тесты.
  *
  * Копия, а не вторая логика одного режима: историю бектеста и турнира исполняет
- * браузер, эфир турнира — сервер (`tournaments/tournament-runner.service.ts`),
+ * браузер, эфир — сервер (`live-engine.service.ts`),
  * потому что время там идёт и без открытой вкладки. Внутри режима реализация одна.
  *
  * Время выхода задаёт вызывающий: у отрезка эфира это время тика, а не
@@ -68,4 +68,23 @@ export function checkMinute(p: Position, m: Bar, closeOrders: CloseOrder[] = [])
   const fired = closestToOpen(touched, m.o);
   if (fired) return { reason: 'limit', price: fired.price, qty: fired.qty, closeOrderId: fired.id };
   return null;
+}
+
+/** Уровень на вход (лимитка или ступень сетки): до срабатывания сделки ещё нет. */
+export interface EntryLevel {
+  id: string;
+  price: number;
+}
+
+/**
+ * Уровни на вход, задетые отрезком, — от ближайшего к открытию: его цена
+ * достигла бы первым. Правило то же, что у `findEntryFill` браузера: гэпа нет,
+ * уровень либо в диапазоне отрезка, либо ждёт. Браузер берёт один уровень за
+ * минутку, эфир — все задетые: отрезок в две секунды не повторится, и уровень,
+ * пропущенный в нём, ждал бы, пока цена вернётся.
+ */
+export function touchedEntries<T extends EntryLevel>(orders: T[], m: Bar): T[] {
+  return orders
+    .filter((o) => o.price <= m.h && o.price >= m.l)
+    .sort((a, b) => Math.abs(a.price - m.o) - Math.abs(b.price - m.o));
 }

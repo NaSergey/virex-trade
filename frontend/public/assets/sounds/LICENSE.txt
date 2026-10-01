@@ -1,0 +1,24 @@
+Звуки карточных столов и джетпака — из паков Kenney (www.kenney.nl), все CC0 1.0
+(Creative Commons Zero, http://creativecommons.org/publicdomain/zero/1.0/):
+можно в коммерческом продукте, атрибуция не обязательна.
+
+Casino Audio 1.1 — https://kenney.nl/assets/casino-audio
+  shuffle.mp3   card-shuffle.ogg (0.05–0.8 с, затухание в конце)
+  deal-1..4     card-slide-1..4
+  flip-1..4     card-place-1..4
+  fold-1..2     card-shove-1..2
+  chip.mp3      chip-lay-1 (единственный вариант: lay-2 и lay-3 глуше и с отскоками)
+  sweep-1..2    chips-handle-1..2
+  win-1, win-2  chips-stack-1, chips-stack-3
+
+Interface Sounds — https://kenney.nl/assets/interface-sounds
+  turn.mp3      confirmation_001.ogg
+  tick.mp3      tick_004.ogg
+
+Sci-Fi Sounds 1.0 — https://kenney.nl/assets/sci-fi-sounds (взрыв джетпака)
+  explosion.mp3      explosionCrunch_004.ogg (раскат с хрустом)
+  explosion-low.mp3  lowFrequency_explosion_000.ogg (низкий удар; стерео сведено
+                     средним каналов, а не суммой: сумма поднимала пик до 0 dBFS)
+
+Конвертация: MP3 моно 44.1 кГц 96 кбит/с, тишина в начале срезана (звук идёт
+за анимацией и не должен опаздывать), пик -1 dBFS.

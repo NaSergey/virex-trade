@@ -14,7 +14,6 @@ import {
   useBacktestSessions,
   useBacktestStats,
   useDeleteSession,
-  type DataSource,
   type SessionListItem,
 } from '@/widgets/backtest-session';
 
@@ -30,8 +29,7 @@ export function BacktestPage() {
   const t = useTranslations('backtest');
   const router = useRouter();
   const sessions = useBacktestSessions();
-  const [statsSource, setStatsSource] = useState<DataSource>('real');
-  const stats = useBacktestStats(statsSource);
+  const stats = useBacktestStats('real');
   const { user } = useAuth();
   const deleteSession = useDeleteSession();
   const [deleting, setDeleting] = useState<SessionListItem | null>(null);
@@ -60,8 +58,6 @@ export function BacktestPage() {
             isLoading={sessions.isLoading}
             onOpen={openSession}
             onDelete={setDeleting}
-            source={statsSource}
-            onSource={setStatsSource}
           />
           <StatsBlock stats={stats.data} isLoading={stats.isLoading} />
         </div>

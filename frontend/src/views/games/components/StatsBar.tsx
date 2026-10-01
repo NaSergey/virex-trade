@@ -28,7 +28,7 @@ export function StatsBar() {
         <span>{t('stats.community')}</span>
       </div>
       <div className="gstats-brand">
-        <b>VIREX</b>
+        <b>TRADE PLAY</b>
         <span>{t('stats.slogan')}</span>
       </div>
     </section>

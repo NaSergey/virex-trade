@@ -1,3 +1,4 @@
+import { LiveEngineService } from '../backtest/live-engine.service';
 import { TournamentRunnerService } from './tournament-runner.service';
 
 /**
@@ -32,6 +33,7 @@ const TOURNAMENT = {
 const openTrade = (over: Record<string, unknown> = {}) => ({
   id: 't1',
   sessionId: 's1',
+  symbol: 'BTCUSDT',
   direction: 'long',
   entryTime: new Date(T - MIN),
   entryPrice: 100,
@@ -47,8 +49,9 @@ const openTrade = (over: Record<string, unknown> = {}) => ({
 function makeRunner(opts: {
   tournaments?: any[];
   trades?: any[];
-  minutes?: any[];
+  minutes?: any[] | ((symbol: string) => any[]);
   due?: any[];
+  dueStart?: any[];
   finalizeError?: Error;
 } = {}) {
   const saved: any[] = [];
@@ -60,17 +63,28 @@ function makeRunner(opts: {
         return {};
       }),
     },
-    backtestTrade: { findMany: jest.fn(async () => opts.trades ?? []) },
+    // Фильтр по монете — как у базы: движок и финал спрашивают сделки монеты.
+    backtestTrade: {
+      findMany: jest.fn(async (args: any) =>
+        (opts.trades ?? []).filter((t) => !args?.where?.symbol || t.symbol === args.where.symbol),
+      ),
+    },
+    backtestEntryOrder: { findMany: jest.fn(async () => []) },
     backtestSession: { findMany: jest.fn(async () => [{ id: 's1', userId: 'u1' }]) },
   };
   const live = {
-    minutesSince: jest.fn(async () => opts.minutes ?? []),
+    minutesSince: jest.fn(async (symbol: string) =>
+      typeof opts.minutes === 'function' ? opts.minutes(symbol) : (opts.minutes ?? []),
+    ),
   };
   const backtest = {
     systemClose: jest.fn(async () => true),
+    systemEnter: jest.fn(async () => true),
     finishTournamentSession: jest.fn(async () => undefined),
   };
   const tournaments = {
+    dueForStart: jest.fn(async () => opts.dueStart ?? []),
+    startScheduled: jest.fn(async () => 'started'),
     dueForFinal: jest.fn(async () => opts.due ?? []),
     finalize: jest.fn(async () => {
       if (opts.finalizeError) throw opts.finalizeError;
@@ -78,9 +92,13 @@ function makeRunner(opts: {
     }),
   };
 
+  // Движок настоящий: исполнение уровней — его работа, и тесты ниже проверяют
+  // её через тик турнира.
+  const engine = new LiveEngineService(prisma as never, live as never, backtest as never);
   const runner = new TournamentRunnerService(
     prisma as never,
     live as never,
+    engine,
     backtest as never,
     tournaments as never,
   );
@@ -181,7 +199,7 @@ describe('TournamentRunnerService.tick — исполнение уровней',
 
     // Читаем с прошлой границы, а не с начала — и старое движение не
     // исполняется второй раз.
-    expect(h.live.minutesSince).toHaveBeenLastCalledWith(T + 2 * MIN, T + 3 * MIN);
+    expect(h.live.minutesSince).toHaveBeenLastCalledWith('BTCUSDT', T + 2 * MIN, T + 3 * MIN);
     expect(h.backtest.systemClose).not.toHaveBeenCalled();
   });
 
@@ -230,18 +248,19 @@ describe('TournamentRunnerService.tick — финал', () => {
     const h = makeRunner({
       tournaments: [],
       due: [ENDED],
+      trades: [openTrade()],
       // Минутка, которой кончается турнир, уже закрыта.
       minutes: [bar(T, 100, 105, 99, 103)],
     });
 
     await h.runner.tick();
 
-    expect(h.backtest.finishTournamentSession).toHaveBeenCalledWith('s1', ENDED.endsAt, 103);
+    expect(h.backtest.finishTournamentSession).toHaveBeenCalledWith('s1', ENDED.endsAt, { BTCUSDT: 103 });
     expect(h.tournaments.finalize).toHaveBeenCalledWith(ENDED);
   });
 
   it('без закрытой финальной минутки итоги ждут следующего тика', async () => {
-    const h = makeRunner({ tournaments: [], due: [ENDED], minutes: [] });
+    const h = makeRunner({ tournaments: [], due: [ENDED], trades: [openTrade()], minutes: [] });
 
     await h.runner.tick();
 
@@ -253,6 +272,7 @@ describe('TournamentRunnerService.tick — финал', () => {
     const h = makeRunner({
       tournaments: [],
       due: [{ ...ENDED, id: 'bad' }, { ...ENDED, id: 'good' }],
+      trades: [openTrade()],
       minutes: [bar(T, 100, 105, 99, 103)],
     });
     h.tournaments.finalize.mockRejectedValueOnce(new Error('упало'));
@@ -260,5 +280,67 @@ describe('TournamentRunnerService.tick — финал', () => {
     await expect(h.runner.tick()).resolves.toBeUndefined();
 
     expect(h.tournaments.finalize).toHaveBeenCalledTimes(2);
+  });
+
+  it('финальная цена — у каждой монеты открытых позиций своя', async () => {
+    const h = makeRunner({
+      tournaments: [],
+      due: [ENDED],
+      trades: [openTrade(), openTrade({ id: 't2', symbol: 'ETHUSDT' })],
+      minutes: (symbol) => [symbol === 'ETHUSDT' ? bar(T, 2_500, 2_520, 2_490, 2_510) : bar(T, 100, 105, 99, 103)],
+    });
+
+    await h.runner.tick();
+
+    expect(h.backtest.finishTournamentSession).toHaveBeenCalledWith('s1', ENDED.endsAt, {
+      BTCUSDT: 103,
+      ETHUSDT: 2_510,
+    });
+  });
+
+  it('нет цены хоть одной монеты — итоги ждут', async () => {
+    const h = makeRunner({
+      tournaments: [],
+      due: [ENDED],
+      trades: [openTrade(), openTrade({ id: 't2', symbol: 'ETHUSDT' })],
+      minutes: (symbol) => (symbol === 'ETHUSDT' ? [] : [bar(T, 100, 105, 99, 103)]),
+    });
+
+    await h.runner.tick();
+
+    expect(h.backtest.finishTournamentSession).not.toHaveBeenCalled();
+    expect(h.tournaments.finalize).not.toHaveBeenCalled();
+  });
+
+  it('без открытых позиций итоги не ждут ни одной цены', async () => {
+    const h = makeRunner({ tournaments: [], due: [ENDED], trades: [], minutes: [] });
+
+    await h.runner.tick();
+
+    expect(h.live.minutesSince).not.toHaveBeenCalled();
+    expect(h.backtest.finishTournamentSession).toHaveBeenCalledWith('s1', ENDED.endsAt, {});
+    expect(h.tournaments.finalize).toHaveBeenCalledWith(ENDED);
+  });
+});
+
+describe('TournamentRunnerService.tick — старт по времени', () => {
+  const LOBBY = { ...TOURNAMENT, status: 'lobby', startsAt: new Date(T + MIN) };
+
+  it('каждое лобби с наступившим временем уходит в startScheduled', async () => {
+    const h = makeRunner({ tournaments: [], dueStart: [LOBBY, { ...LOBBY, id: 'tn2' }] });
+
+    await h.runner.tick();
+
+    expect(h.tournaments.startScheduled).toHaveBeenCalledWith(LOBBY.id, new Date(T + 2 * MIN));
+    expect(h.tournaments.startScheduled).toHaveBeenCalledWith('tn2', new Date(T + 2 * MIN));
+  });
+
+  it('падение одного старта не мешает другому', async () => {
+    const h = makeRunner({ tournaments: [], dueStart: [{ ...LOBBY, id: 'bad' }, { ...LOBBY, id: 'good' }] });
+    h.tournaments.startScheduled.mockRejectedValueOnce(new Error('упало'));
+
+    await expect(h.runner.tick()).resolves.toBeUndefined();
+
+    expect(h.tournaments.startScheduled).toHaveBeenCalledTimes(2);
   });
 });

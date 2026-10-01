@@ -123,6 +123,7 @@ export function TradesTable({
   formatClosed,
   chart = true,
   renderExpanded,
+  priceDecimals,
 }: {
   trades: Trade[];
   isLoading?: boolean;
@@ -163,6 +164,12 @@ export function TradesTable({
    * тейк, риск и то, чем всё кончилось.
    */
   renderExpanded?: (trade: Trade) => React.ReactNode;
+  /**
+   * Знаков цены у инструмента строки — у монет эфира бектеста они известны.
+   * Не задано — общее правило `formatPriceGrouped`, как в журнале. Действует
+   * только без окна графика (`chart={false}`): там цена печатается здесь.
+   */
+  priceDecimals?: (trade: Trade) => number | undefined;
 }) {
   const t = useTranslations('tradesTable');
   const { locale } = useLocaleControl();
@@ -202,7 +209,7 @@ export function TradesTable({
         chart ? (
           <PriceCue price={tr.avgEntryPrice} trade={tr} onOpen={setChartTrade} title={t('showOnChartTitle')} tour />
         ) : (
-          formatPriceGrouped(tr.avgEntryPrice)
+          formatPriceGrouped(tr.avgEntryPrice, priceDecimals?.(tr))
         ),
     },
     {
@@ -215,7 +222,7 @@ export function TradesTable({
         chart ? (
           <PriceCue price={tr.avgExitPrice} trade={tr} onOpen={setChartTrade} title={t('showOnChartTitle')} />
         ) : (
-          formatPriceGrouped(tr.avgExitPrice)
+          formatPriceGrouped(tr.avgExitPrice, priceDecimals?.(tr))
         ),
     },
     ...(range

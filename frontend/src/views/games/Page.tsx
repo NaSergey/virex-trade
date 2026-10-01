@@ -30,11 +30,14 @@ export function GamesPage() {
     <>
       <div className="games-bg" aria-hidden />
       <Wrap page className="games-page">
-        <GamesHero playHref={playable?.href} />
-        <div className="gcards">
-          {GAMES.map((game) => (
-            <GameCard key={game.id} game={game} />
-          ))}
+        {/* Баннер и карточки — ровно окно под шапкой (.gfirst). */}
+        <div className="gfirst">
+          <GamesHero playHref={playable?.href} />
+          <div className="gcards">
+            {GAMES.map((game) => (
+              <GameCard key={game.id} game={game} />
+            ))}
+          </div>
         </div>
         <PlatformBanner />
         <StatsBar />
