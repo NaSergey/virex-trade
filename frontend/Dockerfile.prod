@@ -25,6 +25,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # /auth/* отвечает 500, хотя api при этом полностью здоров.
 ARG API_INTERNAL_URL=http://api:8091
 ENV API_INTERNAL_URL=$API_INTERNAL_URL
+# Та же грабля для процесса игр: rewrites игровых адресов запекаются на сборке.
+ARG GAMES_INTERNAL_URL=http://games:8092
+ENV GAMES_INTERNAL_URL=$GAMES_INTERNAL_URL
 
 RUN npm run build
 

@@ -1,75 +1,50 @@
 'use client';
 
-import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader, useDialogFade } from '@/shared/ui/dialog';
-import { Field, Input } from '@/shared/ui/Field';
 
 export interface ConfirmRequest {
   title: string;
   subtitle: string;
   /** Что именно произойдёт — по пункту на последствие, без обобщений. */
   consequences: string[];
-  /** Слово, которое нужно набрать: подтверждение делом, а не рефлексом. */
-  word: string;
   onConfirm: () => void;
 }
 
 /**
- * Необратимое действие подтверждается набором слова, а не второй кнопкой.
+ * Необратимое действие подтверждается отдельным окном с перечисленными
+ * последствиями — не вторым кликом по той же кнопке, а решением, принятым
+ * после того, как прочитано, что именно случится.
  *
- * Прежний двухшаговый «нажми ещё раз в течение 4 секунд» отличался от обычного
- * клика только скоростью — то есть отменял ошибку темпа, но не ошибку решения,
- * и ничего не сообщал о последствиях. Здесь перечислено, что именно случится, и
- * подтверждение требует прочитать слово и его напечатать.
+ * Прежде ещё требовалось набрать слово руками: это отличалось от обычного
+ * клика скоростью, а не вниманием, и каждое удаление или отключение
+ * превращалось в лишний ввод текста там, где достаточно один раз прочитать
+ * последствия и нажать кнопку. Снято владельцем 2026-10-01.
  *
- * Разговор идёт сверху вниз: что за действие → что после него будет → чем
- * подтвердить. Последствия стоят ДО поля намеренно: набирать слово, не
- * прочитав, за что, — тот же рефлекс, ради отмены которого диалог и заведён.
- * Раньше они приходили в запросе, но на экран не выводились вовсе — оставалось
- * требование напечатать слово без единого объяснения, зачем.
+ * Разговор идёт сверху вниз: что за действие → что после него будет →
+ * кнопка. Последствия стоят в теле окна, а не в подписи, — их может быть
+ * несколько, и подпись под заголовком для списка не годится.
  */
 export function ConfirmDialog({ request, onClose }: { request: ConfirmRequest; onClose: () => void }) {
   const t = useTranslations('common');
   const { closing, close } = useDialogFade(onClose);
-  const [typed, setTyped] = useState('');
-  const matches = typed.trim().toUpperCase() === request.word.toUpperCase();
 
   return (
     <Dialog open={!closing} onOpenChange={(v) => !v && close()}>
       {/* Кромка цветом убытка — то единственное, чем окно необратимого
           отличается от обычного диалога ещё до того, как прочитан заголовок. */}
-      {/* Единственное окно, которое открывают ради ввода: фокус сразу в поле
-          слова — здесь это не мешает прокрутке, поле обычное текстовое. */}
-      <DialogContent className="dlg-risk" autoFocusContent>
+      <DialogContent className="dlg-risk">
         <DialogHeader title={request.title} subtitle={request.subtitle} />
         <DialogBody>
-          <Field
-            className="cfm-word"
-            label={
-              <>
-                {t('typeWordPrefix')} <span className="cfm-key">{request.word}</span>
-              </>
-            }
-            htmlFor="confirm-word"
-          >
-            {/* Плейсхолдера нет: он повторял ровно то слово, которое надо
-                набрать, и пустое поле выглядело уже заполненным. */}
-            <Input
-              id="confirm-word"
-              full
-              autoComplete="off"
-              autoFocus
-              data-ok={matches}
-              value={typed}
-              onChange={(e) => setTyped(e.target.value)}
-            />
-          </Field>
+          <ul className="cfm-list">
+            {request.consequences.map((c) => (
+              <li key={c}>{c}</li>
+            ))}
+          </ul>
         </DialogBody>
         <DialogActions
           confirmLabel={t('confirm')}
           confirmVariant="risk"
-          confirmDisabled={!matches}
           onConfirm={() => {
             request.onConfirm();
             close();

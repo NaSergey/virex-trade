@@ -11,9 +11,15 @@
 
 ```
 браузер ──https──▶ Caddy (80/443, сертификат Let's Encrypt)
+                     ├──▶ /api/games/*, /api/jetpack → games (NestJS, :8092) ──▶ db
                      ├──▶ /api/*, /auth/* → api (NestJS, :8091) ──▶ db (Postgres)
                      └──▶ остальное       → web (Next.js, :8090)
 ```
+
+`games` — тот же образ backend в роли `ROLE=games`: покер, блэкджек, джетпак и их
+сокет. Раздачи живут в его памяти, поэтому контейнер ровно один (`container_name`
+в compose не даёт `--scale`). При варианте с nginx хоста (без Caddy) всё идёт в
+`web`, и игровые адреса разводят rewrites Next (`GAMES_INTERNAL_URL`).
 
 Наружу открыт только Caddy. `web` слушает `127.0.0.1:8090` (снаружи не
 виден), `api` и `db` портов на хосте не занимают вовсе. Caddy различает

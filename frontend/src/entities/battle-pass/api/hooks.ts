@@ -11,8 +11,12 @@ export const battlePassKey = ['battlepass'] as const;
  * собственных действий человека — доигранного турнира, законченной сессии,
  * размеченной сделки, — и точки, где это происходит, сбрасывают ключ сами.
  */
-export const useBattlePass = () =>
-  useQuery({ queryKey: battlePassKey, queryFn: () => apiJson<BattlePassState>('/api/battlepass') });
+/**
+ * `enabled: false` — на чужом профиле, который может открыть и гость: Battle
+ * Pass — ключ смотрящего, и у гостя запрос получил бы 401.
+ */
+export const useBattlePass = (enabled = true) =>
+  useQuery({ queryKey: battlePassKey, queryFn: () => apiJson<BattlePassState>('/api/battlepass'), enabled });
 
 const post = (path: string) => apiJson<{ coins: number; balance: number }>(path, { method: 'POST' });
 
@@ -29,6 +33,10 @@ function useClaimMutation(path: string) {
     onSuccess: ({ balance }) => {
       qc.setQueryData(['coins'], { balance });
       void qc.invalidateQueries({ queryKey: battlePassKey });
+      // Дашборд профиля (`entities/profile`, ключ строкой — сущности друг
+      // друга не импортируют): выдача — новая строка ленты и точка графика
+      // баланса.
+      void qc.invalidateQueries({ queryKey: ['profile'] });
     },
   });
 }

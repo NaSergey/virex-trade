@@ -2,9 +2,8 @@
 
 import { Wrap } from '@/shared/ui/Wrap';
 import { GameCard } from './components/GameCard';
+import { CoinsInfo } from './components/CoinsInfo';
 import { GamesHero } from './components/GamesHero';
-import { PlatformBanner } from './components/PlatformBanner';
-import { StatsBar } from './components/StatsBar';
 import { GAMES } from './model/games';
 
 /**
@@ -14,34 +13,31 @@ import { GAMES } from './model/games';
  * стоит в шапке продукта, а не здесь: тратят монеты внутри игр, а видеть
  * остаток надо с любой страницы.
  *
- * Страница идёт сверху вниз одним рассказом: что здесь происходит (герой) → во
- * что можно играть (карточки) → зачем это собрано вместе (платформа) → чем
- * раздел является в цифрах. Порядок держит человека, пришедшего из журнала
- * сделок: он не искал игру, ему её показывают.
+ * Страница идёт сверху вниз: сцена (баннер со светом) → во что можно играть
+ * (карточки) → на что играют (монеты: откуда берутся и чего с ними нельзя).
+ * Порядок держит человека, пришедшего из журнала сделок: он не искал игру,
+ * ему её показывают — и говорят, что деньги счёта здесь ни при чём.
  *
  * Цветная заливка (`.games-bg`) — отдельный слой под всей страницей, а не фон
- * блоков: в разделе меняется обстановка, а не оформление одного блока, и
- * наливается она при заходе сюда. Слой фиксированный, поэтому не уезжает при
- * прокрутке и не участвует в раскладке.
+ * блоков: в разделе меняется обстановка, а не оформление одного блока. Сам
+ * слой — общий у трёх тёмных маршрутов раздела игр, рендерится в `(app)`
+ * layout (`GamesVeil`), а не здесь: наливается при заходе и гаснет при
+ * выходе одним и тем же переходом, который не прервёт размонтирование этой
+ * страницы.
  */
 export function GamesPage() {
-  const playable = GAMES.find((g) => g.available);
   return (
-    <>
-      <div className="games-bg" aria-hidden />
-      <Wrap page className="games-page">
-        {/* Баннер и карточки — ровно окно под шапкой (.gfirst). */}
-        <div className="gfirst">
-          <GamesHero playHref={playable?.href} />
-          <div className="gcards">
-            {GAMES.map((game) => (
-              <GameCard key={game.id} game={game} />
-            ))}
-          </div>
+    <Wrap page className="games-page">
+      {/* Баннер и карточки — ровно окно под шапкой (.gfirst). */}
+      <div className="gfirst">
+        <GamesHero />
+        <div className="gcards">
+          {GAMES.map((game) => (
+            <GameCard key={game.id} game={game} />
+          ))}
         </div>
-        <PlatformBanner />
-        <StatsBar />
-      </Wrap>
-    </>
+      </div>
+      <CoinsInfo />
+    </Wrap>
   );
 }

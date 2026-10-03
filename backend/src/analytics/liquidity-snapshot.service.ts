@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { BYBIT_API, bybitFetch } from '../bybit/bybit-gate';
 import { PrismaService } from '../prisma/prisma.service';
 import { runsBackgroundJobs } from '../role';
 
@@ -64,8 +65,8 @@ export class LiquiditySnapshotService implements OnApplicationBootstrap, OnModul
   }
 
   private async snapshotOne(symbol: string): Promise<boolean> {
-    const response = await fetch(
-      `https://api.bybit.com/v5/market/orderbook?category=linear&symbol=${encodeURIComponent(symbol)}&limit=${DEPTH_LEVELS}`,
+    const response = await bybitFetch(
+      `${BYBIT_API}/market/orderbook?category=linear&symbol=${encodeURIComponent(symbol)}&limit=${DEPTH_LEVELS}`,
     );
     if (!response.ok) throw new Error(`Bybit orderbook responded with status ${response.status}`);
     const json = await response.json();

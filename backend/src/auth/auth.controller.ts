@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  Get,
   HttpCode,
   HttpStatus,
   Post,
@@ -14,8 +13,6 @@ import { Request, Response } from 'express';
 import { AuthService, AuthResult } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { CurrentUser } from './decorators/current-user.decorator';
 import { useSecureCookie } from './cookie-security';
 
 const REFRESH_COOKIE = 'refresh_token';
@@ -86,12 +83,6 @@ export class AuthController {
     res.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
     res.clearCookie(REFRESH_COOKIE, { path: LEGACY_REFRESH_COOKIE_PATH });
     return { success: true };
-  }
-
-  @Get('me')
-  @UseGuards(JwtAuthGuard)
-  async me(@CurrentUser('userId') userId: string) {
-    return this.authService.getProfile(userId);
   }
 
   // Sets the refresh token as an HttpOnly cookie and returns the access token

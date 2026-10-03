@@ -30,6 +30,7 @@ import {
   weakWeekdays,
 } from './market-metrics';
 import { runsBackgroundJobs } from '../role';
+import { BYBIT_API, bybitFetch } from '../bybit/bybit-gate';
 
 const SYMBOL = 'BTCUSDT';
 const TICK_MS = 5 * 60_000;
@@ -187,8 +188,8 @@ export class MarketAlertsService
   /** Часовые свечи берём напрямую с биржи: hourly_prices отстаёт до получаса. */
   private async candles(): Promise<HourCandle[]> {
     try {
-      const res = await fetch(
-        `https://api.bybit.com/v5/market/kline?category=linear&symbol=${SYMBOL}&interval=60&limit=${BASELINE_HOURS + 1}`,
+      const res = await bybitFetch(
+        `${BYBIT_API}/market/kline?category=linear&symbol=${SYMBOL}&interval=60&limit=${BASELINE_HOURS + 1}`,
       );
       if (!res.ok) throw new Error(`kline ${res.status}`);
       const json = await res.json();

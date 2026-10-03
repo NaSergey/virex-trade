@@ -96,16 +96,6 @@ export interface FundingRow {
   execId: string;
 }
 
-/** One fill aggregated per order — for entry/exit markers on the chart. */
-export interface ExecMarker {
-  orderId: string;
-  time: number; // unix seconds (last fill of the order)
-  price: number; // value-weighted average fill price
-  side: 'Buy' | 'Sell';
-  qty: number; // total filled qty for the order
-  isClose: boolean; // closed part of a position (reduce/exit) vs opened (entry)
-}
-
 export interface BalanceResult {
   success: boolean;
   balance: number;
@@ -186,8 +176,6 @@ export interface ExchangeAdapter {
    */
   getKeyPermissions?(creds: ExchangeCredentials): Promise<KeyPermissions | undefined>;
 
-  getBalance(creds: ExchangeCredentials): Promise<BalanceResult>;
-
   getOpenPositions(creds: ExchangeCredentials): Promise<PositionsResult>;
 
   /** Realized-PnL records closed within the range. Adapters paginate internally. */
@@ -198,10 +186,4 @@ export interface ExchangeAdapter {
    * Adapters paginate internally.
    */
   fetchFills(creds: ExchangeCredentials, range: TimeRange): Promise<FillsResult>;
-
-  /** Recent fills for one symbol, aggregated to one marker per order. */
-  fetchExecutionMarkers(
-    creds: ExchangeCredentials,
-    params: { symbol: string; days?: number },
-  ): Promise<ExecMarker[]>;
 }

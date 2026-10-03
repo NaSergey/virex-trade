@@ -16,6 +16,7 @@ import { isOwnerEmail } from '../admin/owner';
 import { TagsService } from '../tags/tags.service';
 import { CoinsService } from '../coins/coins.service';
 import { REFERRAL_BONUS_COINS } from '../coins/coins.config';
+import { avatarUrl } from '../profile/avatar';
 
 export interface PublicUser {
   id: string;
@@ -31,6 +32,8 @@ export interface PublicUser {
    * убирает из шапки ссылку, которая всё равно вернула бы 403.
    */
   isAdmin: boolean;
+  /** Адрес картинки профиля с версией (`profile/avatar.ts`); нет картинки — null. */
+  avatar: string | null;
 }
 
 export interface AuthResult {
@@ -172,17 +175,6 @@ export class AuthService {
     await this.prisma.refreshToken.deleteMany({ where: { tokenHash } });
   }
 
-  async getProfile(userId: string): Promise<PublicUser> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) {
-      throw new UnauthorizedException({
-        message: 'Пользователь не найден',
-        code: 'USER_NOT_FOUND',
-      });
-    }
-    return this.toPublicUser(user);
-  }
-
   get refreshCookieMaxAgeMs(): number {
     return this.refreshTtlDays * 24 * 60 * 60 * 1000;
   }
@@ -192,6 +184,7 @@ export class AuthService {
       id: string;
       email: string;
       name: string | null;
+      avatarAt: Date | null;
     },
     opts?: { consumeTokenId?: string },
   ): Promise<AuthResult> {
@@ -261,12 +254,14 @@ export class AuthService {
     id: string;
     email: string;
     name: string | null;
+    avatarAt: Date | null;
   }): PublicUser {
     return {
       id: user.id,
       email: user.email,
       name: user.name,
       isAdmin: isOwnerEmail(user.email),
+      avatar: avatarUrl(user.id, user.avatarAt),
     };
   }
 }

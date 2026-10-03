@@ -59,8 +59,8 @@ export function positionTrade(p: TerminalPosition, balance: number, meta: Positi
     qty: p.size,
     leverage: p.leverage ?? 1,
     closedQty: 0,
-    // Стоп за тейками на бирже двигать некому (см. `canFollow`).
-    stopFollow: false,
+    // Стоп за тейками на бирже ведёт worker по событиям потока — флажок приходит с сервера.
+    stopFollow: p.follow ?? false,
     exitTime: null,
     exitPrice: null,
     exitReason: null,

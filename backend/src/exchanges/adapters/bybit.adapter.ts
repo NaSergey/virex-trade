@@ -4,11 +4,9 @@ import { BybitBalanceService } from '../../bybit/services/bybit-balance.service'
 import { BybitPositionService } from '../../bybit/services/bybit-position.service';
 import { BybitTradeService } from '../../bybit/services/bybit-trade.service';
 import {
-  BalanceResult,
   ClosedTrade,
   ExchangeAdapter,
   ExchangeCredentials,
-  ExecMarker,
   Fill,
   FillsResult,
   FundingRow,
@@ -58,16 +56,6 @@ export class BybitAdapter implements ExchangeAdapter {
     const info = await this.apiKeys.getApiKeyInfo(creds);
     if (!info.success) return undefined;
     return { canTrade: info.canTrade, canWithdraw: info.canWithdraw };
-  }
-
-  async getBalance(creds: ExchangeCredentials): Promise<BalanceResult> {
-    const res = await this.balance.getUSDTBalance(creds);
-    return {
-      success: res.success,
-      balance: res.balance,
-      availableToWithdraw: res.availableToWithdraw,
-      error: res.error,
-    };
   }
 
   async getOpenPositions(creds: ExchangeCredentials): Promise<PositionsResult> {
@@ -162,13 +150,6 @@ export class BybitAdapter implements ExchangeAdapter {
     }
 
     return { success: !partial, items, funding, partial: partial || undefined, error };
-  }
-
-  fetchExecutionMarkers(
-    creds: ExchangeCredentials,
-    params: { symbol: string; days?: number },
-  ): Promise<ExecMarker[]> {
-    return this.trades.fetchExecutions(creds, params);
   }
 }
 

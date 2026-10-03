@@ -2,9 +2,11 @@ import { BadRequestException, HttpException, Injectable, Logger } from '@nestjs/
 import { BybitApiKeyService } from '../bybit/services/bybit-api-key.service';
 import { BybitCredentials } from '../bybit/services/bybit-auth.service';
 import { CredentialsService } from '../credentials/credentials.service';
+import { readAccount } from './account-snapshot';
 import { BybitTerminalClient } from './bybit-terminal.client';
 import { CloseGridDto, ClosePositionDto, MoveOrderDto, PlaceOrderDto, SetLevelsDto } from './dto/terminal.dto';
 import {
+  followNotSaved,
   gridPartial,
   oppositePosition,
   positionNotFound,
@@ -32,6 +34,10 @@ import {
   type TerminalPosition,
 } from './terminal-math';
 import { TerminalMarketService } from './terminal-market.service';
+import { StateCache } from './state-cache';
+import { balanceOf, keyHash, project, usable, walletOf, type StreamState } from './stream/stream-state';
+import { StopFollowStore } from './stream/stop-follow.store';
+import { TerminalStreamStore } from './stream/terminal-stream.store';
 
 /** Почему терминала нет — фронт переводит причину по ключу. */
 export type AccessReason = 'NO_EXCHANGE' | 'NOT_BYBIT' | 'READ_ONLY' | 'UNKNOWN';
@@ -48,8 +54,16 @@ const LEVERAGE_NOT_MODIFIED = 110043;
 const LEVELS_NOT_MODIFIED = 34040;
 /** Bybit: «ордера уже нет» — он исполнен или снят, и отменять больше нечего. */
 const ORDER_GONE = 110001;
-/** Страниц открытых ордеров за один снимок: двести ордеров — больше, чем ставят руками. */
-const ORDER_PAGES = 4;
+/** Срок снимка счёта — короче опроса экрана (3 с), см. `states`. */
+const STATE_TTL_MS = 2_500;
+
+export interface TerminalState {
+  serverTime: string;
+  balance: number;
+  available: number | null;
+  positions: TerminalPosition[];
+  orders: TerminalOrder[];
+}
 
 const reasonOf = (e: unknown): string => {
   if (e instanceof HttpException) {
@@ -80,6 +94,8 @@ export class TerminalService {
     private readonly bybit: BybitTerminalClient,
     private readonly market: TerminalMarketService,
     private readonly apiKeys: BybitApiKeyService,
+    private readonly streams: TerminalStreamStore,
+    private readonly follows: StopFollowStore,
   ) {}
 
   /**
@@ -100,19 +116,60 @@ export class TerminalService {
       : { available: false, reason: 'READ_ONLY', exchange };
   }
 
-  /** Всё, что экран показывает о счёте: баланс, позиции и висящие лимиты — одним снимком. */
-  async state(userId: string) {
+  /**
+   * Снимки счёта на пользователя (`StateCache`). Срок короче опроса экрана
+   * (3 с): одна вкладка получает свежий снимок на каждом опросе, а вторая
+   * вкладка того же человека, спросившая следом, — тот же ответ без похода
+   * на биржу. Любая запись этим ключом снимок отменяет (версия —
+   * `BybitTerminalClient.writeVersion`).
+   */
+  private readonly states = new StateCache<TerminalState>(STATE_TTL_MS);
+
+  /**
+   * Всё, что экран показывает о счёте: баланс, позиции и висящие лимиты — одним
+   * снимком. Обычно — из потока счёта (`worker` держит приватный WebSocket
+   * Bybit, `terminal_streams`): это чтение строки из базы, а не три запроса к
+   * бирже на каждый опрос. Нет годного потока — тот же снимок через REST.
+   */
+  async state(userId: string): Promise<TerminalState> {
     const creds = await this.creds(userId);
-    const [wallet, positions, orders] = await Promise.all([
-      this.wallet(creds),
-      this.bybit.privateGet(creds, '/position/list', { category: 'linear', settleCoin: 'USDT', limit: '200' }),
-      this.openOrders(creds),
-    ]);
+    this.streams.want(userId);
+    const streamed = await this.fromStream(userId, creds).catch((e: Error) => {
+      this.logger.warn(`user ${userId}: поток счёта не прочитан — ${e.message}`);
+      return null;
+    });
+    const base =
+      streamed ?? (await this.states.get(userId, this.bybit.writeVersion(creds.apiKey), () => this.readState(creds)));
+    return this.withFollow(userId, base);
+  }
+
+  /** Флажок «стоп за тейками» у позиций с активным планом — по нему окно сетки открывается с ним. */
+  private async withFollow(userId: string, state: TerminalState): Promise<TerminalState> {
+    if (state.positions.length === 0) return state;
+    const keys = await this.follows.activeKeys(userId).catch(() => null);
+    if (!keys) return state;
     return {
+      ...state,
+      positions: state.positions.map((p) => ({ ...p, follow: keys.has(`${p.symbol}:${p.direction}`) })),
+    };
+  }
+
+  private async fromStream(userId: string, creds: BybitCredentials): Promise<TerminalState | null> {
+    const row = await this.streams.read(userId);
+    const now = Date.now();
+    if (!row || !usable(row, keyHash(creds.apiKey), this.bybit.lastWriteAt(creds.apiKey), now)) return null;
+    const marks = await this.market.markPrices();
+    return { serverTime: new Date(now).toISOString(), ...project(row.state as StreamState, marks) };
+  }
+
+  private async readState(creds: BybitCredentials): Promise<TerminalState> {
+    const snap = await readAccount(this.bybit, creds);
+    return {
+      // Время снимка, а не ответа: из кэша он может уйти на пару секунд позже.
       serverTime: new Date().toISOString(),
-      ...wallet,
-      positions: ((positions.list ?? []) as unknown[]).map(toPosition).filter((p): p is TerminalPosition => p != null),
-      orders,
+      ...balanceOf(walletOf(snap.account)),
+      positions: snap.positions.map(toPosition).filter((p): p is TerminalPosition => p != null),
+      orders: snap.orders.map(toOrder).filter((o): o is TerminalOrder => o != null),
     };
   }
 
@@ -288,8 +345,8 @@ export class TerminalService {
    * Сетка фиксации: N reduce-only лимитов равными частями позиции, последний
    * забирает остаток деления. ЗАМЕНЯЕТ прежние лимиты закрытия позиции — иначе
    * сумма ордеров превысила бы её размер. То же правило, что в бектесте
-   * (`createCloseGrid`), кроме «стопа за тейками»: там стоп двигает наш движок,
-   * а здесь ордера исполняет биржа, и двигать его некому.
+   * (`createCloseGrid`). Стоп за тейками ведёт не биржа, а `worker` по событиям
+   * потока счёта (`StopFollowService`): здесь только записывается его план.
    *
    * Объёмы считаются до того, как что-либо снято: сетка, у которой часть
    * меньше минимального ордера, не должна оставить позицию без прежних лимитов.
@@ -323,30 +380,60 @@ export class TerminalService {
       );
     }
 
-    let placed = 0;
+    const placed: { id: string; price: number }[] = [];
     for (const [i, price] of dto.prices.entries()) {
+      const tick = roundToTick(price, inst.tickSize);
       try {
-        await this.bybit.privatePost(creds, '/order/create', {
+        const result = await this.bybit.privatePost(creds, '/order/create', {
           category: 'linear',
           symbol: dto.symbol,
           side: closeSide(dto.direction),
           orderType: 'Limit',
           qty: i === n - 1 ? last : part,
-          price: roundToTick(price, inst.tickSize),
+          price: tick,
           timeInForce: 'GTC',
           positionIdx: Number(row.positionIdx) || 0,
           reduceOnly: true,
         });
-        placed++;
+        placed.push({ id: String(result.orderId), price: Number(tick) });
       } catch (e) {
-        if (placed === 0 && stale.length === 0) throw e;
-        this.logger.warn(`user ${userId}: close grid ${dto.symbol} stopped at ${placed}/${n}`);
-        throw gridPartial(placed, n, reasonOf(e));
+        if (placed.length === 0 && stale.length === 0) throw e;
+        this.logger.warn(`user ${userId}: close grid ${dto.symbol} stopped at ${placed.length}/${n}`);
+        // Тейки, что успели встать, уже на бирже — и человек просил их вести. Не
+        // записался план — всё равно главное здесь «сколько встало»: окно сетки,
+        // открытое снова, покажет флажок выключенным.
+        await this.recordFollow(userId, dto, row, placed).catch(() => undefined);
+        throw gridPartial(placed.length, n, reasonOf(e));
       }
     }
 
-    this.logger.log(`user ${userId}: close grid ${dto.direction} ${dto.symbol} × ${n}`);
+    await this.recordFollow(userId, dto, row, placed);
+    this.logger.log(`user ${userId}: close grid ${dto.direction} ${dto.symbol} × ${n}${dto.follow ? ' + стоп за тейками' : ''}`);
     return { success: true };
+  }
+
+  /**
+   * План переноса стопа — после того, как тейки встали: в нём их `orderId`.
+   * Сетка без флажка план снимает: прежние тейки она и так сняла. Не записался
+   * план — сетка уже на бирже, поэтому отказ говорит именно это.
+   */
+  private async recordFollow(userId: string, dto: CloseGridDto, row: any, placed: { id: string; price: number }[]) {
+    try {
+      if (dto.follow && placed.length > 0) {
+        await this.follows.replace(userId, {
+          symbol: dto.symbol,
+          direction: dto.direction,
+          entryPrice: parseFloat(row.avgPrice),
+          orderIds: placed.map((o) => o.id),
+          prices: placed.map((o) => o.price),
+        });
+      } else {
+        await this.follows.remove(userId, dto.symbol, dto.direction);
+      }
+    } catch (e) {
+      this.logger.error(`user ${userId}: план стопа за тейками не записан — ${(e as Error).message}`);
+      if (dto.follow) throw followNotSaved();
+    }
   }
 
   private creds(userId: string): Promise<BybitCredentials> {
@@ -364,17 +451,9 @@ export class TerminalService {
    */
   private async wallet(creds: BybitCredentials): Promise<{ balance: number; available: number | null }> {
     const result = await this.bybit.privateGet(creds, '/account/wallet-balance', { accountType: 'UNIFIED' });
-    const account = result.list?.[0];
-    const usdt = account?.coin?.find((c: { coin?: string }) => c.coin === 'USDT');
-    const equity = parseFloat(usdt?.equity ?? '');
-    const wallet = parseFloat(usdt?.walletBalance ?? '') || 0;
-    const open = parseFloat(usdt?.unrealisedPnl ?? '') || 0;
-    const available = parseFloat(account?.totalAvailableBalance ?? '');
-    return {
-      balance: Number.isFinite(equity) ? equity : wallet + open,
-      available: Number.isFinite(available) ? available : null,
-    };
+    return balanceOf(walletOf(result.list?.[0]));
   }
+
 
   /** Строки позиций одного символа: биржа отдаёт их и без открытой позиции — по ним виден режим. */
   private async positionRows(creds: BybitCredentials, symbol: string): Promise<any[]> {
@@ -387,23 +466,6 @@ export class TerminalService {
     const row = rows.find((r) => toPosition(r)?.direction === direction);
     if (!row) throw positionNotFound();
     return row;
-  }
-
-  private async openOrders(creds: BybitCredentials): Promise<TerminalOrder[]> {
-    const orders: TerminalOrder[] = [];
-    let cursor = '';
-    for (let page = 0; page < ORDER_PAGES; page++) {
-      const params: Record<string, string> = { category: 'linear', settleCoin: 'USDT', limit: '50' };
-      if (cursor) params.cursor = cursor;
-      const result = await this.bybit.privateGet(creds, '/order/realtime', params);
-      for (const row of result.list ?? []) {
-        const order = toOrder(row);
-        if (order) orders.push(order);
-      }
-      cursor = result.nextPageCursor || '';
-      if (!cursor) break;
-    }
-    return orders;
   }
 
   /**

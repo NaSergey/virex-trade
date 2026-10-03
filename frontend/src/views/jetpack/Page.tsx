@@ -28,18 +28,15 @@ export function JetpackPage() {
   useJetpackSocket();
 
   return (
-    <>
-      <div className="games-bg" aria-hidden />
-      <div className="jpg-page">
-        {view ? (
-          <Game view={view} />
-        ) : isLoading ? (
-          <p className="jpg-wait">{t('loading')}</p>
-        ) : (
-          <ErrorNote error={error} fallback={t('loadFailed')} />
-        )}
-      </div>
-    </>
+    <div className="jpg-page">
+      {view ? (
+        <Game view={view} />
+      ) : isLoading ? (
+        <p className="jpg-wait">{t('loading')}</p>
+      ) : (
+        <ErrorNote error={error} fallback={t('loadFailed')} />
+      )}
+    </div>
   );
 }
 

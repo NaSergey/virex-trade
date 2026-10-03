@@ -134,9 +134,12 @@ export function useExchangeActions(): TerminalActions {
     cancelEntryOrder: useAction(cancel),
     moveEntryOrder: useAction(move),
     moveCloseOrder: useAction(move),
-    // «Стоп за тейками» на биржу не уходит: двигать его там некому (окно его и не предлагает).
+    // Стоп за тейками ведёт worker: план едет вместе с сеткой.
     closeGrid: useAction(async (v) =>
-      apiJson('/api/terminal/positions/close-grid', json('POST', { ...position(v.tradeId), prices: v.prices })),
+      apiJson(
+        '/api/terminal/positions/close-grid',
+        json('POST', { ...position(v.tradeId), prices: v.prices, follow: v.stopFollow }),
+      ),
     ),
     finish: NOTHING,
     // Теги открытой позиции — те же, что на обзоре: синк перенесёт их на закрытую сделку.

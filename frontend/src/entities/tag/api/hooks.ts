@@ -47,19 +47,6 @@ export const useUpdateTag = () => {
   });
 };
 
-/** Merge one tag into another (links move, source tag is deleted). */
-export const useMergeTag = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (input: { sourceId: string; intoTagId: string }) =>
-      apiJson<{ success: boolean; tag: TagItem }>(`/api/tags/${input.sourceId}/merge`, {
-        method: 'POST',
-        body: JSON.stringify({ intoTagId: input.intoTagId }),
-      }),
-    onSuccess: () => invalidateTagCaches(qc),
-  });
-};
-
 export const useDeleteTag = () => {
   const qc = useQueryClient();
   return useMutation({

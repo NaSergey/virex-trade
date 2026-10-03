@@ -143,3 +143,29 @@ describe('MarketEventsService', () => {
     });
   });
 });
+
+/**
+ * Два запроса на пустой кэш одновременно — один расчёт: агрегат читает
+ * тысячи свечей из базы, и второму хватает ответа первого.
+ */
+describe('MarketEventsService — расчёт в полёте общий', () => {
+  it('параллельные запросы одной метрики ждут один расчёт', async () => {
+    const { service, getCandles } = makeService([]);
+    await Promise.all([service.getHourlyStats(730), service.getHourlyStats(730), service.getHourlyStats(730)]);
+    expect(getCandles).toHaveBeenCalledTimes(1);
+  });
+
+  it('разные окна не делят расчёт', async () => {
+    const { service, getCandles } = makeService([]);
+    await Promise.all([service.getHourlyStats(730), service.getHourlyStats(90)]);
+    expect(getCandles).toHaveBeenCalledTimes(2);
+  });
+
+  it('упавший расчёт не кэшируется и не залипает в полёте', async () => {
+    const { service, getCandles } = makeService([]);
+    getCandles.mockRejectedValueOnce(new Error('db down'));
+    await expect(service.getHourlyStats(730)).rejects.toThrow('db down');
+    await expect(service.getHourlyStats(730)).resolves.toBeDefined();
+    expect(getCandles).toHaveBeenCalledTimes(2);
+  });
+});

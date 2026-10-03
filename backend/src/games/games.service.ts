@@ -3,7 +3,6 @@ import { Prisma } from '@prisma/client';
 import { isOwnerEmail } from '../admin/owner';
 import { CoinsService } from '../coins/coins.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { runsApiJobs } from '../role';
 import { CreateGameTableDto } from './dto/game-table.dto';
 import {
   gameAlreadySeated,
@@ -63,12 +62,13 @@ export class GamesService implements OnApplicationBootstrap {
 
   /**
    * Раздачи, прерванные перезапуском, возвращают вклады. `GameHand` общий у
-   * покера и блэкджека: сама раздача живёт в памяти `api`, а поставленное в
-   * неё уже списано со стеков, и вернуть его — забота слоя столов, а не одной
-   * из игр. Только там, где живут столы.
+   * покера и блэкджека: сама раздача живёт в памяти процесса игр, а
+   * поставленное в неё уже списано со стеков, и вернуть его — забота слоя
+   * столов, а не одной из игр. Проверки роли нет: модуль входит только в граф
+   * процесса игр (`runsGames`), а процесс этот ровно один — второй вернул бы
+   * ставки в живых раздачах первого.
    */
   async onApplicationBootstrap() {
-    if (!runsApiJobs()) return;
     const open = await this.prisma.gameHand.findMany({ where: { finishedAt: null } });
     for (const hand of open) {
       try {

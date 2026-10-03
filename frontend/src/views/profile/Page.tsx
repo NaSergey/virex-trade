@@ -1,40 +1,55 @@
 'use client';
 
+import { useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { useBattlePass } from '@/entities/battle-pass';
+import { useProfile } from '@/entities/profile';
 import { useAuth } from '@/features/auth';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
-import { PageHead } from '@/shared/ui/PageHead';
-import { Skeleton } from '@/shared/ui/Skeleton';
-import { Wrap } from '@/shared/ui/Wrap';
-import { DailyReward } from './components/DailyReward';
-import { HeroCard } from './components/HeroCard';
-import { RewardTrack } from './components/RewardTrack';
+import { GuestBar } from './components/GuestBar';
+import { GuestGate } from './components/GuestGate';
+import { PlayerResults } from './components/PlayerResults';
+import { Stripe } from './components/Stripe';
 
 /**
- * Профиль игрока: герой, уровень сезона, ежедневная награда и лестница наград.
+ * Профиль игрока — `/profile/<id>` (свой тоже: `/profile` уводит сюда).
  *
- * Страница обычная, не игровая: чёрное поле, скругления и палитра раздела игр
- * живут только внутри `/games`, а профиль — про учётную запись.
+ * Профиль собирается заново по образцу владельца, по одному элементу
+ * (2026-10-02): прежние блоки сняты, на экране наклонная полоса на всю
+ * страницу и под ней — что человек делал. Иконки достижений (`Achievements`),
+ * графики (`TrendChart`, `GameRadar`) и окно наград сезона
+ * (`SeasonRewardsDialog`) оставлены компонентами — их вернёт следующий шаг.
+ *
+ * **Гостю профиля не видно** (решение владельца 2026-10-02): шапка со входом и
+ * приглашение зарегистрироваться. Данные и так за `JwtAuthGuard` — здесь только
+ * то, что гость об этом читает.
  */
 export function ProfilePage() {
   const t = useTranslations('profile');
   const { user } = useAuth();
-  const battlePass = useBattlePass();
+  const params = useParams<{ id: string }>();
+  const userId = params?.id ?? '';
+  // Профиль заказывается только вошедшим: гостю он ответит 401, и спрашивать
+  // его значило бы ронять запрос ради заранее известного отказа.
+  const { data, error } = useProfile(userId, !!user);
+
+  if (!user) {
+    return (
+      <>
+        <GuestBar />
+        <GuestGate />
+      </>
+    );
+  }
 
   return (
-    <Wrap page>
-      <PageHead title={t('title')} lede={t('lede')} />
-      {battlePass.isPending && <Skeleton height={120} />}
-      {/* ErrorNote сам ничего не рисует, пока ошибки нет, — условие ему не нужно. */}
-      <ErrorNote error={battlePass.error} fallback={t('loadFailed')} />
-      {battlePass.data && (
-        <>
-          <HeroCard state={battlePass.data} name={user?.name || user?.email || ''} />
-          <DailyReward daily={battlePass.data.daily} />
-          <RewardTrack state={battlePass.data} />
-        </>
-      )}
-    </Wrap>
+    <>
+      <div className="pf-stage games-page">
+        <Stripe />
+      </div>
+      <div className="pf-page wrap">
+        <ErrorNote error={error} fallback={t('loadFailed')} />
+        {data && <PlayerResults profile={data} />}
+      </div>
+    </>
   );
 }

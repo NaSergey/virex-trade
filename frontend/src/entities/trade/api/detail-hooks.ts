@@ -2,13 +2,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiJson, qs } from '@/shared/api/http';
-import type {
-  ExecMarker,
-  InstrumentInfo,
-  RangeCheckResponse,
-  RangeTf,
-  TradeOrder,
-} from './types';
+import type { RangeCheckResponse, RangeTf, TradeOrder } from './types';
 
 /**
  * Разбор одной сделки или символа: то, что подгружается по требованию, когда
@@ -20,22 +14,28 @@ import type {
 
 const DETAIL_STALE = 5 * 60 * 1000;
 
-// Ордера подгружаются лениво — только когда строку реально раскрыли.
+// Один набор опций на хук и на префетч окна диапазона: ключ обязан совпадать.
+const tradeOrdersQuery = (tradeId: string) => ({
+  queryKey: ['tradeOrders', tradeId],
+  queryFn: () =>
+    apiJson<{
+      success: boolean;
+      positionId: string | null;
+      orders: TradeOrder[];
+      // null, когда за время жизни позиции фандинга не записано — это не то
+      // же самое, что ноль: у сделок старше бэкфилла его просто нет.
+      funding: { total: number; payments: number } | null;
+      error?: string;
+    }>(`/api/trades/${tradeId}/orders`),
+  staleTime: DETAIL_STALE,
+});
+
+// Ордера подгружаются лениво — когда строку раскрыли или открыли окно
+// диапазона (там из них берутся доборы).
 export const useTradeOrders = (tradeId: string | null) =>
   useQuery({
-    queryKey: ['tradeOrders', tradeId],
-    queryFn: () =>
-      apiJson<{
-        success: boolean;
-        positionId: string | null;
-        orders: TradeOrder[];
-        // null, когда за время жизни позиции фандинга не записано — это не то
-        // же самое, что ноль: у сделок старше бэкфилла его просто нет.
-        funding: { total: number; payments: number } | null;
-        error?: string;
-      }>(`/api/trades/${tradeId}/orders`),
+    ...tradeOrdersQuery(tradeId ?? ''),
     enabled: !!tradeId,
-    staleTime: DETAIL_STALE,
   });
 
 /**
@@ -72,25 +72,9 @@ export const usePrefetchRangeCheck = () => {
   const qc = useQueryClient();
   return (tradeId: string, tf: RangeTf = RANGE_TF_DEFAULT) => {
     void qc.prefetchQuery(rangeCheckQuery(tradeId, tf));
+    // Окно рисует по ордерам среднюю и доборы, а открыть его можно и с цены
+    // в строке, которую не раскрывали, — без прогрева метки входов
+    // появлялись бы на уже нарисованном графике.
+    void qc.prefetchQuery(tradeOrdersQuery(tradeId));
   };
 };
-
-export const useExecutions = (symbol: string, days = 30) =>
-  useQuery({
-    queryKey: ['executions', symbol, days],
-    queryFn: () =>
-      apiJson<{ success: boolean; executions: ExecMarker[] }>(
-        `/api/trades/executions${qs({ symbol, days })}`,
-      ),
-    enabled: !!symbol,
-    staleTime: 30_000,
-    refetchInterval: 60_000,
-  });
-
-export const useInstrumentInfo = (symbol: string) =>
-  useQuery<InstrumentInfo>({
-    queryKey: ['instrument', symbol],
-    queryFn: () => apiJson<InstrumentInfo>(`/api/bybit/instrument${qs({ symbol })}`),
-    enabled: !!symbol,
-    staleTime: DETAIL_STALE,
-  });

@@ -25,6 +25,21 @@
 	# `rewrites` в next.config.ts при этом остаются: они нужны локальному
 	# запуску без Caddy (start.bat) и здесь просто не используются — до них
 	# эти пути не доходят.
+	#
+	# Игры — в своём процессе (ROLE=games): раздачи и раунд джетпака живут в
+	# его памяти. Сюда же едет сокет игр (/api/games/socket.io), апгрейд
+	# соединения Caddy проксирует сам. Блоки с одиночным путём Caddy сортирует
+	# по длине пути, поэтому они срабатывают раньше /api/* при любом порядке
+	# в файле.
+	handle /api/games/* {
+		reverse_proxy games:8092
+	}
+	handle /api/jetpack {
+		reverse_proxy games:8092
+	}
+	handle /api/jetpack/* {
+		reverse_proxy games:8092
+	}
 	handle /api/* {
 		reverse_proxy api:8091
 	}

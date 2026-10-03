@@ -8,7 +8,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { isTrackedPath, sectionOf } from './sections';
 import { floorToDay, floorToMinute } from './visits';
-import { runsApiJobs } from '../../role';
+import { servesHttp } from '../../role';
 
 const FLUSH_INTERVAL_MS = 30_000;
 
@@ -67,10 +67,10 @@ export class UsageTrackerService
   constructor(private readonly prisma: PrismaService) {}
 
   onApplicationBootstrap() {
-    // T11: интерсептор, вызывающий record(), живёт в api (там HTTP-трафик) —
-    // сброс копится там же, а не в worker (см. task-11-brief.md). record()
-    // в роли worker никто не вызовет, но и таймер там заводить незачем.
-    if (!runsApiJobs()) return;
+    // Интерсептор, вызывающий record(), живёт в каждой HTTP-роли — `api` и
+    // `games`, — и сброс копится там же, а не в worker (см. task-11-brief.md).
+    // В worker record() никто не вызовет, и таймер там заводить незачем.
+    if (!servesHttp()) return;
     this.timer = setInterval(() => {
       this.flush().catch((e) => this.logger.error('usage flush failed', e));
     }, FLUSH_INTERVAL_MS);

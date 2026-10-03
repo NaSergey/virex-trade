@@ -69,8 +69,9 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
-      # T11: роль процесса. `api` — HTTP, без единого setInterval и без
-      # telegram-поллинга (см. backend/src/role.ts). Незнакомое или пустое
+      # T11: роль процесса. `api` — HTTP, без единого setInterval, без
+      # telegram-поллинга и без игр: они в сервисе `games` (см.
+      # backend/src/role.ts). Незнакомое или пустое
       # значение ROLE трактуется кодом как `all` — здесь ставим явно, чтобы
       # не зависеть от этого дефолта.
       ROLE: api
@@ -80,9 +81,9 @@ services:
       # секунду (A9) — гарантированный P2024 под нагрузкой. pool_timeout —
       # сколько секунд запрос ждёт свободное соединение в очереди перед
       # ошибкой, вместо мгновенного отказа на всплеске.
-      # После T11 рядом живёт процесс `worker` со своим пулом (см. ниже) —
-      # 10 (api) + 5 (worker) = 15 из max_connections=100 у Postgres, запас
-      # почти на порядок на случай будущего --scale у api.
+      # Рядом живут процессы `worker` и `games` со своими пулами (см. ниже) —
+      # 10 (api) + 5 (worker) + 5 (games) = 20 из max_connections=100 у
+      # Postgres, запас на случай будущего --scale у api.
       DATABASE_URL: postgresql://${POSTGRES_USER:-virex}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-virex}?schema=public&connection_limit=10&pool_timeout=20
       # Origin продукта. Отсюда же берётся CORS-origin (main.ts). Схема
       # обязана быть https: кука сессии в production ставится с secure.
@@ -153,7 +154,7 @@ services:
       ROLE: worker
       # Меньше, чем у api: фон не обслуживает параллельный HTTP-трафик, а
       # проходит пользователей последовательно внутри каждого тика. Вместе с
-      # api (10) — 15 из max_connections=100 у Postgres.
+      # api (10) и games (5) — 20 из max_connections=100 у Postgres.
       DATABASE_URL: postgresql://${POSTGRES_USER:-virex}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-virex}?schema=public&connection_limit=5&pool_timeout=20
       FRONTEND_URL: https://${APP_DOMAIN:?set APP_DOMAIN in .env.prod}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env.prod}
@@ -175,6 +176,53 @@ services:
           cpus: "1"
           memory: 768M
 
+  # Игры: раздачи покера и блэкджека, раунд джетпака и их сокет — из того же
+  # образа, ролью ROLE=games (корень backend/src/games-app.module.ts). Сюда
+  # Caddy и rewrites Next ведут /api/games/* и /api/jetpack.
+  #
+  # ВАЖНО: ровно один процесс. Раздачи и раунд живут в его памяти, а на старте
+  # он возвращает ставки во всех раздачах и раундах без `finishedAt`, считая их
+  # прерванными перезапуском. Второй такой процесс вернул бы ставки в живых
+  # раздачах первого — и первый потом разыграл бы их ещё раз: монеты
+  # печатались бы. Поэтому `container_name` здесь не украшение: Compose
+  # отказывается масштабировать сервис с фиксированным именем, и
+  # `--scale games=2` падает до старта (проверено на compose v5). Не убирать.
+  games:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: virex-prod-games
+    restart: unless-stopped
+    # Та же причина, что у `api`: PID 1 без tini не получает дефолтное
+    # действие на сигнал после enableShutdownHooks.
+    init: true
+    # Схему раскатывает `api` (`prisma db push`), как и для `worker`.
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      ROLE: games
+      PORT: "8092"
+      # Вместе с api (10) и worker (5) — 20 из max_connections=100.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-virex}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-virex}?schema=public&connection_limit=5&pool_timeout=20
+      # CORS HTTP и сокета игр.
+      FRONTEND_URL: https://${APP_DOMAIN:?set APP_DOMAIN in .env.prod}
+      # Проверка access-токена — того же, что выдаёт api.
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env.prod}
+    command: sh -c "node dist/main"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8092/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+
   web:
     build:
       context: ./frontend
@@ -183,17 +231,21 @@ services:
         # Тот же адрес, что и в environment ниже, но нужен ещё и здесь:
         # rewrites запекаются в образ на сборке (см. Dockerfile.prod).
         API_INTERNAL_URL: http://api:8091
+        # Игровые адреса — в процесс игр (rewrites в next.config.ts).
+        GAMES_INTERNAL_URL: http://games:8092
     restart: unless-stopped
     # Та же причина, что у `api` (см. комментарий там): `node server.js` —
     # PID 1, сигнал без обработчика PID 1 не получает дефолтного действия.
     init: true
     depends_on:
       - api
+      - games
     environment:
       # Server-only: браузер сюда не ходит. Next проксирует /api/* и /auth/*
       # на этот адрес (rewrites в next.config.ts), поэтому браузер и API
       # живут на одном origin и кука сессии доезжает до proxy.ts.
       API_INTERNAL_URL: http://api:8091
+      GAMES_INTERNAL_URL: http://games:8092
     # Только loopback: снаружи VPS порт не виден, но остаётся вариант
     # завернуть сюда уже стоящий на хосте nginx (см. deploy/nginx-virex.conf.example),
     # если 80/443 занят панелью и отдавать их Caddy нельзя.
@@ -222,12 +274,13 @@ services:
     image: caddy:2-alpine
     profiles: ["edge"]
     restart: unless-stopped
-    # Caddyfile шлёт /api/* и /auth/* прямо в api (A10, мимо web) — caddy
-    # обязан увидеть оба контейнера в сети compose до старта, иначе первый
-    # запрос на защищённый маршрут ловит DNS-ошибку прокси.
+    # Caddyfile шлёт /api/* и /auth/* прямо в api (A10, мимо web), а игровые
+    # адреса — в games: caddy обязан увидеть эти контейнеры в сети compose до
+    # старта, иначе первый запрос на защищённый маршрут ловит DNS-ошибку прокси.
     depends_on:
       - web
       - api
+      - games
     environment:
       APP_DOMAIN: ${APP_DOMAIN}
       # Без `:?`: compose подставляет переменные во ВЕСЬ файл до того, как

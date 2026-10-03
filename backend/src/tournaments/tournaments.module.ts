@@ -4,7 +4,7 @@ import { BattlePassModule } from '../battlepass/battlepass.module';
 import { CoinsModule } from '../coins/coins.module';
 import { MarketDataModule } from '../market-data/market-data.module';
 import { TournamentRunnerService } from './tournament-runner.service';
-import { TournamentsController } from './tournaments.controller';
+import { TournamentRatingController, TournamentsController } from './tournaments.controller';
 import { TournamentsService } from './tournaments.service';
 
 /**
@@ -18,7 +18,8 @@ import { TournamentsService } from './tournaments.service';
  */
 @Module({
   imports: [CoinsModule, MarketDataModule, BacktestModule, BattlePassModule],
-  controllers: [TournamentsController],
+  // Рейтинг — первым: его `GET rating` обязан встать раньше `GET :id` турниров.
+  controllers: [TournamentRatingController, TournamentsController],
   providers: [TournamentsService, TournamentRunnerService],
   exports: [TournamentsService],
 })

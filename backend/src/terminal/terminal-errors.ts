@@ -99,6 +99,13 @@ export const oppositePosition = (symbol: string) =>
 export const positionNotFound = () =>
   new NotFoundException({ message: 'Позиция не найдена — возможно, она уже закрыта', code: 'TERMINAL_POSITION_NOT_FOUND' });
 
+/** Сетка встала, а план переноса стопа не записан: человек должен знать, что стоп сам не поедет. */
+export const followNotSaved = () =>
+  new ServiceUnavailableException({
+    message: 'Сетка выставлена, но перенос стопа за тейками не включился. Откройте окно сетки ещё раз.',
+    code: 'TERMINAL_FOLLOW_NOT_SAVED',
+  });
+
 /**
  * Сетка встала не целиком: часть ордеров уже на бирже, и откатывать их молча
  * нельзя — человек обязан знать, сколько стоит и почему остальные не встали.

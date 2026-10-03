@@ -1,5 +1,6 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { BybitAuthService } from './bybit-auth.service';
+import { bybitFetch } from '../bybit-gate';
 
 // Public market data barely changes within a tick, but the bot engines and
 // filter evaluation request it repeatedly (every bot, every level, every
@@ -7,7 +8,6 @@ import { BybitAuthService } from './bybit-auth.service';
 // call. Failures (null/empty) are never cached, so errors stay retryable.
 const PRICE_TTL_MS = 3_000;
 const KLINES_TTL_MS = 10_000;
-const SYMBOL_INFO_TTL_MS = 10 * 60_000;
 
 // T22 (B8): entries are only ever overwritten by the next request for the
 // same key, never removed on their own — a symbol/interval nobody asks for
@@ -70,46 +70,6 @@ export class BybitMarketService
     return p;
   }
 
-  // Get list of all coins with prices (public endpoint)
-  async getTickers() {
-    try {
-      const response = await fetch(`${this.baseUrl}/market/tickers?category=linear`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (data.retCode === 0 && data.result?.list) {
-        // Filter only USDT pairs and sort by turnover in USD
-        const tickers = data.result.list
-          .filter((ticker: any) => ticker.symbol.endsWith('USDT'))
-          .map((ticker: any) => ({
-            symbol: ticker.symbol,
-            lastPrice: ticker.lastPrice,
-            price24hPcnt: ticker.price24hPcnt,
-            volume24h: ticker.volume24h,
-            turnover24h: ticker.turnover24h, // Trading volume in USD
-            highPrice24h: ticker.highPrice24h,
-            lowPrice24h: ticker.lowPrice24h,
-          }))
-          .sort((a: any, b: any) => parseFloat(b.turnover24h) - parseFloat(a.turnover24h)); // Sort by turnover in USD
-
-        return { tickers, success: true };
-      }
-
-      return { tickers: [], success: false, error: data.retMsg };
-    } catch (error: any) {
-      return { tickers: [], success: false, error: error.message };
-    }
-  }
-
   // Last traded price for a single symbol (public endpoint, cached ~3s)
   async getLastPrice(symbol: string): Promise<number | null> {
     return this.cached(`price:${symbol}`, PRICE_TTL_MS, () => this.fetchLastPrice(symbol), (v) => v != null);
@@ -117,7 +77,7 @@ export class BybitMarketService
 
   private async fetchLastPrice(symbol: string): Promise<number | null> {
     try {
-      const response = await fetch(
+      const response = await bybitFetch(
         `${this.baseUrl}/market/tickers?category=linear&symbol=${symbol}`,
         { method: 'GET', headers: { 'Content-Type': 'application/json' } },
       );
@@ -152,7 +112,7 @@ export class BybitMarketService
     limit = 200,
   ): Promise<Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }>> {
     try {
-      const response = await fetch(
+      const response = await bybitFetch(
         `${this.baseUrl}/market/kline?category=linear&symbol=${symbol}&interval=${interval}&limit=${limit}`,
         { method: 'GET', headers: { 'Content-Type': 'application/json' } },
       );
@@ -196,7 +156,7 @@ export class BybitMarketService
     let curEnd = endMs;
     try {
       for (let page = 0; page < maxPages && curEnd > startMs; page++) {
-        const response = await fetch(
+        const response = await bybitFetch(
           `${this.baseUrl}/market/kline?category=linear&symbol=${symbol}&interval=${interval}&start=${startMs}&end=${curEnd}&limit=1000`,
           { method: 'GET', headers: { 'Content-Type': 'application/json' } },
         );
@@ -223,35 +183,4 @@ export class BybitMarketService
     }
     return chunks.flat();
   }
-
-  // Get symbol information (lot size filter). Instrument filters change very
-  // rarely — cached for 10 minutes; every order placement reads this.
-  async getSymbolInfo(symbol: string) {
-    return this.cached(`info:${symbol}`, SYMBOL_INFO_TTL_MS, () => this.fetchSymbolInfo(symbol), (v) => v != null);
-  }
-
-  private async fetchSymbolInfo(symbol: string) {
-    try {
-      const response = await fetch(`${this.baseUrl}/market/instruments-info?category=linear&symbol=${symbol}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        return null;
-      }
-
-      const data = await response.json();
-      if (data.retCode === 0 && data.result?.list?.length > 0) {
-        return data.result.list[0];
-      }
-      return null;
-    } catch (error) {
-      console.error('Error fetching symbol info:', error);
-      return null;
-    }
-  }
 }
-

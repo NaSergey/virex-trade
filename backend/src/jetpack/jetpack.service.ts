@@ -3,7 +3,6 @@ import { Prisma } from '@prisma/client';
 import { CoinsService } from '../coins/coins.service';
 import { GamesGateway } from '../games/games.gateway';
 import { PrismaService } from '../prisma/prisma.service';
-import { runsApiJobs } from '../role';
 import { crashX100, msTo, payout, randomUnit, x100At } from './jetpack';
 import {
   BET_MS,
@@ -23,8 +22,9 @@ import { buildView, Phase, RuntimeBet, Snapshot } from './jetpack-view';
 type TimerName = 'launch' | 'crash' | 'next' | 'finish';
 
 /**
- * Рантайм джетпака: раунд один на всех и живёт в памяти процесса `api` —
- * отсюда, как у раздачи покера, требование держать `api` одним процессом.
+ * Рантайм джетпака: раунд один на всех и живёт в памяти процесса игр
+ * (`ROLE=games`) — отсюда, как у раздачи покера, требование держать этот
+ * процесс одним.
  * Деньги — транзакциями в базе; строки раундов и ставок нужны истории и
  * возврату раунда, прерванного перезапуском.
  *
@@ -65,7 +65,7 @@ export class JetpackService implements OnApplicationBootstrap, OnModuleDestroy {
    * — нет (тот же принцип, что у раздач столов).
    */
   async onApplicationBootstrap() {
-    if (!runsApiJobs()) return;
+    // Проверки роли нет: модуль входит только в граф процесса игр, и он один.
     // Сбой чтения не роняет весь `api`: деньги прерванного раунда вернёт
     // следующий старт, а упавший процесс не вернул бы вообще ничего.
     let open: { id: string }[];

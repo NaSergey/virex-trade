@@ -31,11 +31,6 @@ export class UpdateTagDto {
   type?: TagType;
 }
 
-export class MergeTagDto {
-  @IsString()
-  intoTagId: string;
-}
-
 export class CreateSavedComboDto {
   @IsArray()
   @ArrayMaxSize(20)

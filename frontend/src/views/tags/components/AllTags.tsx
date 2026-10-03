@@ -159,7 +159,6 @@ export function AllTags({
                   t('deleteTagConsequence2'),
                   t('deleteConsequenceIrreversible'),
                 ],
-                word: t('deleteWord'),
                 onConfirm: () => row.id && deleteTag.mutate(row.id),
               })
             }

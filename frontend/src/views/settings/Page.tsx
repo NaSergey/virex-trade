@@ -6,7 +6,6 @@ import { useTerminalAccess } from '@/entities/terminal';
 import { Wrap } from '@/shared/ui/Wrap';
 import { Button } from '@/shared/ui/Button';
 import { Field, Input } from '@/shared/ui/Field';
-import { PageHead } from '@/shared/ui/PageHead';
 import { KeyValue } from '@/shared/ui/Lookup';
 import { Seg } from '@/shared/ui/Seg';
 import { Skeleton } from '@/shared/ui/Skeleton';
@@ -21,6 +20,7 @@ import {
   type ExchangeInfo,
   type KeyPermissions,
 } from './api/hooks';
+import { PrivacyCard } from './components/PrivacyCard';
 import { TelegramCard } from './components/TelegramCard';
 
 /**
@@ -75,8 +75,7 @@ export const SettingsPage = () => {
 
   if (isLoading) {
     return (
-      <Wrap page>
-        <PageHead title={t('pageTitle')} lede={t('pageLede')} />
+      <Wrap page className="settings-top">
         <SettingsSkeleton />
       </Wrap>
     );
@@ -88,8 +87,7 @@ export const SettingsPage = () => {
   // страницу ключей нельзя оставлять без выхода, чинить биржу больше негде.
   if (error || !selected) {
     return (
-      <Wrap page>
-        <PageHead title={t('pageTitle')} lede={t('pageLede')} />
+      <Wrap page className="settings-top">
         <div className="set">
           <ErrorNote error={error ?? new Error(t('exchangesEmpty'))} fallback={t('loadFailed')} />
           <Button
@@ -116,14 +114,11 @@ export const SettingsPage = () => {
         t('disconnectConsequence2'),
         t('disconnectConsequence3'),
       ],
-      word: t('disconnectWord'),
       onConfirm: () => disconnect.mutate(selected.id),
     });
 
   return (
-    <Wrap page>
-      <PageHead title={t('pageTitle')} lede={t('pageLede')} />
-
+    <Wrap page className="settings-top">
       {/* Выбор биржи стоит над обеими дорожками: он относится ко всей
           странице, а зажатый в левую колонку ряд из семи делений ломался на
           две строки. Переключатель нужен, только когда выбирать есть из чего:
@@ -191,6 +186,12 @@ export const SettingsPage = () => {
             одинаково. */}
         <div className="set marg" data-tour="set-telegram">
           <TelegramCard />
+          {/* Показ сделок — там же, где Telegram, и по той же причине: к ключам
+              он не относится. Своим ярусом под страницей один переключатель
+              искали бы после пустого низа. */}
+          <div className="set-privacy">
+            <PrivacyCard />
+          </div>
         </div>
       </div>
 

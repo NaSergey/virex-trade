@@ -3,7 +3,7 @@
 import { useTranslations } from 'next-intl';
 import type { TournamentStatus } from '@/entities/tournament';
 import { countdown } from '../lib/countdown';
-import { useCountdown } from '../model/useCountdown';
+import { useCountdown } from '@/shared/lib/hooks/useCountdown';
 
 /**
  * Состояние турнира значком — LIVE / OPEN / ENDED (образец владельца

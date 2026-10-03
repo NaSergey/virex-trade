@@ -31,11 +31,21 @@ export interface User {
    * несут, и это должно читаться как «нет», а не падать.
    */
   isAdmin?: boolean;
+  /**
+   * Адрес картинки профиля с версией; нет картинки — null. Необязательное по
+   * той же причине, что `isAdmin`.
+   */
+  avatar?: string | null;
 }
 
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
+  /**
+   * Новая картинка профиля — сразу в шапку, без перечитки сессии: адрес
+   * вернул сам ответ загрузки.
+   */
+  setAvatar: (avatar: string | null) => void;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name?: string, ref?: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -118,6 +128,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const setAvatar = useCallback((avatar: string | null) => {
+    setUser((u) => (u ? { ...u, avatar } : u));
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await fetch(`${API_BASE_URL}/auth/logout`, {
@@ -149,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [queryClient]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, setAvatar, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -26,10 +26,12 @@ const PB = 18;
 const PW = W - PR; // поле со свечами
 const GAP = 13; // минимальный просвет между подписями уровней, в экранных пикселях
 const MIN_VISIBLE = 6; // дальше приближать нечего — останется частокол
+const MARK_GAP = 40; // ближе подписи меток под свечами налезают друг на друга, в экранных пикселях
 
 interface Level {
   value: number;
   label: string;
+  avg?: boolean; // средняя цена входа, а не граница коридора
   y: number; // где на самом деле лежит уровень
   ly: number; // куда уехала подпись, чтобы не сесть на соседнюю
 }
@@ -78,14 +80,31 @@ export function RangeCheckChartSkeleton() {
   );
 }
 
+/** Один ордер на вход: первый открыл позицию, остальные — доборы. */
+export interface RangeEntryFill {
+  price: number;
+  time: number; // unix seconds
+}
+
 /**
  * Свечи вокруг входа: все, что отдала биржа, с пунктирными верхом и низом того
- * коридора, по которому считался «диапазон входа», и стрелками входа и выхода.
+ * коридора, по которому считался «диапазон входа», линией средней цены входа и
+ * стрелками входа, доборов и выхода.
  *
  * Своё SVG, а не lightweight-charts: библиотеке нужны свои цвета, свои шрифты и
  * свои рамки, и всё это приходится переопределять по одному свойству.
  */
-export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
+export function RangeCheckChart({
+  data,
+  avgEntry,
+  entries = [],
+}: {
+  data: RangeCheckResponse;
+  /** Средняя цена входа позиции — та же, что в заголовке окна. */
+  avgEntry: number;
+  /** Ордера на вход по времени; пусто — история исполнений не подтянута. */
+  entries?: RangeEntryFill[];
+}) {
   const t = useTranslations('rangeCheck');
   const { locale } = useLocaleControl();
   const intlLocale = locale === 'en' ? 'en-US' : 'ru-RU';
@@ -130,6 +149,20 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
   const exitIdx =
     data.exit.barTime != null ? candles.findIndex((c) => c.time === data.exit.barTime) : -1;
 
+  // Ордера на вход — к свече, внутри которой они исполнены: последней, что
+  // открылась не позже ордера (так же бэкенд привязывает вход и выход).
+  const barIndexOf = (sec: number) => {
+    let found = -1;
+    for (let i = 0; i < candles.length && candles[i].time <= sec; i++) found = i;
+    return found;
+  };
+  const fills = entries.map((e) => ({ price: e.price, i: barIndexOf(e.time) })).filter((f) => f.i >= 0);
+  // Свечи с ордерами на вход: первая — сам вход, остальные — доборы. Несколько
+  // ордеров в одной свече — одна метка, сколько их было, говорят точки цены.
+  const entryBars = [...new Set(fills.map((f) => f.i))].sort((a, b) => a - b);
+  const firstEntryIdx = entryBars[0] ?? entryIdx;
+  const hasAdds = entries.length > 1;
+
   const len = candles.length;
   // Вид умеет уезжать за края данных, оставляя пустое поле: иначе последние
   // свечи намертво приклеены к правому краю и приближенный участок нельзя
@@ -154,7 +187,7 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
   const vTo = Math.min(len, Math.ceil(to));
   const visible = candles.slice(vFrom, vTo);
 
-  const marks = [data.window.high, data.window.low].filter((v): v is number => v != null);
+  const marks = [data.window.high, data.window.low, avgEntry].filter((v): v is number => v != null);
   const lo = Math.min(...visible.map((c) => c.low), ...marks);
   const hi = Math.max(...visible.map((c) => c.high), ...marks);
   const priceSpan = hi - lo || 1;
@@ -253,12 +286,18 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
     [
       data.window.high != null && { value: data.window.high, label: t('levelHigh') },
       data.window.low != null && { value: data.window.low, label: t('levelLow') },
+      { value: avgEntry, label: t(hasAdds ? 'levelAvg' : 'levelEntry'), avg: true },
     ]
       .filter((l): l is Omit<Level, 'y' | 'ly'> => Boolean(l))
       .map((l) => ({ ...l, y: y(l.value), ly: y(l.value) })),
     px(GAP),
     h - px(6),
   );
+
+  // Кадр умеет заезжать за края данных, поэтому попадания в него мало: свечи
+  // с таким номером может просто не быть (а при idx = -1 её и не искали).
+  const onScreen = (idx: number) => candles[idx] != null && idx >= vFrom && idx < vTo;
+  const markX = (idx: number) => clamp(cx(idx), px(20), PW - px(20));
 
   /**
    * Стрелка с подписью у своей свечи: снизу под минимумом (смотрит вверх) или
@@ -271,17 +310,18 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
     side,
     label,
     color,
+    text = true,
   }: {
     idx: number;
     side: 'above' | 'below';
     label: string;
     color: string;
+    /** Подпись у стрелки; без неё — одна стрелка, когда соседняя метка уже подписана. */
+    text?: boolean;
   }) => {
-    // Кадр умеет заезжать за края данных, поэтому попадания в него мало: свечи
-    // с таким номером может просто не быть (а при idx = -1 её и не искали).
+    if (!onScreen(idx)) return null;
     const bar = candles[idx];
-    if (!bar || idx < vFrom || idx >= vTo) return null;
-    const x = clamp(cx(idx), px(20), PW - px(20));
+    const x = markX(idx);
     const up = side === 'below'; // стрелка смотрит вверх, на свечу
     // Метка не должна вылезти за поле: если свеча прижата к краю, отступ съедается.
     const base = up
@@ -289,27 +329,50 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
       : Math.max(y(bar.high) - px(7), PT + px(20));
     const tail = up ? base + px(7) : base - px(7);
     return (
-      <g key={label}>
+      <g key={`${label}-${idx}`}>
         <polygon
           points={`${x.toFixed(1)},${base.toFixed(1)} ${(x - px(4.5)).toFixed(1)},${tail.toFixed(1)} ${(x + px(4.5)).toFixed(1)},${tail.toFixed(1)}`}
           fill={color}
           stroke="var(--color-background)"
           strokeWidth={px(0.75).toFixed(2)}
         />
-        <text
-          x={x.toFixed(1)}
-          y={(up ? tail + px(10) : tail - px(4)).toFixed(1)}
-          fill={color}
-          fontSize={px(9).toFixed(1)}
-          fontFamily="var(--font-mono)"
-          letterSpacing="0.08em"
-          textAnchor="middle"
-        >
-          {label}
-        </text>
+        {text && (
+          <text
+            x={x.toFixed(1)}
+            y={(up ? tail + px(10) : tail - px(4)).toFixed(1)}
+            fill={color}
+            fontSize={px(9).toFixed(1)}
+            fontFamily="var(--font-mono)"
+            letterSpacing="0.08em"
+            textAnchor="middle"
+          >
+            {label}
+          </text>
+        )}
       </g>
     );
   };
+
+  /*
+   * Вход и доборы стоят по одну сторону свечей, и на мелком масштабе соседние
+   * доборы оказываются в паре свечей друг от друга — подписи слились бы в
+   * кашу. Подписан вход и те доборы, что отошли от уже подписанных; остальные
+   * остаются стрелками.
+   */
+  const entrySide = long ? 'below' : 'above';
+  const labelled: number[] = [];
+  const entryMarks = [
+    { idx: firstEntryIdx, label: t('markerEntry'), color: 'var(--color-fg)' },
+    ...entryBars.slice(1).map((idx) => ({ idx, label: t('markerAdd'), color: 'var(--color-muted)' })),
+  ]
+    .filter((m) => onScreen(m.idx))
+    .map((m) => {
+      const x = markX(m.idx);
+      const text = labelled.every((lx) => Math.abs(lx - x) >= px(MARK_GAP));
+      if (text) labelled.push(x);
+      return { ...m, text };
+    });
+  const avg = levels.find((l) => l.avg);
 
   return (
     <svg
@@ -336,7 +399,7 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
       }}
       onDoubleClick={() => setSpan(null)}
     >
-      {levels.map((l) => (
+      {levels.filter((l) => !l.avg).map((l) => (
         <line
           key={l.label}
           x1="0"
@@ -384,16 +447,40 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
             </g>
           );
         })}
+
+        {/* Средняя — поверх свечей, как линия позиции на биржевом графике: под
+            ними она терялась бы в телах ровно там, где цена к ней возвращалась.
+            Точки — цена каждого ордера на вход в своей свече: по ним видно,
+            откуда средняя взялась. */}
+        {avg && (
+          <line
+            x1="0"
+            y1={avg.y.toFixed(1)}
+            x2={PW}
+            y2={avg.y.toFixed(1)}
+            stroke="var(--color-fg)"
+            strokeOpacity={0.6}
+            strokeWidth={u.toFixed(2)}
+          />
+        )}
+        {fills
+          .filter((f) => f.i >= vFrom && f.i < vTo)
+          .map((f, k) => (
+            <circle
+              key={k}
+              cx={cx(f.i).toFixed(1)}
+              cy={y(f.price).toFixed(1)}
+              r={px(2.5).toFixed(1)}
+              fill="var(--color-fg)"
+              stroke="var(--color-background)"
+              strokeWidth={px(1).toFixed(2)}
+            />
+          ))}
       </g>
 
       {/* Маркеры сделки — как на любом торговом графике: стрелка стоит СНАРУЖИ
           своей свечи и смотрит на неё, а не сидит на ценовом уровне. */}
-      {marker({
-        idx: entryIdx,
-        side: long ? 'below' : 'above',
-        label: t('markerEntry'),
-        color: 'var(--color-fg)',
-      })}
+      {entryMarks.map((m) => marker({ ...m, side: entrySide }))}
       {marker({ idx: exitIdx, side: long ? 'above' : 'below', label: t('markerExit'), color: pnlColor })}
 
       {ticks.map((t) => (
@@ -462,7 +549,7 @@ export function RangeCheckChart({ data }: { data: RangeCheckResponse }) {
           pointerEvents="none"
           x={(PW - px(2)).toFixed(1)}
           y={(l.ly - px(4)).toFixed(1)}
-          fill="var(--color-muted)"
+          fill={l.avg ? 'var(--color-fg)' : 'var(--color-muted)'}
           fontSize={px(11).toFixed(1)}
           fontFamily="var(--font-mono)"
           textAnchor="end"

@@ -78,7 +78,6 @@ export function useComboRows(
                   t('deleteComboConsequence2'),
                   t('deleteComboConsequence3'),
                 ],
-                word: t('deleteWord'),
                 onConfirm: () => deleteCombo.mutate(c.id),
               }),
       })),

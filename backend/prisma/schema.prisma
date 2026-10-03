@@ -38,15 +38,6 @@ model User {
   // (см. referrals/dto/referral-slug.dto.ts), здесь только колонка.
   referralSlug String? @unique
 
-  // DEPRECATED — superseded by ExchangeConnection, kept only so
-  // LegacyCredentialsMigrationService can move existing keys into the new table
-  // on boot. Dropping them in the same change would have `prisma db push`
-  // delete the columns before the app ever runs, taking the credentials with
-  // them; they are nulled out once migrated and removed in a follow-up.
-  bybitApiKeyEnc    String?
-  bybitApiSecretEnc String?
-  bybitConnectedAt  DateTime?
-
   // Which connected exchange drives sync, positions and trading right now.
   // Null until the first exchange is connected.
   activeExchange String?
@@ -82,8 +73,7 @@ model User {
   openPositionsSeen  OpenPositionSeen[]
   savedTagCombos     SavedTagCombo[]
   dismissedTagCombos DismissedTagCombo[]
-  balanceSnapshots   BalanceSnapshot[]
-  donations          Donation[]
+  donations         Donation[]
   backtestSessions   BacktestSession[]
   tournamentsCreated Tournament[]            @relation("TournamentCreator")
   tournamentEntries  TournamentParticipant[]
@@ -108,7 +98,40 @@ model User {
   /// Ставки джетпака (crash-игры).
   jetpackBets JetpackBet[]
 
+  /// Картинка профиля: есть ли она и её версия (адрес картинки несёт её как
+  /// `?v=`). Сами байты — в `UserAvatar`, а не здесь: Prisma читает все
+  /// скаляры по умолчанию, и картинка ехала бы с каждым чтением пользователя.
+  avatarAt DateTime?
+  avatar   UserAvatar?
+
+  /// Видят ли другие его настоящие сделки с биржи на профиле (решение владельца
+  /// 2026-10-02: показывать, но дать выключатель). Колонка, а не запись в
+  /// `notifyPrefs`: по этому флагу решается, отдавать ли список, то есть он
+  /// участвует в выборке, а не читается целиком вместе с остальными
+  /// настройками. Дефолт `true` — требование владельца; следствие в том, что
+  /// уже заведённые аккаунты получают его при `db push`, ничего не нажав,
+  /// поэтому страница настроек обязана сказать, что именно видно другим.
+  showTrades Boolean @default(true)
+
+  /// Счёт терминала из приватного WebSocket Bybit (`terminal_streams`).
+  terminalStream TerminalStream?
+  /// Планы стопа за тейками на бирже (`terminal_stop_follows`).
+  terminalStopFollows TerminalStopFollow[]
+
   @@map("users")
+}
+
+/// Байты картинки профиля — уже квадрат 256×256, сжатый клиентом. Тип
+/// определён сервером по первым байтам при загрузке (`avatar.ts`), а не взят
+/// из заголовка клиента.
+model UserAvatar {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  data      Bytes
+  mime      String
+  updatedAt DateTime @updatedAt
+
+  @@map("user_avatars")
 }
 
 /// Журнал движения монет — append-only, по строке на событие.
@@ -219,7 +242,6 @@ model Trade {
 
   tags    TradeTag[]
   context TradeContext?
-  risk    TradeRisk?
 
   @@unique([userId, exchange, orderId, closedAt])
   @@index([userId, symbol])
@@ -874,53 +896,6 @@ model UserSectionDay {
   @@map("user_section_days")
 }
 
-/// Якорь ряда баланса. Снимки не образуют сам ряд — баланс в произвольный
-/// момент выводится из цепочки сделок относительно ближайшего якоря. Якоря
-/// нужны, чтобы ловить снос вывода и обнаруживать ввод и вывод средств.
-model BalanceSnapshot {
-  id       String   @id @default(uuid())
-  userId   String
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  exchange String
-  at       DateTime
-  balance  Float
-  /// 'snapshot' — спросили биржу, 'derived' — вывели из цепочки PnL.
-  source   String
-  /// Неторговое изменение баланса: положительное — ввод, отрицательное —
-  /// вывод. Null, пока расхождения нет. Цепочка вывода через разрыв не
-  /// продолжается, поэтому одно пополнение не искажает весь ряд назад.
-  gap      Float?
-
-  @@unique([userId, exchange, at])
-  @@map("balance_snapshots")
-}
-
-/// Метрики риска одной сделки, посчитанные один раз. Материализуется дорогая
-/// и стабильная часть — сопоставить сделке баланс на момент входа; сравнение
-/// с порогом правила остаётся на чтение, чтобы правило можно было править без
-/// пересчёта истории. Образец — TradeContext: та же версия набора полей и то
-/// же правило «считаем только тем, у кого ещё нет».
-model TradeRisk {
-  id             String   @id @default(uuid())
-  tradeId        String   @unique
-  trade          Trade    @relation(fields: [tradeId], references: [id], onDelete: Cascade)
-  balanceAtEntry Float?
-  /// 'snapshot' | 'derived' — доезжает до интерфейса: расчётные числа
-  /// подписываются как оценка, а не выдаются за факт.
-  balanceSource  String?
-  exposurePct    Float?
-  /// Null у сделки без стопа. Отдельно от ok=false: баланс известен,
-  /// exposurePct посчитан, не хватает только стопа.
-  plannedRiskPct Float?
-  /// false — баланс на тот момент неизвестен. Такая сделка выпадает и из
-  /// числителя, и из знаменателя доли соблюдения.
-  ok             Boolean  @default(true)
-  riskVersion    Int      @default(1)
-  computedAt     DateTime @default(now())
-
-  @@map("trade_risks")
-}
-
 /// Состояние одного сигнала у одного пользователя. Сигналы шлются по фронту
 /// нарастания, и держать этот фронт в памяти процесса нельзя: перезапуск api
 /// означал бы повторную рассылку всем сразу — ровно то, что делал
@@ -1154,6 +1129,13 @@ model GameHand {
   voided        Boolean   @default(false)
 
   @@index([finishedAt])
+  /// Раздачи человека по его id — ключи `contributions` и есть id игроков.
+  /// Профиль ищет его раздачи оператором `?` («есть такой ключ»), и без этого
+  /// индекса каждый просмотр любого профиля обходил все раздачи всех игроков
+  /// за всё время (`profile-queries.ts`). Отдельная таблица «раздача — игрок»
+  /// дала бы то же, но потребовала бы правок в денежном коде покера и
+  /// блэкджека, которые пишут раздачу.
+  @@index([contributions(ops: JsonbOps)], type: Gin)
   @@map("game_hands")
 }
 
@@ -1237,4 +1219,58 @@ model BattlePassXpEvent {
   @@index([userId, season])
   @@index([userId, source, createdAt])
   @@map("battle_pass_xp_events")
+}
+
+/// Счёт терминала из приватного WebSocket Bybit
+/// (спека 2026-10-02-terminal-bybit-websocket-design.md). `wantedAt` пишет
+/// api — экран спрашивал счёт; остальное — worker, который держит соединение.
+model TerminalStream {
+  userId   String    @id
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wantedAt DateTime
+  /// Отпечаток ключа, которым собрано состояние: сменил ключ — api не верит строке.
+  /// Сброс соединения обнуляет его вместе с `liveAt`.
+  keyHash  String?
+  /// Сырые строки биржи (stream-state.ts): кошелёк USDT, позиции, активные ордера.
+  state    Json?
+  /// Пульс живого соединения; старше 30 с — api идёт в REST.
+  liveAt   DateTime?
+  /// Когда worker применил последнее событие или снимок.
+  eventAt  DateTime?
+
+  @@index([wantedAt])
+  @@map("terminal_streams")
+}
+
+/// План стопа за тейками на бирже (спека 2026-10-02-terminal-stop-follow-design.md).
+/// Создаёт api вместе с сеткой фиксации; ведёт worker по событиям приватного
+/// потока. Новая сетка позиции — новая строка с новым id: шаг, начатый по
+/// прежней, по id её уже не найдёт и ничего не запишет.
+model TerminalStopFollow {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol     String
+  /// long | short
+  direction  String
+  /// Вход позиции на момент сетки — цель после первого тейка.
+  entryPrice Float
+  /// Тейки сетки по порядку и их цены.
+  orderIds   String[]
+  prices     Float[]
+  /// Исполненные — в порядке исполнения, и их цены исполнения.
+  filled     String[]
+  fillPrices Float[]
+  /// Снятые: исполниться они уже не могут.
+  cancelled  String[]
+  /// Стоп, который должен стоять, и стоит ли он уже на бирже.
+  target     Float?
+  applied    Boolean  @default(true)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, symbol, direction])
+  @@index([active, userId])
+  @@map("terminal_stop_follows")
 }

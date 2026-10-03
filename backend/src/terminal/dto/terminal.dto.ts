@@ -2,6 +2,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsNumber,
   IsOptional,
@@ -107,6 +108,11 @@ export class CloseGridDto {
   @IsNumber({}, { each: true })
   @IsPositive({ each: true })
   prices: number[];
+
+  // Стоп за тейками: после первого — в безубыток, дальше — на предыдущий (ведёт worker).
+  @IsOptional()
+  @IsBoolean()
+  follow?: boolean;
 }
 
 export class ClosePositionDto {

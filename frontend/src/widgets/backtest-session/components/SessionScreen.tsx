@@ -126,7 +126,6 @@ function OutdatedSession({ detail, onLeave }: { detail: SessionDetail; onLeave: 
             title: t('finishTitle'),
             subtitle: t('finishSubtitle'),
             consequences: [...(hasOpen ? [t('outdatedOpenTrades')] : []), t('finishRevealSynthetic')],
-            word: t('finishWord'),
             onConfirm: () => finishM.mutate(),
           })
         }
@@ -170,8 +169,6 @@ export interface TerminalProps {
   soundsOf?: (was: SessionDetail, next: SessionDetail) => readonly TerminalSound[];
   /** Вкладка «История»; не задана — сделки сессии. */
   history?: ReactNode;
-  /** Есть ли кому двигать стоп за тейками в сетке фиксации (у биржи — нет). */
-  canFollow?: boolean;
 }
 
 /**
@@ -190,7 +187,6 @@ export function Terminal({
   badge,
   soundsOf,
   history,
-  canFollow = true,
 }: TerminalProps) {
   const t = useTranslations('backtest');
   const { locale } = useLocaleControl();
@@ -1034,7 +1030,6 @@ export function Terminal({
                     title: t('drawings.clearTitle'),
                     subtitle: t('drawings.clearSubtitle', { n: drawings.count }),
                     consequences: [t('drawings.clearConsequence')],
-                    word: t('drawings.clearWord'),
                     onConfirm: drawings.clearAll,
                   })
                 }
@@ -1230,7 +1225,6 @@ export function Terminal({
             screenPrice={tradePrice}
             closeOrdersCount={detail.closeOrders.filter((o) => o.tradeId === trade.id).length}
             decimals={decimalsOf(trade.symbol)}
-            canFollow={canFollow}
             onSubmit={(prices, stopFollow) =>
               closeGridM.mutate({ tradeId: trade.id, prices, stopFollow }, { onSuccess: () => setCloseGridFor(null) })
             }

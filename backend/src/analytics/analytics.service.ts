@@ -1,4 +1,5 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
+import { BYBIT_API, bybitFetch } from '../bybit/bybit-gate';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface VolatilitySnapshot {
@@ -54,7 +55,11 @@ const stdev = (xs: number[]): number => {
 export class AnalyticsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private volatilityCache: { exp: number; data: VolatilitySnapshot } | null = null;
+  /**
+   * По монете. Ключи ограничены форматом тикера в контроллере
+   * (`sanitizeSymbol`) — та же граница, что у остальных кэшей по символу здесь.
+   */
+  private readonly volatilityCache = new Map<string, { exp: number; data: VolatilitySnapshot }>();
   private marketDataCache: {
     exp: number;
     data: { marketCap: number; marketCapChange24h: number };
@@ -253,17 +258,17 @@ export class AnalyticsService {
     if (cached && cached.exp > Date.now()) return cached.data;
     try {
       const [ratioResp, oiResp, klineResp] = await Promise.all([
-        fetch(
-          `https://api.bybit.com/v5/market/account-ratio?category=linear&symbol=${encodeURIComponent(sym)}&period=1h&limit=200`,
+        bybitFetch(
+          `${BYBIT_API}/market/account-ratio?category=linear&symbol=${encodeURIComponent(sym)}&period=1h&limit=200`,
         ),
-        fetch(
-          `https://api.bybit.com/v5/market/open-interest?category=linear&symbol=${encodeURIComponent(sym)}&intervalTime=1h&limit=200`,
+        bybitFetch(
+          `${BYBIT_API}/market/open-interest?category=linear&symbol=${encodeURIComponent(sym)}&intervalTime=1h&limit=200`,
         ),
         // Hourly closes over the same window: OI comes in base-coin units
         // (BTC for BTCUSDT); the client shows it in dollars — OI × close of
         // the same hour.
-        fetch(
-          `https://api.bybit.com/v5/market/kline?category=linear&symbol=${encodeURIComponent(sym)}&interval=60&limit=200`,
+        bybitFetch(
+          `${BYBIT_API}/market/kline?category=linear&symbol=${encodeURIComponent(sym)}&interval=60&limit=200`,
         ),
       ]);
       if (!ratioResp.ok || !oiResp.ok || !klineResp.ok) {
@@ -321,15 +326,19 @@ export class AnalyticsService {
    * log-returns за окно, stdev последних 24ч сравнивается со stdev всего
    * окна (масштаб — на "дневной" горизонт через √24, читается как типичный
    * дневной размах). Объём — turnover тех же свечей (USDT), тем же образом.
+   *
+   * Кэш — по монете. До 2026-10-02 он был одним слотом на все: страница рынка
+   * переключает BTC / ETH / SOL, и первая спрошенная монета 5 минут
+   * отвечала за все остальные — человек на BTC видел волатильность ETH. Тот
+   * же слот отдавался и запасным ответом при ошибке биржи.
    */
   async getVolatility(symbol = 'BTCUSDT'): Promise<VolatilitySnapshot> {
-    if (this.volatilityCache && this.volatilityCache.exp > Date.now()) {
-      return this.volatilityCache.data;
-    }
+    const cached = this.volatilityCache.get(symbol);
+    if (cached && cached.exp > Date.now()) return cached.data;
     try {
       const hours = VOLATILITY_BASELINE_DAYS * 24;
-      const response = await fetch(
-        `https://api.bybit.com/v5/market/kline?category=linear&symbol=${encodeURIComponent(symbol)}&interval=60&limit=${hours + 1}`,
+      const response = await bybitFetch(
+        `${BYBIT_API}/market/kline?category=linear&symbol=${encodeURIComponent(symbol)}&interval=60&limit=${hours + 1}`,
       );
       if (!response.ok) {
         throw new Error(`Bybit kline responded with status ${response.status}`);
@@ -380,10 +389,12 @@ export class AnalyticsService {
         sellVolumeUsd,
         dominantSide,
       };
-      this.volatilityCache = { exp: Date.now() + VOLATILITY_CACHE_TTL_MS, data };
+      this.volatilityCache.set(symbol, { exp: Date.now() + VOLATILITY_CACHE_TTL_MS, data });
       return data;
     } catch (error) {
-      if (this.volatilityCache) return this.volatilityCache.data;
+      // Запасной ответ — только своей же монеты: устаревшая волатильность
+      // той же монеты лучше ошибки, чужая — хуже.
+      if (cached) return cached.data;
       throw new HttpException('External API error', HttpStatus.BAD_GATEWAY);
     }
   }

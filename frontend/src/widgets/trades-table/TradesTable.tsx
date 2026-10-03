@@ -122,6 +122,8 @@ export function TradesTable({
   onSort,
   formatClosed,
   chart = true,
+  expand = true,
+  tags: showTags = true,
   renderExpanded,
   priceDecimals,
 }: {
@@ -157,6 +159,18 @@ export function TradesTable({
    * коридора вокруг её цены не существует.
    */
   chart?: boolean;
+  /**
+   * Строка раскрывается. Выключается там, где разбирать позицию нечем: у чужой
+   * сделки на профиле нет ни ордеров исполнения, ни рыночного контекста — те
+   * эндпоинты отвечают только про свои сделки, и каретка обещала бы разбор,
+   * которого не будет.
+   */
+  expand?: boolean;
+  /**
+   * Колонка тегов. Снимается на чужих сделках: «почему вошёл» — личная
+   * заметка, её нет в ответе, и пустая колонка говорила бы «не разметил».
+   */
+  tags?: boolean;
   /**
    * Чем раскрывается строка. По умолчанию — ордерами исполнения и рыночным
    * контекстом входа (`TradeOrders`). Бектест передаёт свой разбор: филлов
@@ -300,15 +314,23 @@ export function TradesTable({
     },
   ];
 
+  const shown = columns.filter(
+    (c) => !(compact && ROOMY_ONLY.has(c.key)) && !(c.key === 'tags' && !showTags),
+  );
+
   return (
     <>
       <LedgerTable
-        columns={compact ? columns.filter((c) => !ROOMY_ONLY.has(c.key)) : columns}
+        columns={shown}
         rows={trades}
         rowKey={(tr) => tr.id}
         isLoading={isLoading}
         skeletonRows={skeletonRows}
-        renderExpanded={renderExpanded ?? ((tr) => <TradeOrders trade={tr} onRangeCheck={() => setChartTrade(tr)} />)}
+        // undefined, а не пустой рендер: LedgerTable по нему и решает, быть ли
+        // каретке и раскрытию вообще.
+        renderExpanded={
+          expand ? (renderExpanded ?? ((tr) => <TradeOrders trade={tr} onRangeCheck={() => setChartTrade(tr)} />)) : undefined
+        }
         sort={sort}
         onSort={onSort}
         empty={

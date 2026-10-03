@@ -39,6 +39,8 @@ export interface TerminalPosition {
   liqPrice: number | null;
   stopLoss: number | null;
   takeProfit: number | null;
+  /** Есть активный план стопа за тейками — ставит `TerminalService.state`, у строки биржи его нет. */
+  follow?: boolean;
 }
 
 export interface TerminalOrder {

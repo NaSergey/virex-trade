@@ -6,7 +6,6 @@ import {
   CreateSavedComboDto,
   CreateTagDto,
   DismissComboDto,
-  MergeTagDto,
   SetPositionTagsDto,
   SetTradeTagsDto,
   UpdateSavedComboDto,
@@ -60,12 +59,6 @@ export class TagsController {
   @Patch(':id')
   update(@CurrentUser('userId') userId: string, @Param('id') id: string, @Body() dto: UpdateTagDto) {
     return this.tags.update(id, userId, dto);
-  }
-
-  // Merge tag :id into dto.intoTagId, moving all links; :id is deleted.
-  @Post(':id/merge')
-  merge(@CurrentUser('userId') userId: string, @Param('id') id: string, @Body() dto: MergeTagDto) {
-    return this.tags.merge(userId, id, dto.intoTagId);
   }
 
   // Current tag set of an open position.

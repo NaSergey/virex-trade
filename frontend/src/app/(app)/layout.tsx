@@ -1,9 +1,7 @@
 import type { ReactNode } from 'react';
 import { getServerTerminalHint } from '@/entities/terminal/server-access';
 import { AuthGuard } from '@/features/auth';
-import { DailyRewardPrompt } from '@/features/daily-reward';
-import { OnboardingProvider, TourOverlay } from '@/features/onboarding';
-import { TopNav } from '@/widgets/top-nav';
+import { AppChrome } from '../(internal)/AppChrome';
 
 /**
  * Оболочка приложения: рейка разделов и защита от неавторизованного входа.
@@ -30,22 +28,14 @@ import { TopNav } from '@/widgets/top-nav';
  * права ключа, которое знает только запрос к API, и без подсказки он появлялся
  * бы после ответа, сдвигая всю рейку. Тот же приём «кука + серверный
  * компонент», что у темы и локали в корневом layout. Всё, что внутри, —
- * клиентские компоненты, как и раньше.
+ * клиентские компоненты, как и раньше. Сама обвязка — `AppChrome`, общая с
+ * макетом `(open)` (профиль по ссылке).
  */
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const initialTerminal = await getServerTerminalHint();
   return (
-    <OnboardingProvider>
-      <TopNav initialTerminal={initialTerminal} />
+    <AppChrome initialTerminal={initialTerminal}>
       <AuthGuard>{children}</AuthGuard>
-      {/* Обучение — последним слоем и снаружи защиты: рейка, которую оно
-          подсвечивает первым шагом, тоже стоит снаружи. Провайдер обнимает
-          и её, потому что «Обучение заново» живёт в меню профиля. Сюда без
-          куки сессии не попасть — гейт отработал раньше, на edge. */}
-      <TourOverlay />
-      {/* Тоже снаружи защиты и тоже читает состояние Battle Pass, как и
-          TopNav: гейт на edge уже отсеял запросы без сессии. */}
-      <DailyRewardPrompt />
-    </OnboardingProvider>
+    </AppChrome>
   );
 }

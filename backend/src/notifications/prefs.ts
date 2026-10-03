@@ -86,19 +86,6 @@ export const thresholdOf = (prefs: Prefs, key: NotifKey | string): number | null
 };
 
 /** Подпись текущего пресета для кнопки. null — порога нет. */
-export const presetLabelOf = (prefs: Prefs, key: NotifKey | string): string | null => {
-  const def = notifDef(key);
-  if (!def || def.presets.length === 0) return null;
-  const idx = prefs.items[key]?.preset ?? def.defaultPreset;
-  return (def.presets[idx] ?? def.presets[def.defaultPreset]).label;
-};
-
-export const togglePref = (prefs: Prefs, key: NotifKey | string): Prefs => {
-  const item = prefs.items[key];
-  if (!item) return prefs;
-  return { ...prefs, items: { ...prefs.items, [key]: { ...item, enabled: !item.enabled } } };
-};
-
 export interface PrefsPatch {
   items?: Record<string, { enabled?: boolean; preset?: number }>;
   quietHours?: boolean;
@@ -126,12 +113,4 @@ export const applyPatch = (prefs: Prefs, patch: PrefsPatch): Prefs => {
     items,
     quietHours: typeof patch.quietHours === 'boolean' ? patch.quietHours : prefs.quietHours,
   };
-};
-
-export const cyclePreset = (prefs: Prefs, key: NotifKey | string): Prefs => {
-  const def = notifDef(key);
-  const item = prefs.items[key];
-  if (!def || !item || def.presets.length === 0) return prefs;
-  const next = (item.preset + 1) % def.presets.length;
-  return { ...prefs, items: { ...prefs.items, [key]: { ...item, preset: next } } };
 };

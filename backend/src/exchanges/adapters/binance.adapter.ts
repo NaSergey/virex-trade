@@ -4,14 +4,12 @@ import {
   ClosedTrade,
   ExchangeAdapter,
   ExchangeCredentials,
-  ExecMarker,
   Fill,
   PositionsResult,
   RangeResult,
   TimeRange,
 } from '../exchange.types';
 import { getJson, hmac, num, queryString, str } from './http';
-import { markersFromFills } from './markers';
 
 const BASE_URL = 'https://fapi.binance.com';
 // Binance rejects a userTrades/income range wider than 7 days.
@@ -186,35 +184,6 @@ export class BinanceAdapter implements ExchangeAdapter {
       partial: fetched.partial || undefined,
       error: fetched.error,
     };
-  }
-
-  async fetchExecutionMarkers(
-    creds: ExchangeCredentials,
-    params: { symbol: string; days?: number },
-  ): Promise<ExecMarker[]> {
-    const endMs = Date.now();
-    const startMs = endMs - (params.days ?? 30) * 24 * 60 * 60 * 1000;
-    // The symbol is known here, so the income lookup that normally discovers
-    // symbols can be skipped entirely.
-    const fetched = await this.tradesForSymbol(creds, params.symbol, { startMs, endMs });
-    const fills: Fill[] = fetched.rows
-      .filter((t) => t.id && num(t.qty) > 0 && num(t.time) > 0)
-      .map((t) => {
-        const qty = num(t.qty);
-        const side: 'Buy' | 'Sell' = t.side === 'BUY' ? 'Buy' : 'Sell';
-        return {
-          symbol: String(t.symbol),
-          side,
-          qty,
-          price: num(t.price),
-          closedSize: closedSizeOf(t, side, qty),
-          execType: 'Trade',
-          orderId: String(t.orderId ?? ''),
-          execId: String(t.id),
-          execTime: new Date(num(t.time)),
-        };
-      });
-    return markersFromFills(fills);
   }
 
   // ── plumbing ──

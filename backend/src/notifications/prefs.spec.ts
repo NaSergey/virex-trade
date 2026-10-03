@@ -1,12 +1,10 @@
 import { NOTIF_DEFS } from './registry';
 import {
   applyPatch,
-  cyclePreset,
   defaultPrefs,
   isEnabled,
   mergePrefs,
   thresholdOf,
-  togglePref,
   toStored,
 } from './prefs';
 
@@ -55,34 +53,11 @@ describe('prefs', () => {
     expect(thresholdOf(mergePrefs({ items: { 'mkt.price1h': { p: 99 } } }), 'mkt.price1h')).toBe(3.5);
   });
 
-  it('togglePref переключает и не трогает соседей', () => {
-    const p = togglePref(defaultPrefs(), 'mkt.vol1h');
-    expect(isEnabled(p, 'mkt.vol1h')).toBe(true);
-    expect(isEnabled(p, 'mkt.volume')).toBe(false);
-    expect(isEnabled(togglePref(p, 'mkt.vol1h'), 'mkt.vol1h')).toBe(false);
-  });
-
-  it('cyclePreset идёт по кругу', () => {
-    // mkt.vol1h: ×1.5 → ×2 → ×3 → ×1.5
-    let p = mergePrefs({ items: { 'mkt.vol1h': { p: 0 } } });
-    p = cyclePreset(p, 'mkt.vol1h');
-    expect(thresholdOf(p, 'mkt.vol1h')).toBe(2);
-    p = cyclePreset(p, 'mkt.vol1h');
-    expect(thresholdOf(p, 'mkt.vol1h')).toBe(3);
-    p = cyclePreset(p, 'mkt.vol1h');
-    expect(thresholdOf(p, 'mkt.vol1h')).toBe(1.5);
-  });
-
-  it('cyclePreset ничего не делает сигналу без порога', () => {
-    const p = cyclePreset(defaultPrefs(), 'trade.opened');
-    expect(thresholdOf(p, 'trade.opened')).toBeNull();
-  });
-
   // Хранить полную копию дефолтов значило бы заморозить их в базе: правка
   // дефолта в коде не доехала бы ни до кого из уже привязанных.
   it('toStored пишет только отклонения от дефолта', () => {
     expect(toStored(defaultPrefs())).toEqual({ items: {} });
-    expect(toStored(togglePref(defaultPrefs(), 'mkt.vol1h'))).toEqual({
+    expect(toStored(applyPatch(defaultPrefs(), { items: { 'mkt.vol1h': { enabled: true } } }))).toEqual({
       items: { 'mkt.vol1h': { e: true } },
     });
   });
@@ -94,7 +69,10 @@ describe('prefs', () => {
   });
 
   it('mergePrefs(toStored(p)) возвращает то же самое', () => {
-    const p = cyclePreset(togglePref(defaultPrefs(), 'mkt.book'), 'mkt.ls');
+    // mkt.book включён (по умолчанию выключен), mkt.ls сдвинут с дефолтного пресета 1.
+    const p = applyPatch(defaultPrefs(), {
+      items: { 'mkt.book': { enabled: true }, 'mkt.ls': { preset: 2 } },
+    });
     expect(mergePrefs(toStored(p))).toEqual(p);
   });
 });

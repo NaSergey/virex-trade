@@ -14,6 +14,8 @@ export interface TerminalPosition {
   /** null — стопа у позиции нет: на бирже так бывает, в бектесте — нет. */
   stopLoss: number | null;
   takeProfit: number | null;
+  /** Есть план стопа за тейками: его ведёт worker, и окно сетки открывается с флажком. */
+  follow?: boolean;
 }
 
 /** Висящий лимит. Стопы и тейки позиций сюда не входят — они её уровни. */

@@ -279,15 +279,6 @@ export class DonationsService {
     return this.toView(donation);
   }
 
-  async listMine(userId: string, limit = 20): Promise<DonationView[]> {
-    const rows = await this.prisma.donation.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-      take: Math.min(Math.max(limit, 1), 100),
-    });
-    return rows.map((d) => this.toView(d));
-  }
-
   /**
    * Отмена окна оплаты. Ничего не «отменяет» в сети — перевод, уже ушедший в
    * блокчейн, отозвать нельзя, поэтому сумма остаётся закреплённой за интентом

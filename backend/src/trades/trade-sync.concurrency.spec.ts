@@ -5,8 +5,8 @@ import { ExchangePositionsCacheService } from '../exchanges/exchange-positions-c
  * T12 (A3): обход `syncAll` идёт с ограничителем параллелизма (не голым
  * `for`, не голым `Promise.all`), и на каждого пользователя за тик уходит
  * ровно один `getOpenPositions`, а не два. Сервис собирается вручную с
- * заглушками (как в balance-snapshot.service.spec.ts) — тест про сам обход
- * и про то, что уходит в `positions.sync`, а не про Nest DI.
+ * заглушками — тест про сам обход и про то, что уходит в `positions.sync`, а
+ * не про Nest DI.
  */
 function makeService(
   userIds: string[],
@@ -56,7 +56,7 @@ function makeService(
   const positions = { sync: jest.fn().mockResolvedValue({ fills: 0, positions: 0, stamped: 0 }) } as any;
   const dataVersion = { bump: jest.fn().mockResolvedValue(undefined) } as any;
   // T20 (B4): real cache/coalescing service wired to the same fake `exchanges`
-  // — this exercises the actual call path syncUserUnlocked now goes through,
+  // — this exercises the actual call path syncOne now goes through,
   // not a bypass of it.
   const positionsCache = new ExchangePositionsCacheService(exchanges);
 

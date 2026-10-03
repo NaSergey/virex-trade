@@ -4,14 +4,12 @@ import {
   ClosedTrade,
   ExchangeAdapter,
   ExchangeCredentials,
-  ExecMarker,
   Fill,
   PositionsResult,
   RangeResult,
   TimeRange,
 } from '../exchange.types';
 import { getJson, hmac, num, queryString, str } from './http';
-import { markersFromFills } from './markers';
 
 const BASE_URL = 'https://www.okx.com';
 // Perpetual swaps — the instrument class the journal is about. OKX keys the
@@ -168,16 +166,6 @@ export class OkxAdapter implements ExchangeAdapter {
       });
     }
     return { success: !page.partial, items, partial: page.partial || undefined, error: page.error };
-  }
-
-  async fetchExecutionMarkers(
-    creds: ExchangeCredentials,
-    params: { symbol: string; days?: number },
-  ): Promise<ExecMarker[]> {
-    const endMs = Date.now();
-    const startMs = endMs - (params.days ?? 30) * 24 * 60 * 60 * 1000;
-    const fills = await this.fetchFills(creds, { startMs, endMs });
-    return markersFromFills(fills.items.filter((f) => f.symbol === params.symbol));
   }
 
   // ── plumbing ──

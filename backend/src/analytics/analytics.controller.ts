@@ -53,6 +53,8 @@ export class AnalyticsController {
 
   @Get('volatility')
   async getVolatility(@Query('symbol') symbol?: string) {
-    return this.analyticsService.getVolatility(symbol ?? 'BTCUSDT');
+    // Тот же фильтр формата, что у соседей: кэш волатильности теперь по монете,
+    // и ключ из адреса без проверки рос бы без предела.
+    return this.analyticsService.getVolatility(sanitizeSymbol(symbol));
   }
 }

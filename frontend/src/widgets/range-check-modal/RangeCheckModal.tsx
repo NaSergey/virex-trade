@@ -7,7 +7,7 @@ import { Seg } from '@/shared/ui/Seg';
 import { Button } from '@/shared/ui/Button';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { Lookup, KeyValue } from '@/shared/ui/Lookup';
-import { useRangeCheck, RANGE_TF_DEFAULT, type RangeTf, type Trade } from '@/entities/trade';
+import { useRangeCheck, useTradeOrders, RANGE_TF_DEFAULT, type RangeTf, type Trade } from '@/entities/trade';
 import { formatPriceGrouped } from '@/shared/lib/utils/format';
 import { formatRangePos } from '@/shared/lib/utils/range';
 import { useLocaleControl } from '@/shared/i18n';
@@ -41,6 +41,14 @@ export function RangeCheckModal({ trade, onClose }: { trade: Trade; onClose: () 
   // иначе окно спросит запрос, которого в кэше нет.
   const [tf, setTf] = useState<RangeTf>(RANGE_TF_DEFAULT);
   const { data, isLoading, isError } = useRangeCheck(trade.id, tf);
+  // Ордера позиции — те же, что в раскрытой строке (оттуда окно чаще всего и
+  // открывают, так что они уже в кэше). Из них — вход и доборы на графике.
+  // Не пришли или истории исполнений нет — график рисуется как раньше, с одним
+  // входом по времени открытия.
+  const entries = (useTradeOrders(trade.id).data?.orders ?? [])
+    .filter((o) => o.kind === 'entry')
+    .map((o) => ({ price: o.avgPrice, time: Math.floor(Date.parse(o.time) / 1000) }));
+  const adds = Math.max(0, entries.length - 1);
 
   /**
    * Длина коридора человеческими словами: «за сутки» вместо «24 свечи 1H».
@@ -59,7 +67,7 @@ export function RangeCheckModal({ trade, onClose }: { trade: Trade; onClose: () 
       <DialogContent wide>
         <DialogHeader
           title={t('title')}
-          subtitle={`${trade.symbol} · ${trade.direction} · ${t('entryWord')} ${formatPriceGrouped(trade.avgEntryPrice)}${
+          subtitle={`${trade.symbol} · ${trade.direction} · ${t(adds > 0 ? 'avgEntryWord' : 'entryWord')} ${formatPriceGrouped(trade.avgEntryPrice)}${
             data ? ` · ${t('corridorPrefix')} ${windowAge(tf, data.window.expected)}` : ''
           }`}
         />
@@ -75,7 +83,7 @@ export function RangeCheckModal({ trade, onClose }: { trade: Trade; onClose: () 
           ) : data && data.candles.length > 0 ? (
             /* key: смена таймфрейма — это другой график, а не тот же самый в
                новом масштабе, поэтому вид сбрасывается вместе с ней. */
-            <RangeCheckChart key={tf} data={data} />
+            <RangeCheckChart key={tf} data={data} avgEntry={trade.avgEntryPrice} entries={entries} />
           ) : (
             <p className="muted">{t('noCandlesForPeriod')}</p>
           )}
@@ -91,6 +99,7 @@ export function RangeCheckModal({ trade, onClose }: { trade: Trade; onClose: () 
                     ? `${formatPriceGrouped(data.window.low)} – ${formatPriceGrouped(data.window.high)}`
                     : '—'}
                 </KeyValue>
+                {adds > 0 && <KeyValue label={t('addsLabel')}>{adds}</KeyValue>}
               </Lookup>
             </>
           )}

@@ -223,23 +223,4 @@ describe('OkxAdapter', () => {
       expect(res.items[0].closedSize).toBe(0);
     });
   });
-
-  describe('fetchExecutionMarkers', () => {
-    it('collapses a symbol\'s fills to one marker per order', async () => {
-      // Markers look back a fixed number of days from now, so the fixture has
-      // to sit inside that window rather than at a fixed past date.
-      const ts = String(Date.now() - 60_000);
-      const base = { instId: 'BTC-USDT-SWAP', side: 'buy', posSide: 'long', ts };
-      stubFetch([[
-        { ...base, tradeId: 'a', ordId: 'order-1', fillSz: '1', fillPx: '100' },
-        { ...base, tradeId: 'b', ordId: 'order-1', fillSz: '3', fillPx: '200' },
-        { ...base, tradeId: 'c', ordId: 'order-2', fillSz: '1', fillPx: '999', instId: 'ETH-USDT-SWAP' },
-      ]]);
-      const markers = await adapter.fetchExecutionMarkers(CREDS, { symbol: 'BTC-USDT-SWAP' });
-
-      expect(markers).toHaveLength(1);
-      // Value-weighted: (1*100 + 3*200) / 4 = 175.
-      expect(markers[0]).toMatchObject({ orderId: 'order-1', price: 175, qty: 4, side: 'Buy' });
-    });
-  });
 });

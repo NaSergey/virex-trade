@@ -109,12 +109,9 @@ describe('TradesController — ETag/304 (T10, A2)', () => {
     const tradesService = { stats: jest.fn(statsImpl) };
     const controller = new TradesController(
       tradesService as any,
-      {} as any, // TradeSyncService — не участвует в этом пути
       {} as any, // TradeContextService
       {} as any, // LabService
       {} as any, // HabitsService
-      {} as any, // CredentialsService
-      {} as any, // ExchangeRegistry
       dataVersion as any,
     );
     return { controller, tradesService };

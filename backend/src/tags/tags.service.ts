@@ -155,54 +155,6 @@ export class TagsService {
     return { success: true, tag: updated };
   }
 
-  /**
-   * Merge `sourceId` into `intoTagId`: every trade/position link moves to the
-   * target (duplicates collapse via skipDuplicates), then the source tag is
-   * deleted. The history-preserving alternative to delete for accidental
-   * near-duplicates ("отскок EMA" vs "EMA bounce").
-   *
-   * T10: бампит версию — перевешивает TradeTag-связи, которые видят
-   * statsByTag/statsByTagCombo/list/lab/habits.
-   */
-  async merge(userId: string, sourceId: string, intoTagId: string) {
-    if (sourceId === intoTagId)
-      throw new BadRequestException({ message: 'Нельзя слить тег сам в себя', code: 'TAG_MERGE_SELF' });
-    const [source, target] = await Promise.all([
-      this.prisma.tag.findUnique({ where: { id: sourceId } }),
-      this.prisma.tag.findUnique({ where: { id: intoTagId } }),
-    ]);
-    if (!source || source.userId !== userId) throw new NotFoundException({ message: 'Тег не найден', code: 'TAG_NOT_FOUND' });
-    if (!target || target.userId !== userId)
-      throw new NotFoundException({ message: 'Целевой тег не найден', code: 'TAG_MERGE_TARGET_NOT_FOUND' });
-
-    await this.prisma.$transaction(async (tx) => {
-      const tradeLinks = await tx.tradeTag.findMany({
-        where: { tagId: sourceId },
-        select: { tradeId: true },
-      });
-      if (tradeLinks.length > 0) {
-        await tx.tradeTag.createMany({
-          data: tradeLinks.map((l) => ({ tradeId: l.tradeId, tagId: intoTagId })),
-          skipDuplicates: true,
-        });
-      }
-      const posLinks = await tx.positionTag.findMany({
-        where: { tagId: sourceId },
-        select: { symbol: true, direction: true },
-      });
-      if (posLinks.length > 0) {
-        await tx.positionTag.createMany({
-          data: posLinks.map((l) => ({ userId, symbol: l.symbol, direction: l.direction, tagId: intoTagId })),
-          skipDuplicates: true,
-        });
-      }
-      // Cascade deletes the source's remaining TradeTag/PositionTag rows.
-      await tx.tag.delete({ where: { id: sourceId } });
-    });
-    await this.dataVersion.bump(userId);
-    return { success: true, tag: { id: target.id, name: target.name, color: target.color, type: target.type } };
-  }
-
   /** T10: бампит версию — cascade выкашивает TradeTag/PositionTag этого тега. */
   async remove(id: string, userId: string) {
     const tag = await this.prisma.tag.findUnique({ where: { id } });

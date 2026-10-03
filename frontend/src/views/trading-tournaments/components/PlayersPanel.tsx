@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Seg, type SegOption } from '@/shared/ui/Seg';
-import { Rating } from './Rating';
+import { Rating } from '@/widgets/tournament-rating';
 import { TradesFeed } from './TradesFeed';
 
 type Tab = 'rating' | 'trades';

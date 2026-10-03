@@ -206,3 +206,55 @@ describe('AnalyticsService — кэш рыночных эндпоинтов', ()
     });
   });
 });
+
+/**
+ * До 2026-10-02 кэш волатильности был одним слотом на все монеты: страница
+ * рынка переключает BTC / ETH / SOL, и первая спрошенная монета 5 минут
+ * отвечала за остальные.
+ */
+describe('AnalyticsService.getVolatility — кэш по монете', () => {
+  /** 30 часовых свечей с заданным шагом цены — у разных монет разная волатильность. */
+  const klines = (step: number) =>
+    Array.from({ length: 30 }, (_, i) => {
+      const close = 100 + (i % 2 === 0 ? step : -step);
+      return [String(i * 3_600_000), '100', '0', '0', String(close), '1', '1000'];
+    });
+
+  let now = 1_000_000;
+  beforeEach(() => {
+    now = 1_000_000;
+    jest.spyOn(Date, 'now').mockImplementation(() => now);
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it('BTC и ETH не делят кэш: у каждой свой запрос и свой ответ', async () => {
+    const fetchMock = jest.fn(async (url: string) =>
+      okResponse(bybitListBody(url.includes('ETHUSDT') ? klines(5) : klines(1))),
+    );
+    global.fetch = fetchMock as never;
+    const service = makeService();
+
+    const btc = await service.getVolatility('BTCUSDT');
+    const eth = await service.getVolatility('ETHUSDT');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(eth.currentVolPct).not.toBeCloseTo(btc.currentVolPct);
+    // Повторные запросы каждой монеты — из её же кэша.
+    await expect(service.getVolatility('BTCUSDT')).resolves.toEqual(btc);
+    await expect(service.getVolatility('ETHUSDT')).resolves.toEqual(eth);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('при ошибке биржи запасной ответ — только своей монеты, чужой не подставляется', async () => {
+    const fetchMock = jest.fn().mockResolvedValueOnce(okResponse(bybitListBody(klines(1))));
+    global.fetch = fetchMock as never;
+    const service = makeService();
+    const btc = await service.getVolatility('BTCUSDT');
+
+    now += 10 * 60_000; // кэш BTC протух
+    fetchMock.mockResolvedValue(failResponse());
+
+    await expect(service.getVolatility('ETHUSDT')).rejects.toThrow();
+    await expect(service.getVolatility('BTCUSDT')).resolves.toEqual(btc);
+  });
+});

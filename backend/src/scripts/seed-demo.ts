@@ -29,7 +29,6 @@ import 'reflect-metadata';
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { CTX_VERSION } from '../trades/trade-context.service';
-import { RISK_VERSION } from '../balance/trade-risk.service';
 
 /**
  * Учётка публична по назначению: её вводит кнопка «Посмотреть демо» на входе
@@ -296,7 +295,6 @@ interface Position {
   openFee: number;
   pnl: number;
   parts: Part[];
-  balanceAtEntry: number;
   riskUsd: number;
 }
 
@@ -341,8 +339,7 @@ function buildPositions(now: number): Position[] {
     const entryPrice = base * (1 + (rnd() - 0.5) * spec.vol * 0.6);
     const direction: 'long' | 'short' = chance(0.62) ? 'long' : 'short';
 
-    // Размер считается от риска, а не от «сколько не жалко»: тогда exposurePct
-    // и plannedRiskPct в TradeRisk получаются согласованными между собой.
+    // Размер считается от риска, а не от «сколько не жалко».
     /*
      * Риск на сделку — логнормальный, с широким разбросом, а не ровный
      * процент от депозита. Это не «шум ради шума»: непостоянный размер входа —
@@ -371,10 +368,9 @@ function buildPositions(now: number): Position[] {
     const rawQty = notional / entryPrice;
     const qty = Math.max(spec.step, Math.round(rawQty / spec.step) * spec.step);
 
-    // Часть входов — без стопа на бирже: у таких сделок plannedRiskPct честно
-    // остаётся null, а убыток бежит дальше (см. множитель ниже). Своего тега
-    // у этого больше нет — в наборе демо он не нужен, — но поведение осталось:
-    // раздел риска обязан показывать сделки, у которых плановый риск неизвестен.
+    // Часть входов — без стопа на бирже: стопа у таких сделок нет, а убыток
+    // бежит дальше (см. множитель ниже). Своего тега у этого больше нет — в
+    // наборе демо он не нужен, — но поведение осталось.
     const noStop = chance(0.12);
     const stopLoss = noStop
       ? null
@@ -457,7 +453,6 @@ function buildPositions(now: number): Position[] {
       openFee,
       pnl,
       parts,
-      balanceAtEntry: balance,
       riskUsd,
     };
     balance += pnl - openFee - parts.reduce((s, p) => s + p.closeFee, 0);
@@ -871,24 +866,10 @@ async function main() {
           });
         }
 
-        // Контекст и риск — только на первую часть: `collapseToPositions`
-        // берёт их у неё же, а строки на остальных частях никто не прочитает.
+        // Контекст — только на первую часть: `collapseToPositions` берёт его у
+        // неё же, а строки на остальных частях никто не прочитает.
         if (i === 0) {
           await prisma.tradeContext.create({ data: { tradeId: trade.id, ...contextOf(p) } });
-          const notional = p.qty * p.entryPrice;
-          await prisma.tradeRisk.create({
-            data: {
-              tradeId: trade.id,
-              balanceAtEntry: p.balanceAtEntry,
-              balanceSource: 'derived',
-              exposurePct: (notional / p.balanceAtEntry) * 100,
-              // Null без стопа — не «ошибка расчёта», а отсутствие плана:
-              // exposurePct при этом посчитан, поэтому ok остаётся true.
-              plannedRiskPct: p.stopLoss ? (p.riskUsd / p.balanceAtEntry) * 100 : null,
-              ok: true,
-              riskVersion: RISK_VERSION,
-            },
-          });
         }
       }
 
@@ -962,38 +943,6 @@ async function main() {
       if (++n % 25 === 0) console.log(`  позиций записано: ${n}/${positions.length}`);
     }
 
-    // История баланса: ежедневный снимок плюс два пополнения. Без неё
-    // «риск в % от депозита» невычислим в принципе — считать не от чего.
-    const startMs = now - DAYS * DAY;
-    const deposits = new Map<number, number>([
-      [DAYS - 120, 2000],
-      [DAYS - 45, 1500],
-    ]);
-    let balance = START_BALANCE;
-    let cursor = 0;
-    const snapshots: Array<{ at: Date; balance: number; gap: number | null }> = [];
-    for (let d = 0; d <= DAYS; d++) {
-      const at = new Date(startMs + d * DAY);
-      while (cursor < positions.length && positions[cursor].closeMs <= at.getTime()) {
-        const p = positions[cursor++];
-        balance += p.pnl - p.openFee - p.parts.reduce((s, x) => s + x.closeFee, 0);
-      }
-      const gap = deposits.get(d) ?? null;
-      if (gap) balance += gap;
-      snapshots.push({ at, balance, gap });
-    }
-    await prisma.balanceSnapshot.createMany({
-      data: snapshots.map((s) => ({
-        userId: user.id,
-        exchange: EXCHANGE,
-        at: s.at,
-        balance: s.balance,
-        source: 'snapshot',
-        gap: s.gap,
-      })),
-      skipDuplicates: true,
-    });
-
     // Закреплённая комбинация: карточка «связка, за которой я слежу» —
     // показать, что срез можно не только найти, но и оставить на виду.
     const pinned = ['По тренду', 'Ретест'].map((t) => tagId.get(t)!).sort();
@@ -1012,7 +961,6 @@ async function main() {
     console.log(`демо-аккаунт готов: ${DEMO_EMAIL} / ${DEMO_PASSWORD}`);
     console.log(`  позиций: ${positions.length}, строк сделок: ${totalTrades}`);
     console.log(`  итог за период: ${pnl >= 0 ? '+' : '−'}$${Math.abs(pnl).toFixed(2)}`);
-    console.log(`  баланс: $${balance.toFixed(2)} (старт $${START_BALANCE}, пополнений $3500)`);
     console.log('');
     // Та же сводка, что у --dry: два расходящихся её варианта уже разъехались
     // однажды — в шапке появилась колонка, которой в строках не было.

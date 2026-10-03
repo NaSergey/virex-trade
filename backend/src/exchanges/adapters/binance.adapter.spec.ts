@@ -297,19 +297,4 @@ describe('BinanceAdapter', () => {
       expect(res.items.map((f) => [f.execId, f.closedSize])).toEqual([['1', 0], ['2', 2]]);
     });
   });
-
-  describe('fetchExecutionMarkers', () => {
-    it('goes straight to userTrades — the symbol is already known', async () => {
-      const calls = stubApi({ trades: { BTCUSDT: [
-        { id: 1, orderId: 'o-1', symbol: 'BTCUSDT', side: 'BUY', positionSide: 'BOTH', price: '100', qty: '1', realizedPnl: '0', time: Date.now() - 60_000 },
-        { id: 2, orderId: 'o-1', symbol: 'BTCUSDT', side: 'BUY', positionSide: 'BOTH', price: '200', qty: '3', realizedPnl: '0', time: Date.now() - 30_000 },
-      ] } });
-      const markers = await adapter.fetchExecutionMarkers(CREDS, { symbol: 'BTCUSDT', days: 1 });
-
-      expect(calls.some((c) => c.path === '/fapi/v1/income')).toBe(false);
-      expect(markers).toHaveLength(1);
-      // Value-weighted: (1*100 + 3*200) / 4 = 175.
-      expect(markers[0]).toMatchObject({ orderId: 'o-1', price: 175, qty: 4 });
-    });
-  });
 });

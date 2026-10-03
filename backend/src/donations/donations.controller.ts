@@ -43,13 +43,6 @@ export class DonationsController {
     return this.donations.unmatchedTransfers(limit ?? 50);
   }
 
-  /** История своих донатов. */
-  @Get('mine')
-  @UseGuards(JwtAuthGuard)
-  mine(@CurrentUser('userId') userId: string, @Query('limit') limit?: number) {
-    return this.donations.listMine(userId, limit ?? 20);
-  }
-
   @Post()
   @UseGuards(OptionalJwtAuthGuard, ThrottlerGuard)
   @Throttle(CREATE_LIMIT)

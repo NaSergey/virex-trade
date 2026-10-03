@@ -22,6 +22,7 @@ import { PositionBuilderService } from './position-builder.service';
 import { DataVersionService } from '../prisma/data-version.service';
 import { runsBackgroundJobs } from '../role';
 import { runWithConcurrency } from '../common/concurrency';
+import { bybitPaused, bybitRejections } from '../bybit/bybit-gate';
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const BACKFILL_WEEKS = 26; // first run: import ~6 months of history
@@ -61,11 +62,6 @@ export class TradeSyncService
   implements OnApplicationBootstrap, OnModuleDestroy
 {
   private readonly logger = new Logger(TradeSyncService.name);
-  // Per-user locks, not one global flag: a single shared `syncing` boolean let
-  // the background sweep swallow a user's manual re-sync (it returned a
-  // truthful-looking `{ inserted: 0 }` without ever contacting Bybit), and made
-  // every user wait behind whoever was mid-backfill.
-  private readonly inFlight = new Set<string>();
   private sweeping = false;
   private timer?: NodeJS.Timeout;
 
@@ -82,9 +78,7 @@ export class TradeSyncService
   ) {}
 
   onApplicationBootstrap() {
-    // T11: этот сервис — один из девяти фоновых, живёт только в роли worker
-    // (и в дефолтной all). В роли api его периодический таймер не стартует —
-    // syncUser() для ручного ресинка остаётся вызываемым через DI как обычно.
+    // T11: фоновый сервис, живёт только в роли worker (и в дефолтной all).
     if (!runsBackgroundJobs()) return;
     // Don't block startup on the network; sync in the background.
     this.syncAll().catch((e) => this.logger.error('initial sync failed', e));
@@ -121,11 +115,10 @@ export class TradeSyncService
       // последовательный for на 1000 аккаунтов не помещался в минутный
       // интервал (десять минут на обход, см. бриф).
       await runWithConcurrency(users, SYNC_CONCURRENCY, async (u) => {
-        if (this.inFlight.has(u.id)) return; // manual re-sync already running
         // One user's failure (revoked keys, an undecryptable credential blob,
         // an exchange outage) must not abort the sweep for everyone behind them.
         try {
-          inserted += await this.runLocked(u.id, opts);
+          inserted += await this.syncOne(u.id, opts);
         } catch (e) {
           this.logger.warn(`sync failed for user ${u.id}: ${e}`);
         }
@@ -146,32 +139,9 @@ export class TradeSyncService
     }
   }
 
-  /**
-   * Manual re-sync for a single user (e.g. right after connecting keys).
-   * `skipped` distinguishes "nothing new on the exchange" from "your previous
-   * sync is still running" — both used to surface as a bare `inserted: 0`.
-   */
-  async syncUser(
-    userId: string,
-    opts?: { full?: boolean },
-  ): Promise<{ inserted: number; skipped?: boolean }> {
-    if (this.inFlight.has(userId)) return { inserted: 0, skipped: true };
-    return { inserted: await this.runLocked(userId, opts) };
-  }
-
-  private async runLocked(
-    userId: string,
-    opts?: { full?: boolean },
-  ): Promise<number> {
-    this.inFlight.add(userId);
-    try {
-      return await this.syncUserUnlocked(userId, opts);
-    } finally {
-      this.inFlight.delete(userId);
-    }
-  }
-
-  private async syncUserUnlocked(
+  // Один пользователь за прогон. Отдельного замка нет: другого пути к синку,
+  // кроме обхода (`sweeping`), не осталось — ручной ресинк снят.
+  private async syncOne(
     userId: string,
     opts?: { full?: boolean },
   ): Promise<number> {
@@ -179,6 +149,18 @@ export class TradeSyncService
     if (!active) return 0;
     const { exchange, credentials: creds } = active;
     const adapter = this.exchanges.get(exchange);
+
+    // Пауза шлюза Bybit (IP сервера получил 403): каждый запрос прогона был бы
+    // отклонён без сети, а сам прогон засчитался бы человеку как неудачный.
+    // Тик пропускается молча — синк вернётся сам, когда пауза кончится.
+    if (exchange === 'bybit' && bybitPaused()) return 0;
+    // Неудача, в которой виноват наш шлюз (пауза началась посреди прогона, нет
+    // места в окне), — не неудача ключа: три таких подряд разослали бы всем
+    // «проверь API-ключи», хотя ключи в порядке. Счётчик отказов общий на
+    // процесс, поэтому отказ чужого прогона в то же время тоже снимает этот с
+    // учёта; это сдвигает сигнал на прогон, но не выдумывает его.
+    const gateMark = bybitRejections();
+    const gateFault = () => bybitRejections() !== gateMark;
 
     // Backfill depth is per exchange: connecting a second exchange must pull
     // its full history, not the one-week increment the first one is down to.
@@ -199,7 +181,7 @@ export class TradeSyncService
     } catch (e) {
       // Упавший запрос — тоже неудачный прогон: без этого счётчик сбоев видел
       // бы только «частично» и молчал бы, когда биржа не отвечает вовсе.
-      await this.tradeAlerts.syncOutcome(userId, false);
+      if (!gateFault()) await this.tradeAlerts.syncOutcome(userId, false);
       throw e;
     }
     if (closed.partial) {
@@ -208,7 +190,7 @@ export class TradeSyncService
       );
     }
     const inserted = await this.persist(userId, exchange, closed.items);
-    await this.tradeAlerts.syncOutcome(userId, !closed.partial);
+    if (!closed.partial || !gateFault()) await this.tradeAlerts.syncOutcome(userId, !closed.partial);
     // T-final-review (re-review, IMPORTANT): символы этого тика с новыми
     // closed-pnl `Trade` — нужны PositionBuilderService.sync ниже, чтобы
     // расширить область перестройки конкретно на них (см. комментарий у
@@ -247,7 +229,7 @@ export class TradeSyncService
         this.logger.log(`stamped openedAt on ${filled} trade(s)`);
         // Trade.openedAt видят list/stats/statsByTime (длительность удержания,
         // час/день входа) — stopLoss в этом же UPDATE кэшируемым эндпоинтам не
-        // виден (его читает только trade-risk.service.ts, вне скоупа кэша), но
+        // виден (его читает только недельный отчёт, вне скоупа кэша), но
         // бампим всё равно: поле пишется тем же вызовом ради openedAt.
         await this.dataVersion.bump(userId);
       }
@@ -268,9 +250,7 @@ export class TradeSyncService
       // api/worker processes (T11), where this service has run its own
       // separate instance since it has no way to share one across processes.
       // Still worth going through: it keeps this call's own retry/no-cache-
-      // on-failure behavior consistent with the controller's, and coalesces
-      // this service's own concurrent/rapid calls (e.g. a manual re-sync
-      // landing mid-tick) with the scheduled tick's.
+      // on-failure behavior consistent with the controller's.
       open = await this.positionsCache.getOpenPositions(
         userId,
         exchange,

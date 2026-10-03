@@ -120,7 +120,6 @@ function ExchangeTerminal({ state, stale }: { state: TerminalState; stale: boole
         badge={tt('realBadge')}
         soundsOf={sounds}
         history={<ExchangeHistory />}
-        canFollow={false}
       />
     </>
   );

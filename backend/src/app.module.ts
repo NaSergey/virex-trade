@@ -8,7 +8,6 @@ import { ExchangesModule } from './exchanges/exchanges.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { TradesModule } from './trades/trades.module';
-import { BalanceModule } from './balance/balance.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { SettingsModule } from './settings/settings.module';
 import { TagsModule } from './tags/tags.module';
@@ -22,12 +21,11 @@ import { DonationsModule } from './donations/donations.module';
 import { CoinsModule } from './coins/coins.module';
 import { TournamentsModule } from './tournaments/tournaments.module';
 import { ReferralsModule } from './referrals/referrals.module';
-import { GamesModule } from './games/games.module';
-import { PokerModule } from './poker/poker.module';
-import { BlackjackModule } from './blackjack/blackjack.module';
-import { JetpackModule } from './jetpack/jetpack.module';
 import { BattlePassModule } from './battlepass/battlepass.module';
 import { TerminalModule } from './terminal/terminal.module';
+import { ProfileModule } from './profile/profile.module';
+import { GAME_MODULES } from './games-app.module';
+import { runsGames } from './role';
 
 @Module({
   imports: [
@@ -45,7 +43,6 @@ import { TerminalModule } from './terminal/terminal.module';
     BybitModule,
     ExchangesModule,
     TradesModule,
-    BalanceModule,
     AnalyticsModule,
     SettingsModule,
     TagsModule,
@@ -59,12 +56,13 @@ import { TerminalModule } from './terminal/terminal.module';
     CoinsModule,
     TournamentsModule,
     ReferralsModule,
-    GamesModule,
-    PokerModule,
-    BlackjackModule,
-    JetpackModule,
+    // Игры — только где они идут: здесь это `ROLE=all`; у `games` свой корень
+    // (`GamesAppModule`). В `api` и `worker` их нет вовсе — ни контроллеров,
+    // ни сокета, ни возврата прерванных раздач на старте.
+    ...(runsGames() ? GAME_MODULES : []),
     BattlePassModule,
     TerminalModule,
+    ProfileModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -29,11 +29,6 @@ export class TournamentsController {
     return this.tournaments.board(userId);
   }
 
-  @Get('rating')
-  rating(@CurrentUser('userId') userId: string) {
-    return this.tournaments.rating(userId);
-  }
-
   /** Лента сделок идущих турниров — см. `TournamentsService.feed`. */
   @Get('feed')
   feed(@CurrentUser('userId') userId: string) {
@@ -94,5 +89,27 @@ export class TournamentsController {
   @Delete(':id')
   remove(@CurrentUser('userId') userId: string, @Param('id') id: string) {
     return this.tournaments.remove(userId, id);
+  }
+}
+
+/**
+ * Рейтинг игры — вошедшему; его строка приходит за пределами таблицы (`me`).
+ *
+ * Без авторизации он был открыт ровно ради гостевого профиля, а профиль с
+ * 2026-10-02 требует входа — и публичный эндпоинт, переживший свою причину,
+ * это поверхность без владельца. Гостя теперь не пускает `JwtAuthGuard`, а не
+ * `OptionalJwtAuthGuard`, отдававший таблицу кому угодно.
+ *
+ * Отдельный контроллер остаётся: его `GET rating` обязан встать раньше `GET
+ * :id` турниров, иначе слово `rating` было бы принято за id турнира.
+ */
+@UseGuards(JwtAuthGuard)
+@Controller('api/tournaments')
+export class TournamentRatingController {
+  constructor(private readonly tournaments: TournamentsService) {}
+
+  @Get('rating')
+  rating(@CurrentUser('userId') userId: string | undefined) {
+    return this.tournaments.rating(userId);
   }
 }

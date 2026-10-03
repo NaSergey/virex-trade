@@ -10,6 +10,10 @@ const INSTRUMENTS_TTL_MS = 10 * 60_000;
 const SYMBOLS_TTL_MS = 5 * 60_000;
 /** Хвост графика — не чаще одного запроса к Bybit за столько на монету на весь сервер. */
 const TAIL_TTL_MS = 1500;
+/** Маркировка всех монет одним запросом — на всех пользователей процесса. */
+const MARKS_TTL_MS = 2_000;
+/** Столько после сбоя отдаётся прошлый ответ; дальше — пусто, и PnL берётся из событий. */
+const MARKS_STALE_MS = 30_000;
 /** Сколько последних минуток в хвосте — столько же, сколько у эфира бектеста. */
 const TAIL_SIZE = 30;
 /** Больше Bybit за один запрос свечей не отдаёт. */
@@ -142,6 +146,43 @@ export class TerminalMarketService {
       .sort((a, b) => (turnover.get(b.symbol) ?? 0) - (turnover.get(a.symbol) ?? 0) || a.symbol.localeCompare(b.symbol));
     this.symbolsCache = { at: this.now(), value };
     return value;
+  }
+
+  private marks: Cached<Map<string, number>> | null = null;
+  private marksInflight: Promise<Map<string, number>> | null = null;
+  /** Когда запрос маркировки последний раз упал: столько же, сколько живёт кэш, к бирже не идём. */
+  private marksFailedAt = Number.NEGATIVE_INFINITY;
+
+  /**
+   * Цена маркировки всех USDT-перпов — для PnL позиций и депозита потока
+   * счёта: изменение цены событий приватного потока не даёт.
+   */
+  async markPrices(): Promise<ReadonlyMap<string, number>> {
+    const now = this.now();
+    const stale = () => (this.marks && now - this.marks.at < MARKS_STALE_MS ? this.marks.value : new Map<string, number>());
+    if (this.marks && now - this.marks.at < MARKS_TTL_MS) return this.marks.value;
+    // Биржа только что не ответила: каждый опрос экрана повторял бы запрос, пока она лежит.
+    if (now - this.marksFailedAt < MARKS_TTL_MS) return stale();
+    this.marksInflight ??= this.bybit
+      .publicGet('/market/tickers', { category: 'linear' })
+      .then((result) => {
+        const value = new Map<string, number>();
+        for (const t of result.list ?? []) {
+          const mark = parseFloat(t.markPrice);
+          if (mark > 0) value.set(String(t.symbol), mark);
+        }
+        this.marks = { at: this.now(), value };
+        return value;
+      })
+      .finally(() => {
+        this.marksInflight = null;
+      });
+    try {
+      return await this.marksInflight;
+    } catch {
+      this.marksFailedAt = this.now();
+      return stale();
+    }
   }
 
   /** Последняя цена монеты — от неё считается объём рыночного ордера. Без кэша: устаревшая цена — неверный размер. */

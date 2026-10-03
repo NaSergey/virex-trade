@@ -40,9 +40,33 @@ export interface RatingRow {
  */
 export function ratingRows(
   input: RatingInput[],
-  viewerId: string,
+  viewerId: string | undefined,
   limit = 50,
 ): { rows: RatingRow[]; me: RatingRow | null } {
+  return pickRows(rankAll(input), viewerId, limit);
+}
+
+/**
+ * То же, что `ratingRows`, но по уже ранжированной таблице — её держит кэш
+ * сервиса турниров (рейтинг пересчитывается раз в час), а выбор строк для
+ * смотрящего — на каждый запрос: смотрящие разные.
+ */
+export function pickRows(
+  ranked: RatingRow[],
+  viewerId: string | undefined,
+  limit = 50,
+): { rows: RatingRow[]; me: RatingRow | null } {
+  const rows = ranked.slice(0, limit);
+  const me = ranked.find((r) => r.userId === viewerId);
+  return { rows, me: me && me.place > limit ? me : null };
+}
+
+/**
+ * Вся таблица целиком, по местам. Отдельно от `ratingRows` ради профиля: там
+ * нужна строка любого игрока, а не первые `limit` и смотрящий, — и правило
+ * очков при этом обязано остаться одним.
+ */
+export function rankAll(input: RatingInput[]): RatingRow[] {
   // Сколько человек было в турнире — из самих строк: они и есть все его
   // участники, и второй источник этого числа мог бы с ними разойтись.
   const size = new Map<string, number>();
@@ -71,7 +95,7 @@ export function ratingRows(
     byUser.set(r.userId, acc);
   }
 
-  const ranked: RatingRow[] = [...byUser.entries()]
+  return [...byUser.entries()]
     .map(([userId, acc]) => ({ place: 0, userId, ...acc }))
     // Очки, при равенстве — победы, дальше меньше турниров: те же очки за
     // меньшее число попыток стоят дороже. Имя — последний разводящий, чтобы
@@ -84,8 +108,4 @@ export function ratingRows(
         a.name.localeCompare(b.name),
     )
     .map((r, i) => ({ ...r, place: i + 1 }));
-
-  const rows = ranked.slice(0, limit);
-  const me = ranked.find((r) => r.userId === viewerId);
-  return { rows, me: me && me.place > limit ? me : null };
 }

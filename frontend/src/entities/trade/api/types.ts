@@ -163,26 +163,6 @@ export interface TimeStatsResponse {
   };
 }
 
-// Entry/exit fill marker for the candlestick chart (one per order).
-export interface ExecMarker {
-  orderId: string;
-  time: number; // unix seconds
-  price: number;
-  side: 'Buy' | 'Sell';
-  qty: number;
-  isClose: boolean; // exit (closed part of a position) vs entry
-}
-
-// ── Instrument info (lot size, price tick, leverage range) ──
-export interface InstrumentInfo {
-  success: boolean;
-  symbol: string;
-  leverageFilter?: { minLeverage: string; maxLeverage: string; leverageStep: string };
-  lotSizeFilter?: { minOrderQty: string; maxOrderQty: string; qtyStep: string; minNotionalValue?: string };
-  priceFilter?: { minPrice: string; maxPrice: string; tickSize: string };
-  error?: string;
-}
-
 // ── Habits: диагностика поведения без тегов ("Цена привычек") ──
 export type HabitKind =
   | 'tilt'

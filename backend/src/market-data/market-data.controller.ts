@@ -89,9 +89,4 @@ export class MarketDataController {
 
     return candles;
   }
-
-  @Get('coverage')
-  async getCoverage(@Query('symbol') symbol?: string) {
-    return this.marketData.getCoverage(symbol);
-  }
 }

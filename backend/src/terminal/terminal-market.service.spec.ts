@@ -35,7 +35,7 @@ function setup(klines: (params: Record<string, string>) => string[][]) {
     publicGet: jest.fn(async (path: string, params: Record<string, string>) => {
       if (path === '/market/instruments-info') return { list: [INSTRUMENT, { ...INSTRUMENT, symbol: 'ETHUSDC', quoteCoin: 'USDC' }] };
       if (path === '/market/tickers') {
-        return { list: [{ symbol: 'BTCUSDT', lastPrice: '60000', turnover24h: '5' }] };
+        return { list: [{ symbol: 'BTCUSDT', lastPrice: '60000', markPrice: '60010', turnover24h: '5' }] };
       }
       if (path === '/market/kline') {
         calls.push(params);
@@ -107,5 +107,27 @@ describe('TerminalMarketService', () => {
     const { market } = setup(() => []);
 
     expect(await market.symbols()).toEqual([{ symbol: 'BTCUSDT', base: 'BTC', decimals: 2, maxLeverage: 100 }]);
+  });
+
+  it('маркировка — один запрос на все монеты, кэш 2 с, после сбоя — прошлый ответ до 30 с', async () => {
+    const { market, bybit } = setup(() => []);
+    const tickers = () => bybit.publicGet.mock.calls.filter(([p]) => p === '/market/tickers').length;
+
+    expect((await market.markPrices()).get('BTCUSDT')).toBe(60_010);
+    await market.markPrices();
+    expect(tickers()).toBe(1);
+
+    market.setNow(NOW + 2_000);
+    bybit.publicGet.mockRejectedValueOnce(new Error('down'));
+    expect((await market.markPrices()).get('BTCUSDT')).toBe(60_010);
+
+    // только что упало — к бирже не идём, отдаём прошлое
+    market.setNow(NOW + 3_000);
+    await market.markPrices();
+    expect(tickers()).toBe(2);
+
+    market.setNow(NOW + 31_000);
+    bybit.publicGet.mockRejectedValueOnce(new Error('down'));
+    expect((await market.markPrices()).size).toBe(0);
   });
 });

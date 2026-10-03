@@ -36,7 +36,6 @@ export function CloseGridModal({
   isPending,
   error,
   decimals,
-  canFollow = true,
 }: {
   trade: BacktestTrade;
   scale: number;
@@ -49,12 +48,6 @@ export function CloseGridModal({
   isPending: boolean;
   error: unknown;
   decimals?: number;
-  /**
-   * Есть ли кому двигать стоп за тейками. У сессии его двигает наш сервер
-   * (`followStop`); на бирже ордера исполняет она, и переноса нет — тогда окно
-   * его не предлагает и не показывает колонку «стоп после».
-   */
-  canFollow?: boolean;
 }) {
   const t = useTranslations('backtest');
   const { closing, close } = useDialogFade(onClose);
@@ -67,8 +60,8 @@ export function CloseGridModal({
   const [last, setLast] = useState(() => anchor * (1 + sign * 0.03));
   const [count, setCount] = useState('3');
   // Позиция без сетки — перенос включён: ради него окно обычно и открывают.
-  const [wantFollow, setStopFollow] = useState(() => trade.stopFollow || closeOrdersCount === 0);
-  const stopFollow = canFollow && wantFollow;
+  // Стоп за тейками двигает сервер: у сессии — `followStop`, у биржи — worker по событиям потока.
+  const [stopFollow, setStopFollow] = useState(() => trade.stopFollow || closeOrdersCount === 0);
 
   const n = clamp(Math.round(Number(count) || MIN_ORDERS), MIN_ORDERS, MAX_ORDERS);
   const range = levelSliderRange('take', anchor, trade.direction);
@@ -147,17 +140,13 @@ export function CloseGridModal({
           <Field label={t('ordersCount')}>
             {(id) => <Input id={id} full inputMode="numeric" value={count} onChange={(e) => setCount(e.target.value)} />}
           </Field>
-          {canFollow ? (
-            <label className="opt" data-on={stopFollow}>
-              <input type="checkbox" checked={stopFollow} onChange={(e) => setStopFollow(e.target.checked)} />
-              <span className="opt-n">
-                {t('closeGridFollow')}
-                <span className="muted"> — {t('closeGridFollowHint')}</span>
-              </span>
-            </label>
-          ) : (
-            <p className="muted">{t('closeGridNoFollow')}</p>
-          )}
+          <label className="opt" data-on={stopFollow}>
+            <input type="checkbox" checked={stopFollow} onChange={(e) => setStopFollow(e.target.checked)} />
+            <span className="opt-n">
+              {t('closeGridFollow')}
+              <span className="muted"> — {t('closeGridFollowHint')}</span>
+            </span>
+          </label>
 
           <LedgerTable columns={columns} rows={plan.rows.map((r, i) => ({ ...r, i }))} rowKey={(r) => String(r.i)} />
           <div className="size-preview">

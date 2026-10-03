@@ -1,14 +1,11 @@
-import { Controller, Get, Headers, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
+import { Controller, Get, Headers, Param, Query, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { TradesService } from './trades.service';
-import { TradeSyncService } from './trade-sync.service';
 import { TradeContextService, isRangeTf, type RangeTf } from './trade-context.service';
 import { LabService } from './lab.service';
 import { HabitsService } from './habits.service';
-import { CredentialsService } from '../credentials/credentials.service';
-import { ExchangeRegistry } from '../exchanges/exchange-registry.service';
 import { DataVersionService } from '../prisma/data-version.service';
 import { buildEtag } from './aggregate-cache';
 import type { LabFilter } from './lab.service';
@@ -18,12 +15,9 @@ import type { LabFilter } from './lab.service';
 export class TradesController {
   constructor(
     private readonly tradesService: TradesService,
-    private readonly syncService: TradeSyncService,
     private readonly tradeContext: TradeContextService,
     private readonly labService: LabService,
     private readonly habitsService: HabitsService,
-    private readonly credentials: CredentialsService,
-    private readonly exchanges: ExchangeRegistry,
     private readonly dataVersion: DataVersionService,
   ) {}
 
@@ -252,22 +246,6 @@ export class TradesController {
     return this.tradesService.openPositionContext(userId, symbol ?? '', direction ?? '');
   }
 
-  // Entry/exit fill markers for the chart (one per order, recent window).
-  @Get('executions')
-  async executions(
-    @CurrentUser('userId') userId: string,
-    @Query('symbol') symbol: string,
-    @Query('days') days?: string,
-  ) {
-    if (!symbol) return { success: false, executions: [] };
-    const { exchange, credentials } = await this.credentials.requireActive(userId);
-    const executions = await this.exchanges.get(exchange).fetchExecutionMarkers(credentials, {
-      symbol,
-      days: days ? parseInt(days, 10) : undefined,
-    });
-    return { success: true, executions };
-  }
-
   // Все ордера одной позиции (раскрытая строка таблицы сделок). Объявлен
   // после статических путей, иначе ':id' перехватил бы 'stats' и остальные.
   @Get(':id/orders')
@@ -285,15 +263,5 @@ export class TradesController {
   ) {
     const timeframe: RangeTf = isRangeTf(tf) ? tf : '4h';
     return this.tradeContext.rangeCheck(userId, id, timeframe);
-  }
-
-  // Manual re-sync (full backfill) — useful after connecting new API keys.
-  @Post('sync')
-  async sync(@CurrentUser('userId') userId: string) {
-    await this.credentials.requireActive(userId);
-    const { inserted, skipped } = await this.syncService.syncUser(userId, { full: true });
-    // `skipped` = a sync for this user was already running, so this request did
-    // nothing; without it the caller can't tell that apart from "no new trades".
-    return { success: true, inserted, ...(skipped ? { skipped: true } : {}) };
   }
 }

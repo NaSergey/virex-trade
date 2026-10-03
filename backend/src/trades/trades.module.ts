@@ -32,5 +32,10 @@ import { AggregateCacheService } from './aggregate-cache';
     // делят один и тот же LRU (T10, A2), а не заводят по кэшу на сервис.
     AggregateCacheService,
   ],
+  // Кэш отдаётся наружу ради листа чужого журнала на профиле
+  // (`ProfileService.trades`): потолок записей держит память в рамках только
+  // пока кэш один на процесс, а второй LRU в другом модуле был бы вторым
+  // местом, где про эту память надо помнить.
+  exports: [AggregateCacheService],
 })
 export class TradesModule {}

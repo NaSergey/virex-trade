@@ -88,14 +88,8 @@ const DialogContent = React.forwardRef<
      * весь набор — поле, линейки, кромка и свет вокруг.
      */
     tone?: 'game';
-    /**
-     * Отдать фокус первому полю внутри — только там, где окно и открывают ради
-     * ввода (набрать слово в подтверждении необратимого). См. ниже, почему это
-     * не умолчание.
-     */
-    autoFocusContent?: boolean;
   }
->(({ className, children, wide = false, tone, autoFocusContent = false, ...props }, ref) => (
+>(({ className, children, wide = false, tone, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -112,7 +106,6 @@ const DialogContent = React.forwardRef<
        * фокусируемо (tabIndex=-1 у Radix), с него Tab идёт внутрь окна.
        */
       onOpenAutoFocus={(e) => {
-        if (autoFocusContent) return;
         e.preventDefault();
         (e.currentTarget as HTMLElement | null)?.focus({ preventScroll: true });
       }}

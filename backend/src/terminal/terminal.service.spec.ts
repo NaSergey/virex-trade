@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { keyHash } from './stream/stream-state';
 import { TerminalService } from './terminal.service';
 import { exchangeRejected } from './terminal-errors';
 import type { Instrument } from './terminal-math';
@@ -51,10 +52,15 @@ interface Setup {
   post?: (path: string, body: Record<string, unknown>, n: number) => unknown;
   active?: string | null;
   keyInfo?: { success: boolean; canPlaceOrders: boolean };
+  /** Строка `terminal_streams`, как её прочитает `api`; по умолчанию потока нет. */
+  stream?: unknown;
+  /** Позиции с активным планом стопа за тейками — ключи `символ:сторона`. */
+  follow?: string[];
 }
 
 function setup(s: Setup = {}) {
   const posts: { path: string; body: Record<string, any> }[] = [];
+  let lastWrite: number | null = null;
   const bybit = {
     privateGet: jest.fn(async (_creds: unknown, path: string) => {
       if (path === '/account/wallet-balance') {
@@ -66,14 +72,19 @@ function setup(s: Setup = {}) {
       throw new Error(`unexpected GET ${path}`);
     }),
     privatePost: jest.fn(async (_creds: unknown, path: string, body: Record<string, any>) => {
+      lastWrite = Date.now();
       posts.push({ path, body });
       const custom = s.post?.(path, body, posts.length);
       return custom === undefined ? { orderId: `o-${posts.length}` } : custom;
     }),
+    // Как у настоящего клиента: версия снимка — число записей этим ключом.
+    writeVersion: jest.fn(() => posts.length),
+    lastWriteAt: jest.fn(() => lastWrite),
   };
   const market = {
     requireInstrument: jest.fn(async () => BTC),
     lastPrice: jest.fn(async () => s.last ?? 60_000),
+    markPrices: jest.fn(async () => new Map([['BTCUSDT', 61_000]])),
   };
   const credentials = {
     require: jest.fn(async () => CREDS),
@@ -81,9 +92,22 @@ function setup(s: Setup = {}) {
     activeExchange: jest.fn(async () => (s.active === undefined ? 'bybit' : s.active)),
   };
   const apiKeys = { getApiKeyInfo: jest.fn(async () => s.keyInfo ?? { success: true, canPlaceOrders: true }) };
-  const service = new TerminalService(credentials as any, bybit as any, market as any, apiKeys as any);
+  const streams = { want: jest.fn(), read: jest.fn(async () => s.stream ?? null) };
+  const follows = {
+    replace: jest.fn(async () => undefined),
+    remove: jest.fn(async () => undefined),
+    activeKeys: jest.fn(async () => new Set(s.follow ?? [])),
+  };
+  const service = new TerminalService(
+    credentials as any,
+    bybit as any,
+    market as any,
+    apiKeys as any,
+    streams as any,
+    follows as any,
+  );
   const orders = () => posts.filter((p) => p.path === '/order/create').map((p) => p.body);
-  return { service, posts, orders, bybit };
+  return { service, posts, orders, bybit, streams, follows };
 }
 
 const market = (extra: Record<string, unknown> = {}) => ({
@@ -390,6 +414,54 @@ describe('TerminalService', () => {
       expect(posts.map((p) => p.path)).toEqual(['/order/cancel', '/order/create']);
     });
 
+    it('с флажком — план стопа за тейками: выставленные тейки, их цены и вход позиции', async () => {
+      const { service, follows } = setup({ rows: [openRow('Buy', 1), emptyRow(2)] });
+
+      await service.closeGrid('u1', { symbol: 'BTCUSDT', direction: 'long', prices: [61_000, 62_000.04], follow: true });
+
+      expect(follows.replace).toHaveBeenCalledWith('u1', {
+        symbol: 'BTCUSDT',
+        direction: 'long',
+        entryPrice: 60_000,
+        orderIds: ['o-1', 'o-2'],
+        prices: [61_000, 62_000],
+      });
+      expect(follows.remove).not.toHaveBeenCalled();
+    });
+
+    it('без флажка прежний план позиции снимается', async () => {
+      const { service, follows } = setup({ rows: [openRow('Buy', 1)] });
+      await service.closeGrid('u1', { symbol: 'BTCUSDT', direction: 'long', prices: [61_000] });
+      expect(follows.remove).toHaveBeenCalledWith('u1', 'BTCUSDT', 'long');
+      expect(follows.replace).not.toHaveBeenCalled();
+    });
+
+    it('сетка оборвалась посреди — план на то, что успело встать, и отказ о частичной сетке', async () => {
+      const { service, follows } = setup({
+        rows: [openRow('Buy', 1)],
+        post: (_path, _body, n) => {
+          if (n === 2) throw exchangeRejected(110007, 'insufficient');
+          return undefined;
+        },
+      });
+
+      const err = await service
+        .closeGrid('u1', { symbol: 'BTCUSDT', direction: 'long', prices: [61_000, 62_000], follow: true })
+        .catch((e) => e);
+
+      expect(follows.replace).toHaveBeenCalledWith('u1', expect.objectContaining({ orderIds: ['o-1'], prices: [61_000] }));
+      expect((err.getResponse() as { code: string }).code).toBe('TERMINAL_GRID_PARTIAL');
+    });
+
+    it('план не записался — отказ говорит, что сетка стоит, а перенос не включился', async () => {
+      const { service, follows } = setup({ rows: [openRow('Buy', 1)] });
+      follows.replace.mockRejectedValueOnce(new Error('db'));
+      const err = await service
+        .closeGrid('u1', { symbol: 'BTCUSDT', direction: 'long', prices: [61_000], follow: true })
+        .catch((e) => e);
+      expect((err.getResponse() as { code: string }).code).toBe('TERMINAL_FOLLOW_NOT_SAVED');
+    });
+
     it('cancels nothing when a part would be below the minimum order', async () => {
       // 0.05 на десять частей при шаге 0.001 — 0.005, а минимум инструмента здесь 0.01.
       const { service, posts } = setup({ rows: [openRow('Buy', 0)], orders: [limit('own-close', 'Sell', true)] });
@@ -445,6 +517,24 @@ describe('TerminalService', () => {
   });
 
   describe('state', () => {
+    it('second tab asking right after the first gets the same snapshot without going to the exchange', async () => {
+      const { service, bybit } = setup();
+      await service.state('u1');
+      await service.state('u1');
+      // Снимок — три GET (кошелёк, позиции, ордера); второй опрос их не повторил.
+      expect(bybit.privateGet).toHaveBeenCalledTimes(3);
+    });
+
+    it('after an order the next snapshot comes from the exchange, not from before the order', async () => {
+      const { service, bybit } = setup();
+      await service.state('u1');
+      await service.placeOrders('u1', market());
+      bybit.privateGet.mockClear();
+
+      await service.state('u1');
+      expect(bybit.privateGet).toHaveBeenCalledWith(expect.anything(), '/position/list', expect.anything());
+    });
+
     it('shows the deposit as it is now, with the open result, not the bare wallet', async () => {
       // Кошелёк 1417.60, открытые позиции в минусе на 914.69: депозит сейчас — 502.91.
       const { service } = setup({
@@ -467,6 +557,69 @@ describe('TerminalService', () => {
 
       expect(state).toMatchObject({ balance: 10_000, available: 900, orders: [] });
       expect(state.positions).toEqual([expect.objectContaining({ symbol: 'BTCUSDT', direction: 'long', size: 0.05, stopLoss: 59_000 })]);
+    });
+
+    const live = (extra: Record<string, unknown> = {}) => ({
+      keyHash: keyHash('k'),
+      liveAt: new Date(),
+      eventAt: new Date(Date.now() - 10_000),
+      state: {
+        wallet: { walletBalance: 1000, equity: 1000, unrealisedPnl: 0, available: 900 },
+        positions: { 'BTCUSDT:0': openRow('Buy', 0, { size: '0.1', updatedTime: '1' }) },
+        orders: {},
+      },
+      ...extra,
+    });
+
+    it('живой поток своего ключа — счёт из него, без единого запроса к бирже', async () => {
+      const { service, bybit, streams } = setup({ stream: live() });
+
+      const state = await service.state('u1');
+
+      expect(bybit.privateGet).not.toHaveBeenCalled();
+      expect(streams.want).toHaveBeenCalledWith('u1');
+      // лонг 0.1 от 60 000, маркировка 61 000 → +100 к кошельку 1000.
+      expect(state.balance).toBeCloseTo(1100, 10);
+      expect(state.available).toBe(900);
+      expect(state.positions[0]).toMatchObject({ symbol: 'BTCUSDT', unrealisedPnl: 100 });
+    });
+
+    it('старый пульс или чужой ключ — запасной путь REST', async () => {
+      const stale = setup({ stream: live({ liveAt: new Date(Date.now() - 60_000) }) });
+      await stale.service.state('u1');
+      expect(stale.bybit.privateGet).toHaveBeenCalledTimes(3);
+
+      const other = setup({ stream: live({ keyHash: keyHash('другой') }) });
+      await other.service.state('u1');
+      expect(other.bybit.privateGet).toHaveBeenCalledTimes(3);
+    });
+
+    it('сразу после своего ордера, пока поток его не увидел, — REST', async () => {
+      const { service, bybit } = setup({ stream: live() });
+      await service.placeOrders('u1', market());
+      bybit.privateGet.mockClear();
+
+      await service.state('u1');
+      expect(bybit.privateGet).toHaveBeenCalledWith(expect.anything(), '/position/list', expect.anything());
+    });
+
+    it('позиция с планом стопа за тейками помечена — окно сетки откроется с флажком', async () => {
+      const { service } = setup({ rows: [openRow('Buy', 0, { stopLoss: '59000' })], follow: ['BTCUSDT:long'] });
+      const state = await service.state('u1');
+      expect(state.positions[0].follow).toBe(true);
+    });
+
+    it('без позиций в планы не ходит', async () => {
+      const { service, follows } = setup();
+      await service.state('u1');
+      expect(follows.activeKeys).not.toHaveBeenCalled();
+    });
+
+    it('упавшее чтение потока — тоже REST, а не ошибка экрана', async () => {
+      const { service, bybit, streams } = setup();
+      streams.read.mockRejectedValueOnce(new Error('db'));
+      await service.state('u1');
+      expect(bybit.privateGet).toHaveBeenCalledTimes(3);
     });
   });
 

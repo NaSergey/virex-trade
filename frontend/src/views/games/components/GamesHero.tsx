@@ -1,46 +1,43 @@
 'use client';
 
-import Link from 'next/link';
-import { useTranslations } from 'next-intl';
+import type { CSSProperties } from 'react';
+import { GAMES } from '../model/games';
 
 /**
- * Первый экран раздела: что здесь вообще происходит и куда нажать.
+ * Первый экран раздела — сцена над карточками. Вместе с карточками баннер
+ * занимает ровно окно под шапкой (`.gfirst`) и забирает всё, что карточки
+ * оставили.
  *
- * Баннер над карточками, без картинки: вместе с карточками он занимает ровно
- * окно под шапкой (`.gfirst`) и забирает всё, что карточки оставили (решение
- * владельца 2026-09-25). Большой герой с ассетом справа занимал треть
- * страницы, и карточки уходили под сгиб. Что будет в баннере кроме текста —
- * решается отдельно.
+ * Над каждой карточкой висит софит в краске её игры: колонки софитов — та же
+ * сетка, что у `.gcards`, поэтому луч падает ровно на свою карточку.
+ * Наведение на карточку зажигает её луч и приглушает остальные (`:has` в
+ * CSS) — прожектор на выбранную игру.
  *
- * Текст всё равно нужен: витрина стоит в продукте, где соседние разделы —
- * журнал сделок и аналитика, и человек, попавший сюда из «Бектеста», должен за
- * секунду понять, что правила сменились.
+ * Своей коробки у баннера нет — ни поля, ни рамки, ни обрезки по краю: лучи
+ * идут от верха экрана сквозь него до карточек и уходят за их кромку. Коробка
+ * резала свет о свой край (решение владельца 2026-10-01).
  *
- * Главная кнопка ведёт в первую написанную игру, а не на список. Вторая
- * никуда не уводит, а прокручивает к блоку «одна платформа» — ответ на «как
- * это работает» лежит на этой же странице.
+ * Текста и кнопок нет (снято владельцем 2026-10-01): «Игры» и слоган
+ * повторяли шапку, где раздел и так подсвечен, а карточки кликабельны сами.
+ * Что встанет в баннер — реклама, анонс, прогресс игрока — открыто.
  */
-export function GamesHero({ playHref }: { playHref?: string }) {
-  const t = useTranslations('games');
+export function GamesHero() {
   return (
-    <section className="ghero">
-      <div className="ghero-txt">
-        <p className="gkicker">{t('kicker')}</p>
-        <h1>{t('title')}</h1>
-        <p className="ghero-tag">{t('tagline')}</p>
-      </div>
-      <div className="ghero-side">
-        <p className="ghero-lede">{t('lede')}</p>
-        <div className="ghero-cta">
-          {playHref && (
-            <Link href={playHref} className="gbtn gbtn-solid">
-              {t('start')} <span aria-hidden>→</span>
-            </Link>
-          )}
-          <a href="#games-platform" className="gbtn gbtn-line">
-            {t('how')}
-          </a>
-        </div>
+    <section className="ghero" aria-hidden>
+      <div className="ghero-rig">
+        {GAMES.map((game) => (
+          <div key={game.id} className="ghero-beam" style={{ '--beam': `var(--g-a-${game.accent})` } as CSSProperties}>
+            <div className="ghero-breathe">
+              <i className="ghero-cone" />
+              <i className="ghero-pool" />
+            </div>
+            <div className="ghero-lit">
+              <i className="ghero-cone" />
+              <i className="ghero-pool" />
+            </div>
+            <i className="ghero-lamp" />
+          </div>
+        ))}
       </div>
     </section>
   );

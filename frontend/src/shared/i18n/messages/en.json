@@ -15,7 +15,6 @@
     "saving": "Saving…",
     "save": "Save",
     "saveTagsFailed": "Couldn't save tags",
-    "typeWordPrefix": "Type",
     "confirm": "Confirm",
     "close": "Close",
     "open": "Open",
@@ -49,7 +48,7 @@
     "games": "Games",
     "support": "Support the developer",
     "referrals": "Invite a friend",
-    "battlePass": "Battle Pass"
+    "battlePass": "Profile"
   },
   "auth": {
     "brand": "Trade Play",
@@ -199,7 +198,6 @@
     "deleteTagConsequence1": "the tag disappears from {n} trades",
     "deleteTagConsequence2": "combinations will be recalculated",
     "deleteConsequenceIrreversible": "cannot be undone",
-    "deleteWord": "DELETE",
     "searchPlaceholder": "search by name…",
     "searchAriaLabel": "Search tag by name",
     "emptySearch": "No tag matched the search.",
@@ -293,6 +291,7 @@
   "rangeCheck": {
     "title": "Entry range",
     "entryWord": "entry",
+    "avgEntryWord": "avg entry",
     "corridorPrefix": "window",
     "priceMovedPrefix": "Price moved",
     "windowDay": "over a day",
@@ -304,9 +303,13 @@
     "noCandlesForPeriod": "The exchange didn't return candles for this period",
     "levelHigh": "high",
     "levelLow": "low",
+    "levelEntry": "entry",
+    "levelAvg": "avg",
     "markerEntry": "ENTRY",
+    "markerAdd": "ADD",
     "markerExit": "EXIT",
-    "chartAriaLabel": "Candles around the entry, its range bounds, and the entry marker"
+    "addsLabel": "Adds",
+    "chartAriaLabel": "Candles around the entry, its range bounds, the average entry price, and entry, add and exit markers"
   },
   "equityChart": {
     "ariaBase": "Cumulative P&L: {pnl} USDT over {n, plural, one {# trade} other {# trades}}",
@@ -370,8 +373,12 @@
     "rangeTfWindow1d": "Range of the last 60 daily candles (2 months)"
   },
   "settings": {
-    "pageTitle": "Settings",
-    "pageLede": "Connect an exchange account.",
+    "privacyTitle": "Who sees my trades",
+    "privacyLede": "Your profile has a tab with your closed trades: symbol, side, leverage, prices, size and result in USDT. Tags — why you entered — stay yours alone.",
+    "privacyShowTrades": "Show my trades on my profile",
+    "privacyOnFoot": "Right now any Trade Play user with a link to your profile can see them. Guests without an account cannot open the profile at all.",
+    "privacyOffFoot": "Right now nobody sees trades on your profile. Game results and season level stay visible.",
+    "privacyFailed": "Could not save the setting",
     "telegramTitle": "Telegram",
     "telegramDisabled": "The bot is not configured on the server.",
     "telegramNotLinked": "Trade and market alerts arrive in Telegram. Linking a chat takes half a minute.",
@@ -426,7 +433,6 @@
     "disconnectConsequence1": "open positions will stop updating",
     "disconnectConsequence2": "new trades won't sync",
     "disconnectConsequence3": "orders on the exchange stay as they are — you can only cancel them after reconnecting the same keys",
-    "disconnectWord": "DISCONNECT",
     "apiKeyPlaceholder": "from your {label} account",
     "passphrasePlaceholder": "set when you created the key on {label}",
     "keysEncryptedShort": "The key and secret are stored encrypted.",
@@ -615,6 +621,7 @@
     "TERMINAL_OPPOSITE_POSITION": "There is an open {symbol} position on the other side, and the Bybit account is in one-way mode: this order would reduce it rather than open a new one. Close the position or switch to hedge mode on Bybit.",
     "TERMINAL_POSITION_NOT_FOUND": "Position not found — it may already be closed",
     "TERMINAL_GRID_PARTIAL": "{placed} of {total} orders placed. The rest were rejected: {reason}",
+    "TERMINAL_FOLLOW_NOT_SAVED": "The grid is placed, but the stop doesn't follow the takes yet. Open the grid window again.",
     "INVALID_CREDENTIALS": "Invalid email or password",
     "USER_EXISTS": "A user with this email already exists",
     "REFRESH_TOKEN_MISSING": "Refresh token missing",
@@ -624,8 +631,6 @@
     "TAG_NAME_EMPTY": "Empty tag name",
     "TAG_NAME_DUPLICATE": "That tag already exists",
     "TAG_NOT_FOUND": "Tag not found",
-    "TAG_MERGE_SELF": "Can't merge a tag into itself",
-    "TAG_MERGE_TARGET_NOT_FOUND": "Target tag not found",
     "TAG_COMBO_MIN_TWO": "Pick at least two tags",
     "TAGS_NOT_FOUND": "Some tags weren't found",
     "TAG_COMBO_DUPLICATE": "That combination is already saved",
@@ -692,7 +697,11 @@
     "TOURNAMENT_TEAM_REQUIRED": "Pick a team",
     "TOURNAMENT_TEAM_FULL": "This team is full",
     "TOURNAMENT_BAD_TEAM_SIZE": "Team size must be 2 to 15",
-    "TOURNAMENT_NOT_TEAMS": "This is not a team tournament"
+    "TOURNAMENT_NOT_TEAMS": "This is not a team tournament",
+    "PROFILE_NOT_FOUND": "No such player",
+    "AVATAR_TYPE": "Use a PNG, JPEG or WebP picture",
+    "AVATAR_TOO_LARGE": "Picture is larger than 512 KB",
+    "AVATAR_EMPTY": "The file did not arrive — try again"
   },
   "landing": {
     "signIn": "Sign in",
@@ -1067,7 +1076,6 @@
       "clearTitle": "Delete all drawings?",
       "clearSubtitle": "Drawings on this session chart: {n}",
       "clearConsequence": "All drawings of this session will be removed for good",
-      "clearWord": "DELETE",
       "style": "Drawing style",
       "color": {
         "fg": "Default",
@@ -1200,7 +1208,6 @@
     "closeGridLast": "Last take",
     "closeGridFollow": "Move the stop behind takes",
     "closeGridFollowHint": "after the first — to breakeven, then — to the previous take",
-    "closeGridNoFollow": "The stop doesn't follow the takes here: the limits are filled by the exchange, and nothing moves the stop after them.",
     "closeGridLevelPnl": "Profit",
     "closeGridStopAfter": "Stop after",
     "closeGridAvgExit": "Average exit price",
@@ -1297,12 +1304,6 @@
     }
   },
   "games": {
-    "kicker": "Play · Compete · Earn",
-    "title": "Games",
-    "tagline": "More than trading",
-    "lede": "Play, compete, sharpen your skills and earn. Trade Play puts trading and games in one place.",
-    "start": "Start playing",
-    "how": "How it works",
     "play": "Play",
     "soon": "Coming soon",
     "tags": {
@@ -1331,48 +1332,195 @@
         "description": "A real market and real skills. Trade against other players."
       }
     },
-    "platform": {
-      "kicker": "Trade Play Games",
-      "title": "One platform. Different ways to play.",
-      "lede": "Games, tournaments, ratings and rewards — all in one place, all on the same coins.",
-      "steps": [
-        "Play",
-        "Improve",
-        "Compete",
-        "Earn"
-      ]
-    },
-    "stats": {
-      "games": "games",
-      "options": "ways to play",
-      "community": "community",
-      "communityN": "1",
-      "slogan": "PLAY THE ADVANTAGE"
+    "coins": {
+      "kicker": "Coins",
+      "title": "Every game is played for coins. Your exchange account money is never involved.",
+      "daily": {
+        "label": "Every day",
+        "note": "The daily reward grows while you keep coming back without a gap."
+      },
+      "season": {
+        "label": "Per season",
+        "upTo": "up to",
+        "note": "Season levels pay coins. A season is a quarter; unclaimed rewards burn at its end.",
+        "action": "Rewards in profile"
+      },
+      "buy": {
+        "label": "Buy",
+        "per": "per 1 USDT",
+        "note": "By donating to the developer — USDT on TRON.",
+        "off": "Donations are not set up right now.",
+        "action": "Buy coins"
+      },
+      "withdraw": {
+        "label": "Withdrawal",
+        "value": "In development",
+        "note": "For now coins can't be withdrawn or sent to other players."
+      }
     }
   },
   "profile": {
     "title": "Profile",
-    "lede": "Experience from games, season level and its rewards",
     "level": "Level {level}",
     "toNext": "{xp} XP to level {level}",
     "maxed": "Season track fully completed",
-    "seasonEnds": "Season ends {date}",
-    "seasonNote": "A new season restarts the level, and unclaimed rewards expire",
-    "heroSoon": "Hero models in progress",
+    "lvl": "lvl",
+    "since": "Playing since {date}",
+    "tileRank": "Rank",
+    "tilePoints": "Points",
+    "tileTournaments": "Tournaments",
+    "tileWins": "Wins",
+    "tileCoins": "Coins",
     "daily": "Daily reward",
+    "dailyWaiting": "Reward waiting",
     "dailyLede": "Each day in a row gives more than the last, up to the seventh",
-    "dailyClaim": "Claim {coins}",
-    "dailyDone": "Today’s reward is claimed",
+    "dailyHint": "A missed day restarts the week",
+    "dailyTomorrow": "Tomorrow: +{coins}",
     "dailyStreak": "{days} days in a row",
     "day": "Day {day}",
     "track": "Season rewards",
-    "claim": "Claim {coins}",
-    "claimNone": "Nothing to claim",
+    "seasonEnds": "Season ends {date}",
+    "seasonNote": "A new season restarts the level, and unclaimed rewards expire",
+    "claimPlus": "Claim +{coins}",
     "claimed": "Claimed",
-    "ready": "Ready to claim",
-    "locked": "Needs {xp} XP",
+    "ready": "Ready",
+    "done": "Done",
+    "achievements": "Achievements",
+    "achEarned": "Earned",
+    "ach": {
+      "first_tournament": {
+        "name": "First tournament",
+        "desc": "Play a tournament to the end"
+      },
+      "first_win": {
+        "name": "First win",
+        "desc": "Take first place in a tournament"
+      },
+      "champion": {
+        "name": "Champion",
+        "desc": "Ten tournament wins"
+      },
+      "streak_7": {
+        "name": "Full week",
+        "desc": "Seven daily rewards without a gap"
+      },
+      "level_10": {
+        "name": "Level ten",
+        "desc": "Reach level 10 in any season"
+      },
+      "jetpack_x10": {
+        "name": "Ten-bagger",
+        "desc": "Cash out a jetpack bet at ×10 or higher"
+      },
+      "jetpack_100": {
+        "name": "Pilot",
+        "desc": "A hundred jetpack bets"
+      },
+      "poker_100": {
+        "name": "Poker player",
+        "desc": "A hundred poker hands"
+      },
+      "blackjack_100": {
+        "name": "Twenty-one",
+        "desc": "A hundred blackjack rounds"
+      },
+      "tagger_100": {
+        "name": "Tagger",
+        "desc": "A hundred trades tagged"
+      },
+      "backtest_10": {
+        "name": "Researcher",
+        "desc": "Ten backtest sessions of your own"
+      },
+      "rich_10k": {
+        "name": "Capital",
+        "desc": "Hold 10,000 coins"
+      }
+    },
+    "radar": "Where you play",
+    "radarNote": "days of 90",
+    "radarEmpty": "No games in the last 90 days",
+    "days": "{days} d",
+    "game": {
+      "tournament": "Tournaments",
+      "backtest": "Backtest",
+      "jetpack": "Jetpack",
+      "poker": "Poker",
+      "blackjack": "Blackjack"
+    },
+    "xpChart": "Experience",
+    "xpSeason": "XP this season",
+    "perWeek": "in 7 days",
+    "weekBefore": "week before {xp}",
+    "coinChart": "Coins",
+    "perMonth": "in 30 days",
+    "feed": "Coin feed",
+    "feedEmptyTitle": "No movements yet",
+    "feedEmptyBody": "Bets, prizes and rewards will show up here.",
+    "colWhen": "When",
+    "colEvent": "Event",
+    "colAmount": "Amount",
+    "colBalance": "Balance",
+    "kinds": {
+      "DONATION": "Coin purchase",
+      "TOURNAMENT_FEE": "Tournament entry",
+      "TOURNAMENT_BONUS": "Prize pool top-up",
+      "TOURNAMENT_REFUND": "Entry refund",
+      "TOURNAMENT_PRIZE": "Tournament prize",
+      "GAME_BUYIN": "Sat at a table",
+      "GAME_CASHOUT": "Left a table",
+      "GAME_REFUND": "Interrupted hand refund",
+      "GAME_PAYOUT": "Blackjack payout",
+      "REFERRAL_BONUS": "Referral bonus",
+      "BATTLEPASS_REWARD": "Season reward",
+      "DAILY_REWARD": "Daily reward",
+      "JETPACK_BET": "Jetpack bet",
+      "JETPACK_WIN": "Jetpack cash-out",
+      "JETPACK_REFUND": "Jetpack bet refund"
+    },
+    "games": "Games",
+    "colGame": "Game",
+    "colPlayed": "Played",
+    "colDays90": "Days of 90",
+    "colLast": "Last",
+    "rating": "Player rating",
     "loadFailed": "Could not load the profile",
-    "claimFailed": "Could not claim the reward"
+    "claimFailed": "Could not claim the reward",
+    "notFoundTitle": "Profile could not be opened",
+    "avatarChange": "Change profile picture",
+    "avatarRemove": "Remove picture",
+    "avatarBad": "Could not read the picture — use PNG, JPEG or WebP",
+    "seasonPending": "Waiting to claim:",
+    "seasonNothing": "All claimed",
+    "share": "Share",
+    "shareCopied": "Link copied",
+    "shareManual": "Link to your profile:",
+    "guestSignIn": "Sign in",
+    "guestSignUp": "Create account",
+    "gateTitle": "Sign up to view this profile",
+    "gateBody": "Player profiles — their game results and trades — are open to anyone with an account. It's free.",
+    "tabGames": "Games",
+    "tabExchange": "Exchange trades",
+    "tabsLabel": "What to show",
+    "colResult": "Result",
+    "resWins": "{wins} wins",
+    "gamesEmptyTitle": "Hasn't played yet",
+    "gamesEmptyBody": "Results show up after the first tournament or round.",
+    "tradesEmptyTitle": "No trades",
+    "tradesEmptyBody": "Closed exchange trades will appear here once there are any.",
+    "tradesFailed": "Could not load trades",
+    "xpPerDay": "Experience per day",
+    "coinPerDay": "Balance at end of day",
+    "records": "Records",
+    "recX": "Best multiplier",
+    "recStreak": "Reward streak",
+    "recPeak": "Peak balance",
+    "recFav": "Favourite game",
+    "xpEmpty": "No experience yet — it comes from tournaments, games and trade tags",
+    "coinEmpty": "No coin movement yet",
+    "rewardReady": "ready",
+    "feedExpand": "Expand",
+    "feedCollapse": "Collapse"
   },
   "cardTable": {
     "mineTitle": "My tables",

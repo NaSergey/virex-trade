@@ -72,7 +72,9 @@ export async function apiFetch(
   const doFetch = (token: string | null): Promise<Response> => {
     const headers = new Headers(options.headers ?? {});
     if (token) headers.set('Authorization', `Bearer ${token}`);
-    if (options.body && !headers.has('Content-Type')) {
+    // FormData заголовок ставит браузер сам — с границей частей; JSON-тип
+    // поверх неё сломал бы разбор загрузки на сервере.
+    if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json');
     }
     return fetch(`${API_BASE_URL}${path}`, {

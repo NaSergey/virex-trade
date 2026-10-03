@@ -13,7 +13,6 @@ const RULES: ReadonlyArray<readonly [prefix: string, section: string]> = [
   ['/api/trades/lab', 'lab'],
   ['/api/trades/habits', 'habits'],
   ['/api/trades/stats', 'stats'],
-  ['/api/trades/sync', 'sync'],
   ['/api/trades', 'journal'],
   ['/api/tags', 'tags'],
   ['/api/analytics', 'market'],
@@ -22,7 +21,7 @@ const RULES: ReadonlyArray<readonly [prefix: string, section: string]> = [
   ['/api/exchange', 'settings'],
   ['/api/telegram', 'telegram'],
   ['/api/donations', 'support'],
-  ['/api/bybit', 'terminal'],
+  ['/api/terminal', 'terminal'],
   ['/auth', 'auth'],
 ];
 

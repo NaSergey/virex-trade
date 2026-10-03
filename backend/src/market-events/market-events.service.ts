@@ -41,14 +41,30 @@ export class MarketEventsService {
   // должны делить друг с другом закэшированный результат.
   private readonly aggregateCache = new Map<string, { exp: number; data: unknown }>();
 
-  private async cached<T>(metric: string, days: number, compute: () => Promise<T>): Promise<T> {
+  /**
+   * Расчёт в полёте по тому же ключу. Без этого два запроса, пришедшие на
+   * пустой или протухший кэш одновременно, оба считали бы агрегат заново —
+   * тысячи свечей из базы на каждый, — хотя второму хватило бы ответа первого.
+   * Упавший расчёт отсюда уходит и не кэшируется.
+   */
+  private readonly inflight = new Map<string, Promise<unknown>>();
+
+  private cached<T>(metric: string, days: number, compute: () => Promise<T>): Promise<T> {
     const key = `${metric}:${days}`;
     const hit = this.aggregateCache.get(key);
-    if (hit && hit.exp > Date.now()) return hit.data as T;
+    if (hit && hit.exp > Date.now()) return Promise.resolve(hit.data as T);
 
-    const data = await compute();
-    this.aggregateCache.set(key, { exp: Date.now() + AGGREGATE_CACHE_TTL_MS, data });
-    return data;
+    const running = this.inflight.get(key);
+    if (running) return running as Promise<T>;
+
+    const job = compute()
+      .then((data) => {
+        this.aggregateCache.set(key, { exp: Date.now() + AGGREGATE_CACHE_TTL_MS, data });
+        return data;
+      })
+      .finally(() => this.inflight.delete(key));
+    this.inflight.set(key, job);
+    return job;
   }
 
   /** Weekday win-rate/avg-move breakdown for the «Вероятности» panel. */

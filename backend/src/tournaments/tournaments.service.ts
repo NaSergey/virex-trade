@@ -11,7 +11,7 @@ import { boardOrder, type BoardRelation } from './board';
 import { teamOutcome, teamPrizes } from './teams';
 import { rankParticipants } from './leaderboard';
 import { payouts, prizePool, validateShares } from './prize';
-import { ratingRows } from './rating';
+import { pickRows, rankAll, type RatingRow } from './rating';
 import { startTimeFrom } from './schedule';
 import { FEED_LIMIT, FINAL_GRACE_MS, MIN_PLAYERS, PUBLIC_LIST_LIMIT, RATING_LIMIT } from './tournament.config';
 import {
@@ -35,6 +35,8 @@ import {
 import { isOwnerEmail } from '../admin/owner';
 
 const MINUTE_MS = 60_000;
+/** Рейтинг пересчитывается не чаще раза в час — см. `rankedTable`. */
+const RATING_TTL_MS = 60 * MINUTE_MS;
 
 /** Поля сделки для ленты и для блока «Сделки» в окне турнира — одна форма на оба. */
 const FEED_SELECT = {
@@ -772,22 +774,58 @@ export class TournamentsService {
   }
 
   /** Рейтинг игры — по всем завершённым турнирам. См. `rating.ts`. */
-  async rating(userId: string) {
+  async rating(userId: string | undefined) {
+    return pickRows(await this.rankedTable(), userId, RATING_LIMIT);
+  }
+
+  /**
+   * Строка одного игрока в рейтинге — для его профиля, кто бы его ни
+   * смотрел. null — он ещё не доиграл ни одного турнира.
+   */
+  async ratingOf(userId: string) {
+    return (await this.rankedTable()).find((r) => r.userId === userId) ?? null;
+  }
+
+  /**
+   * Ранжированная таблица рейтинга — пересчитывается не чаще раза в час
+   * (решение владельца 2026-10-02). Расчёт читает места всех участников всех
+   * завершённых турниров платформы и ранжирует всех, а шёл он на каждый
+   * просмотр любого профиля и страницы рейтинга, хотя меняется таблица только
+   * на финале турнира.
+   *
+   * Следствие, которое надо помнить: после финала новые очки видны не сразу,
+   * а до часа спустя. Сбросить кэш на финале нельзя — финал подводит `worker`,
+   * а кэш живёт в памяти `api`, общей памяти у них нет.
+   *
+   * Хранится промис, а не значение: два запроса в момент пересчёта ждут один
+   * расчёт, а не запускают два. Упавший расчёт не кэшируется.
+   */
+  private ranked: { at: number; table: Promise<RatingRow[]> } | null = null;
+
+  private rankedTable(): Promise<RatingRow[]> {
+    const now = Date.now();
+    if (this.ranked && now - this.ranked.at < RATING_TTL_MS) return this.ranked.table;
+    const table = this.ratingInput().then(rankAll);
+    const slot = { at: now, table };
+    table.catch(() => {
+      if (this.ranked === slot) this.ranked = null;
+    });
+    this.ranked = slot;
+    return table;
+  }
+
+  private async ratingInput() {
     const rows = await this.prisma.tournamentParticipant.findMany({
       where: { place: { not: null }, tournament: { status: 'finished' } },
       select: { tournamentId: true, userId: true, place: true, team: true, user: { select: { name: true } } },
     });
-    return ratingRows(
-      rows.map((r) => ({
-        tournamentId: r.tournamentId,
-        userId: r.userId,
-        name: r.user?.name ?? '—',
-        place: r.place!,
-        team: r.team,
-      })),
-      userId,
-      RATING_LIMIT,
-    );
+    return rows.map((r) => ({
+      tournamentId: r.tournamentId,
+      userId: r.userId,
+      name: r.user?.name ?? '—',
+      place: r.place!,
+      team: r.team,
+    }));
   }
 
   /** Живая цена для оценки открытых позиций; недоступна — оценивать нечем. */

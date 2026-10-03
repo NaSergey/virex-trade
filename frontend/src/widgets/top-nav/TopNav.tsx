@@ -16,6 +16,7 @@ import { LocaleSwitch } from '@/shared/ui/LocaleSwitch';
 import { ThemeToggle } from '@/shared/ui/ThemeToggle';
 import { TradePlayMark } from '@/shared/ui/TradePlayMark';
 import { useLocaleControl } from '@/shared/i18n';
+import { isGamesDarkRoute } from '@/shared/lib/utils/games-dark-route';
 
 type Tab = 'terminal' | 'overview' | 'tags' | 'analytics' | 'market' | 'backtest' | 'games' | 'settings' | 'admin';
 
@@ -106,6 +107,11 @@ export function TopNav({
   const [moving, setMoving] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLElement>(null);
+  // Тёмные маршруты раздела игр (витрина, джетпак, сам стол) — шапка общая
+  // снаружи них, и её полупрозрачная заливка берёт цвет темы: в светлой теме
+  // читалась бы кремовым пятном поверх чёрного содержимого под ней. Лобби
+  // столов и турниры сюда не входят — там обычная тема (`isGamesDarkRoute`).
+  const inGames = isGamesDarkRoute(pathname);
 
   // На узком экране разделы стоят рейкой, которая листается вбок, и выбранный
   // может оказаться за её краем — после перезагрузки страницы или перехода не
@@ -137,7 +143,16 @@ export function TopNav({
   useLayoutEffect(() => {
     const place = (animated: boolean) => {
       const active = navRef.current?.querySelector<HTMLElement>('[aria-current="page"]');
-      if (!active) return;
+      // Страницы вне рейки (`/settings`, `/profile`, `/admin`) не дают
+      // активной ссылки — плашку тогда нужно спрятать, а не оставить от
+      // прошлой страницы: иначе появление «Терминала» сдвигает рейку, а
+      // плашка остаётся на координатах, снятых до сдвига, и повисает между
+      // пунктами.
+      if (!active) {
+        setMoving(false);
+        setIndicator(null);
+        return;
+      }
       setMoving(animated);
       setIndicator({ left: active.offsetLeft, width: active.offsetWidth });
     };
@@ -160,10 +175,10 @@ export function TopNav({
   }, [menuOpen, closeMenu]);
 
   return (
-    <header className="top">
+    <header className={`top${inGames ? ' top-game' : ''}`}>
       <div className="top-in">
         <Link href="/overview" className="mark">
-          <TradePlayMark width={56} height={34} />
+          <TradePlayMark width={46} height={28} />
         </Link>
 
         {/* role="tablist" здесь больше нет: вкладки не меняют адрес, а эти
@@ -205,12 +220,20 @@ export function TopNav({
           <ThemeToggle />
           <Button
             variant="none"
-            className={`acct${hasRewards ? ' has-dot' : ''}`}
+            className={`acct acct-av${hasRewards ? ' has-dot' : ''}`}
+            aria-label={t('profile')}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
             onClick={() => setMenu((m) => (m === 'open' ? 'closing' : 'open'))}
           >
-            {t('profile')}
+            {/* Картинка профиля — не через next/image: адрес версионный и с
+                кэшем на год, оптимизатору пришлось бы ходить за ней на API. */}
+            {user?.avatar ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={user.avatar} alt="" />
+            ) : (
+              (user?.name || user?.email || '?').charAt(0).toUpperCase()
+            )}
           </Button>
           {menu !== 'closed' && (
             <div
@@ -243,18 +266,19 @@ export function TopNav({
                   от подписи: подпись и есть действие, и второе слово рядом с
                   ней только отодвигало цель от руки. */}
               <div className="acct-items">
+                {/* Профиль — первым, выше настроек (решение владельца
+                    2026-10-01): переход по адресу, а не окно. Кнопка меню
+                    теперь кружок без подписи, и двух «Профилей» подряд нет. */}
+                {/* Сразу на `/profile/<id>`, а не на `/profile`: адрес в
+                    строке браузера и есть ссылка, которой делятся. */}
+                <Link className="acct-item" href={user ? `/profile/${user.id}` : '/profile'} onClick={closeMenu}>
+                  {t('battlePass')}
+                </Link>
                 {/* Настройки — сюда же, рядом с языком: оба пункта про учётную
                     запись и подключение к ней, а не про работу с журналом,
                     которой посвящена рейка разделов выше. */}
                 <Link className="acct-item" href="/settings" onClick={closeMenu}>
                   {t('settings')}
-                </Link>
-                {/* Прогресс — переход по адресу, а не окно: у профиля есть свой
-                    адрес, и меню обязано его отдавать. Подпись — «Battle Pass», а
-                    не «Профиль»: кнопка, открывающая это меню, уже так
-                    называется, и два «Профиля» подряд ничего не различали бы. */}
-                <Link className="acct-item" href="/profile" onClick={closeMenu}>
-                  {t('battlePass')}
                 </Link>
                 {/* Обучение здесь, а не в Настройках: туры идут по всем пяти
                     разделам, и вернуть их надо уметь с того раздела, где

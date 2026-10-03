@@ -11,7 +11,7 @@ import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { countdown } from '../lib/countdown';
-import { useCountdown } from '../model/useCountdown';
+import { useCountdown } from '@/shared/lib/hooks/useCountdown';
 import { TournamentBadge } from './TournamentBadge';
 
 /**

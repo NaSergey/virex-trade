@@ -8,8 +8,10 @@ import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { TableDefs } from './TableDefs';
 
 /**
- * Страница стола: тёмное поле раздела игр в обеих темах (`.games-bg`) и сама
- * страница `.ct-page`. Пока снимка стола нет — строка загрузки или ошибка.
+ * Страница стола: `.ct-page`, тёмная в обеих темах, как и заливка под ней
+ * (`.games-bg` — общая у трёх тёмных маршрутов раздела игр, рендерится в
+ * `(app)` layout через `GamesVeil`, а не здесь). Пока снимка стола нет —
+ * строка загрузки или ошибка.
  */
 export function TableFrame({
   loading,
@@ -24,13 +26,10 @@ export function TableFrame({
 }) {
   const t = useTranslations('cardTable');
   return (
-    <>
-      <div className="games-bg" aria-hidden />
-      <div className={cn('ct-page', className)}>
-        {children ??
-          (loading ? <p className="ct-wait">{t('loading')}</p> : <ErrorNote error={error} fallback={t('loadFailed')} />)}
-      </div>
-    </>
+    <div className={cn('ct-page', className)}>
+      {children ??
+        (loading ? <p className="ct-wait">{t('loading')}</p> : <ErrorNote error={error} fallback={t('loadFailed')} />)}
+    </div>
   );
 }
 

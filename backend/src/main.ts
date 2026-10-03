@@ -2,10 +2,12 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
+import { GamesAppModule } from './games-app.module';
 import { ROLE, servesHttp } from './role';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // `games` — свой корень: только игры, без биржи и фона (games-app.module.ts).
+  const app = await NestFactory.create(ROLE === 'games' ? GamesAppModule : AppModule);
 
   // Без этого SIGTERM (docker stop / деплой) убивает процесс сразу, не
   // дав OnModuleDestroy-хукам отработать — в частности, UsageTrackerService
@@ -58,6 +60,6 @@ async function bootstrap() {
   });
 
   await app.listen(process.env.PORT ?? 3000);
-  Logger.log(`api started (ROLE=${ROLE})`, 'Bootstrap');
+  Logger.log(`http started (ROLE=${ROLE})`, 'Bootstrap');
 }
 bootstrap();

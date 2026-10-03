@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { BybitAuthService, BybitCredentials } from './bybit-auth.service';
+import { bybitFetch } from '../bybit-gate';
 
 /** What `GET /v5/user/query-api` says a key is allowed to do. */
 export interface BybitApiKeyInfo {
@@ -52,7 +53,7 @@ export class BybitApiKeyService extends BybitAuthService {
         creds.apiSecret,
       );
 
-      const response = await fetch(`${this.baseUrl}/user/query-api`, {
+      const response = await bybitFetch(`${this.baseUrl}/user/query-api`, {
         method: 'GET',
         headers: this.buildAuthHeaders(creds.apiKey, timestamp, signature, recvWindow),
       });

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { BybitAuthService, BybitCredentials } from './bybit-auth.service';
+import { bybitFetch } from '../bybit-gate';
 
 @Injectable()
 export class BybitBalanceService extends BybitAuthService {
@@ -26,7 +27,7 @@ export class BybitBalanceService extends BybitAuthService {
       const signatureString = timestamp + creds.apiKey + recvWindow + queryString;
       const signature = this.createSignature(signatureString, creds.apiSecret);
 
-      const response = await fetch(`${this.baseUrl}/account/wallet-balance?${queryString}`, {
+      const response = await bybitFetch(`${this.baseUrl}/account/wallet-balance?${queryString}`, {
         method: 'GET',
         headers: this.buildAuthHeaders(creds.apiKey, timestamp, signature, recvWindow),
       });

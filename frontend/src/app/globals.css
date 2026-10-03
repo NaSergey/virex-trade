@@ -80,7 +80,7 @@
   /* Высота липкой шапки. Переменная, а не число: от неё считается, где
      останавливается всё остальное липкое на странице, и на узком экране шапка
      ниже — забыть поправить второе место было бы нечем. */
-  --top-h: 56px;
+  --top-h: 48px;
 
   --hair: var(--color-line);
   --hair-2: var(--color-line-2);
@@ -174,6 +174,10 @@
      свет строится из нескольких значений прозрачности, а альфа от hex не
      берётся. Та же нужда, что у --ink-rgb выше. */
   --g-a-green-rgb: 101 201 150;
+  /* Янтарь и фиолетовый каналами — свет окон наград профиля (`.dlg-reward`):
+     ежедневная награда янтарная, награды сезона фиолетовые. */
+  --g-a-amber-rgb: 217 161 79;
+  --g-a-purple-rgb: 154 92 255;
 }
 
 /* ═══════════════ СВЕТЛАЯ ТЕМА ═══════════════
@@ -381,6 +385,37 @@
     position: sticky;
     top: 0;
     z-index: 40;
+  }
+  /* Витрина, джетпак и сам стол (`.games-page`, `.jpg-page`, `.ct-page`) —
+     тёмные маршруты раздела игр в обеих темах (`isGamesDarkRoute` в
+     TopNav.tsx; лобби столов и турниры сюда не входят, у них обычная тема),
+     а шапка — общий элемент снаружи них, и её прозрачная заливка берёт
+     `--ground-rgb` темы сайта: в светлой теме сквозь блюр читалось бы
+     кремовое пятно поверх чёрного содержимого (карточек, стола, полёта).
+     Переопределяются те же прикладные имена, что и у самих маршрутов, —
+     рейка и профиль внутри берут краску оттуда же. */
+  .top-game {
+    --ground: var(--g-field);
+    --ground-rgb: 5 5 5;
+    --ink: var(--g-ink);
+    --ink-2: var(--g-ink-2);
+    --ink-3: var(--g-ink-3);
+    --ink-rgb: 242 240 234;
+    --hair: var(--g-line);
+    --hair-2: var(--g-line-2);
+    --rule: var(--g-line-2);
+    --meta: var(--g-ink-2);
+    --meta-dim: var(--g-ink-3);
+    /* Знак в шапке (`.mark`) берёт краску из своей отдельной палитры
+       (--tpm-*, серебро/графит), а не из --ink — без этой строки на чёрной
+       шапке в светлой теме он остался бы графитовым и пропал. */
+    --tpm-1: #ffffff;
+    --tpm-2: #6c727a;
+    --tpm-3: #dfe3e7;
+    --tpm-4: #474c52;
+    --tpm-5: #b3b9bf;
+    --tpm-edge: #fff;
+    --tpm-glow: rgb(255 255 255 / 0.2);
   }
   .top-in {
     max-width: var(--wrap);
@@ -1731,6 +1766,10 @@
     flex-wrap: wrap;
     padding: var(--s4) 0 var(--s3);
   }
+  /* Настройки без шапки страницы (заголовок и подпись сняты) всё равно не
+     должны прилипать первой строкой к липкой шапке сайта — тот же отступ,
+     что раньше давал `.pagehead`. */
+  .settings-top { padding-top: var(--s4); }
 
   input[type="date"],
   .in {
@@ -2455,8 +2494,9 @@
     filter: drop-shadow(0 0 0.06em var(--coin-glow))
       drop-shadow(0 0 0.3em color-mix(in srgb, var(--coin-glow) 60%, transparent));
   }
-  /* Раздел игр тёмный в обеих темах — и свечение у знака там остаётся. */
-  :is(.games-page, .dlg-game, .ct-page, .jpg-page) { --coin-glow: rgb(255 255 255 / 0.55); }
+  /* Раздел игр тёмный в обеих темах — и свечение у знака там остаётся, в том
+     числе у баланса в шапке над разделом (`.top-game`). */
+  :is(.games-page, .dlg-game, .ct-page, .jpg-page, .top-game) { --coin-glow: rgb(255 255 255 / 0.55); }
 
   /* Баланс монет в шапке. Кнопка, но выглядит как значение: цифра моноширинная,
      единица приглушена — это показание, а не призыв нажать. */
@@ -2909,30 +2949,42 @@
       radial-gradient(90% 60% at 50% -10%, var(--g-deep), transparent 64%),
       radial-gradient(70% 50% at 88% 108%, var(--g-warm), transparent 60%),
       var(--g-field);
-    /* Заливка наливается при заходе на раздел, а не стоит готовой: переход со
-       страницы журнала на витрину — смена обстановки, и показать её сменой
-       света дешевле, чем объяснять словами. Один раз, на монтировании; при
-       prefers-reduced-motion глобальное правило внизу файла сводит её к нулю. */
-    animation: games-veil 700ms cubic-bezier(0.32, 0.72, 0, 1) both;
+    /* Заливка наливается при заходе на раздел и гаснет при выходе — смена
+       обстановки в обе стороны, а не только туда. Один узел на все три
+       тёмных маршрута (`GamesVeil`, смонтирован в `(app)` layout), который
+       не размонтируется при переходе между ними: класс `is-on` переключает
+       только opacity, и переход доигрывает в обе стороны сам. */
+    opacity: 0;
+    transition: opacity 700ms cubic-bezier(0.32, 0.72, 0, 1);
   }
-  @keyframes games-veil {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
+  .games-bg.is-on {
+    opacity: 1;
   }
   /* Содержимое встаёт над заливкой: без своего слоя фиксированный фон накрыл
      бы страницу целиком. */
   .games-page {
+    /* Прикладные имена темы — на палитру раздела: витрина тёмная в обеих
+       темах, а общие компоненты внутри (Button, Skeleton) берут краску из
+       --ink/--rule/--ground. Без этого в светлой теме кнопка рисовалась бы
+       тёмным по чёрному. Тот же приём, что у .ct-page и окна турнира. */
+    --ground: var(--g-field);
+    --ground-rgb: 5 5 5;
+    --ink: var(--g-ink);
+    --ink-2: var(--g-ink-2);
+    --ink-3: var(--g-ink-3);
+    --ink-rgb: 242 240 234;
+    --hair: var(--g-line);
+    --hair-2: var(--g-line-2);
+    --rule: var(--g-line-2);
+    --meta: var(--g-ink-2);
+    --meta-dim: var(--g-ink-3);
     position: relative;
     z-index: 1;
     color: var(--g-ink);
   }
   /* То самое исключение: скругления только внутри раздела и только у его
      собственных элементов. */
-  .games-page :is(.gcard, .gbtn, .gplat, .gcard > img) {
+  .games-page :is(.gcard, .gcard > img) {
     border-radius: 12px !important;
   }
 
@@ -2960,83 +3012,141 @@
     min-height: calc(100dvh - var(--top-h) - 1px);
     padding: var(--s4) 0;
   }
-  /* Баннер: пока в нём только текст раздела — слева заголовок и слоган,
-     справа внизу лида и кнопки. Рамка показывает, сколько места у баннера. */
+  /* Баннер — сцена над карточками, а не коробка: ни поля, ни рамки, ни
+     обрезки по краю. Свет софитов идёт сквозь него до карточек и уходит за
+     их кромку; коробка с фоном резала лучи о свой край (решение владельца
+     2026-10-01). Текста в нём нет — только свет; высота — то, что оставили
+     карточки, но не меньше, чем нужно лучу, чтобы было куда падать. */
   .ghero {
+    /* Насколько лучи заходят за верхнюю кромку карточек. */
+    --ghero-spill: 72px;
+    position: relative;
     flex: 1;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: end;
-    gap: var(--s3) var(--s5);
-    padding: var(--s4);
-    border: 1px solid var(--g-line);
-  }
-  .ghero h1 {
-    margin: 0;
-    font-size: clamp(40px, 4.4vw, 64px);
-    font-weight: 600;
-    line-height: 0.95;
-    letter-spacing: 0.01em;
-    text-transform: uppercase;
-    color: var(--g-ink);
-  }
-  .ghero-tag {
-    margin: var(--s2) 0 0;
-    font-size: 22px;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--g-ink-2);
-  }
-  .ghero-side {
-    max-width: 52ch;
-  }
-  .ghero-lede {
-    margin: 0;
-    font-size: var(--t-s);
-    line-height: 1.6;
-    color: var(--g-ink-2);
-  }
-  .ghero-cta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--s2);
-    margin-top: var(--s3);
+    min-height: 120px;
   }
 
-  /* ── кнопки раздела ────────────────────────────────────── */
-  /* Своя кнопка, а не shared/ui/Button: у продукта кнопка — служебный элемент
-     строки таблицы, здесь она первое, на что смотрят. Живёт только внутри
-     раздела и наружу не выходит. */
-  .gbtn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--s2);
-    padding: 13px var(--s4);
-    font-family: var(--font-mono);
-    font-size: var(--t-xs);
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    text-decoration: none;
-    cursor: pointer;
-    transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
+  /* Софиты — колонки той же сетки, что у .gcards: ширина баннера и ряда
+     карточек одна (.gfirst). Лампы висят у самого верха экрана (над отступом
+     .gfirst), лучи кончаются за кромкой карточек — их хвост закрывают сами
+     карточки, а наружу выходит только размытый край. */
+  .ghero-rig {
+    position: absolute;
+    top: calc(var(--s4) * -1);
+    right: 0;
+    bottom: calc((var(--s3) + var(--ghero-spill)) * -1);
+    left: 0;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--s3);
+    pointer-events: none;
   }
-  .gbtn-solid {
-    background: var(--g-ink);
-    color: var(--g-field);
-    border: 1px solid var(--g-ink);
+  .ghero-beam {
+    position: relative;
+    transition: opacity 420ms ease;
   }
-  .gbtn-solid:hover {
-    background: #ffffff;
-    border-color: #ffffff;
+  .ghero-breathe,
+  .ghero-lit {
+    position: absolute;
+    inset: 0;
+    will-change: opacity;
   }
-  .gbtn-line {
-    background: none;
-    color: var(--g-ink);
-    border: 1px solid var(--g-line);
+  /* Дыхание — у каждого луча свой период и сдвиг: с общим ритмом рампа
+     мигала бы целиком. Кадр 0 % = кадр 100 %. */
+  .ghero-breathe {
+    opacity: 0.8;
+    animation: ghero-breathe var(--dur, 8s) ease-in-out var(--delay, 0s) infinite;
   }
-  .gbtn-line:hover {
-    border-color: var(--g-line-2);
+  .ghero-beam:nth-child(1) { --dur: 8.2s; --delay: -1.4s; }
+  .ghero-beam:nth-child(2) { --dur: 9.6s; --delay: -5.2s; }
+  .ghero-beam:nth-child(3) { --dur: 7.4s; --delay: -3s; }
+  .ghero-beam:nth-child(4) { --dur: 10.8s; --delay: -7.6s; }
+  @keyframes ghero-breathe {
+    0%,
+    100% {
+      opacity: 0.6;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+  /* Конус: размытие на обёртке, форма — на её содержимом. clip-path
+     применяется после filter и на одном узле срезал бы размытые края. Внизу
+     конус чуть шире колонки — свет выходит за кромку карточки. */
+  .ghero-cone {
+    position: absolute;
+    inset: 0;
+    filter: blur(18px);
+  }
+  .ghero-cone::before {
+    content: '';
+    position: absolute;
+    inset: 0 -4%;
+    clip-path: polygon(42% 0, 58% 0, 100% 100%, 0 100%);
+    background: linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--beam) 32%, transparent),
+      color-mix(in srgb, var(--beam) 9%, transparent) 72%,
+      color-mix(in srgb, var(--beam) 6%, transparent)
+    );
+  }
+  /* Пятно — там, где луч ложится на карточку: эллипс по её верхней кромке,
+     нижнюю половину закрывает сама карточка. */
+  .ghero-pool {
+    position: absolute;
+    right: -6%;
+    bottom: calc(var(--ghero-spill) - 36px);
+    left: -6%;
+    height: 72px;
+    background: radial-gradient(closest-side, color-mix(in srgb, var(--beam) 38%, transparent), transparent);
+  }
+  .ghero-lamp {
+    position: absolute;
+    top: 0;
+    right: 41%;
+    left: 41%;
+    height: 2px;
+    background: color-mix(in srgb, var(--beam) 45%, #ffffff);
+  }
+  .ghero-lamp::after {
+    content: '';
+    position: absolute;
+    inset: -8px -24%;
+    background: var(--beam);
+    filter: blur(10px);
+    opacity: 0.55;
+  }
+  /* Подсветка под курсором — второй, яркий комплект луча поверх дыхания. */
+  .ghero-lit {
+    opacity: 0;
+    transition: opacity 360ms ease;
+  }
+  .ghero-lit .ghero-cone::before {
+    background: linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--beam) 55%, transparent),
+      color-mix(in srgb, var(--beam) 18%, transparent) 72%,
+      color-mix(in srgb, var(--beam) 12%, transparent)
+    );
+  }
+  .ghero-lit .ghero-pool {
+    background: radial-gradient(closest-side, color-mix(in srgb, var(--beam) 62%, transparent), transparent);
+  }
+  /* Карточка под курсором: её луч горит, остальные притухают. Порядок лучей
+     — порядок карточек (оба из GAMES), поэтому связь — по номеру. */
+  .gfirst:has(.gcard:is(:hover, :focus-visible)) .ghero-beam {
+    opacity: 0.35;
+  }
+  .gfirst:has(.gcard:nth-child(1):is(:hover, :focus-visible)) .ghero-beam:nth-child(1),
+  .gfirst:has(.gcard:nth-child(2):is(:hover, :focus-visible)) .ghero-beam:nth-child(2),
+  .gfirst:has(.gcard:nth-child(3):is(:hover, :focus-visible)) .ghero-beam:nth-child(3),
+  .gfirst:has(.gcard:nth-child(4):is(:hover, :focus-visible)) .ghero-beam:nth-child(4) {
+    opacity: 1;
+  }
+  .gfirst:has(.gcard:nth-child(1):is(:hover, :focus-visible)) .ghero-beam:nth-child(1) .ghero-lit,
+  .gfirst:has(.gcard:nth-child(2):is(:hover, :focus-visible)) .ghero-beam:nth-child(2) .ghero-lit,
+  .gfirst:has(.gcard:nth-child(3):is(:hover, :focus-visible)) .ghero-beam:nth-child(3) .ghero-lit,
+  .gfirst:has(.gcard:nth-child(4):is(:hover, :focus-visible)) .ghero-beam:nth-child(4) .ghero-lit {
+    opacity: 1;
   }
 
   /* ── карточки игр ──────────────────────────────────────── */
@@ -3044,6 +3154,9 @@
      задана явно, а не auto-fit: на планшете авторазмещение давало три в ряд и
      одну сиротой во втором ряду. */
   .gcards {
+    /* Поверх баннера: хвосты софитов уходят за кромку карточек (.ghero-rig). */
+    position: relative;
+    z-index: 1;
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: var(--s3);
@@ -3922,101 +4035,111 @@
     transform: scale(1.1);
   }
 
-  /* ── полоса «одна платформа» ───────────────────────────── */
-  /* Ассет лежит фоном на всю полосу: у него тёмные края, и текст ложится прямо
-     на кадр без подложки и затемнения. Кадр центрированный (знак V посреди
-     гор), поэтому обрезается он от центра, а полоса держит высоту, на которой
-     от знака остаётся не одна линия. */
-  .gplat {
-    position: relative;
-    overflow: hidden;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: var(--s4);
-    min-height: 260px;
-    margin-top: var(--s5);
-    padding: var(--s4);
-    border: 1px solid var(--g-line);
+  /* ── монеты ────────────────────────────────────────────── */
+  /* Низ витрины: на что идут игры. Язык страницы — чёрное поле, волосяные
+     линии, моноширинные подписи; ни картинки, ни подложки: полоса со снимком
+     гор здесь стояла и снята (2026-10-01) — рекламировала раздел внутри
+     самого раздела. Клетки — сетка карточек (4 / 2 / 1), поэтому блок стоит
+     под ними колонка в колонку. */
+  .gcoins {
+    margin-top: var(--s6);
+    padding-bottom: var(--s5);
   }
-  .gplat-art {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: center;
-    pointer-events: none;
+  .gcoins-head {
+    max-width: 64ch;
+    margin-bottom: var(--s5);
   }
-  .gplat-txt {
-    position: relative;
-    max-width: 46ch;
-  }
-  .gplat h2 {
+  .gcoins-head h2 {
     margin: 0;
-    font-size: var(--t-l);
+    padding: 0;
+    border: 0;
+    font-family: var(--font-sans);
+    font-size: clamp(22px, 2.2vw, 30px);
     font-weight: 500;
-    line-height: 1.2;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    line-height: 1.25;
+    letter-spacing: 0;
+    text-transform: none;
     color: var(--g-ink);
   }
-  .gplat-lede {
-    margin: var(--s3) 0 0;
-    font-size: var(--t-s);
-    color: var(--g-ink-2);
+  .gcoins-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--s3);
   }
-  /* Четыре шага — порядок, а не список свойств. Стоят столбцом в правой части
-     полосы, обычной колонкой сетки, а не абсолютом поверх кадра: кадр
-     обрезается по ширине окна, и привязка к точке на картинке съезжала бы на
-     каждом втором экране. */
-  .gplat-steps {
+  .gcoins-cell {
     position: relative;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--s2);
+    padding-top: var(--s4);
+    border-top: 1px solid var(--g-line);
+  }
+  /* Лампа на линии — тот же знак, что софиты над карточками, только белая:
+     у монет нет своей игры, и краска одной из них была бы здесь чужой. */
+  .gcoins-lamp {
+    position: absolute;
+    top: -1px;
+    left: 0;
+    width: 40px;
+    height: 2px;
+    background: var(--g-ink);
+  }
+  .gcoins-lamp::after {
+    content: '';
+    position: absolute;
+    inset: -6px -10px;
+    background: var(--g-ink);
+    filter: blur(8px);
+    opacity: 0.3;
+  }
+  .gcoins-label {
     margin: 0;
-    padding: 0;
-    list-style: none;
     font-family: var(--font-mono);
     font-size: var(--t-xs);
     letter-spacing: 0.2em;
     text-transform: uppercase;
-    color: var(--g-ink-2);
+    color: var(--g-ink-3);
   }
-
-  /* ── полоса итогов ─────────────────────────────────────── */
-  .gstats {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: var(--s4);
-    margin-top: var(--s4);
-    padding: var(--s4) 0 0;
-    border-top: 1px solid var(--g-line);
-  }
-  .gstats > div {
-    display: flex;
-    flex-direction: column;
-    gap: var(--s1);
-  }
-  .gstats b {
+  .gcoins-value {
+    margin: 0;
     font-size: var(--t-xl);
     font-weight: 500;
-    line-height: 1;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
     color: var(--g-ink);
   }
-  .gstats span {
+  .gcoins-value small {
+    font-size: var(--t-s);
+    color: var(--g-ink-2);
+  }
+  .gcoins-note {
+    margin: 0;
+    max-width: 36ch;
+    font-size: var(--t-s);
+    line-height: 1.55;
+    color: var(--g-ink-2);
+  }
+  /* Действие — внизу клетки, на одной линии у соседних: клетки равной высоты
+     (сетка), а пояснения разной длины. */
+  .gcoins-action {
+    margin-top: auto;
+    padding-top: var(--s2);
+  }
+  .gcoins-link {
+    padding-bottom: 2px;
+    border-bottom: 1px solid var(--g-line-2);
     font-family: var(--font-mono);
     font-size: var(--t-xs);
     letter-spacing: 0.16em;
     text-transform: uppercase;
-    color: var(--g-ink-3);
+    text-decoration: none;
+    color: var(--g-ink);
+    transition: border-color 160ms ease;
   }
-  .gstats-brand {
-    text-align: right;
-  }
-  .gstats-brand b {
-    letter-spacing: 0.34em;
+  .gcoins-link:hover,
+  .gcoins-link:focus-visible {
+    border-color: var(--g-ink);
   }
 
   /* ── узкие экраны ──────────────────────────────────────── */
@@ -4024,36 +4147,31 @@
     .gcards {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-    /* Шаги над кадром съезжают с нарисованной рамки, как только полоса
-       обрезается по ширине: ниже этой границы они встают обычной строкой под
-       текстом. */
-    .gplat {
-      grid-template-columns: minmax(0, 1fr);
-      min-height: 0;
+    .gcoins-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      row-gap: var(--s5);
     }
-    .gplat-steps {
-      flex-direction: row;
-      flex-wrap: wrap;
-      gap: var(--s3);
-      margin-top: var(--s4);
+    /* Карточки встают 2×2 — софиты тоже в две колонки, над первым рядом. */
+    .ghero-rig {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-    .gplat-art {
-      opacity: 0.45;
+    .ghero-beam:nth-child(n + 3) {
+      display: none;
     }
   }
   @media (max-width: 767px) {
     .gcards {
       grid-template-columns: minmax(0, 1fr);
     }
-    .ghero {
+    /* Телефон: одна колонка — один софит. */
+    .ghero-rig {
       grid-template-columns: minmax(0, 1fr);
     }
-    .gstats {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: var(--s3);
+    .ghero-beam:nth-child(n + 2) {
+      display: none;
     }
-    .gstats-brand {
-      text-align: left;
+    .gcoins-grid {
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 
@@ -4283,6 +4401,13 @@
   }
   /* ═══════════════ НАСТРОЙКИ ═══════════════ */
   .set { max-width: 620px; }
+  /* Показ сделок (`PrivacyCard`) — второй блок правой дорожки, под Telegram:
+     отбивается линейкой, иначе два заголовка подряд читаются одной карточкой. */
+  .set-privacy {
+    margin-top: var(--s5);
+    padding-top: var(--s4);
+    border-top: 1px solid var(--hair);
+  }
   /* Справочная пара «подпись → значение»: единственная разметка на весь
      продукт — и в меню профиля, и в настройках, и в справках под графиками
      (.lookup собирает эти же пары в колонки). Подпись набирается общим .lbl,
@@ -4600,6 +4725,9 @@
      --profit/--loss/--doubt в список не входят намеренно: игровой тон отвечает
      за поле, а не за числа. Деньги внутри окна красятся как везде. */
   .dlg-game {
+    /* Цвет света окна каналами: зелёный турнира по умолчанию, окна наград
+       профиля подставляют свой (`.dlg-reward`). */
+    --dlg-glow: var(--g-a-green-rgb);
     --ground: var(--g-field);
     --ink: var(--g-ink);
     --ink-2: var(--g-ink-2);
@@ -4621,31 +4749,10 @@
        род окна опознаётся раньше, чем прочитан заголовок. Акцент приглушён до
        половины — на 860 пикселях полная заливка --g-a-green читается полосой
        светофора, а не кромкой. */
-    border-top: 2px solid rgb(var(--g-a-green-rgb) / 0.5);
-    /* Зелёное свечение по бокам. box-shadow, а не слой под окном: окно
-       прокручивается (`overflow-y: auto`) и обрезало бы о себя любой свой
-       слой, а тень браузер рисует снаружи и не режет.
-
-       Свет стоит ВПЛОТНУЮ к кромке и набран двумя слоями на сторону. Один
-       широкий слой с большим отступом здесь уже стоял и был не виден вовсе:
-       размытая тень набирает половину своей прозрачности только на собственном краю,
-       и отнесённая от окна на сорок пикселей она приходит к его кромке почти
-       прозрачной. А место сбоку от окна есть не всегда — в окне шириной 860
-       на экране 935 его остаётся по три десятка пикселей на сторону, и свет
-       обязан быть ярким именно там, а не в ста пикселях, которых нет.
-       Ближний слой (размытие 18) даёт саму кромку, дальний (52) уводит её в
-       темноту, когда место всё-таки есть.
-
-       Сдвиг только по горизонтали и отрицательный разгон: сверху и снизу
-       свет не нужен — окно занимает почти всю высоту экрана, и ореол вокруг
-       него читался бы подсветкой всей страницы, а не окна. */
-    box-shadow:
-      0 0 0 1px rgb(var(--g-a-green-rgb) / 0.4),
-      -6px 0 18px -4px rgb(var(--g-a-green-rgb) / 0.7),
-      6px 0 18px -4px rgb(var(--g-a-green-rgb) / 0.7),
-      -22px 0 52px -12px rgb(var(--g-a-green-rgb) / 0.45),
-      22px 0 52px -12px rgb(var(--g-a-green-rgb) / 0.45),
-      0 40px 120px rgb(0 0 0 / 0.7);
+    border-top: 2px solid rgb(var(--dlg-glow) / 0.5);
+    /* Свечение по бокам — `box-shadow` в слое base (блок профиля и окон
+       наград ниже): здесь, в components, его молча снимал глобальный сброс
+       теней с !important. */
   }
 
   /* ── подтверждение необратимого ──────────────────────────────── */
@@ -4673,15 +4780,6 @@
     left: 0;
     color: var(--ink-3);
   }
-  /* Поле отбито от последствий воздухом, а не линейкой: зон в окне и так три,
-     и каждая уже отделена своей. */
-  .cfm-word { margin-top: var(--s4); }
-  /* Слово в подписи — краской: его нужно прочитать буквально, а вся подпись
-     набрана приглушённым. */
-  .cfm-key { color: var(--ink); }
-  /* Слово набрано верно — поле отвечает само, не заставляя переводить взгляд
-     на кнопку в подвале и проверять, ожила ли она. */
-  .in[data-ok="true"] { border-bottom-color: var(--ink); }
   /*
    * Тег в диалоге разметки: подчёркнутое слово, линия — в цвет тега.
    *
@@ -5506,104 +5604,996 @@
   to { opacity: 1; transform: none; }
 }
 
-/* ── ПРОФИЛЬ И BATTLE PASS ─────────────────────────────────────────────────
-   Страница профиля — обычная страница продукта, не раздел игр: ни чёрного
-   поля, ни скруглений, ни палитры --g-*. Цвета — прикладные имена темы, и
-   потому блок одинаково работает в обеих темах. */
+/* ── ПРОФИЛЬ ───────────────────────────────────────────────────────────────
+   Профиль (`views/profile`) собирается заново по образцу владельца, по
+   одному элементу (2026-10-02). Пока на экране одна наклонная полоса на всю
+   страницу (`Stripe`). Иконки достижений, графики и окно наград сезона
+   остались компонентами, и их стили ниже ждут своей раскладки.
 
-.hero-card {
-  display: grid;
-  grid-template-columns: 160px 1fr;
-  gap: var(--s3);
-  margin-bottom: var(--s4);
+   `.pf` — палитра этих компонентов: тона `--pf-*`, класс `pf-t-<тон>` у
+   панели задаёт `--tc`/`--tc-rgb`. */
+
+.pf {
+  --pf-violet: #a77bff;
+  --pf-violet-rgb: 167 123 255;
+  /* Гамма сайта — монохром (краска на чёрном), а цвет в нём означает деньги.
+     Поэтому тона панелей — оттенки серого, а фиолетовый (акцент раздела
+     игр) — только акцент: кольцо и полоса уровня, место в рейтинге, опыт,
+     кнопка сезона. Владелец 2026-10-01: «добавить цвет можно, основным не
+     делать». Имена тонов остались, значения — оттенки серого. */
+  --pf-pink: #9b9ba2;
+  --pf-pink-rgb: 155 155 162;
+  --pf-gold: #d6d6da;
+  --pf-gold-rgb: 214 214 218;
+  --pf-green: #bcbcc2;
+  --pf-green-rgb: 188 188 194;
+  --pf-cyan: #a9a9b0;
+  --pf-cyan-rgb: 169 169 176;
+  --pf-orange: #8b8b92;
+  --pf-orange-rgb: 139 139 146;
 }
+.pf-t-violet { --tc: var(--pf-violet); --tc-rgb: var(--pf-violet-rgb); }
+.pf-t-neutral { --tc: #c9c9ce; --tc-rgb: 201 201 206; }
+.pf-t-pink { --tc: var(--pf-pink); --tc-rgb: var(--pf-pink-rgb); }
+.pf-t-gold,
+.pf-t-coin { --tc: var(--pf-gold); --tc-rgb: var(--pf-gold-rgb); }
+.pf-t-green { --tc: var(--pf-green); --tc-rgb: var(--pf-green-rgb); }
+.pf-t-cyan { --tc: var(--pf-cyan); --tc-rgb: var(--pf-cyan-rgb); }
+.pf-t-orange { --tc: var(--pf-orange); --tc-rgb: var(--pf-orange-rgb); }
 
-/* Место под модель героя. Занято сейчас, чтобы страница не переезжала, когда
-   модели появятся; пока в нём стоит номер уровня — пустая рамка читалась бы
-   как незагрузившаяся картинка. */
-.hero-slot {
-  aspect-ratio: 3 / 4;
-  border: 1px solid var(--hair);
-  display: grid;
-  place-items: center;
-}
-
-.hero-level {
-  font-size: var(--t-xl);
-  font-variant-numeric: tabular-nums;
-  color: var(--ink-2);
-}
-
-.hero-name { font-weight: 600; }
-.hero-soon { margin: var(--s1) 0 var(--s3); }
-
-.profile-section { margin-top: var(--s5); }
-
+/* Полоса уровня — в окне наград сезона. */
 .xpbar-head {
   display: flex;
   justify-content: space-between;
   gap: var(--s2);
-  margin-bottom: var(--s1);
+  margin-bottom: 6px;
+  font-size: var(--t-xs);
 }
-
 .xpbar-rail {
-  height: 8px;
-  background: var(--hair);
+  position: relative;
+  height: 10px;
+  background: rgb(255 255 255 / 0.08);
 }
-
 .xpbar-fill {
+  position: relative;
   display: block;
   height: 100%;
-  background: var(--ink);
+  min-width: 10px;
+  background: linear-gradient(90deg, #a77bff, #ff5fae);
+}
+/* Яркий конец полосы дышит: «здесь ты сейчас». */
+.xpbar-fill::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -3px;
+  width: 12px;
+  height: 12px;
+  translate: 0 -50%;
+  background: #fff;
+  filter: blur(3px);
+  animation: xp-tip 1.8s ease-in-out infinite;
+}
+@keyframes xp-tip {
+  0%,
+  100% { opacity: 0.45; }
+  50% { opacity: 1; }
 }
 
-.daily-row,
-.track {
-  display: grid;
+.pf-panel {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 12px 14px 14px;
+  background:
+    radial-gradient(70% 55% at 0% 0%, rgb(var(--tc-rgb) / 0.14), transparent 72%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.045), rgb(255 255 255 / 0.018));
+  border: 1px solid rgb(255 255 255 / 0.07);
+}
+.pf-ph {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
   gap: var(--s2);
-  list-style: none;
+  margin-bottom: 10px;
+}
+.pf-ph h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
   padding: 0;
-  margin: var(--s2) 0;
+  border: 0;
 }
-
-.daily-row { grid-template-columns: repeat(7, 1fr); }
-.track { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
-
-.daily-cell,
-.track-cell {
-  border: 1px solid var(--hair);
-  padding: var(--s2);
-  display: grid;
-  gap: 2px;
+.pf-ph h2::before {
+  content: '';
+  flex: none;
+  width: 8px;
+  height: 8px;
+  background: var(--tc);
 }
-
-/* Пройденное приглушено, сегодняшнее и готовое к выдаче — обведено. В системе,
-   где цвет означает деньги, «вот это» нельзя покрасить: его можно обвести. */
-.daily-cell.is-done,
-.track-cell.is-claimed { opacity: 0.5; }
-
-.daily-cell.is-today,
-.track-cell.is-ready { outline: 2px solid var(--ink); }
-
-.track-cell.is-locked { opacity: 0.6; }
-
-.daily-day,
-.track-level {
+.pf-count {
+  color: var(--tc);
+  letter-spacing: 0;
+}
+.pf-pb {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.pf-pb.is-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 255 255 / 0.2) transparent;
+}
+.pf-note {
+  font-family: var(--font-mono);
   font-size: var(--t-xs);
-  color: var(--ink-2);
+  color: var(--g-ink-3);
+}
+.pf-empty {
+  padding: var(--s4) 0;
+  text-align: center;
+}
+.pf-unit {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--g-ink-2);
 }
 
-.daily-coins,
-.track-coins {
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
+/* Достижения: полученный — цветной круг со светом, неполученный — серый с
+   кольцом прогресса по кромке (`--p`). */
+.pf-ach {
+  list-style: none;
+  margin: 0;
+  padding: 2px;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+.pf-ach li {
+  display: grid;
+  place-items: center;
+}
+.pf-ach-i {
+  --p: 0;
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  max-width: 64px;
+  aspect-ratio: 1;
+  color: var(--g-ink-3);
+  cursor: help;
+  background: conic-gradient(
+    rgb(var(--tc-rgb) / 0.7) calc(var(--p) * 360deg),
+    rgb(255 255 255 / 0.08) calc(var(--p) * 360deg)
+  );
+}
+.pf-ach-i::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  background: #110e18;
+}
+.pf-ach-i svg {
+  position: relative;
+  width: 46%;
+  height: 46%;
+}
+.pf-ach-i.is-earned {
+  color: #fff;
+  background: linear-gradient(145deg, var(--tc), rgb(var(--tc-rgb) / 0.35));
+}
+.pf-ach-i.is-earned::before {
+  background:
+    radial-gradient(circle at 35% 28%, rgb(var(--tc-rgb) / 0.6), rgb(var(--tc-rgb) / 0.12) 72%),
+    #14101c;
+}
+.pf-ach-i.is-earned svg { filter: drop-shadow(0 0 5px rgb(var(--tc-rgb) / 0.95)); }
+
+/* Паутинка «Где играет» — шесть самых частых игр. */
+.pf-radar {
+  display: block;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  max-height: 100%;
+  overflow: visible;
+}
+.pf-radar-ring,
+.pf-radar-axis {
+  fill: none;
+  stroke: rgb(255 255 255 / 0.09);
+}
+.pf-radar-g0 { stop-color: var(--pf-cyan); stop-opacity: 0.55; }
+.pf-radar-g1 { stop-color: var(--pf-violet); stop-opacity: 0.35; }
+.pf-radar-shape {
+  stroke: var(--pf-cyan);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 6px rgb(var(--pf-cyan-rgb) / 0.6));
+}
+.pf-radar-dot { fill: #fff; }
+.pf-radar-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  fill: var(--g-ink-2);
+}
+.pf-radar-v {
+  font-size: 12px;
+  font-weight: 700;
+  fill: #fff;
 }
 
-.track-note { font-size: var(--t-xs); }
+/* Ряды по дням: крупное число, изменение, линия в тоне панели. Холст лежит
+   в блоке абсолютно и берёт его высоту (`TrendChart`). */
+.pf-trend-head {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: var(--s2);
+}
+.pf-trend-v {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s2);
+  font-size: 28px;
+  line-height: 1;
+  font-weight: 800;
+  color: var(--g-ink);
+}
+.pf-trend-v .coin {
+  height: 0.6em;
+  color: var(--pf-gold);
+}
+.pf-trend-sub { font-size: var(--t-xs); }
+.pf-trend {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.pf-trend-box {
+  position: relative;
+  flex: 1;
+  min-height: 120px;
+}
+.pf-trend-box svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: visible;
+  touch-action: pan-y;
+}
+.pf-trend-line {
+  fill: none;
+  stroke: var(--tc);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 6px rgb(var(--tc-rgb) / 0.7));
+}
+.pf-trend-g0 { stop-color: var(--tc); stop-opacity: 0.38; }
+.pf-trend-g1 { stop-color: var(--tc); stop-opacity: 0; }
+.pf-trend-dot {
+  fill: #fff;
+  stroke: var(--tc);
+  stroke-width: 2;
+}
+.pf-trend-dot.is-live {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pf-live 1.8s ease-in-out infinite;
+}
+@keyframes pf-live {
+  0%,
+  100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.pf-trend-cursor { stroke: rgb(255 255 255 / 0.25); }
+.pf-trend-tip {
+  position: absolute;
+  top: 0;
+  z-index: 1;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 3px var(--s2);
+  background: var(--g-ink);
+  color: #0d0a15;
+  font-size: var(--t-xs);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.pf-trend-tip .muted { color: rgb(13 10 21 / 0.6); }
+.pf-trend-tip .coin { filter: none; }
+.pf-trend-axis {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--s1);
+  font-size: 10px;
+  color: var(--g-ink-3);
+}
 
-/* Модалка ежедневной награды: одна кнопка, и она во всю ширину подвала —
-   это главное и единственное действие окна, закрыть можно и Esc, и кликом
-   по затемнению. */
+/* ── экран профиля: мазок ──
+   Ровная белая наклонная полоса на всю страницу под шапкой (`Stripe`):
+   без текстуры, теней и затемнений. */
+.pf-stage {
+  position: relative;
+  /* Сцена уходит под шапку (как у джетпака): шапка полупрозрачная и
+     размывает то, что под ней, поэтому белая полоса должна идти и под ней. */
+  margin-top: calc(-1 * (var(--top-h) + 1px));
+  height: 100dvh;
+  overflow: hidden;
+}
+.pfs-svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.pfs-paint { fill: #f2f0ea; }
+
+/* Шапка гостя (`GuestBar`). */
+.pf-guest-gap { flex: 1; }
+.pf-guest-r { gap: var(--s2); }
+
+/* Приглашение гостю (`GuestGate`): профиль требует входа с 2026-10-02, и
+   вместо профиля гость читает, зачем ему аккаунт. Стоит в экран под шапкой —
+   других блоков на этой странице у него нет, и прижимать текст к верху
+   незачем. */
+.pf-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s4);
+  min-height: calc(100dvh - var(--top-h) - 1px);
+  padding: var(--s4) var(--s4) calc(var(--s4) * 2);
+  text-align: center;
+}
+.pf-gate .state { max-width: 44ch; }
+.pf-gate-do {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  justify-content: center;
+}
+
+/* Что человек делал (`PlayerResults`) — под полосой, обычным листом страницы:
+   полоса стоит ровно в экран, а этот блок читают прокруткой. */
+.pf-page { padding-block: var(--s5) var(--s6); }
+.pf-results .seg { flex: none; }
+
+/* ── ОКНА НАГРАД ───────────────────────────────────────────────────────────
+   ПЕРЕРАБОТАНО 2026-10-01 под монохром сайта: плоское тёмное поле без
+   свечений, лучей и градиентного текста, акцент один — у ежедневной свет
+   «краски» (костяной), у сезона фиолетовый; предметы и разлёт монет остались.
+   Ежедневная награда (`features/daily-reward`) и награды сезона
+   (`views/profile`) — игровые окна (`tone="game"`) своего цвета: янтарь с
+   оранжевым у ежедневной, фиолетовый с маджентой у сезона. Владелец
+   2026-10-01: «мало движения, тускло, мало цвета, плоские скучные
+   карточки», — поэтому поле залито цветом окна, за главным предметом
+   вращаются лучи, карточки — предметы (`RewardItem`: монета, стопка, горка,
+   сундук), а выдача — прыжок, открытая крышка и разлёт монет.
+
+   Всё движение — transform/opacity; кадр 0 % = кадр 100 %: под
+   reduced-motion глобальное правило обрывает цикл на первой итерации. */
+
+.dlg-daily {
+  --rw: #e9e7e2;
+  --rw-rgb: 233 231 226;
+  --rw-2: #8d8b86;
+  --rw-2-rgb: 141 139 134;
+  --rw-deep: #1a1a1d;
+  --rw-on: #0c0c0d;
+  max-width: min(94vw, 760px);
+}
+.dlg-season {
+  --rw: #a77bff;
+  --rw-rgb: 167 123 255;
+  --rw-2: #6c47c9;
+  --rw-2-rgb: 108 71 201;
+  --rw-deep: #1b1530;
+  --rw-on: #fff;
+}
+.dlg-reward {
+  --dlg-glow: 60 60 66;
+  border-top-color: var(--rw);
+  background: #111113;
+}
+.dlg-reward .dh h3 {
+  color: #fff;
+}
+.dlg-reward .btn.solid {
+  min-height: 48px;
+  background: var(--rw);
+  border-color: transparent;
+  color: var(--rw-on);
+  font-size: var(--t-m);
+  font-weight: 700;
+}
+.dlg-reward .btn.solid:hover { opacity: 1; filter: brightness(1.1); }
+.dlg-reward .btn.solid .coin {
+  height: 1.05em;
+  filter: none;
+}
+/* Кнопка выдачи зовёт: чуть дышит размером, пока не нажата. */
+.dlg-reward .rw-claim:not(:disabled) { animation: none; }
+@keyframes rw-cta {
+  0%,
+  100% { scale: 1; }
+  50% { scale: 1.025; }
+}
+.rw-streak,
+.rw-ends {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--rw);
+  background: rgb(var(--rw-rgb) / 0.16);
+  border: 1px solid rgb(var(--rw-rgb) / 0.45);
+}
+.rw-streak svg {
+  color: var(--rw);
+}
+@keyframes rw-flame {
+  0%,
+  100% { scale: 1; }
+  50% { scale: 1.2; }
+}
+
+/* Предметы наград (`shared/ui/RewardItem`). Дерево сундука — цвет окна;
+   вне окна — запасные. */
+.ri {
+  --ri-w0: var(--rw-2, #8a4dff);
+  --ri-w1: var(--rw-deep, #2a0f4d);
+  display: block;
+  overflow: visible;
+}
+.ri-shadow { fill: rgb(0 0 0 / 0.45); }
+.ri-wood-0 { stop-color: var(--ri-w0); }
+.ri-wood-1 { stop-color: var(--ri-w1); }
+.ri-lid {
+  transform-box: view-box;
+  transform-origin: 54px 32px;
+  transition: transform 560ms cubic-bezier(0.3, 1.5, 0.5, 1);
+}
+.ri.is-open .ri-lid { transform: rotate(28deg) translate(3px, -5px); }
+.ri-loot,
+.ri-shine {
+  opacity: 0;
+  transition: opacity 300ms ease 150ms, transform 500ms ease 150ms;
+}
+.ri.is-open .ri-loot {
+  opacity: 1;
+  transform: translateY(-5px);
+}
+.ri.is-open .ri-shine { opacity: 1; }
+
+/* Сцена сегодняшней награды: лучи, свечение, предмет покачивается. */
+.rw-stage {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  height: 170px;
+  margin: 0 0 var(--s3);
+}
+.rw-rays {
+  display: none;
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  z-index: -2;
+  width: 440px;
+  height: 440px;
+  translate: -50% -50%;
+  pointer-events: none;
+  background: repeating-conic-gradient(from 0deg, rgb(var(--rw-rgb) / 0.3) 0deg 9deg, transparent 9deg 22.5deg);
+  -webkit-mask-image: radial-gradient(closest-side, #000 12%, transparent 72%);
+  mask-image: radial-gradient(closest-side, #000 12%, transparent 72%);
+  animation: rw-spin 24s linear infinite;
+}
+@keyframes rw-spin {
+  to { rotate: 360deg; }
+}
+.rw-stage-glow {
+  display: none;
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  z-index: -1;
+  width: 190px;
+  height: 190px;
+  translate: -50% -50%;
+  background: radial-gradient(circle, rgb(var(--rw-rgb) / 0.75), rgb(var(--rw-2-rgb) / 0.25) 45%, transparent 70%);
+  animation: rw-breathe 2.4s ease-in-out infinite;
+}
+.rw-stage-item {
+  position: relative;
+  width: 128px;
+  height: 128px;
+  margin-top: 14px;
+  animation: rw-bob 2.6s ease-in-out infinite;
+}
+.rw-stage-item .ri {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 8px 12px rgb(0 0 0 / 0.5));
+}
+.rw-stage.is-fresh .rw-stage-item {
+  animation:
+    rw-jump 720ms cubic-bezier(0.3, 1.6, 0.5, 1) both,
+    rw-bob 2.6s ease-in-out 720ms infinite;
+}
+.rw-stage-sum {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1;
+  color: #fff;
+}
+.rw-stage-sum .coin {
+  height: 0.75em;
+  color: var(--rw);
+  filter: none;
+}
+.rw-stage-day {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.6);
+}
+@keyframes rw-bob {
+  0%,
+  100% { translate: 0 0; }
+  50% { translate: 0 -8px; }
+}
+@keyframes rw-jump {
+  0% { scale: 1; translate: 0 0; }
+  35% { scale: 1.2; translate: 0 -18px; }
+  100% { scale: 1; translate: 0 0; }
+}
+@keyframes rw-breathe {
+  0%,
+  100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* Неделя: семь предметов, растущих день ото дня; седьмой — сундук, шире. */
+.rw-week {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0 0;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr)) minmax(0, 1.4fr);
+  gap: 8px;
+}
+.rw-day,
+.rw-lv {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 2px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.1), rgb(255 255 255 / 0.03));
+  border: 1px solid rgb(255 255 255 / 0.12);
+  color: var(--g-ink-2);
+}
+.rw-day {
+  padding: 8px 4px 10px;
+  transition: translate 200ms ease;
+}
+.rw-day .ri {
+  width: 50px;
+  height: 50px;
+}
+.rw-day.is-last .ri {
+  width: 62px;
+  height: 62px;
+  margin: -6px 0 -6px;
+}
+.rw-day-n,
+.rw-lv-n {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.55);
+}
+.rw-day-c {
+  font-size: var(--t-m);
+  font-weight: 800;
+  color: #fff;
+}
+.rw-day.is-last {
+  border-color: rgb(var(--rw-rgb) / 0.55);
+  background: rgb(var(--rw-rgb) / 0.08);
+}
+.rw-day.is-today {
+  translate: 0 -6px;
+  border-color: var(--rw);
+  background: linear-gradient(180deg, rgb(var(--rw-rgb) / 0.45), rgb(var(--rw-2-rgb) / 0.12));
+}
+.rw-day.is-today .ri { animation: rw-bob 2.6s ease-in-out infinite; }
+.rw-day.is-done:not(.is-today) .ri { filter: saturate(0.3) brightness(0.6); }
+.rw-day.is-done:not(.is-today) :is(.rw-day-n, .rw-day-c) { opacity: 0.5; }
+/* Штамп пройденного дня. Свежий — у дня, забранного в этом окне, — бьёт. */
+.rw-stamp {
+  position: absolute;
+  top: 36%;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  translate: -50% -50%;
+  rotate: -12deg;
+  color: #06230f;
+  background: linear-gradient(135deg, #6bf0a0, #22b463);
+}
+.rw-stamp.is-fresh { animation: rw-stamp 560ms cubic-bezier(0.2, 1.4, 0.4, 1) 300ms both; }
+@keyframes rw-stamp {
+  0% { scale: 2.4; opacity: 0; }
+  60% { scale: 0.9; opacity: 1; }
+  100% { scale: 1; opacity: 1; }
+}
+.rw-day.is-today::before,
+.rw-lv.is-ready::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  animation: rw-breathe 2.4s ease-in-out infinite;
+}
+.rw-day.is-today.is-done::before { display: none; }
+.rw-note {
+  margin-top: var(--s3);
+  text-align: center;
+  color: rgb(255 255 255 / 0.72);
+}
+
+/* Разлёт (`RewardBurst`): искры лучами, монеты дугой, «+N» вверх.
+   Одноразово, последний кадр пустой; `--bd` — сдвиг всего салюта. */
+.rw-burst {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  z-index: 3;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.rw-burst i {
+  --a: calc(var(--i) * 30deg);
+  --d: 56px;
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  width: 6px;
+  height: 6px;
+  background: var(--rw);
+  opacity: 0;
+  animation: rw-spark 900ms cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+  animation-delay: calc(var(--bd, 0ms) + var(--i) * 14ms);
+}
+.rw-burst i:nth-child(even) {
+  --d: 78px;
+  background: #fff6d6;
+}
+@keyframes rw-spark {
+  0% { opacity: 1; transform: rotate(var(--a)) translateY(0) scale(1); }
+  100% { opacity: 0; transform: rotate(var(--a)) translateY(calc(var(--d) * -1)) scale(0.3) rotate(180deg); }
+}
+.rw-burst s {
+  position: absolute;
+  left: -7px;
+  top: -7px;
+  width: 14px;
+  height: 14px;
+  background: radial-gradient(circle at 35% 30%, #fff6c9, #ffd34d 45%, #c98a0c);
+  opacity: 0;
+  animation: rw-coin 1050ms cubic-bezier(0.25, 0.8, 0.4, 1) forwards;
+  animation-delay: calc(var(--bd, 0ms) + var(--i) * 32ms);
+}
+@keyframes rw-coin {
+  0% { opacity: 1; transform: translate(0, 0) scale(0.5); }
+  40% { opacity: 1; transform: translate(var(--dx), -96px) scale(1.1) rotate(180deg); }
+  100% { opacity: 0; transform: translate(calc(var(--dx) * 1.5), 14px) scale(0.8) rotate(360deg); }
+}
+.rw-burst b {
+  position: absolute;
+  left: 0;
+  top: -12px;
+  font-size: var(--t-l);
+  font-weight: 800;
+  color: #fff;
+  white-space: nowrap;
+  opacity: 0;
+  animation: rw-plus 1300ms ease-out forwards;
+  animation-delay: var(--bd, 0ms);
+}
+@keyframes rw-plus {
+  0% { opacity: 0; transform: translate(-50%, 6px) scale(0.8); }
+  20% { opacity: 1; transform: translate(-50%, -10px) scale(1.15); }
+  100% { opacity: 0; transform: translate(-50%, -60px) scale(1); }
+}
+
+/* Награды сезона: медаль уровня с лучами и полосой опыта, лента уровней. */
+.rw-level {
+  display: grid;
+  grid-template-columns: 124px minmax(0, 1fr);
+  gap: var(--s4);
+  align-items: center;
+  margin-bottom: var(--s3);
+}
+.rw-medal-wrap {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  width: 124px;
+  height: 124px;
+}
+.rw-medal-wrap .rw-rays {
+  top: 50%;
+  width: 280px;
+  height: 280px;
+}
+.rw-medal {
+  position: relative;
+  display: grid;
+  place-content: center;
+  width: 98px;
+  height: 110px;
+  text-align: center;
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  background: linear-gradient(160deg, #fff 0%, var(--rw) 32%, var(--rw-2) 100%);
+  animation: rw-bob 3s ease-in-out infinite;
+}
+.rw-medal::before {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  background: linear-gradient(160deg, #2c1257, #12061f);
+}
+.rw-medal > * { position: relative; }
+.rw-medal-lbl {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.7);
+}
+.rw-medal-n {
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1;
+  background: linear-gradient(180deg, #fff, var(--rw));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.dlg-reward .xpbar-rail { height: 12px; }
+.dlg-reward .xpbar-fill { background: linear-gradient(90deg, var(--rw), var(--rw-2)); }
+.rw-pending {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 12px;
+  color: rgb(255 255 255 / 0.8);
+}
+.rw-pending strong {
+  font-size: var(--t-l);
+  color: #fff;
+}
+.rw-pending .coin {
+  height: 0.95em;
+  color: #ffc23d;
+  filter: none;
+}
+
+.rw-track {
+  list-style: none;
+  margin: 0;
+  /* Снизу место под путь с узлами, сверху — под свет готовых карточек. */
+  padding: 14px 4px 36px;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 106px;
+  gap: 10px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--rw-rgb) / 0.5) transparent;
+}
+.rw-lv {
+  padding: 8px 4px 10px;
+  scroll-snap-align: center;
+}
+.rw-lv .ri {
+  width: 54px;
+  height: 54px;
+}
+.rw-lv.is-milestone .ri {
+  width: 64px;
+  height: 64px;
+  margin: -5px 0;
+}
+.rw-lv.is-milestone {
+  border-color: rgb(var(--rw-rgb) / 0.5);
+  background: rgb(var(--rw-rgb) / 0.08);
+}
+.rw-lv-c {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: var(--t-m);
+  font-weight: 800;
+  color: #fff;
+}
+.rw-lv-c .coin {
+  height: 0.8em;
+  color: #ffc23d;
+  filter: none;
+}
+.rw-lv-s {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 16px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: rgb(255 255 255 / 0.45);
+}
+.rw-lv.is-ready {
+  border-color: var(--rw);
+  background: linear-gradient(180deg, rgb(var(--rw-rgb) / 0.42), rgb(var(--rw-2-rgb) / 0.12));
+}
+.rw-lv.is-ready .ri { animation: rw-bob 2.4s ease-in-out infinite; }
+.rw-lv.is-ready .rw-lv-s {
+  color: #fff;
+  font-weight: 700;
+}
+.rw-lv.is-claimed .ri { filter: saturate(0.3) brightness(0.6); }
+.rw-lv.is-claimed .rw-lv-c { opacity: 0.55; }
+.rw-lv.is-claimed .rw-lv-s { color: #6bf0a0; }
+.rw-lv.is-locked .ri { filter: grayscale(1) brightness(0.5); }
+.rw-lv.is-locked :is(.rw-lv-c, .rw-lv-n) { opacity: 0.6; }
+/* Ближайший уровень впереди — пунктиром цвета окна: следующая цель. */
+.rw-lv.is-locked[data-current] { border: 1px dashed rgb(var(--rw-rgb) / 0.75); }
+.rw-lv.is-locked[data-current] .ri { filter: grayscale(0.4) brightness(0.85); }
+.rw-lv.is-bursting { animation: rw-jump 720ms cubic-bezier(0.3, 1.6, 0.5, 1) both; animation-delay: var(--bd, 0ms); }
+/* Путь под лентой: отрезок под каждой карточкой вместе с зазором слева и
+   узел в её центре. Пройденные — залиты цветом окна и светятся. */
+.rw-lv::after {
+  content: '';
+  position: absolute;
+  left: -11px;
+  right: -1px;
+  bottom: -22px;
+  height: 4px;
+  background: rgb(255 255 255 / 0.1);
+}
+.rw-lv:first-child::after { left: 50%; }
+.rw-lv:is(.is-claimed, .is-ready)::after { background: linear-gradient(90deg, var(--rw), var(--rw-2)); }
+.rw-node {
+  position: absolute;
+  left: 50%;
+  bottom: -26px;
+  z-index: 1;
+  width: 12px;
+  height: 12px;
+  translate: -50% 0;
+  background: #241a33;
+  border: 2px solid rgb(255 255 255 / 0.25);
+}
+.rw-lv:is(.is-claimed, .is-ready) .rw-node {
+  background: #fff;
+  border-color: var(--rw);
+}
+.rw-lv.is-milestone .rw-node {
+  width: 16px;
+  height: 16px;
+  bottom: -28px;
+}
+
+@media (max-width: 640px) {
+  .rw-week { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .rw-day.is-last { grid-column: span 2; }
+  .rw-stage { height: 180px; }
+  .rw-stage-item {
+    width: 104px;
+    height: 104px;
+  }
+  .rw-level { grid-template-columns: 92px minmax(0, 1fr); }
+  .rw-medal-wrap {
+    width: 92px;
+    height: 92px;
+  }
+  .rw-medal {
+    width: 74px;
+    height: 84px;
+  }
+  .rw-medal-n { font-size: 30px; }
+}
+
+/* Скругления и свет — в слое base, рядом с глобальным сбросом радиусов и
+   теней: у !important порядок слоёв обратный, и исключение в components
+   проигрывало молча (окно турнира стояло без света). Внутри одного слоя
+   решает специфичность.
+
+   Свет окна — по бокам, вплотную к кромке, двумя слоями на сторону: размытая
+   тень набирает половину прозрачности только на собственном краю, и
+   отнесённая от окна она приходит к нему почти невидимой, а места сбоку от
+   окна бывает три десятка пикселей. Ближний слой (18) даёт кромку, дальний
+   (52) уводит её в темноту. Сверху и снизу света нет: окно занимает почти
+   всю высоту экрана, и ореол вокруг читался бы подсветкой страницы. */
+@layer base {
+  .dlg-game {
+    box-shadow:
+      0 0 0 1px rgb(var(--dlg-glow) / 0.4),
+      -6px 0 18px -4px rgb(var(--dlg-glow) / 0.7),
+      6px 0 18px -4px rgb(var(--dlg-glow) / 0.7),
+      -22px 0 52px -12px rgb(var(--dlg-glow) / 0.45),
+      22px 0 52px -12px rgb(var(--dlg-glow) / 0.45),
+      0 40px 120px rgb(0 0 0 / 0.7) !important;
+  }
+
+  /* окна наград: прямые углы сайта смягчены только до 12px, света нет */
+  .dlg-reward { border-radius: 12px !important; }
+  .dlg-reward :is(.rw-day, .rw-lv) { border-radius: 8px !important; }
+  .dlg-reward :is(.rw-streak, .rw-ends, .xpbar-rail, .xpbar-fill) { border-radius: 999px !important; }
+  .dlg-reward .rw-lv::after { border-radius: 999px !important; }
+  .dlg-reward :is(.rw-stamp, .rw-node) { border-radius: 50% !important; }
+  .dlg-reward .rw-burst s { border-radius: 50% !important; }
+  .dlg-reward .xpbar-fill::after { border-radius: 50% !important; }
+  .dlg-reward .btn.solid { border-radius: 8px !important; }
+  /* профиль */
+  .pf .pf-panel {
+    border-radius: 16px !important;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05) !important;
+  }
+  .pf .pf-ach-i { border-radius: 50% !important; }
+  .pf .pf-ach-i::before,
+  .pf .pf-ph h2::before { border-radius: 50% !important; }
+  .pf .pf-trend-tip { border-radius: 8px !important; }
+  .pf .pf-ach-i.is-earned { box-shadow: 0 0 16px rgb(var(--tc-rgb) / 0.45) !important; }
+  .pf .pf-ph h2::before { box-shadow: 0 0 8px var(--tc) !important; }
+}
+
+/* Модалка с одной кнопкой: она во всю ширину подвала — это главное и
+   единственное действие окна, закрыть можно и Esc, и кликом по затемнению. */
 .df-solo .btn { width: 100%; }
 
 /* Точка на кнопке профиля: награда, которой не видно, — не награда. */
@@ -5618,9 +6608,30 @@
   background: var(--ink);
 }
 
-@media (max-width: 640px) {
-  .hero-card { grid-template-columns: 1fr; }
-  .daily-row { grid-template-columns: repeat(4, 1fr); }
+/* Профиль — кружок: в него встанет картинка пользователя (`<img>` внутри
+   `.acct-av`), пока её нет — первая буква имени. Круг — исключение из нулевого
+   радиуса, поэтому в слое base: глобальный сброс с !important стоит там же. */
+.acct.acct-av {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  width: 30px;
+  height: 30px;
+  margin-left: var(--s3);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--hair);
+  color: var(--ink);
+  font-size: var(--t-xs);
+  letter-spacing: 0;
+}
+.acct.acct-av:hover { border-color: var(--ink-3); }
+.acct-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.acct.acct-av.has-dot::after { top: -1px; right: -1px; }
+@layer base {
+  .acct.acct-av { border-radius: 50% !important; }
+  .acct.acct-av.has-dot::after { border-radius: 50% !important; }
 }
 
 /* ── СТОЛ КАРТОЧНЫХ ИГР (/games/poker/<id>, /games/blackjack/<id>) ──────────
