@@ -86,6 +86,9 @@ describe('toDetail', () => {
       closedQty: 0,
       leverage: 20,
       liqPrice: 54_300,
+      // Маркировка и результат — числа биржи: экран показывает их, а не свою формулу.
+      markPrice: 60_100,
+      unrealisedPnl: 10,
       exitTime: null,
       entryTime: '2026-09-30T09:00:00.000Z',
       // До стопа 1000 при 0.1 монеты — 100 USDT, один процент баланса.

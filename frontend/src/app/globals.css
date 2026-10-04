@@ -736,7 +736,9 @@
     /* Места на каждый элемент — явно: терминал-main тут display: contents,
        и без номеров авторазмещение отправило бы тикет под строку кнопок. */
     .terminal-chart { grid-column: 1; grid-row: 1; }
-    .asym.terminal > .marg { grid-column: 2; grid-row: 1; min-height: 0; overflow-y: auto; }
+    /* overflow-x: hidden — сдвиг входящей панели (.panel-swap) иначе на время
+       анимации заводил бы в колонке горизонтальную прокрутку. */
+    .asym.terminal > .marg { grid-column: 2; grid-row: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
     .terminal-controls { grid-row: 2; }
   }
   /* Узкое окно: колонки складываются, и тикет уходит под первый экран. Окном
@@ -923,6 +925,112 @@
   }
   .order-actions { display: flex; gap: var(--s2); }
   .order-actions .btn { flex: 1; }
+  /* Сетка фиксации на месте панели ордера: заголовок и строка позиции под ним —
+     одна шапка, и линейка под заголовком её разрезала бы. */
+  .cg-head { border-bottom: 0; padding-bottom: 0; margin-bottom: var(--s1); }
+  .cg-sub { margin: 0; font-family: var(--font-mono); font-size: var(--t-xs); }
+  /* Итог и кнопки сетки — подвал, прилипший к низу колонки: на широком экране
+     колонка сама прокручивается (см. .asym.terminal > .marg), и подвал стоит
+     внизу её окна, даже когда панель короче колонки (`margin-top: auto` при
+     колонке во всю высоту — .panel-swap-fill); на узком — внизу экрана, пока
+     панель в кадре. Фон свой: прокрученные под ним строки не просвечивают. */
+  .panel-swap-fill { min-height: 100%; display: flex; flex-direction: column; }
+  .cg-panel { flex: 1; display: flex; flex-direction: column; }
+  .cg-foot {
+    margin-top: auto;
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    display: grid;
+    gap: var(--s2);
+    padding: var(--s2) 0;
+    border-top: 1px solid var(--hair);
+    background: var(--ground);
+  }
+  /* Отрицательный отступ .size-preview подтягивает итог к полям тикета; в подвале
+     он наехал бы на его линейку. */
+  .cg-foot .size-preview { margin-top: 0; }
+  /* Таблица уровней в колонке 360px: общая мерка .ledger (760px) уводила её в
+     горизонтальную прокрутку с пустыми промежутками между колонками. Строки
+     плотнее, чем в журнале, — уровней до десяти, и все должны быть видны. */
+  .cg-table .ledger { min-width: 0; }
+  @media (min-width: 721px) {
+    .cg-table .ledger th { padding: var(--s1) var(--s2) var(--s1) 0; letter-spacing: 0.06em; }
+    .cg-table .ledger td { height: auto; padding: 3px var(--s2) 3px 0; font-size: var(--t-xs); }
+  }
+  /* Объём и стоп после уровня правятся прямо в таблице (требование владельца:
+     «интуитивно понятно, что можно нажать и поменять»). Поле — тихая заливка без
+     рамки, как у биржевых терминалов: рамки делали из таблицы форму. Под
+     курсором заливка плотнее, в фокусе — черта снизу. Посчитанное приглушено,
+     закреплённое руками — краской текста и чертой слева: разница видна, не
+     вчитываясь, и замок для неё не нужен. */
+  .cg-edit {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 76px;
+    height: 24px;
+    padding: 0 6px;
+    background: rgb(var(--ink-rgb) / 0.045);
+    border-left: 2px solid transparent;
+    border-bottom: 1px solid transparent;
+    cursor: text;
+    transition: background-color 120ms ease;
+  }
+  .cg-edit:hover { background: rgb(var(--ink-rgb) / 0.09); }
+  .cg-edit:focus-within { background: rgb(var(--ink-rgb) / 0.03); border-bottom-color: var(--ink); }
+  .cg-edit[data-pinned] { border-left-color: var(--ink); }
+  .cg-table .cg-edit .in.cg-cell {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-2);
+  }
+  /* Фокус показывает сама ячейка — чертой снизу; общий контур ввода здесь лишний. */
+  .cg-table .cg-edit .in.cg-cell:focus-visible { outline: 0; }
+  .cg-edit[data-pinned] .in.cg-cell,
+  .cg-edit:focus-within .in.cg-cell { color: var(--ink); }
+  .cg-edit[data-ignored] .in.cg-cell { color: var(--ink-3); text-decoration: line-through; }
+  /* Цена уровня в одну строку: поля рядом забирают ширину, и число переносилось по пробелу разрядов. */
+  .cg-table .ledger td.n { white-space: nowrap; }
+  /* Доля уровня в позиции — мелко слева в той же ячейке: строка остаётся одна. */
+  .cg-note { flex: none; font-family: var(--font-mono); font-size: 9px; color: var(--ink-3); }
+  .cg-table .ledger td.cg-no,
+  .cg-none { color: var(--ink-3); }
+  /* Заголовок «Объём» — кнопка «поделить поровну»: та же подпись колонки, что у
+     соседей, со значком действия; под курсором — краска текста. */
+  .cg-split {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+  .cg-split svg { color: var(--ink-3); }
+  .cg-split:hover,
+  .cg-split:hover svg { color: var(--ink); }
+  /* Смена панели в колонке терминала (ордер ⇄ сетка фиксации): входящая панель
+     въезжает коротким сдвигом с проявлением — сетка справа, ордер на возврате
+     слева, как шаг вперёд и назад. Анимируется только вход: уходящая снимается
+     сразу, иначе две панели на миг стояли бы в колонке одна под другой. */
+  .panel-swap[data-swap="in"] { animation: panel-swap-in 220ms cubic-bezier(0.32, 0.72, 0, 1) both; }
+  .panel-swap[data-swap="back"] { animation: panel-swap-back 220ms cubic-bezier(0.32, 0.72, 0, 1) both; }
+  @keyframes panel-swap-in {
+    from { opacity: 0; transform: translateX(16px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes panel-swap-back {
+    from { opacity: 0; transform: translateX(-16px); }
+    to { opacity: 1; transform: none; }
+  }
   /* Ползунок значения (Slider из shared/ui) — единственное текущее место
      использования; токены свои, кросс-браузерная стилизация range только
      через псевдоэлементы track/thumb. */
@@ -936,6 +1044,12 @@
     cursor: pointer;
   }
   .slider:disabled { opacity: 0.4; cursor: default; }
+  /* Место ползунка до прихода цены (`SliderSlot`): та же высота и отступы, только дорожка. */
+  /* Это тот же input, только выключенный и без бегунка: высоту ползунку
+     добирает строка поля, и любая другая заглушка выходила на пиксели ниже. */
+  .slider.slider-slot { opacity: 1; background: var(--hair); cursor: default; }
+  .slider-slot::-webkit-slider-thumb { visibility: hidden; }
+  .slider-slot::-moz-range-thumb { visibility: hidden; }
   .slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     width: 10px;
@@ -1435,6 +1549,24 @@
   .sym {
     font-family: var(--font-mono);
     letter-spacing: 0.04em;
+  }
+  /* Символ, открывающий монету на графике терминала, — тот же пунктир, что у
+     цены, за которой стоит график (.px-cue ниже): «нажми — увидишь на графике»
+     в продукте говорится одним способом. */
+  .sym-pick {
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    border-bottom: 1px dashed var(--ink-3);
+    padding: 0 0 1px;
+    cursor: pointer;
+    transition: border-color 150ms ease, color 150ms ease;
+  }
+  .sym-pick:hover,
+  .sym-pick:focus-visible {
+    border-bottom-color: var(--ink);
+    border-bottom-style: solid;
+    color: var(--ink);
   }
   /* Цена, за которой стоит график: вход и выход в журнале открывают окно со
      свечами вокруг сделки. Пунктир, а не цвет: цветом в этом продукте
@@ -4342,6 +4474,45 @@
   /* Заглушка в колонке чисел прижимается вправо: цифры выровнены по правому
      краю, и полоса слева обещала бы не ту колонку, что придёт. */
   .skel-r { margin-left: auto; }
+  /* Заглушка по форме настоящего элемента (`CoinSkeleton`): сам элемент стоит
+     внутри невидимым и задаёт размер, полоса — его коробка. */
+  .skel-shape { display: inline-flex; height: auto; }
+  .skel-shape > * { visibility: hidden; }
+  /* Выбор монеты терминала (`CoinPicker`): значок списка, логотип и тикер.
+     Ширина постоянная — линейка ТФ справа не ездит ни при смене монеты, ни при
+     приходе списка; длинный тикер обрезается многоточием. */
+  .coin-pick { position: relative; display: inline-flex; }
+  .coin-pick-btn {
+    display: inline-flex; align-items: center; gap: var(--s2);
+    width: 9.5rem; height: 30px; padding: 0 var(--s1);
+    color: var(--ink); cursor: pointer;
+  }
+  .coin-pick-btn:hover { background: rgb(var(--ink-rgb) / 0.06); }
+  .coin-pick-icon { flex: none; color: var(--ink-3); }
+  .coin-pick-sym {
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-family: var(--font-mono); font-size: var(--t-s); font-weight: 700; letter-spacing: 0.02em;
+  }
+  .coin-logo { flex: none; display: block; }
+  .coin-logo-bg { fill: rgb(var(--ink-rgb) / 0.14); }
+  .coin-logo-letter { fill: var(--ink-2); font-family: var(--font-mono); font-size: 10px; font-weight: 700; }
+  .coin-menu {
+    position: absolute; top: calc(100% + 4px); left: 0; z-index: 6;
+    width: 240px; padding: var(--s2);
+    display: flex; flex-direction: column; gap: var(--s2);
+    background: var(--ground); border: 1px solid var(--rule);
+  }
+  .coin-menu-list { display: flex; flex-direction: column; max-height: 320px; overflow-y: auto; }
+  .coin-menu-row {
+    display: flex; align-items: center; gap: var(--s2); width: 100%;
+    padding: 6px var(--s1); text-align: left;
+    font-family: var(--font-mono); font-size: var(--t-xs); color: var(--ink-2); cursor: pointer;
+  }
+  .coin-menu-row:hover { color: var(--ink); background: rgb(var(--ink-rgb) / 0.06); }
+  .coin-menu-row.on { color: var(--ink); background: rgb(var(--ink-rgb) / 0.1); }
+  .coin-menu-empty { padding: 6px var(--s1); font-size: var(--t-xs); }
+  /* Оборот за 24 часа — справа в строке, тише тикера: это подсказка к выбору, а не сам выбор. */
+  .coin-menu-vol { margin-left: auto; color: var(--ink-3); }
 
   /* Кому движение мешает — тому ровная краска чуть плотнее обычной, чтобы
      заглушка оставалась заметной без волны. */
@@ -6000,7 +6171,7 @@
   --rw-2-rgb: 141 139 134;
   --rw-deep: #1a1a1d;
   --rw-on: #0c0c0d;
-  max-width: min(94vw, 760px);
+  max-width: min(94vw, 520px);
 }
 .dlg-season {
   --rw: #a77bff;
@@ -6038,7 +6209,6 @@
   100% { scale: 1; }
   50% { scale: 1.025; }
 }
-.rw-streak,
 .rw-ends {
   display: inline-flex;
   align-items: center;
@@ -6051,14 +6221,6 @@
   color: var(--rw);
   background: rgb(var(--rw-rgb) / 0.16);
   border: 1px solid rgb(var(--rw-rgb) / 0.45);
-}
-.rw-streak svg {
-  color: var(--rw);
-}
-@keyframes rw-flame {
-  0%,
-  100% { scale: 1; }
-  50% { scale: 1.2; }
 }
 
 /* Предметы наград (`shared/ui/RewardItem`). Дерево сундука — цвет окна;
@@ -6272,6 +6434,24 @@
   animation: rw-breathe 2.4s ease-in-out infinite;
 }
 .rw-day.is-today.is-done::before { display: none; }
+/* Окно ежедневной награды — компактное: неделя ровными ячейками без картинок,
+   число (или галочка забранного дня) по центру. */
+.dlg-daily .rw-week {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  padding: 0;
+}
+.dlg-daily .rw-day {
+  align-content: center;
+  gap: 4px;
+  padding: 10px 2px;
+}
+.dlg-daily .rw-day.is-today { translate: none; }
+.dlg-daily .dh { position: relative; justify-content: center; text-align: center; }
+.dlg-daily .dh-main { text-align: center; }
+.dlg-daily .rw-day { justify-items: center; text-align: center; }
+.dlg-daily .rw-day-c { width: 100%; text-align: center; }
+.dlg-daily .rw-day-c { display: grid; place-items: center; min-height: 20px; }
 .rw-note {
   margin-top: var(--s3);
   text-align: center;
@@ -6531,6 +6711,7 @@
 @media (max-width: 640px) {
   .rw-week { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .rw-day.is-last { grid-column: span 2; }
+  .dlg-daily .rw-week { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .rw-stage { height: 180px; }
   .rw-stage-item {
     width: 104px;
@@ -6573,7 +6754,7 @@
   /* окна наград: прямые углы сайта смягчены только до 12px, света нет */
   .dlg-reward { border-radius: 12px !important; }
   .dlg-reward :is(.rw-day, .rw-lv) { border-radius: 8px !important; }
-  .dlg-reward :is(.rw-streak, .rw-ends, .xpbar-rail, .xpbar-fill) { border-radius: 999px !important; }
+  .dlg-reward :is(.rw-ends, .xpbar-rail, .xpbar-fill) { border-radius: 999px !important; }
   .dlg-reward .rw-lv::after { border-radius: 999px !important; }
   .dlg-reward :is(.rw-stamp, .rw-node) { border-radius: 50% !important; }
   .dlg-reward .rw-burst s { border-radius: 50% !important; }

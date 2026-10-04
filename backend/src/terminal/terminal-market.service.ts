@@ -36,6 +36,8 @@ export interface TerminalSymbol {
   /** Знаков цены — по шагу цены биржи. */
   decimals: number;
   maxLeverage: number;
+  /** Оборот за 24 часа в USDT — на момент кэша списка; 0, если биржа не ответила. */
+  turnover24h: number;
 }
 
 export interface CandleQuery {
@@ -136,14 +138,20 @@ export class TerminalMarketService {
     if (hit && this.now() - hit.at < SYMBOLS_TTL_MS) return hit.value;
     const [instruments, tickers] = await Promise.all([
       this.instruments(),
-      // Оборот нужен только для порядка: без него список всё равно годится.
+      // Оборот — порядок и подпись строки в списке; без него список всё равно годится.
       this.bybit.publicGet('/market/tickers', { category: 'linear' }).catch(() => ({ list: [] })),
     ]);
     const turnover = new Map<string, number>();
     for (const t of tickers.list ?? []) turnover.set(String(t.symbol), parseFloat(t.turnover24h) || 0);
     const value = [...instruments.values()]
-      .map((i) => ({ symbol: i.symbol, base: i.base, decimals: stepDecimals(i.tickSize), maxLeverage: i.maxLeverage }))
-      .sort((a, b) => (turnover.get(b.symbol) ?? 0) - (turnover.get(a.symbol) ?? 0) || a.symbol.localeCompare(b.symbol));
+      .map((i) => ({
+        symbol: i.symbol,
+        base: i.base,
+        decimals: stepDecimals(i.tickSize),
+        maxLeverage: i.maxLeverage,
+        turnover24h: turnover.get(i.symbol) ?? 0,
+      }))
+      .sort((a, b) => b.turnover24h - a.turnover24h || a.symbol.localeCompare(b.symbol));
     this.symbolsCache = { at: this.now(), value };
     return value;
   }

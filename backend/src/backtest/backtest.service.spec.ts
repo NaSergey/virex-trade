@@ -954,6 +954,62 @@ describe('BacktestService — сделки', () => {
       expect(prisma.backtestTrade.update).toHaveBeenCalledWith({ where: { id: 't1' }, data: { stopFollow: true } });
     });
 
+    it('свои объёмы и цели стопа уровней — как прислал экран; совпала сумма — последний забирает остаток', async () => {
+      const { service, prisma } = makeService();
+      prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, qty: 1, closedQty: 0.1 });
+
+      await service.createCloseGrid('u1', 't1', {
+        prices: [105, 110, 115],
+        qtys: [0.5, 0.2, 0.2000000001],
+        stops: [100, 104, null],
+        stopFollow: true,
+      });
+
+      const rows = prisma.backtestCloseOrder.create.mock.calls.map((c: any[]) => c[0].data);
+      expect(rows.map((r: any) => r.qty).slice(0, 2)).toEqual([0.5, 0.2]);
+      expect(rows.map((r: any) => r.qty).reduce((a: number, b: number) => a + b, 0)).toBe(0.9);
+      expect(rows.map((r: any) => r.stopAfter)).toEqual([100, 104, null]);
+    });
+
+    it('объёмы меньше остатка — так и ставятся: остаток остаётся под стопом', async () => {
+      const { service, prisma } = makeService();
+      prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, qty: 1, closedQty: 0 });
+
+      await service.createCloseGrid('u1', 't1', { prices: [105, 110], qtys: [0.3, 0.3], stopFollow: false });
+
+      const qtys = prisma.backtestCloseOrder.create.mock.calls.map((c: any[]) => c[0].data.qty);
+      expect(qtys).toEqual([0.3, 0.3]);
+    });
+
+    it('объёмы больше остатка — отказ, прежние лимиты не сняты', async () => {
+      const { service, prisma } = makeService();
+      prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, qty: 1, closedQty: 0.5 });
+
+      const err = await rejection(service.createCloseGrid('u1', 't1', { prices: [105, 110], qtys: [0.3, 0.3], stopFollow: false }));
+
+      expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_QTY_EXCEEDS_REMAINING' });
+      expect(prisma.backtestCloseOrder.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('остаток деления съел последний уровень — отказ, а не лимит на ноль', async () => {
+      const { service, prisma } = makeService();
+      prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, qty: 1, closedQty: 0 });
+
+      const err = await rejection(service.createCloseGrid('u1', 't1', { prices: [105, 110], qtys: [1, 1e-9], stopFollow: false }));
+
+      expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_GRID_INVALID' });
+      expect(prisma.backtestCloseOrder.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('объёмов или целей не столько, сколько цен, — отказ', async () => {
+      const { service, prisma } = makeService();
+      prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, qty: 1, closedQty: 0 });
+
+      const err = await rejection(service.createCloseGrid('u1', 't1', { prices: [105, 110], qtys: [0.3], stopFollow: false }));
+
+      expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_GRID_INVALID' });
+    });
+
     it('у закрытой сделки — отказ', async () => {
       const { service, prisma } = makeService();
       prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, exitTime: new Date(T0 + DAY) });
@@ -1002,6 +1058,29 @@ describe('BacktestService — сделки', () => {
       await service.systemClose('t1', fill(95));
 
       expect(prisma.backtestTrade.update).toHaveBeenCalledWith({ where: { id: 't1' }, data: { stopLoss: 100 } });
+    });
+
+    it('у исполнившегося лимита своя цель — стоп идёт на неё, а не по правилу', async () => {
+      const { service, prisma } = makeService();
+      prisma.backtestTrade.findUnique.mockResolvedValue(FOLLOW);
+      prisma.backtestCloseOrder.findUnique.mockResolvedValue({ stopAfter: 102 });
+      prisma.backtestTradeExit.findMany.mockResolvedValue([{ price: 105 }]);
+
+      await service.systemClose('t1', fill(105));
+
+      expect(prisma.backtestCloseOrder.findUnique).toHaveBeenCalledWith({ where: { id: 'o1' }, select: { stopAfter: true } });
+      expect(prisma.backtestTrade.update).toHaveBeenCalledWith({ where: { id: 't1' }, data: { stopLoss: 102 } });
+    });
+
+    it('своя цель слабее нынешнего стопа — стоп не ослабляется', async () => {
+      const { service, prisma } = makeService();
+      prisma.backtestTrade.findUnique.mockResolvedValue({ ...FOLLOW, stopLoss: 103 });
+      prisma.backtestCloseOrder.findUnique.mockResolvedValue({ stopAfter: 101 });
+      prisma.backtestTradeExit.findMany.mockResolvedValue([{ price: 105 }]);
+
+      await service.systemClose('t1', fill(105));
+
+      expect(prisma.backtestTrade.update).not.toHaveBeenCalled();
     });
 
     it('без флага стоп не трогается', async () => {

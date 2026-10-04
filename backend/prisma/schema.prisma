@@ -571,6 +571,8 @@ model BacktestCloseOrder {
   trade     BacktestTrade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
   price     Float
   qty       Float
+  /// Цель стопа, когда этот лимит исполнится (сетка фиксации); null — правило «вход, дальше предыдущий тейк».
+  stopAfter Float?
   createdAt DateTime      @default(now())
 
   @@index([tradeId])
@@ -1258,6 +1260,8 @@ model TerminalStopFollow {
   /// Тейки сетки по порядку и их цены.
   orderIds   String[]
   prices     Float[]
+  /// Цель стопа после каждого тейка, параллельно orderIds; 0 или нет элемента — правило.
+  stops      Float[]  @default([])
   /// Исполненные — в порядке исполнения, и их цены исполнения.
   filled     String[]
   fillPrices Float[]

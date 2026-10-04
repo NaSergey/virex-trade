@@ -35,6 +35,14 @@ import {
 } from '../lib/money';
 
 /** Заголовок тейка: прибыль по нему, пока он стоит, иначе «(по желанию)». */
+/**
+ * Место ползунка, пока цены ещё нет: тот же range, выключенный и без бегунка.
+ * Без него поле росло вдвое, когда приходила цена, и сдвигало всё под собой.
+ */
+export function SliderSlot() {
+  return <input type="range" className="slider slider-slot" disabled tabIndex={-1} aria-hidden />;
+}
+
 function TakeTitle({ profit }: { profit: number | null }) {
   const t = useTranslations('backtest');
   return (
@@ -485,9 +493,7 @@ export function OrderPanel({
         }
       >
         {() =>
-          takeRange &&
-          takePos != null &&
-          screenPrice != null && (
+          takeRange && takePos != null && screenPrice != null ? (
             <Slider
               value={takePos}
               min={takeSliderMin}
@@ -499,6 +505,8 @@ export function OrderPanel({
               }
               aria-label={t('take')}
             />
+          ) : (
+            <SliderSlot />
           )
         }
       </Field>
@@ -511,8 +519,7 @@ export function OrderPanel({
         }
       >
         {() =>
-          screenPrice != null &&
-          stopPos != null && (
+          screenPrice != null && stopPos != null ? (
             <Slider
               value={stopPos}
               min={stopSliderMin}
@@ -522,6 +529,8 @@ export function OrderPanel({
               onChange={(pos) => setStop(stopFromSignedPct(curvedSliderValue(pos, -STOP_RISK_PCT, STOP_RISK_PCT, 0), screenPrice))}
               aria-label={t('stop')}
             />
+          ) : (
+            <SliderSlot />
           )
         }
       </Field>

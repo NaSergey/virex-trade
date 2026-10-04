@@ -74,6 +74,19 @@ export interface EntryOrdersVars {
 }
 
 /**
+ * Сетка фиксации: цены уровней, их объёмы в монете (закреплённые руками и
+ * поделённые остальными) и цели стопа после каждого — 0 у последнего и там,
+ * где действует правило. Без флажка переноса целей нет.
+ */
+export interface CloseGridVars {
+  tradeId: string;
+  prices: number[];
+  qtys: number[];
+  stops?: number[];
+  stopFollow: boolean;
+}
+
+/**
  * Всё, что терминал умеет делать со счётом. Экран один на бектест, турнир и
  * биржу — а куда уходит действие, решает этот набор: у сессии это наш сервер и
  * его движок, у биржевого терминала — ордера на Bybit.
@@ -93,7 +106,7 @@ export interface TerminalActions {
   cancelEntryOrder: TerminalAction<string>;
   moveEntryOrder: TerminalAction<{ orderId: string; price: number }>;
   moveCloseOrder: TerminalAction<{ orderId: string; price: number }>;
-  closeGrid: TerminalAction<{ tradeId: string; prices: number[]; stopFollow: boolean }>;
+  closeGrid: TerminalAction<CloseGridVars>;
   finish: TerminalAction<void>;
   tags: TerminalAction<{ tradeId: string; tagIds: string[] }>;
 }

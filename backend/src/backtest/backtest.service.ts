@@ -100,8 +100,33 @@ const entryOrderNotFound = () =>
 const closeOrderNotFound = () =>
   new NotFoundException({ message: 'Ордер не найден', code: 'BACKTEST_CLOSE_ORDER_NOT_FOUND' });
 
+const qtyExceedsRemaining = () =>
+  new BadRequestException({ message: 'Объём больше остатка', code: 'BACKTEST_QTY_EXCEEDS_REMAINING' });
+
+const gridInvalid = () =>
+  new BadRequestException({ message: 'Объёмов или целей стопа не столько, сколько уровней', code: 'BACKTEST_GRID_INVALID' });
+
 /** Допуск на накопленную погрешность float-сложений closedQty. */
 const QTY_EPS = 1e-8;
+
+/**
+ * Объёмы уровней сетки фиксации: присланные — как есть, если вместе не больше
+ * остатка (совпали с ним — последний забирает остаток деления), иначе отказ;
+ * не присланы — равные части, последний забирает остаток деления.
+ */
+function gridQtys(remaining: number, n: number, sent?: number[]): number[] {
+  if (!sent) {
+    const part = remaining / n;
+    return Array.from({ length: n }, (_, i) => (i === n - 1 ? remaining - part * (n - 1) : part));
+  }
+  const sum = sent.reduce((a, b) => a + b, 0);
+  if (sum > remaining + QTY_EPS) throw qtyExceedsRemaining();
+  const qtys = [...sent];
+  if (Math.abs(sum - remaining) <= QTY_EPS) qtys[n - 1] = remaining - qtys.slice(0, -1).reduce((a, b) => a + b, 0);
+  // Остаток деления съел последний уровень — лимита на ноль не бывает.
+  if (!(qtys[n - 1] > 0)) throw gridInvalid();
+  return qtys;
+}
 
 /** Что подтягивать к сделке, чтобы отдать её с тегами и историей входов —
  * каждое отдельное исполнение (открытие и каждый добор сеткой), а не только
@@ -786,9 +811,7 @@ export class BacktestService {
     if (trade.exitTime) throw tradeClosed();
     if (trade.session.status !== 'active') throw sessionFinished();
     const remaining = trade.qty - trade.closedQty;
-    if (input.qty > remaining + QTY_EPS) {
-      throw new BadRequestException({ message: 'Объём больше остатка', code: 'BACKTEST_QTY_EXCEEDS_REMAINING' });
-    }
+    if (input.qty > remaining + QTY_EPS) throw qtyExceedsRemaining();
     const order = await this.prisma.backtestCloseOrder.create({
       data: { tradeId, price: input.price, qty: input.qty },
     });
@@ -796,12 +819,24 @@ export class BacktestService {
   }
 
   /**
-   * Сетка фиксации позиции: N лимитов закрытия равными частями остатка и флаг
-   * «стоп за тейками» (`followStop`). Заменяет прежние лимиты закрытия сделки —
-   * иначе сумма ордеров превысила бы остаток. Последний уровень забирает остаток
-   * деления: сумма ровно равна остатку, и он закрывает позицию целиком.
+   * Сетка фиксации позиции: N лимитов закрытия и флаг «стоп за тейками»
+   * (`followStop`). Заменяет прежние лимиты закрытия сделки — иначе сумма
+   * ордеров превысила бы остаток.
+   *
+   * Объёмы уровней — присланные экраном (`qtys`: закреплённые руками и
+   * поделённые остальными), без них — равные части. Сумма не больше остатка;
+   * совпала с ним — последний уровень забирает остаток деления, и сетка
+   * закрывает позицию целиком, без хвоста double. Цель стопа уровня (`stops`,
+   * null — правило) ложится в `stopAfter` его лимита: на исполнении стоп идёт
+   * на неё (спека `2026-10-04-close-grid-custom-levels-design.md`).
    */
-  async createCloseGrid(userId: string, tradeId: string, input: { prices: number[]; stopFollow: boolean }) {
+  async createCloseGrid(
+    userId: string,
+    tradeId: string,
+    input: { prices: number[]; qtys?: number[]; stops?: (number | null)[]; stopFollow: boolean },
+  ) {
+    const n = input.prices.length;
+    if ((input.qtys && input.qtys.length !== n) || (input.stops && input.stops.length !== n)) throw gridInvalid();
     const trade = await this.ownedTrade(userId, tradeId);
     if (trade.exitTime) throw tradeClosed();
     if (trade.session.status !== 'active') throw sessionFinished();
@@ -814,14 +849,13 @@ export class BacktestService {
       const fresh = await tx.backtestTrade.findUnique({ where: { id: tradeId } });
       if (!fresh || fresh.exitTime) throw tradeClosed();
       const remaining = fresh.qty - fresh.closedQty;
-      const n = input.prices.length;
-      const part = remaining / n;
+      const qtys = gridQtys(remaining, n, input.qtys);
 
       await tx.backtestCloseOrder.deleteMany({ where: { tradeId } });
       const closeOrders = [];
       for (const [i, price] of input.prices.entries()) {
-        const qty = i === n - 1 ? remaining - part * (n - 1) : part;
-        closeOrders.push(await tx.backtestCloseOrder.create({ data: { tradeId, price, qty } }));
+        const stopAfter = input.stops?.[i] || null; // 0 — правило, как и null
+        closeOrders.push(await tx.backtestCloseOrder.create({ data: { tradeId, price, qty: qtys[i], stopAfter } }));
       }
       await tx.backtestTrade.update({ where: { id: tradeId }, data: { stopFollow: input.stopFollow } });
       return { closeOrders };
@@ -951,7 +985,11 @@ export class BacktestService {
     await tx.backtestTradeExit.create({
       data: { tradeId: trade.id, qty: input.qty, price: input.exitPrice, time: input.exitTime, reason: input.reason, fee, pnl },
     });
+    // Цель стопа сработавшего лимита (сетка фиксации) — до того, как он снят.
+    let stopAfter: number | null = null;
     if (input.closeOrderId) {
+      const order = await tx.backtestCloseOrder.findUnique({ where: { id: input.closeOrderId }, select: { stopAfter: true } });
+      stopAfter = order?.stopAfter ?? null;
       await tx.backtestCloseOrder.deleteMany({ where: { id: input.closeOrderId, tradeId: trade.id } });
     }
     const session = await tx.backtestSession.update({
@@ -980,7 +1018,7 @@ export class BacktestService {
       // позицию со своими стопом и тейком.
       await tx.backtestCloseOrder.deleteMany({ where: { tradeId: trade.id } });
     } else if (input.reason === 'limit') {
-      await this.followStop(tx, trade.id, input.exitPrice);
+      await this.followStop(tx, trade.id, input.exitPrice, stopAfter);
     }
 
     return { balance: session.balance };
@@ -988,7 +1026,8 @@ export class BacktestService {
 
   /**
    * Стоп за тейками (`BacktestTrade.stopFollow`, ставит сетка фиксации):
-   * исполнился лимит закрытия, позиция ещё открыта — стоп подтягивается. После
+   * исполнился лимит закрытия, позиция ещё открыта — стоп подтягивается. Цель —
+   * своя у лимита (`stopAfter`, задана в сетке), а без неё правило: после
    * первого — в безубыток (цена входа позиции), после каждого следующего — на
    * цену предыдущего исполненного лимита. Так делают «умные ордера» торговых
    * терминалов.
@@ -1001,16 +1040,19 @@ export class BacktestService {
    * Сделка читается здесь, под замком сессии, а не берётся у вызывающего: стоп
    * мог поменяться правкой между его чтением и транзакцией.
    */
-  protected async followStop(tx: Prisma.TransactionClient, tradeId: string, fillPrice: number) {
+  protected async followStop(tx: Prisma.TransactionClient, tradeId: string, fillPrice: number, explicit: number | null = null) {
     const cur = await tx.backtestTrade.findUnique({ where: { id: tradeId } });
     if (!cur?.stopFollow) return;
-    const limits = await tx.backtestTradeExit.findMany({
-      where: { tradeId, reason: 'limit' },
-      orderBy: [{ time: 'asc' }, { createdAt: 'asc' }],
-      select: { price: true },
-    });
-    // Последний в списке — только что записанный выход; предыдущий — перед ним.
-    const target = limits.length >= 2 ? limits[limits.length - 2].price : cur.entryPrice;
+    let target = explicit;
+    if (target == null) {
+      const limits = await tx.backtestTradeExit.findMany({
+        where: { tradeId, reason: 'limit' },
+        orderBy: [{ time: 'asc' }, { createdAt: 'asc' }],
+        select: { price: true },
+      });
+      // Последний в списке — только что записанный выход; предыдущий — перед ним.
+      target = limits.length >= 2 ? limits[limits.length - 2].price : cur.entryPrice;
+    }
     const direction = cur.direction as Direction;
     if (!stopOnRightSide(direction, fillPrice, target)) return;
     const tighter = direction === 'long' ? target > cur.stopLoss : target < cur.stopLoss;

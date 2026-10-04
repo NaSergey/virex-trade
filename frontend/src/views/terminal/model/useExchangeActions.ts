@@ -138,7 +138,7 @@ export function useExchangeActions(): TerminalActions {
     closeGrid: useAction(async (v) =>
       apiJson(
         '/api/terminal/positions/close-grid',
-        json('POST', { ...position(v.tradeId), prices: v.prices, follow: v.stopFollow }),
+        json('POST', { ...position(v.tradeId), prices: v.prices, qtys: v.qtys, stops: v.stops, follow: v.stopFollow }),
       ),
     ),
     finish: NOTHING,

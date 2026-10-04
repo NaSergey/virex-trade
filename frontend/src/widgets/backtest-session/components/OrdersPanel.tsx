@@ -1,6 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import { CoinSymbol } from '@/shared/ui/CoinSymbol';
 import { Button } from '@/shared/ui/Button';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
@@ -34,6 +35,7 @@ export function OrdersPanel({
   onCancelEntryOrder,
   showSymbol = false,
   decimalsOf,
+  onSymbol,
 }: {
   trades: BacktestTrade[];
   scale: number;
@@ -47,6 +49,8 @@ export function OrdersPanel({
   showSymbol?: boolean;
   /** Знаков цены монеты; не задано — общее правило формата. */
   decimalsOf?: (symbol: string) => number | undefined;
+  /** Нажатие на символ монеты — открыть её на графике (терминал); не задано — символ просто текст. */
+  onSymbol?: (symbol: string) => void;
 }) {
   const t = useTranslations('backtest');
   const tradeById = new Map(trades.map((x) => [x.id, x]));
@@ -71,7 +75,10 @@ export function OrdersPanel({
           {
             key: 'symbol',
             header: t('colOrderSymbol'),
-            render: (o: BacktestCloseOrder) => <span className="sym">{tradeById.get(o.tradeId)?.symbol ?? '—'}</span>,
+            render: (o: BacktestCloseOrder) => {
+              const symbol = tradeById.get(o.tradeId)?.symbol;
+              return symbol ? <CoinSymbol symbol={symbol} onPick={onSymbol} /> : '—';
+            },
           } satisfies LedgerColumn<BacktestCloseOrder>,
         ]
       : []),
@@ -114,7 +121,7 @@ export function OrdersPanel({
           {
             key: 'symbol',
             header: t('colOrderSymbol'),
-            render: (o: BacktestEntryOrder) => <span className="sym">{o.symbol}</span>,
+            render: (o: BacktestEntryOrder) => <CoinSymbol symbol={o.symbol} onPick={onSymbol} />,
           } satisfies LedgerColumn<BacktestEntryOrder>,
         ]
       : []),

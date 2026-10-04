@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Flame } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useClaimDaily, type DailyState } from '@/entities/battle-pass';
 import { cn } from '@/shared/lib/utils/css';
@@ -8,8 +8,6 @@ import { Button } from '@/shared/ui/Button';
 import { CoinIcon } from '@/shared/ui/CoinIcon';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, useDialogFade } from '@/shared/ui/dialog';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
-import { RewardBurst } from '@/shared/ui/RewardBurst';
-import { RewardItem, rewardItemOf } from '@/shared/ui/RewardItem';
 
 /**
  * Окно ежедневной награды — одно на два входа: всплывает само при первом
@@ -31,42 +29,13 @@ export function DailyRewardDialog({ daily, onClose }: { daily: DailyState; onClo
   // Между ответом сервера и перечиткой Battle Pass `claimedToday` ещё ложь —
   // без успеха мутации кнопка на этот миг снова звала бы «Забрать».
   const claimed = daily.claimedToday || claim.isSuccess;
-  const max = Math.max(...daily.week);
-  const todayItem = rewardItemOf(daily.coins, max);
 
   return (
     <Dialog open={!closing} onOpenChange={(v) => !v && close()}>
       <DialogContent tone="game" className="dlg-reward dlg-daily">
-        <DialogHeader
-          title={t('daily')}
-          subtitle={t('dailyLede')}
-          // Ноль дней подряд — это «ещё ни разу», а не серия: показывать тут
-          // нечего, пока она не началась.
-          aside={
-            daily.streak > 0 ? (
-              <span className="rw-streak">
-                <Flame aria-hidden size={14} />
-                {t('dailyStreak', { days: daily.streak })}
-              </span>
-            ) : undefined
-          }
-        />
+        {/* Счётчика «N дн. подряд» в шапке нет — снят владельцем 2026-10-04. */}
+        <DialogHeader title={t('daily')} />
         <DialogBody>
-          {/* `is-fresh` — выдача случилась в этом окне: предмет подпрыгивает.
-              Открывший окно после забора видит открытый сундук без прыжка. */}
-          <div className={cn('rw-stage', claimed && 'is-claimed', claim.isSuccess && 'is-fresh')}>
-            <span className="rw-rays" aria-hidden />
-            <span className="rw-stage-glow" aria-hidden />
-            <div className="rw-stage-item">
-              <RewardItem kind={todayItem} open={claimed} />
-              {claim.isSuccess && <RewardBurst coins={daily.coins} />}
-            </div>
-            <span className="rw-stage-sum n">
-              +{daily.coins} <CoinIcon />
-            </span>
-            <span className="rw-stage-day">{t('day', { day: daily.day })}</span>
-          </div>
-
           <ol className="rw-week">
             {daily.week.map((coins, i) => {
               const day = i + 1;
@@ -83,23 +52,13 @@ export function DailyRewardDialog({ daily, onClose }: { daily: DailyState; onClo
                   )}
                 >
                   <span className="rw-day-n">{t('day', { day })}</span>
-                  <RewardItem kind={rewardItemOf(coins, max)} open={done && day === daily.week.length} />
-                  <span className="rw-day-c n">+{coins}</span>
-                  {done && (
-                    <span
-                      className={cn('rw-stamp', today && claim.isSuccess && 'is-fresh')}
-                      aria-label={t('claimed')}
-                    >
-                      <Check size={14} strokeWidth={3.5} />
-                    </span>
-                  )}
+                  <span className="rw-day-c n">
+                    {done ? <Check aria-label={t('claimed')} size={16} strokeWidth={3.5} /> : `+${coins}`}
+                  </span>
                 </li>
               );
             })}
           </ol>
-          <p className="rw-note">
-            {claimed ? t('dailyTomorrow', { coins: daily.nextCoins }) : t('dailyHint')}
-          </p>
         </DialogBody>
         <DialogFooter className="df-solo">
           {claimed ? (
@@ -107,7 +66,14 @@ export function DailyRewardDialog({ daily, onClose }: { daily: DailyState; onClo
               {t('done')}
             </Button>
           ) : (
-            <Button variant="solid" className="rw-claim" disabled={claim.isPending} onClick={() => claim.mutate()}>
+            // Забрать и закрыть одним нажатием: монеты видны на балансе, второй
+            // кнопки «Готово» после выдачи не нужно.
+            <Button
+              variant="solid"
+              className="rw-claim"
+              disabled={claim.isPending}
+              onClick={() => claim.mutate(undefined, { onSuccess: close })}
+            >
               {t('claimPlus', { coins: daily.coins })}
               <CoinIcon />
             </Button>

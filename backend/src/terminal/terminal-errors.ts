@@ -99,6 +99,21 @@ export const oppositePosition = (symbol: string) =>
 export const positionNotFound = () =>
   new NotFoundException({ message: 'Позиция не найдена — возможно, она уже закрыта', code: 'TERMINAL_POSITION_NOT_FOUND' });
 
+/** Свои объёмы сетки фиксации вместе больше позиции. */
+export const gridQtyExceeds = (size: string) =>
+  new BadRequestException({
+    message: `Объёмы сетки больше позиции (${size}).`,
+    code: 'TERMINAL_GRID_QTY_EXCEEDS',
+    params: { size },
+  });
+
+/** Объёмов или целей стопа не столько, сколько цен. */
+export const gridInvalid = () =>
+  new BadRequestException({
+    message: 'Объёмов или целей стопа не столько, сколько уровней сетки.',
+    code: 'TERMINAL_GRID_INVALID',
+  });
+
 /** Сетка встала, а план переноса стопа не записан: человек должен знать, что стоп сам не поедет. */
 export const followNotSaved = () =>
   new ServiceUnavailableException({

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
+import { useAuth, DEMO_EMAIL } from '@/features/auth';
 import { useTerminalAccess } from '@/entities/terminal';
 import { Button } from '@/shared/ui/Button';
 import { EmptyState } from '@/shared/ui/EmptyState';
@@ -9,6 +10,7 @@ import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { PageHead } from '@/shared/ui/PageHead';
 import { Wrap } from '@/shared/ui/Wrap';
 import { TerminalSkeleton } from '@/widgets/backtest-session';
+import { DemoTerminal } from './components/DemoTerminal';
 import { TerminalScreen } from './components/TerminalScreen';
 
 /**
@@ -22,9 +24,15 @@ import { TerminalScreen } from './components/TerminalScreen';
 export function TerminalPage() {
   const tt = useTranslations('terminal');
   const access = useTerminalAccess();
+  const { user, loading } = useAuth();
 
+  // Демо — общий аккаунт без ключа: вместо биржи тот же экран на симуляции.
+  if (user?.email === DEMO_EMAIL) return <DemoTerminal />;
   if (access.data?.available) return <TerminalScreen />;
-  if (access.isLoading) return <TerminalSkeleton />;
+  // Пока не пришёл пользователь, неизвестно, демо это или биржа: надпись
+  // слева внизу у них разная, и на её месте стоит серая полоса.
+  if (loading || access.isLoading)
+    return <TerminalSkeleton live badge={loading ? null : tt('realBadge')} leave={false} />;
 
   return (
     <Wrap page>

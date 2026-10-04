@@ -15,6 +15,7 @@ import {
   levelImpact,
   levelSliderRange,
   liquidationPrice,
+  openPnl,
   previewSize,
   riskAmount,
   signedPctFromStop,
@@ -445,5 +446,24 @@ describe('withoutLockedLevels', () => {
 
   it('открыты обе стороны — уровней нет вовсе', () => {
     expect(withoutLockedLevels(d('95', '90'), 100, ['long', 'short'])).toEqual(d('', ''));
+  });
+});
+
+describe('openPnl', () => {
+  const trade = { direction: 'long' as const, entryPrice: 100, qty: 2, closedQty: 0.5 };
+
+  it('у сделки сессии — формула от цены, с оценкой комиссий, на остаток', () => {
+    expect(openPnl(trade, 110)).toBeCloseTo(unrealizedPnl('long', 100, 110, 1.5), 10);
+    expect(openPnl(trade, null)).toBeNull();
+  });
+
+  it('у позиции биржи — формула биржи: без комиссий, от цены последней сделки', () => {
+    expect(openPnl({ ...trade, unrealisedPnl: 42.3 }, 110)).toBeCloseTo(15, 10);
+    expect(openPnl({ ...trade, direction: 'short', unrealisedPnl: -1 }, 110)).toBeCloseTo(-15, 10);
+  });
+
+  it('цены нет — число биржи из снимка счёта; нет и его — пусто', () => {
+    expect(openPnl({ ...trade, unrealisedPnl: 42.3 }, null)).toBe(42.3);
+    expect(openPnl({ ...trade, unrealisedPnl: null }, null)).toBeNull();
   });
 });

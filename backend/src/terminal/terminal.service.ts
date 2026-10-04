@@ -7,7 +7,9 @@ import { BybitTerminalClient } from './bybit-terminal.client';
 import { CloseGridDto, ClosePositionDto, MoveOrderDto, PlaceOrderDto, SetLevelsDto } from './dto/terminal.dto';
 import {
   followNotSaved,
+  gridInvalid,
   gridPartial,
+  gridQtyExceeds,
   oppositePosition,
   positionNotFound,
   qtyTooLarge,
@@ -73,6 +75,36 @@ const reasonOf = (e: unknown): string => {
   }
   return e instanceof Error ? e.message : String(e);
 };
+
+/**
+ * Объёмы уровней сетки фиксации — строками для биржи, кратными шагу лота.
+ *
+ * Не присланы — равные части, последний забирает остаток деления. Присланы
+ * (закреплённые руками и поделённые остальными) — каждый вниз до шага лота;
+ * вместе не больше позиции; совпали с ней с точностью до шага — последний
+ * забирает остаток, и сетка закрывает позицию целиком. Уровень меньше
+ * минимального ордера — отказ.
+ */
+function gridQtys(symbol: string, sizeRaw: string, n: number, inst: Instrument, sent?: number[]): string[] {
+  const size = parseFloat(sizeRaw);
+  const decimals = stepDecimals(inst.qtyStep);
+  const half = Number(inst.qtyStep) / 2;
+  // Размер позиции и части кратны шагу лота — остаток тоже; toFixed лишь снимает хвост double.
+  const rest = (head: string[]) => (size - head.reduce((sum, q) => sum + Number(q), 0)).toFixed(decimals);
+  let qtys: string[];
+  if (!sent) {
+    const part = floorToStep(size / n, inst.qtyStep);
+    const head = Array.from({ length: n - 1 }, () => part);
+    qtys = [...head, rest(head)];
+  } else {
+    const sum = sent.reduce((a, b) => a + b, 0);
+    if (sum > size + half) throw gridQtyExceeds(sizeRaw);
+    qtys = sent.map((q) => floorToStep(q, inst.qtyStep));
+    if (Math.abs(sum - size) < half) qtys[n - 1] = rest(qtys.slice(0, -1));
+  }
+  for (const q of qtys) if (!(Number(q) >= inst.minQty)) throw qtyTooSmall(symbol, String(inst.minQty));
+  return qtys;
+}
 
 /**
  * Биржевой терминал: торговля на Bybit ключом пользователя.
@@ -342,26 +374,24 @@ export class TerminalService {
   }
 
   /**
-   * Сетка фиксации: N reduce-only лимитов равными частями позиции, последний
-   * забирает остаток деления. ЗАМЕНЯЕТ прежние лимиты закрытия позиции — иначе
-   * сумма ордеров превысила бы её размер. То же правило, что в бектесте
-   * (`createCloseGrid`). Стоп за тейками ведёт не биржа, а `worker` по событиям
-   * потока счёта (`StopFollowService`): здесь только записывается его план.
+   * Сетка фиксации: N reduce-only лимитов. ЗАМЕНЯЕТ прежние лимиты закрытия
+   * позиции — иначе сумма ордеров превысила бы её размер. То же правило, что в
+   * бектесте (`createCloseGrid`). Объёмы — присланные экраном или равные части
+   * (`gridQtys`). Стоп за тейками ведёт не биржа, а `worker` по событиям потока
+   * счёта (`StopFollowService`): здесь только записывается его план — с целью
+   * стопа каждого тейка (`stops`, 0 — правило).
    *
-   * Объёмы считаются до того, как что-либо снято: сетка, у которой часть
-   * меньше минимального ордера, не должна оставить позицию без прежних лимитов.
+   * Объёмы считаются до того, как что-либо снято: сетка, у которой уровень
+   * меньше минимального ордера или объёмы больше позиции, не должна оставить
+   * позицию без прежних лимитов.
    */
   async closeGrid(userId: string, dto: CloseGridDto) {
+    const n = dto.prices.length;
+    if ((dto.qtys && dto.qtys.length !== n) || (dto.stops && dto.stops.length !== n)) throw gridInvalid();
     const creds = await this.creds(userId);
     const inst = await this.market.requireInstrument(dto.symbol);
     const row = await this.positionRow(creds, dto.symbol, dto.direction);
-    const size = parseFloat(row.size);
-    const n = dto.prices.length;
-
-    const part = floorToStep(size / n, inst.qtyStep);
-    if (!(Number(part) >= inst.minQty)) throw qtyTooSmall(dto.symbol, String(inst.minQty));
-    // Размер позиции и часть кратны шагу лота — остаток тоже; toFixed лишь снимает хвост double.
-    const last = (size - Number(part) * (n - 1)).toFixed(stepDecimals(inst.qtyStep));
+    const qtys = gridQtys(dto.symbol, String(row.size), n, inst, dto.qtys);
 
     const open = await this.bybit.privateGet(creds, '/order/realtime', {
       category: 'linear',
@@ -380,7 +410,7 @@ export class TerminalService {
       );
     }
 
-    const placed: { id: string; price: number }[] = [];
+    const placed: { id: string; price: number; stop: number }[] = [];
     for (const [i, price] of dto.prices.entries()) {
       const tick = roundToTick(price, inst.tickSize);
       try {
@@ -389,13 +419,13 @@ export class TerminalService {
           symbol: dto.symbol,
           side: closeSide(dto.direction),
           orderType: 'Limit',
-          qty: i === n - 1 ? last : part,
+          qty: qtys[i],
           price: tick,
           timeInForce: 'GTC',
           positionIdx: Number(row.positionIdx) || 0,
           reduceOnly: true,
         });
-        placed.push({ id: String(result.orderId), price: Number(tick) });
+        placed.push({ id: String(result.orderId), price: Number(tick), stop: dto.stops?.[i] ?? 0 });
       } catch (e) {
         if (placed.length === 0 && stale.length === 0) throw e;
         this.logger.warn(`user ${userId}: close grid ${dto.symbol} stopped at ${placed.length}/${n}`);
@@ -417,7 +447,7 @@ export class TerminalService {
    * Сетка без флажка план снимает: прежние тейки она и так сняла. Не записался
    * план — сетка уже на бирже, поэтому отказ говорит именно это.
    */
-  private async recordFollow(userId: string, dto: CloseGridDto, row: any, placed: { id: string; price: number }[]) {
+  private async recordFollow(userId: string, dto: CloseGridDto, row: any, placed: { id: string; price: number; stop: number }[]) {
     try {
       if (dto.follow && placed.length > 0) {
         await this.follows.replace(userId, {
@@ -426,6 +456,7 @@ export class TerminalService {
           entryPrice: parseFloat(row.avgPrice),
           orderIds: placed.map((o) => o.id),
           prices: placed.map((o) => o.price),
+          stops: placed.map((o) => o.stop),
         });
       } else {
         await this.follows.remove(userId, dto.symbol, dto.direction);

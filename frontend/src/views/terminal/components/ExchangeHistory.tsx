@@ -24,7 +24,7 @@ const PAGE_SIZE = 10;
  *
  * Сделка появляется здесь не в момент закрытия, а со следующим проходом синка.
  */
-export function ExchangeHistory() {
+export function ExchangeHistory({ onSymbol }: { onSymbol?: (symbol: string) => void }) {
   const t = useTranslations('backtest');
   const to = useTranslations('overview');
   const { locale } = useLocaleControl();
@@ -46,6 +46,7 @@ export function ExchangeHistory() {
         isLoading={isLoading && !data}
         skeletonRows={PAGE_SIZE}
         onEditTags={setTagging}
+        onSymbol={onSymbol}
         empty={<EmptyState title={t('noTrades')} />}
       />
       {data && data.total > 0 && (

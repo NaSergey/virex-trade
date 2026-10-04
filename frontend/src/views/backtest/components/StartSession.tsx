@@ -21,7 +21,7 @@ type Visibility = 'show' | 'hide';
  */
 export function StartSession({ onStarted }: { onStarted: (id: string) => void }) {
   const t = useTranslations('backtest');
-  const [market, setMarket] = useState<DataSource>('real');
+  const [market, setMarket] = useState<DataSource>('live');
   const [deposit, setDeposit] = useState('10000');
   const [date, setDate] = useState<Visibility>('hide');
   const [price, setPrice] = useState<Visibility>('show');

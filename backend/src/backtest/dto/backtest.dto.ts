@@ -136,6 +136,22 @@ export class CreateCloseGridDto {
   @IsPositive({ each: true })
   prices: number[];
 
+  /** Объёмы уровней в монете — закреплённые руками и поделённые остальными; нет — поровну. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsNumber({}, { each: true })
+  @IsPositive({ each: true })
+  qtys?: number[];
+
+  /** Цель стопа после исполнения уровня; 0 — правило (вход, дальше предыдущий тейк). */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsNumber({}, { each: true })
+  @Min(0, { each: true })
+  stops?: number[];
+
   @IsBoolean()
   stopFollow: boolean;
 }

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { usePrefetchRangeCheck, type RangeTf, type Trade } from '@/entities/trade';
 import { Tags } from '@/entities/tag';
+import { CoinSymbol } from '@/shared/ui/CoinSymbol';
 import { Button } from '@/shared/ui/Button';
 import { LedgerTable, type LedgerColumn, type LedgerSort } from '@/shared/ui/LedgerTable';
 import { EmptyState } from '@/shared/ui/EmptyState';
@@ -126,6 +127,7 @@ export function TradesTable({
   tags: showTags = true,
   renderExpanded,
   priceDecimals,
+  onSymbol,
 }: {
   trades: Trade[];
   isLoading?: boolean;
@@ -184,6 +186,8 @@ export function TradesTable({
    * только без окна графика (`chart={false}`): там цена печатается здесь.
    */
   priceDecimals?: (trade: Trade) => number | undefined;
+  /** Нажатие на символ монеты — открыть её на графике (терминал); не задано — символ просто текст. */
+  onSymbol?: (symbol: string) => void;
 }) {
   const t = useTranslations('tradesTable');
   const { locale } = useLocaleControl();
@@ -206,7 +210,7 @@ export function TradesTable({
       sortKey: colSortKey('closedAt'),
       render: (tr) => <span className="muted">{formatClosed ? formatClosed(tr.closedAt) : fmtClosed(tr.closedAt, intlLocale)}</span>,
     },
-    { key: 'symbol', header: t('colSymbol'), render: (tr) => <span className="sym">{tr.symbol}</span> },
+    { key: 'symbol', header: t('colSymbol'), render: (tr) => <CoinSymbol symbol={tr.symbol} onPick={onSymbol} /> },
     {
       key: 'direction',
       header: t('colDirection'),

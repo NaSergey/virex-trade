@@ -109,6 +109,22 @@ export class CloseGridDto {
   @IsPositive({ each: true })
   prices: number[];
 
+  // Объёмы уровней в монете (закреплённые руками и поделённые остальными); нет — поровну.
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_GRID)
+  @IsNumber({}, { each: true })
+  @IsPositive({ each: true })
+  qtys?: number[];
+
+  // Цель стопа после исполнения уровня; 0 — правило (вход, дальше предыдущий тейк).
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_GRID)
+  @IsNumber({}, { each: true })
+  @Min(0, { each: true })
+  stops?: number[];
+
   // Стоп за тейками: после первого — в безубыток, дальше — на предыдущий (ведёт worker).
   @IsOptional()
   @IsBoolean()

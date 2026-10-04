@@ -425,8 +425,74 @@ describe('TerminalService', () => {
         entryPrice: 60_000,
         orderIds: ['o-1', 'o-2'],
         prices: [61_000, 62_000],
+        stops: [0, 0],
       });
       expect(follows.remove).not.toHaveBeenCalled();
+    });
+
+    it('свои объёмы — вниз до шага лота; совпали с позицией — последний забирает остаток', async () => {
+      // 0.05: 0.0301 → 0.030, 0.0101 → 0.010, последний — 0.05 − 0.040 = 0.010.
+      const { service, orders } = setup({ rows: [openRow('Buy', 1), emptyRow(2)] });
+
+      await service.closeGrid('u1', {
+        symbol: 'BTCUSDT',
+        direction: 'long',
+        prices: [61_000, 62_000, 63_000],
+        qtys: [0.0301, 0.0101, 0.0098],
+      });
+
+      expect(orders().map((o) => o.qty)).toEqual(['0.030', '0.010', '0.010']);
+    });
+
+    it('свои объёмы меньше позиции — так и ставятся: остаток остаётся под стопом', async () => {
+      const { service, orders } = setup({ rows: [openRow('Buy', 1), emptyRow(2)] });
+
+      await service.closeGrid('u1', { symbol: 'BTCUSDT', direction: 'long', prices: [61_000, 62_000], qtys: [0.02, 0.01] });
+
+      expect(orders().map((o) => o.qty)).toEqual(['0.020', '0.010']);
+    });
+
+    it('объёмы больше позиции — отказ, прежние лимиты не сняты', async () => {
+      const { service, posts } = setup({ rows: [openRow('Buy', 0)], orders: [limit('own-close', 'Sell', true)] });
+
+      await expect(
+        service.closeGrid('u1', { symbol: 'BTCUSDT', direction: 'long', prices: [61_000, 62_000], qtys: [0.03, 0.03] }),
+      ).rejects.toMatchObject({ response: { code: 'TERMINAL_GRID_QTY_EXCEEDS' } });
+      expect(posts).toHaveLength(0);
+    });
+
+    it('свой объём уровня меньше минимального ордера — отказ до снятия прежних', async () => {
+      const { service, posts } = setup({ rows: [openRow('Buy', 0)], orders: [limit('own-close', 'Sell', true)] });
+      const small = { ...BTC, minQty: 0.01 };
+      (service as any).market.requireInstrument = async () => small;
+
+      await expect(
+        service.closeGrid('u1', { symbol: 'BTCUSDT', direction: 'long', prices: [61_000, 62_000], qtys: [0.045, 0.005] }),
+      ).rejects.toMatchObject({ response: { code: 'TERMINAL_QTY_TOO_SMALL' } });
+      expect(posts).toHaveLength(0);
+    });
+
+    it('цели стопа уровней — в план, по выставленным тейкам', async () => {
+      const { service, follows } = setup({ rows: [openRow('Buy', 1), emptyRow(2)] });
+
+      await service.closeGrid('u1', {
+        symbol: 'BTCUSDT',
+        direction: 'long',
+        prices: [61_000, 62_000, 63_000],
+        stops: [60_200, 0, 0],
+        follow: true,
+      });
+
+      expect(follows.replace).toHaveBeenCalledWith('u1', expect.objectContaining({ stops: [60_200, 0, 0] }));
+    });
+
+    it('объёмов или целей не столько, сколько цен, — отказ', async () => {
+      const { service, posts } = setup({ rows: [openRow('Buy', 1)] });
+
+      await expect(
+        service.closeGrid('u1', { symbol: 'BTCUSDT', direction: 'long', prices: [61_000, 62_000], qtys: [0.02] }),
+      ).rejects.toMatchObject({ response: { code: 'TERMINAL_GRID_INVALID' } });
+      expect(posts).toHaveLength(0);
     });
 
     it('без флажка прежний план позиции снимается', async () => {
@@ -449,7 +515,7 @@ describe('TerminalService', () => {
         .closeGrid('u1', { symbol: 'BTCUSDT', direction: 'long', prices: [61_000, 62_000], follow: true })
         .catch((e) => e);
 
-      expect(follows.replace).toHaveBeenCalledWith('u1', expect.objectContaining({ orderIds: ['o-1'], prices: [61_000] }));
+      expect(follows.replace).toHaveBeenCalledWith('u1', expect.objectContaining({ orderIds: ['o-1'], prices: [61_000], stops: [0] }));
       expect((err.getResponse() as { code: string }).code).toBe('TERMINAL_GRID_PARTIAL');
     });
 

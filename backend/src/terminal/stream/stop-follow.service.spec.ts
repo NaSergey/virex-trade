@@ -12,6 +12,7 @@ const plan = (extra: Partial<FollowPlan> = {}): FollowPlan => ({
   entryPrice: 60_000,
   orderIds: ['t1', 't2', 't3'],
   prices: [61_000, 62_000, 63_000],
+  stops: [],
   filled: [],
   fillPrices: [],
   cancelled: [],
@@ -116,6 +117,23 @@ describe('StopFollowService', () => {
       { category: 'linear', symbol: 'BTCUSDT', positionIdx: 1, tpslMode: 'Full', stopLoss: '60000.0', takeProfit: '65000.0' },
     ]);
     expect(t.plans()[0]).toMatchObject({ filled: ['t1'], fillPrices: [61_000], target: 60_000, applied: true, active: true });
+  });
+
+  it('у тейка своя цель стопа — стоп идёт на неё, а не в безубыток', async () => {
+    const t = setup({ plans: [plan({ stops: [60_400, 0, 0] })], mark: 61_200 });
+    await t.service.pinned();
+    t.service.onEvent('u1', { topic: 'order.linear', data: [filled('t1', '61000')] }, t.ctx);
+    await settle();
+    expect(stops(t.posts)[0]).toMatchObject({ stopLoss: '60400.0' });
+    expect(t.plans()[0]).toMatchObject({ target: 60_400 });
+  });
+
+  it('цель у второго тейка, а исполнился первый — первому правило', async () => {
+    const t = setup({ plans: [plan({ stops: [0, 61_500, 0] })], mark: 61_200 });
+    await t.service.pinned();
+    t.service.onEvent('u1', { topic: 'order.linear', data: [filled('t1', '61000')] }, t.ctx);
+    await settle();
+    expect(stops(t.posts)[0]).toMatchObject({ stopLoss: '60000.0' });
   });
 
   it('второй тейк — стоп на цену первого', async () => {

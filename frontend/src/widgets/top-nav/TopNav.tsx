@@ -6,8 +6,8 @@ import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useBattlePass } from '@/entities/battle-pass';
 import { CoinBalance } from '@/entities/coins';
-import { useTerminalAccess } from '@/entities/terminal';
-import { useAuth } from '@/features/auth';
+import { setClientTerminalHint, useTerminalAccess } from '@/entities/terminal';
+import { DEMO_EMAIL, useAuth } from '@/features/auth';
 import { DonateDialog } from '@/features/donation';
 import { useOnboarding } from '@/features/onboarding';
 import { ReferralDialog } from '@/features/referrals';
@@ -97,7 +97,17 @@ export function TopNav({
   // (`initialTerminal` — кука, прочитанная сервером): пункт есть уже в
   // присланной разметке, а не появляется после запроса, сдвигая остальные.
   const access = useTerminalAccess().data;
-  const hasTerminal = access ? access.available : initialTerminal;
+  // Демо-аккаунту терминал показывается всегда: у него нет ключа биржи, и
+  // страница открывает тот же экран на симуляции (`DemoTerminal`).
+  const demo = user?.email === DEMO_EMAIL;
+  const hasTerminal = demo || (access ? access.available : initialTerminal);
+  // Сервер про демо не знает и отвечает «доступа нет», а запрос доступа
+  // переписывает этим ответом куку-подсказку первого кадра. Без перезаписи
+  // следующая загрузка демо рисовала рейку без пункта и вставляла его через
+  // долю секунды, сдвигая все разделы.
+  useEffect(() => {
+    if (demo && access) setClientTerminalHint(true);
+  }, [demo, access]);
   const nav = hasTerminal ? [TERMINAL, ...NAV] : NAV;
   const [donateOpen, setDonateOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);

@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import type { ExchangePosition } from '@/entities/position';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
+import { CoinSymbol } from '@/shared/ui/CoinSymbol';
 import { Money } from '@/shared/ui/Money';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { Wrap } from '@/shared/ui/Wrap';
@@ -32,6 +33,7 @@ export function PositionsTable({
   extraColumns,
   flush,
   priceDecimals,
+  onSymbol,
 }: {
   positions: ExchangePosition[];
   title: string;
@@ -56,12 +58,14 @@ export function PositionsTable({
    * Не задано — общее правило `formatPriceGrouped`, как на обзоре.
    */
   priceDecimals?: (p: ExchangePosition) => number | undefined;
+  /** Нажатие на символ монеты — открыть её на графике (терминал); не задано — символ просто текст. */
+  onSymbol?: (symbol: string) => void;
 }) {
   const t = useTranslations('positionsTable');
   const price = (p: ExchangePosition, v: string | undefined) => formatPriceGrouped(v, priceDecimals?.(p));
 
   const columns: LedgerColumn<ExchangePosition>[] = [
-    { key: 'symbol', header: t('colSymbol'), render: (p) => <span className="sym">{p.symbol}</span> },
+    { key: 'symbol', header: t('colSymbol'), render: (p) => <CoinSymbol symbol={p.symbol} onPick={onSymbol} /> },
     {
       key: 'direction',
       header: t('colDirection'),

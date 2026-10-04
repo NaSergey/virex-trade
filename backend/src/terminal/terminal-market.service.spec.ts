@@ -103,10 +103,12 @@ describe('TerminalMarketService', () => {
     expect(b).toBe(a);
   });
 
-  it('lists the coins with the decimals of their price step', async () => {
+  it('lists the coins with the decimals of their price step and 24h turnover', async () => {
     const { market } = setup(() => []);
 
-    expect(await market.symbols()).toEqual([{ symbol: 'BTCUSDT', base: 'BTC', decimals: 2, maxLeverage: 100 }]);
+    expect(await market.symbols()).toEqual([
+      { symbol: 'BTCUSDT', base: 'BTC', decimals: 2, maxLeverage: 100, turnover24h: 5 },
+    ]);
   });
 
   it('маркировка — один запрос на все монеты, кэш 2 с, после сбоя — прошлый ответ до 30 с', async () => {

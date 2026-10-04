@@ -128,6 +128,7 @@ export type LevelKind =
   | 'limitEntry'
   | 'gridUpper'
   | 'gridLower'
+  | 'gridTake'
   | 'pendingEntry';
 
 /**
@@ -180,6 +181,7 @@ const LEVEL_COLOR: Record<LevelKind, string> = {
   limitEntry: 'var(--color-fg)',
   gridUpper: 'var(--color-fg)',
   gridLower: 'var(--color-fg)',
+  gridTake: 'var(--profit)',
   pendingEntry: 'var(--color-fg)',
 };
 
@@ -349,9 +351,23 @@ export const ReplayChart = memo(function ReplayChart({
   const priceDragRef = useRef<{ startY: number; lo: number; hi: number } | null>(null);
   /** То же по полосе справа напротив панели RSI — масштаб её шкалы. */
   const rsiDragRef = useRef<{ startY: number; lo: number; hi: number } | null>(null);
-  /** Формирующаяся свеча в середине анимации — с ТФ, на котором её посчитали. */
-  const [animCandle, setAnimCandle] = useState<(Candle & { tf: number }) | null>(null);
+  /**
+   * Формирующаяся свеча в середине анимации — с ТФ, на котором её посчитали.
+   * Не состояние: кадр анимации пишет её прямо в DOM (см. paintLast). Анимация
+   * в автопрокрутке идёт без перерыва — её длина равна шагу, — и состояние
+   * перерисовывало бы весь график с уровнями, RSI и отметками на каждом кадре,
+   * хотя меняются в нём только последняя свеча и линия цены.
+   */
+  const animRef = useRef<(Candle & { tf: number }) | null>(null);
   const prevLastRef = useRef<Candle | null>(null);
+  // Узлы, которые пишет paintLast: последняя свеча, линия текущей цены и её плашка.
+  const lastWickRef = useRef<SVGLineElement>(null);
+  const lastBodyRef = useRef<SVGRectElement>(null);
+  const priceLineRef = useRef<SVGLineElement>(null);
+  const priceTagRef = useRef<SVGGElement>(null);
+  const priceTagBox = useRef<SVGRectElement>(null);
+  const priceTagText = useRef<SVGTextElement>(null);
+  const paintLastRef = useRef<() => void>(() => undefined);
   // Ручной зум цены — null, пока не тронут (тогда диапазон авто-подгоняется
   // под видимые свечи); сброс — двойной клик, как у span в RangeCheckChart.
   const [priceRange, setPriceRange] = useState<{ lo: number; hi: number } | null>(null);
@@ -359,13 +375,14 @@ export const ReplayChart = memo(function ReplayChart({
   const [rsiRange, setRsiRange] = useState<{ lo: number; hi: number } | null>(null);
   // Новый ТФ — окно к живому краю, зум цены сброшен: пан и зум, набранные на одних
   // свечах, на другом наборе бессмысленны. Прямо в рендере — тот же кадр уже с новым видом.
+  // Шкала RSI остаётся: у неё одни и те же 0–100 на любом ТФ, и настроенный под себя
+  // масштаб сбрасывался на каждой смене (жалоба владельца 2026-10-03). Назад к 0–100 —
+  // двойной клик по панели.
   const [viewTf, setViewTf] = useState(timeframe);
   if (viewTf !== timeframe) {
     setViewTf(timeframe);
     setView({ count: DEFAULT_COUNT, anchorTime: null });
     setPriceRange(null);
-    setRsiRange(null);
-    setAnimCandle(null);
   }
   // Плавный сдвиг «живого» окна (FLIP через CSS-transition) — группа свечей
   // и меток времени, которую двигаем; остальное — снимок предыдущего тика,
@@ -578,9 +595,8 @@ export const ReplayChart = memo(function ReplayChart({
     el.style.transition = `transform ${duration}ms cubic-bezier(0.22, 0.61, 0.36, 1)`;
     el.style.transform = 'translateX(0px)';
     // Зависимости — узко только то, что решает isLiveTick: без них эффект
-    // перезапускался бы на КАЖДЫЙ ре-рендер (в т.ч. на ценовой glide
-    // формирующейся свечи, который тикает так же часто) и обрубал бы
-    // transition ещё до того, как он успел бы визуально доиграть.
+    // перезапускался бы на КАЖДЫЙ ре-рендер и обрубал бы transition ещё до
+    // того, как он успел бы визуально доиграть.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frameStart, live, count, candles.length, timeframe]);
 
@@ -597,6 +613,8 @@ export const ReplayChart = memo(function ReplayChart({
   const timeframeRef = useRef(timeframe);
   useLayoutEffect(() => {
     timeframeRef.current = timeframe;
+    // Кадр прежнего ТФ не должен ожить, если вернуться на него до новой свечи.
+    animRef.current = null;
   }, [timeframe]);
 
   useEffect(() => {
@@ -618,12 +636,11 @@ export const ReplayChart = memo(function ReplayChart({
       if (timeframeRef.current !== tf) return;
       const ph = Math.min(1, (now - t0) / durationMs);
       const price = glidePrice(minute.o, minute.h, minute.l, minute.c, ph);
-      if (ph < 1) {
-        setAnimCandle({ tf, t: newLast.t, o: base.o, h: Math.max(base.h, price), l: Math.min(base.l, price), c: price });
-        raf = requestAnimationFrame(frame);
-      } else {
-        setAnimCandle(null); // доигралось — дальше рисуем настоящие финальные значения
-      }
+      // Доигралось — дальше рисуем настоящие финальные значения.
+      animRef.current =
+        ph < 1 ? { tf, t: newLast.t, o: base.o, h: Math.max(base.h, price), l: Math.min(base.l, price), c: price } : null;
+      paintLastRef.current();
+      if (ph < 1) raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
     prevLastRef.current = newLast;
@@ -1157,16 +1174,11 @@ export const ReplayChart = memo(function ReplayChart({
    * масштабе — тот же принцип, по которому терминалы рисуют весь ряд одним
    * проходом.
    *
-   * Формирующаяся свеча в пути не участвует — её рисует отдельная пара узлов
-   * ниже: glide перерисовывает её каждый кадр анимации, и без этого на каждый
-   * такой кадр пересобирались бы пути всего кадра, хотя меняется одна свеча.
+   * Последняя свеча ряда в пути не участвует никогда — её рисует отдельная пара
+   * узлов ниже (см. paintLast): glide двигает её каждый кадр анимации прямо в
+   * DOM, и путь, собранный рендером, не знал бы, где она сейчас.
    */
-  // Анимируется только последняя свеча текущего ТФ. Кадр от прежнего ТФ, успевший
-  // прийти между сменой ряда и остановкой анимации, пропускается — иначе он лёг бы
-  // на чужую свечу с тем же временем открытия.
-  const lastT = candles.length ? candles[candles.length - 1].t : null;
-  const anim = animCandle != null && animCandle.tf === timeframe && animCandle.t === lastT ? animCandle : null;
-  const animT = anim?.t ?? null;
+  const lastIdx = candles.length - 1;
   const candlePaths = useMemo(() => {
     const plotHeight = plotBottom - PT;
     const yOf = (p: number) => PT + ((hi - p) / (hi - lo)) * plotHeight;
@@ -1177,8 +1189,8 @@ export const ReplayChart = memo(function ReplayChart({
     let downWicks = '';
     let downBodies = '';
     for (let i = startIdx; i < endIdx; i++) {
+      if (i === lastIdx) continue;
       const c = candles[i];
-      if (c.t === animT) continue;
       const x = (i - frameStart) * slot + slot / 2;
       const top = yOf(Math.max(c.o, c.c));
       const height = Math.max(minBody, yOf(Math.min(c.o, c.c)) - top);
@@ -1193,7 +1205,7 @@ export const ReplayChart = memo(function ReplayChart({
       }
     }
     return { upWicks, upBodies, downWicks, downBodies };
-  }, [candles, startIdx, endIdx, frameStart, slot, lo, hi, bodyW, u, animT, plotBottom]);
+  }, [candles, lastIdx, startIdx, endIdx, frameStart, slot, lo, hi, bodyW, u, plotBottom]);
 
   /**
    * RSI — по всем загруженным свечам таймфрейма, как у TradingView по всем
@@ -1255,21 +1267,69 @@ export const ReplayChart = memo(function ReplayChart({
   }, [rsiData, candles.length, startIdx, endIdx, frameStart, slot, rsiTop, rsiH, rsiLo, rsiHi]);
   const rsiLast = rsiData ? rsiData.rsi[rsiData.rsi.length - 1] : NaN;
 
-  let animBar: { x: number; wickTop: number; wickBottom: number; top: number; height: number; color: string } | null = null;
-  if (anim) {
-    const ai = candles.length - 1;
-    if (ai >= startIdx && ai < endIdx) {
-      const top = y(Math.max(anim.o, anim.c));
-      animBar = {
-        x: cx(ai),
-        wickTop: y(anim.h),
-        wickBottom: y(anim.l),
-        top,
-        height: Math.max(px(1), y(Math.min(anim.o, anim.c)) - top),
-        color: anim.c >= anim.o ? 'var(--profit)' : 'var(--loss)',
-      };
+  /**
+   * Последняя свеча, линия текущей цены и её плашка пишутся прямо в DOM, как
+   * перекрестие (см. updateCross): кадр анимации зовёт это без рендера, а после
+   * каждого рендера эффект ниже ставит их заново по новой геометрии — пан, зум и
+   * новая свеча двигают их вместе со всем остальным.
+   *
+   * У формирующейся свечи в прокрутке — анимированные значения, иначе линия цены
+   * обгоняла бы свечу. Кадр от прежнего ТФ, успевший прийти между сменой ряда и
+   * остановкой анимации, не берётся — он лёг бы на чужую свечу с тем же временем
+   * открытия.
+   *
+   * Линия цены — цветом самой свечи: растёт — зелёная, падает — красная. Без неё
+   * на часовом графике движение в несколько пунктов не видно вовсе: свеча не
+   * меняется на пиксель.
+   */
+  const paintLast = () => {
+    const real = lastIdx >= 0 ? candles[lastIdx] : null;
+    const a = animRef.current;
+    const bar = a != null && real != null && a.tf === timeframe && a.t === real.t ? a : real;
+    const color = bar && bar.c >= bar.o ? 'var(--profit)' : 'var(--loss)';
+
+    const wick = lastWickRef.current;
+    const body = lastBodyRef.current;
+    if (wick && body) {
+      const inFrame = bar != null && lastIdx >= startIdx && lastIdx < endIdx;
+      wick.style.display = inFrame ? '' : 'none';
+      body.style.display = inFrame ? '' : 'none';
+      if (bar && inFrame) {
+        const x = cx(lastIdx);
+        const top = y(Math.max(bar.o, bar.c));
+        wick.setAttribute('x1', String(x));
+        wick.setAttribute('x2', String(x));
+        wick.setAttribute('y1', String(y(bar.h)));
+        wick.setAttribute('y2', String(y(bar.l)));
+        wick.setAttribute('stroke', color);
+        body.setAttribute('x', String(x - bodyW / 2));
+        body.setAttribute('y', String(top));
+        body.setAttribute('width', String(bodyW));
+        body.setAttribute('height', String(Math.max(px(1), y(Math.min(bar.o, bar.c)) - top)));
+        body.setAttribute('fill', color);
+      }
     }
-  }
+
+    const line = priceLineRef.current;
+    const tag = priceTagRef.current;
+    if (!line || !tag) return;
+    const py = bar ? y(bar.c) : -1;
+    const shown = bar != null && py >= PT && py <= plotBottom;
+    line.style.display = shown ? '' : 'none';
+    tag.style.display = shown ? '' : 'none';
+    if (!bar || !shown) return;
+    line.setAttribute('y1', String(py));
+    line.setAttribute('y2', String(py));
+    line.setAttribute('stroke', color);
+    priceTagBox.current?.setAttribute('y', String(py - px(8)));
+    priceTagBox.current?.setAttribute('fill', color);
+    priceTagText.current?.setAttribute('y', String(py + px(3.5)));
+    if (priceTagText.current) priceTagText.current.textContent = formatPriceGrouped(bar.c, priceDecimals);
+  };
+  useLayoutEffect(() => {
+    paintLastRef.current = paintLast;
+    paintLast();
+  });
 
   // Маркеры в кадре: позиция — своя свеча (floor от дробного места во
   // времени), а не точка между свечами. Уехавшие по цене за видимый диапазон
@@ -1419,20 +1479,9 @@ export const ReplayChart = memo(function ReplayChart({
             <path d={candlePaths.downWicks} stroke="var(--loss)" strokeWidth={px(1)} fill="none" />
             <path d={candlePaths.upBodies} fill="var(--profit)" />
             <path d={candlePaths.downBodies} fill="var(--loss)" />
-            {/* Формирующаяся свеча — анимированные (glide) значения, отдельно от путей (см. candlePaths). */}
-            {animBar && (
-              <>
-                <line
-                  x1={animBar.x}
-                  x2={animBar.x}
-                  y1={animBar.wickTop}
-                  y2={animBar.wickBottom}
-                  stroke={animBar.color}
-                  strokeWidth={px(1)}
-                />
-                <rect x={animBar.x - bodyW / 2} y={animBar.top} width={bodyW} height={animBar.height} fill={animBar.color} />
-              </>
-            )}
+            {/* Последняя свеча — отдельно от путей (см. candlePaths); положение пишет paintLast. */}
+            <line ref={lastWickRef} strokeWidth={px(1)} />
+            <rect ref={lastBodyRef} />
 
             {/* Рисунки — внутри сдвигаемой группы, как свечи: иначе на живом сдвиге
                 окна фигуры отставали бы от свечей, к которым привязаны. Под
@@ -1634,6 +1683,16 @@ export const ReplayChart = memo(function ReplayChart({
             );
           })}
 
+        {/* Линия текущей цены — под уровнями: захват у совпавших линий
+            достаётся уровню, а событий она не ловит вовсе. Высоту и цвет пишет paintLast. */}
+        <line
+          ref={priceLineRef}
+          x1={0}
+          x2={PW}
+          strokeWidth={px(1)}
+          strokeDasharray={`${px(1)} ${px(3)}`}
+          pointerEvents="none"
+        />
         {drawnLevels.map((l) => {
           const price = drag?.id === l.id ? drag.price : l.price;
           const impact = l.impactAt?.(price) ?? null;
@@ -1804,6 +1863,19 @@ export const ReplayChart = memo(function ReplayChart({
             </g>
           );
         })}
+        {/* Цена — плашкой на полосе цены поверх плашек уровней: её смотрят
+            чаще всего, и подпись входа рядом не должна её закрывать. Высоту,
+            цвет и число пишет paintLast. */}
+        <g ref={priceTagRef} pointerEvents="none">
+          <rect ref={priceTagBox} x={PW} width={W - PW} height={px(16)} />
+          <text
+            ref={priceTagText}
+            x={PW + px(PRICE_LABEL_GAP_PX)}
+            fill="var(--color-background)"
+            fontSize={px(10)}
+            fontFamily="var(--font-mono)"
+          />
+        </g>
         </g>
 
         {/* Полоса цены ловит жест масштаба — прозрачный прямоугольник поверх

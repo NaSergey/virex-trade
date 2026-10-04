@@ -79,6 +79,31 @@ export function unrealizedPnl(direction: Direction, entry: number, price: number
 }
 
 /**
+ * Результат открытой позиции сейчас — то, что стоит в «Нереализ. P&L» и на
+ * плашке входа.
+ *
+ * У позиции биржи (поле `unrealisedPnl` есть, хоть и null) — формула самой
+ * биржи: без комиссий, от цены последней сделки, как во вкладке позиций Bybit
+ * по умолчанию. Цена — та же, что на графике, поэтому число движется вместе с
+ * ним, а не раз в опрос счёта. Формула сессии вычитала бы оценку комиссий входа
+ * и выхода, и число расходилось бы с биржей на несколько долларов. Цены нет —
+ * число биржи из снимка счёта.
+ *
+ * У сделки сессии — формула с комиссиями: там это и есть результат закрытия.
+ */
+export function openPnl(
+  trade: { direction: Direction; entryPrice: number; qty: number; closedQty: number; unrealisedPnl?: number | null },
+  price: number | null,
+): number | null {
+  const remaining = trade.qty - trade.closedQty;
+  if (trade.unrealisedPnl !== undefined) {
+    if (price == null) return trade.unrealisedPnl;
+    return (trade.direction === 'long' ? 1 : -1) * (price - trade.entryPrice) * remaining;
+  }
+  return price != null ? unrealizedPnl(trade.direction, trade.entryPrice, price, remaining) : null;
+}
+
+/**
  * Скрытая цена — только способ показа. В базе цены настоящие; на экран они
  * идут умноженными на масштаб сессии, а введённое пользователем делится обратно.
  * На R и PnL масштаб не влияет: размер — риск / |вход − стоп|, и он сокращается.

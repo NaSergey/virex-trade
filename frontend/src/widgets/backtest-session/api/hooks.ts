@@ -234,8 +234,16 @@ export const useCloseTrade = (id: string) => {
 export const useCreateCloseGrid = (id: string) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ tradeId, ...body }: { tradeId: string; prices: number[]; stopFollow: boolean }) =>
-      apiJson<{ closeOrders: BacktestCloseOrder[] }>(`/api/backtest/trades/${tradeId}/close-grid`, json('POST', body)),
+    mutationFn: ({
+      tradeId,
+      ...body
+    }: {
+      tradeId: string;
+      prices: number[];
+      qtys: number[];
+      stops?: number[];
+      stopFollow: boolean;
+    }) => apiJson<{ closeOrders: BacktestCloseOrder[] }>(`/api/backtest/trades/${tradeId}/close-grid`, json('POST', body)),
     onSettled: () => refresh(qc, id),
   });
 };

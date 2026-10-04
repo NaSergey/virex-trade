@@ -26,6 +26,21 @@ describe('followTarget — правило бектеста', () => {
   it('ничего не исполнено — цели нет', () => {
     expect(followTarget('long', 60_000, [], null)).toBeNull();
   });
+
+  it('у уровня своя цель — она вместо правила', () => {
+    expect(followTarget('long', 60_000, [61_000], 59_000, 60_400)).toBe(60_400);
+    expect(followTarget('short', 60_000, [59_000, 58_000], 60_000, 59_300)).toBe(59_300);
+  });
+
+  it('своя цель проходит те же проверки: только теснее и по свою сторону от цены исполнения', () => {
+    expect(followTarget('long', 60_000, [61_000], 60_500, 60_200)).toBeNull();
+    expect(followTarget('long', 60_000, [61_000], 59_000, 61_200)).toBeNull();
+  });
+
+  it('цели нет (null или 0) — правило', () => {
+    expect(followTarget('long', 60_000, [61_000], 59_000, null)).toBe(60_000);
+    expect(followTarget('long', 60_000, [61_000], 59_000, 0)).toBe(60_000);
+  });
 });
 
 describe('crossed', () => {

@@ -10,6 +10,8 @@ export interface FollowPlan {
   entryPrice: number;
   orderIds: string[];
   prices: number[];
+  /** Цель стопа после каждого тейка, параллельно `orderIds`; 0 или нет элемента — правило. */
+  stops: number[];
   filled: string[];
   fillPrices: number[];
   cancelled: string[];
@@ -28,7 +30,7 @@ export class StopFollowStore {
   /** Сетка с флажком: прежний план позиции заменяется новым — с новым id. */
   async replace(
     userId: string,
-    p: { symbol: string; direction: Direction; entryPrice: number; orderIds: string[]; prices: number[] },
+    p: { symbol: string; direction: Direction; entryPrice: number; orderIds: string[]; prices: number[]; stops: number[] },
   ): Promise<void> {
     await this.prisma.$transaction([
       this.prisma.terminalStopFollow.deleteMany({ where: { userId, symbol: p.symbol, direction: p.direction } }),

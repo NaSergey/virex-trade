@@ -70,6 +70,8 @@ export function positionTrade(p: TerminalPosition, balance: number, meta: Positi
     tags: meta?.tags ?? NO_TAGS,
     entries: [],
     liqPrice: p.liqPrice,
+    markPrice: p.markPrice,
+    unrealisedPnl: p.unrealisedPnl,
   };
 }
 

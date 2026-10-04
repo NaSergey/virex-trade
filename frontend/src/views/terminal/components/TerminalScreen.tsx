@@ -47,7 +47,7 @@ export function TerminalScreen() {
   const tt = useTranslations('terminal');
   const { data, error, refetch, isFetching } = useTerminalState();
   if (!data) {
-    if (!error) return <TerminalSkeleton />;
+    if (!error) return <TerminalSkeleton live badge={tt('realBadge')} leave={false} />;
     return (
       <Wrap page>
         <ErrorNote error={error} fallback={tt('loadFailed')} />
@@ -119,7 +119,7 @@ function ExchangeTerminal({ state, stale }: { state: TerminalState; stale: boole
         // Настоящий счёт — сказано словами: экран тот же, что у бектеста, и спутать их можно ровно один раз.
         badge={tt('realBadge')}
         soundsOf={sounds}
-        history={<ExchangeHistory />}
+        history={ExchangeHistory}
       />
     </>
   );

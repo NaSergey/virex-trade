@@ -166,7 +166,8 @@ export class StopFollowService implements StreamListener {
       // Безубыток — вход позиции сейчас, как у бектеста: долитая после сетки
       // позиция сменила среднюю цену, и стоп по старой был бы не в безубытке.
       const entry = positive(position?.row.avgPrice) ?? p.entryPrice;
-      const target = followTarget(p.direction, entry, p.fillPrices, tightest);
+      // Цель, заданная этому тейку в сетке; 0 или нет — правило (`followTarget`).
+      const target = followTarget(p.direction, entry, p.fillPrices, tightest, p.stops[p.orderIds.indexOf(id)] ?? null);
       if (target != null) {
         p.target = target;
         p.applied = false;

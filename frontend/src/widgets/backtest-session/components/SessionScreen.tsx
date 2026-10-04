@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { useTranslations } from 'next-intl';
 import { Check, Settings as SettingsIcon, Volume2, VolumeX } from 'lucide-react';
 import { TagsDialog } from '@/entities/tag';
@@ -9,7 +9,6 @@ import { useLocaleControl } from '@/shared/i18n';
 import { Button } from '@/shared/ui/Button';
 import { ConfirmDialog, type ConfirmRequest } from '@/shared/ui/ConfirmDialog';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
-import { Select } from '@/shared/ui/Field';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { Seg, type SegOption } from '@/shared/ui/Seg';
 import { Wrap } from '@/shared/ui/Wrap';
@@ -24,6 +23,7 @@ import {
   type SessionDetail,
 } from '../api/types';
 import { TIMEFRAMES, dayNumber, scaleCandle } from '../lib/candles';
+import { CLOSE_GRID_FIRST_ID, CLOSE_GRID_LAST_ID, closeGridLevels, initCloseGrid, type CloseGridDraft } from '../lib/close-grid';
 import { draftLevels } from '../lib/draft-levels';
 import { isPartialExit } from '../lib/fills';
 import {
@@ -38,11 +38,11 @@ import {
   levelDirection,
   levelImpact,
   liquidationPrice,
+  openPnl,
   previewSize,
   toInput,
   toInputPrice,
   toScreen,
-  unrealizedPnl,
   withoutLockedLevels,
 } from '../lib/money';
 import type { TerminalSound } from '../lib/sounds';
@@ -56,7 +56,7 @@ import { sessionSounds, useSnapshotSound, useTerminalSoundOn } from '../model/us
 import { DrawingStyleBar } from './drawings/DrawingStyleBar';
 import { DrawingToolbar } from './drawings/DrawingToolbar';
 import { ChangeLevelsModal } from './ChangeLevelsModal';
-import { CloseGridModal } from './CloseGridModal';
+import { CloseGridPanel } from './CloseGridPanel';
 import { LimitCloseModal } from './LimitCloseModal';
 import { MarketCloseModal } from './MarketCloseModal';
 import { OpenPositionsPanel } from './OpenPositionsPanel';
@@ -65,7 +65,8 @@ import { OrderPanel, type Draft, type LimitDraft, type OrderTab, type ScaledDraf
 import { ReplayChart, type Level, type LevelKind, type Marker } from './ReplayChart';
 import { SessionSummary } from './SessionSummary';
 import { SessionTrades } from './SessionTrades';
-import { ChartSkeleton, TerminalSkeleton } from './TerminalSkeleton';
+import { ChartSkeleton, CoinSkeleton, TerminalSkeleton } from './TerminalSkeleton';
+import { CoinPicker } from './CoinPicker';
 
 /**
  * Сессия целиком: загрузка, прокрутка активной или итог завершённой.
@@ -75,7 +76,16 @@ import { ChartSkeleton, TerminalSkeleton } from './TerminalSkeleton';
  * отчёт, как остальные страницы продукта, а вот у активной сессии свой
  * терминал во всю ширину окна (см. `.bt-live` и комментарий в `ActiveSession`).
  */
-export function SessionScreen({ id, onLeave }: { id: string; onLeave: () => void }) {
+export function SessionScreen({
+  id,
+  onLeave,
+  live = false,
+}: {
+  id: string;
+  onLeave: () => void;
+  /** Сессия заведомо эфирная — заглушка до её прихода рисуется в виде эфира. */
+  live?: boolean;
+}) {
   const t = useTranslations('backtest');
   const { data, error } = useBacktestSession(id);
   if (error)
@@ -84,7 +94,7 @@ export function SessionScreen({ id, onLeave }: { id: string; onLeave: () => void
         <ErrorNote error={error} fallback={t('loadFailed')} />
       </Wrap>
     );
-  if (!data) return <TerminalSkeleton />;
+  if (!data) return <TerminalSkeleton live={live} />;
   if (data.session.status === 'finished')
     return (
       <Wrap page>
@@ -167,8 +177,12 @@ export interface TerminalProps {
   badge?: string;
   /** Сигналы по разнице снимков; не задано — правила сессии (`soundsOf`). Ссылка — стабильная. */
   soundsOf?: (was: SessionDetail, next: SessionDetail) => readonly TerminalSound[];
-  /** Вкладка «История»; не задана — сделки сессии. */
-  history?: ReactNode;
+  /**
+   * Вкладка «История»; не задана — сделки сессии. Компонентом: ему передаётся
+   * переход к монете на графике по нажатию на символ (или undefined, где
+   * монета одна).
+   */
+  history?: ComponentType<{ onSymbol?: (symbol: string) => void }>;
 }
 
 /**
@@ -186,7 +200,7 @@ export function Terminal({
   priceOf: priceOfProp,
   badge,
   soundsOf,
-  history,
+  history: History,
 }: TerminalProps) {
   const t = useTranslations('backtest');
   const { locale } = useLocaleControl();
@@ -399,7 +413,12 @@ export function Terminal({
   const [limitModalFor, setLimitModalFor] = useState<string | null>(null);
   const [marketModalFor, setMarketModalFor] = useState<string | null>(null);
   const [levelsModalFor, setLevelsModalFor] = useState<string | null>(null);
-  const [closeGridFor, setCloseGridFor] = useState<string | null>(null);
+  // Черновик сетки фиксации: пока он есть, на месте панели ордера стоит панель
+  // сетки, а её уровни — на графике (спека 2026-10-04-close-grid-panel-design.md).
+  const [closeGrid, setCloseGrid] = useState<CloseGridDraft | null>(null);
+  // Панели меняются анимацией (`.panel-swap`), но не на первой отрисовке
+  // терминала: там нечего менять, панель ордера просто стоит.
+  const [panelSwapped, setPanelSwapped] = useState(false);
   const [tagsModalFor, setTagsModalFor] = useState<string | null>(null);
   /** Теги закрытой сделки из истории — отдельно от tagsModalFor: тот ищет среди
       openTrades, а история правит сделки, которых там уже нет. */
@@ -415,6 +434,9 @@ export function Terminal({
   // То же для висящего ордера (лимит на вход или закрытия), перенесённого на графике:
   // экранная цена, пока сервер не сохранил её и сессия не перечиталась.
   const [pendingOrder, setPendingOrder] = useState<{ id: string; price: number } | null>(null);
+  // Позиция панели сетки. Закрылась — панель уходит сама: черновик без позиции
+  // ничего не значит, а ждать «Отмены» от человека незачем.
+  const gridTrade = closeGrid ? (openTrades.find((x) => x.id === closeGrid.tradeId) ?? null) : null;
 
   const screenPrice = replay.price != null ? toScreen(replay.price, scale) : null;
   // Черновик «Маркета» без уровней занятых сторон — его видят панель, график,
@@ -450,17 +472,22 @@ export function Terminal({
   // равно перерисовывался бы целиком.
   const levels = useMemo<Level[]>(() => {
     // Черновик следующего ордера — первым: под уровнями позиций (см. `draftLevels`).
-    const list: Level[] = draftLevels({
-      tab: orderTab,
-      market: { stop: stopN, take: takeN, risk: draftRisk },
-      limit: { entry: lEntryN, stop: lStopN, take: lTakeN, risk: Number(limitDraft.risk) },
-      scaled: { upper: sUpperN, lower: sLowerN, stop: sStopN, take: sTakeN, count: sCountN, risk: Number(scaledDraft.risk) },
-      livePrice,
-      screenPrice,
-      balance,
-      leverage: draftLeverage,
-      scale,
-    });
+    // Пока вместо панели ордера стоит панель сетки, её черновика на графике нет:
+    // самой панели на экране нет, и линии висели бы уровнями ордера, который
+    // сейчас никто не отправляет. Черновик при этом цел и вернётся с панелью.
+    const list: Level[] = gridTrade
+      ? []
+      : draftLevels({
+          tab: orderTab,
+          market: { stop: stopN, take: takeN, risk: draftRisk },
+          limit: { entry: lEntryN, stop: lStopN, take: lTakeN, risk: Number(limitDraft.risk) },
+          scaled: { upper: sUpperN, lower: sLowerN, stop: sStopN, take: sTakeN, count: sCountN, risk: Number(scaledDraft.risk) },
+          livePrice,
+          screenPrice,
+          balance,
+          leverage: draftLeverage,
+          scale,
+        });
 
     // Уровни уже открытых сделок монеты графика — от их собственных
     // stopLoss/takeProfit, не от черновика панели: с хеджем сделок может быть
@@ -477,7 +504,7 @@ export function Terminal({
         draggable: false,
         qty: remaining,
         direction: trade.direction,
-        pnl: livePrice != null ? unrealizedPnl(trade.direction, trade.entryPrice, livePrice, remaining) : null,
+        pnl: openPnl(trade, livePrice),
       });
       // Биржа называет цену ликвидации сама (или не называет вовсе — null); у сделки сессии она считается.
       const liq = trade.liqPrice !== undefined ? trade.liqPrice : liquidationPrice(trade.direction, trade.entryPrice, trade.leverage);
@@ -526,8 +553,16 @@ export function Terminal({
       const price = pendingOrder?.id === o.id ? pendingOrder.price : toScreen(o.price, scale);
       list.push({ id: o.id, kind: 'pendingEntry', price, draggable: true, qty });
     }
+    // Уровни сетки фиксации — последними, поверх уровней позиции, а не под ними,
+    // как черновик ордера: в этом режиме человек занят сеткой, и совпавшая с ней
+    // линия позиции не должна перехватывать захват.
+    if (gridTrade && closeGrid && gridTrade.symbol === symbol) {
+      list.push(...closeGridLevels(gridTrade, closeGrid, scale));
+    }
     return list;
   }, [
+    gridTrade,
+    closeGrid,
     pendingOrder,
     chartTrades,
     symbol,
@@ -644,10 +679,46 @@ export function Terminal({
    * Смена монеты чистит уровни черновиков тем же приёмом, что смена вкладки
    * тикета: стоп, выставленный по цене BTC, на графике ETH — не уровень, а
    * число из другого рынка. Риск и плечо переживают переключение.
+   *
+   * Панель сетки фиксации при этом уходит: её уровни стоят на графике монеты
+   * позиции, и на графике другой монеты их ставить некуда.
    */
   const switchSymbol = (next: string) => {
     setSymbol(next);
     clearDraftLevels();
+    setCloseGrid(null);
+  };
+
+  // График — ради прокрутки к нему, когда монету выбирают в таблице под ним.
+  const chartRef = useRef<HTMLDivElement>(null);
+  /**
+   * Нажатие на символ монеты в таблицах — переход к её графику. Только там, где
+   * монет несколько (эфир, биржа), и только к монете из списка графика: свечей
+   * другой терминал не запросит. Таблицы стоят под графиком, и тот, кто их
+   * листал, графика может не видеть — к нему прокручивается.
+   */
+  const pickSymbol =
+    isLive && coins && coins.length > 0
+      ? (next: string) => {
+          if (!coins.some((c) => c.symbol === next)) return;
+          if (next !== symbol) switchSymbol(next);
+          chartRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+      : undefined;
+
+  /**
+   * Лесенка на плашке позиции или в таблице — панель ордера сменяется панелью
+   * сетки. Позиция другой монеты переключает на неё график: линии сетки иначе
+   * ставить некуда. Повторное нажатие по той же позиции черновик не сбрасывает.
+   */
+  const openCloseGrid = (tradeId: string) => {
+    if (closeGrid?.tradeId === tradeId && gridTrade) return;
+    const trade = openTrades.find((x) => x.id === tradeId);
+    const tradePrice = trade ? screenPriceOf(trade.symbol) : null;
+    if (!trade || tradePrice == null) return;
+    if (trade.symbol !== symbol) switchSymbol(trade.symbol);
+    setCloseGrid(initCloseGrid(trade, scale, tradePrice, detail.closeOrders.filter((o) => o.tradeId === trade.id).length));
+    setPanelSwapped(true);
   };
 
   const open = (direction: Direction) => {
@@ -806,12 +877,21 @@ export function Terminal({
 
   // Свежие значения для onDragLevel: тот стабилен ради memo(ReplayChart) и читает их
   // отсюда. Пишется в эффекте, а не в рендере — жест случается уже после коммита.
-  const dragCtxRef = useRef({ draft: marketDraft, openTrades, screenPrice, applyLevels, orderTab, lockedSides, moveOrder });
+  const dragCtxRef = useRef({ draft: marketDraft, openTrades, screenPrice, applyLevels, orderTab, lockedSides, moveOrder, openCloseGrid });
   useLayoutEffect(() => {
-    dragCtxRef.current = { draft: marketDraft, openTrades, screenPrice, applyLevels, orderTab, lockedSides, moveOrder };
+    dragCtxRef.current = { draft: marketDraft, openTrades, screenPrice, applyLevels, orderTab, lockedSides, moveOrder, openCloseGrid };
   });
 
   const onDragLevel = useCallback((kind: LevelKind, price: number, tradeId?: string, levelId?: string) => {
+    if (kind === 'gridTake') {
+      // Тянутся только первый и последний тейк сетки; промежуточные встанут
+      // между ними сами. Сторону проверяет панель — как у введённого в поле.
+      if (levelId === CLOSE_GRID_FIRST_ID || levelId === CLOSE_GRID_LAST_ID) {
+        const key = levelId === CLOSE_GRID_FIRST_ID ? 'first' : 'last';
+        setCloseGrid((prev) => (prev ? { ...prev, [key]: Number(toInputPrice(price)) } : prev));
+      }
+      return;
+    }
     if ((kind === 'pendingEntry' || kind === 'limitClose') && levelId != null) {
       dragCtxRef.current.moveOrder(kind, levelId, price);
       return;
@@ -885,7 +965,7 @@ export function Terminal({
 
   // ✕ на плашках графика — стабильные ради memo(ReplayChart), свежее берут из dragCtxRef.
   const onCloseTrade = useCallback((tradeId: string) => setMarketModalFor(tradeId), []);
-  const onCloseGrid = useCallback((tradeId: string) => setCloseGridFor(tradeId), []);
+  const onCloseGrid = useCallback((tradeId: string) => dragCtxRef.current.openCloseGrid(tradeId), []);
   const onClearTake = useCallback((tradeId: string) => {
     const { openTrades: ots, screenPrice: sp, applyLevels: apply } = dragCtxRef.current;
     const trade = ots.find((x) => x.id === tradeId);
@@ -957,22 +1037,20 @@ export function Terminal({
     <div className="bt-live px-4">
       <div className="asym terminal">
         <div className="terminal-main">
-          <div className="terminal-chart">
+          <div className="terminal-chart" ref={chartRef}>
             {/* Без заголовка «Таймфрейм» — сами кнопки ТФ слева и есть подпись себе.
                 Разметка та же, что у SectionHead (.h2row: линейка снизу, выключка вправо),
                 но без <h2>: он тут просто нечем заполнить. */}
             <div className="h2row">
               <div className="flex items-center gap-3">
-                {/* Монета — только в эфире: у истории и тренажёра она одна. */}
-                {isLive && coins && coins.length > 0 && (
-                  <Select value={symbol} onChange={(e) => switchSymbol(e.target.value)} aria-label={t('coin')}>
-                    {coins.map((s) => (
-                      <option key={s.symbol} value={s.symbol}>
-                        {s.base}
-                      </option>
-                    ))}
-                  </Select>
-                )}
+                {/* Монета — только в эфире: у истории и тренажёра она одна. Пока
+                    список едет — заглушка того же размера, а не пустое место. */}
+                {isLive &&
+                  (coins && coins.length > 0 ? (
+                    <CoinPicker coins={coins} value={symbol} onChange={switchSymbol} />
+                  ) : (
+                    <CoinSkeleton />
+                  ))}
                 <Seg options={tfOptions} value={replay.tf} onChange={replay.setTf} ariaLabel={t('timeframe')} />
               </div>
               <div className="flex items-center gap-1">
@@ -1116,30 +1194,57 @@ export function Terminal({
         </div>
 
         <div className="marg">
-          <OrderPanel
-            tab={orderTab}
-            onTab={switchOrderTab}
-            draft={marketDraft}
-            onDraft={setDraft}
-            limitDraft={limitDraft}
-            onLimitDraft={setLimitDraft}
-            scaledDraft={scaledDraft}
-            onScaledDraft={setScaledDraft}
-            scale={scale}
-            price={replay.price}
-            balance={session.balance}
-            disabled={orderBusy}
-            hint={hint}
-            limitHint={limitHint}
-            scaledHint={scaledHint}
-            onOpen={open}
-            onOpenLimit={openLimit}
-            onOpenScaled={openScaled}
-            onLeverageCommit={setDefaultLeverage}
-            priceDecimals={chartDecimals}
-            lockedSides={lockedSides}
-          />
-          <ErrorNote error={openM.error ?? addToTradeM.error ?? createEntryOrdersM.error ?? finishM.error} fallback={t('actionFailed')} />
+          {/* Сетка фиксации стоит на месте панели ордера, а не окном поверх: её
+              уровни — на графике, и смотреть на них, настраивая, нужно рядом.
+              Смена панели — сменой ключа: новая въезжает анимацией (.panel-swap). */}
+          <div
+            key={gridTrade ? 'grid' : 'order'}
+            className={gridTrade ? 'panel-swap panel-swap-fill' : 'panel-swap'}
+            data-swap={panelSwapped ? (gridTrade ? 'in' : 'back') : undefined}
+          >
+            {gridTrade && closeGrid ? (
+              <CloseGridPanel
+                trade={gridTrade}
+                draft={closeGrid}
+                onDraft={setCloseGrid}
+                scale={scale}
+                screenPrice={screenPriceOf(gridTrade.symbol)}
+                closeOrdersCount={detail.closeOrders.filter((o) => o.tradeId === gridTrade.id).length}
+                decimals={decimalsOf(gridTrade.symbol)}
+                onSubmit={(grid) => closeGridM.mutate({ tradeId: gridTrade.id, ...grid }, { onSuccess: () => setCloseGrid(null) })}
+                onCancel={() => setCloseGrid(null)}
+                isPending={closeGridM.isPending}
+                error={closeGridM.error}
+              />
+            ) : (
+              <>
+                <OrderPanel
+                  tab={orderTab}
+                  onTab={switchOrderTab}
+                  draft={marketDraft}
+                  onDraft={setDraft}
+                  limitDraft={limitDraft}
+                  onLimitDraft={setLimitDraft}
+                  scaledDraft={scaledDraft}
+                  onScaledDraft={setScaledDraft}
+                  scale={scale}
+                  price={replay.price}
+                  balance={session.balance}
+                  disabled={orderBusy}
+                  hint={hint}
+                  limitHint={limitHint}
+                  scaledHint={scaledHint}
+                  onOpen={open}
+                  onOpenLimit={openLimit}
+                  onOpenScaled={openScaled}
+                  onLeverageCommit={setDefaultLeverage}
+                  priceDecimals={chartDecimals}
+                  lockedSides={lockedSides}
+                />
+                <ErrorNote error={openM.error ?? addToTradeM.error ?? createEntryOrdersM.error ?? finishM.error} fallback={t('actionFailed')} />
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1170,8 +1275,9 @@ export function Terminal({
             onLimit={(trade) => setLimitModalFor(trade.id)}
             onMarket={(trade) => setMarketModalFor(trade.id)}
             onChangeLevels={(trade) => setLevelsModalFor(trade.id)}
-            onCloseGrid={(trade) => setCloseGridFor(trade.id)}
+            onCloseGrid={(trade) => onCloseGrid(trade.id)}
             onTags={(trade) => setTagsModalFor(trade.id)}
+            onSymbol={pickSymbol}
           />
         )}
         {tab === 'orders' && (
@@ -1184,16 +1290,20 @@ export function Terminal({
             onCancelEntryOrder={(id) => cancelEntryOrderM.mutate(id)}
             showSymbol={isLive}
             decimalsOf={decimalsOf}
+            onSymbol={pickSymbol}
           />
         )}
         {tab === 'history' &&
-          (history ?? (
+          (History ? (
+            <History onSymbol={pickSymbol} />
+          ) : (
             <SessionTrades
               trades={trades}
               scale={scale}
               labelFor={labelFor}
               onEditTags={(trade) => setHistoryTagsFor(trade.id)}
               decimalsOf={decimalsOf}
+              onSymbol={pickSymbol}
             />
           ))}
       </div>
@@ -1212,25 +1322,6 @@ export function Terminal({
             onClose={() => setLevelsModalFor(null)}
             isPending={modifyM.isPending}
             error={modifyM.error}
-          />
-        ) : null;
-      })()}
-      {closeGridFor != null && (() => {
-        const trade = openTrades.find((x) => x.id === closeGridFor);
-        const tradePrice = trade ? screenPriceOf(trade.symbol) : null;
-        return trade && tradePrice != null ? (
-          <CloseGridModal
-            trade={trade}
-            scale={scale}
-            screenPrice={tradePrice}
-            closeOrdersCount={detail.closeOrders.filter((o) => o.tradeId === trade.id).length}
-            decimals={decimalsOf(trade.symbol)}
-            onSubmit={(prices, stopFollow) =>
-              closeGridM.mutate({ tradeId: trade.id, prices, stopFollow }, { onSuccess: () => setCloseGridFor(null) })
-            }
-            onClose={() => setCloseGridFor(null)}
-            isPending={closeGridM.isPending}
-            error={closeGridM.error}
           />
         ) : null;
       })()}

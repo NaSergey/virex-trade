@@ -12,7 +12,7 @@ import { Tooltip } from '@/shared/ui/Tooltip';
 import { PositionsTable } from '@/widgets/positions-table';
 import { durationUnitLabels } from '@/shared/lib/utils/format';
 import type { BacktestTrade } from '../api/types';
-import { liquidationPrice, toScreen, unrealizedPnl } from '../lib/money';
+import { liquidationPrice, openPnl, toScreen } from '../lib/money';
 
 /** В полтора раза крупнее прежних 14: по этим кнопкам целятся в терминале. */
 const ICON_SIZE = 21;
@@ -58,6 +58,7 @@ export function OpenPositionsPanel({
   onChangeLevels,
   onCloseGrid,
   onTags,
+  onSymbol,
 }: {
   trades: BacktestTrade[];
   scale: number;
@@ -76,6 +77,8 @@ export function OpenPositionsPanel({
   /** Сетка фиксации — лимиты закрытия и стоп за тейками. */
   onCloseGrid: (trade: BacktestTrade) => void;
   onTags: (trade: BacktestTrade) => void;
+  /** Нажатие на символ монеты — открыть её на графике (терминал); не задано — символ просто текст. */
+  onSymbol?: (symbol: string) => void;
 }) {
   const t = useTranslations('backtest');
   const { locale } = useLocaleControl();
@@ -92,6 +95,10 @@ export function OpenPositionsPanel({
     const remaining = trade.qty - trade.closedQty;
     const entry = toScreen(trade.entryPrice, scale);
     const price = priceOf(trade.symbol);
+    const pnl = openPnl(trade, price);
+    // Маркировка биржи, если она её назвала: колонка так и подписана, а цена
+    // графика — последняя сделка, не маркировка.
+    const mark = trade.markPrice ?? price;
     byKey.set(`${trade.symbol}-${trade.direction}`, trade);
     // Биржа называет цену ликвидации сама — тогда формула не нужна (и не верна: она про изолированную маржу).
     const liq = trade.liqPrice !== undefined ? trade.liqPrice : liquidationPrice(trade.direction, trade.entryPrice, trade.leverage);
@@ -100,9 +107,9 @@ export function OpenPositionsPanel({
       direction: trade.direction,
       size: String(remaining),
       avgPrice: String(entry),
-      markPrice: price != null ? String(toScreen(price, scale)) : undefined,
+      markPrice: mark != null ? String(toScreen(mark, scale)) : undefined,
       positionValue: String(remaining * entry),
-      unrealisedPnl: price != null ? String(unrealizedPnl(trade.direction, trade.entryPrice, price, remaining)) : undefined,
+      unrealisedPnl: pnl != null ? String(pnl) : undefined,
       leverage: String(trade.leverage),
       liqPrice: liq != null ? String(toScreen(liq, scale)) : undefined,
     };
@@ -110,10 +117,7 @@ export function OpenPositionsPanel({
   const tradeOf = (p: ExchangePosition) => byKey.get(`${p.symbol}-${p.direction}`)!;
 
   // Сумма — только когда известны цены всех монет: без одной она была бы не суммой.
-  const pnls = trades.map((x) => {
-    const price = priceOf(x.symbol);
-    return price != null ? unrealizedPnl(x.direction, x.entryPrice, price, x.qty - x.closedQty) : null;
-  });
+  const pnls = trades.map((x) => openPnl(x, priceOf(x.symbol)));
   const totalPnl = pnls.every((v) => v != null) ? pnls.reduce<number>((s, v) => s + v!, 0) : null;
 
   const actions: LedgerColumn<ExchangePosition>[] = [
@@ -169,6 +173,7 @@ export function OpenPositionsPanel({
       }}
       extraColumns={actions}
       priceDecimals={decimalsOf && ((p) => decimalsOf(p.symbol))}
+      onSymbol={onSymbol}
       flush
     />
   );

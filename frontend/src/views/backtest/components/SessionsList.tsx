@@ -10,6 +10,13 @@ import { SectionHead } from '@/shared/ui/SectionHead';
 import type { SessionListItem } from '@/widgets/backtest-session';
 import { formatR } from '@/widgets/backtest-session/lib/money';
 
+/** Подписи — те же, что у выбора «График» в форме новой сессии. */
+const MARKET_LABEL = {
+  live: 'marketLive',
+  real: 'marketReal',
+  synthetic: 'marketSynthetic',
+} as const satisfies Record<SessionListItem['dataSource'], string>;
+
 /**
  * Сессии, свежие сверху. Дата в первой колонке — когда сессия создана, а не
  * какой отрезок в ней: отрезок раскрывается только в итоге завершённой.
@@ -45,6 +52,7 @@ export function SessionsList({
       header: t('colStarted'),
       render: (s) => new Date(s.createdAt).toLocaleDateString(intl, { day: 'numeric', month: 'short', year: 'numeric' }),
     },
+    { key: 'market', header: t('market'), render: (s) => t(MARKET_LABEL[s.dataSource]) },
     { key: 'status', header: t('colStatus'), render: (s) => t(`status.${s.status}`) },
     { key: 'trades', header: t('colTrades'), align: 'right', cellClassName: 'n', render: (s) => s.summary.trades },
     {
@@ -65,11 +73,10 @@ export function SessionsList({
     {
       key: 'blind',
       header: t('colBlind'),
+      // Дата вслепую — только у истории: тренажёр скрывает её всегда (эпоха вымышленная),
+      // а у эфира её не скрыть — будущего нет. Это видно по колонке «График».
       render: (s) =>
-        [
-          s.dataSource === 'synthetic' ? t('syntheticTag') : s.dataSource === 'live' ? t('liveTag') : s.hideDate && t('blindDate'),
-          s.hidePrice && t('blindPrice'),
-        ]
+        [s.dataSource === 'real' && s.hideDate && t('blindDate'), s.hidePrice && t('blindPrice')]
           .filter(Boolean)
           .join(', ') || <span className="muted">—</span>,
     },

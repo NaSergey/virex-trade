@@ -49,6 +49,8 @@ export interface TerminalSymbol {
   base: string;
   decimals: number;
   maxLeverage: number;
+  /** Оборот за 24 часа в USDT (Bybit), на момент загрузки списка. */
+  turnover24h: number;
 }
 
 /** Как монета настроена на счёте: плечо и режим позиций. */
