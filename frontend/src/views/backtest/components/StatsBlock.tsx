@@ -1,12 +1,13 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
+import { Skeleton } from '@/shared/ui/Skeleton';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import { Money } from '@/shared/ui/Money';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import type { BacktestStats, TagSummary } from '@/widgets/backtest-session/api/types';
 import { formatR } from '@/widgets/backtest-session/lib/money';
-import { SummaryCells } from '@/widgets/backtest-session';
 
 /**
  * Итог по всем сессиям и по тегам. Подпись под таблицей тегов обязательна: как
@@ -16,6 +17,41 @@ import { SummaryCells } from '@/widgets/backtest-session';
  * здесь, а выше, в шапке списка сессий (`SessionsList`).
  */
 export function StatsBlock({ stats, isLoading }: { stats?: BacktestStats; isLoading: boolean }) {
+  const t = useTranslations('backtest');
+  const o = stats?.overall;
+  const items: [string, ReactNode][] = [
+    [t('statSessions'), o?.sessions ?? 0],
+    [t('statTrades'), o?.trades ?? 0],
+    [t('statWinRate'), `${(o?.winRate ?? 0).toFixed(0)} %`],
+    [t('statTotalR'), <span key="r" className={(o?.totalR ?? 0) >= 0 ? 'pos' : 'neg'}>{formatR(o?.totalR ?? 0)}</span>],
+    [t('statAvgR'), <span key="a" className={(o?.avgR ?? 0) >= 0 ? 'pos' : 'neg'}>{formatR(o?.avgR ?? 0)}</span>],
+  ];
+
+  return (
+    <section data-tour="bt-stats">
+      <SectionHead title={t('statsTitle')} />
+      <div className="bt-sum">
+        <div className="bt-sum-hero">
+          <span className="lbl">{t('statPnl')}</span>
+          <span className="mval">
+            {isLoading ? <Skeleton as="span" flush height={34} width={140} /> : <Money value={o?.pnl ?? 0} unit="USDT" />}
+          </span>
+        </div>
+        <dl className="bt-sum-list">
+          {items.map(([label, value]) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd>{isLoading ? <Skeleton as="span" flush height={16} width={40} /> : value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </section>
+  );
+}
+
+/** Таблица по тегам — отдельным блоком, страница ставит её в самый низ. */
+export function TagStatsBlock({ stats, isLoading }: { stats?: BacktestStats; isLoading: boolean }) {
   const t = useTranslations('backtest');
 
   const columns: LedgerColumn<TagSummary>[] = [
@@ -34,9 +70,7 @@ export function StatsBlock({ stats, isLoading }: { stats?: BacktestStats; isLoad
   ];
 
   return (
-    <section data-tour="bt-stats">
-      <SectionHead title={t('statsTitle')} />
-      <SummaryCells summary={stats?.overall} sessions={stats?.overall.sessions ?? 0} loading={isLoading} />
+    <section>
       <SectionHead title={t('byTagTitle')} />
       <LedgerTable
         columns={columns}

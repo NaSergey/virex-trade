@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { TAG_TYPES, useCreateTag, useTagTypeLabels, type TagType } from '@/entities/tag';
+import { TAG_TYPES, type TagItem, type TagType } from '../api/types';
+import { useCreateTag } from '../api/hooks';
+import { useTagTypeLabels } from './useTagTypeLabels';
 import { Button } from '@/shared/ui/Button';
 import { Input, Select } from '@/shared/ui/Field';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
@@ -12,11 +14,22 @@ import { ErrorNote } from '@/shared/ui/ErrorNote';
  * сервер (см. TagsService.pickColor), чтобы два тега не оказались одного
  * оттенка и палитра не расползалась.
  *
- * Своей строки не заводит — встаёт правой половиной в общую строку раздела
- * (`.newrow` в AllTags), напротив поиска: слева отбирают из того, что есть,
- * справа добавляют новое.
+ * Живёт в двух местах: строкой раздела «Теги» (`.newrow-r`, правая половина
+ * общей строки с поиском) и в диалоге тегов сделки. `onCreated` нужен только
+ * диалогу — он сразу отмечает новый тег у сделки.
  */
-export function NewTagRow() {
+export function NewTagRow({
+  onCreated,
+  onCancel,
+  full,
+}: {
+  onCreated?: (tag: TagItem) => void;
+  /** В диалоге — «Отмена» рядом с «Создать»; на странице тегов её нет. */
+  onCancel?: () => void;
+  /** Во всю ширину окна: поле растягивается, ширина не фиксируется. */
+  full?: boolean;
+}) {
+  const tc = useTranslations('common');
   const t = useTranslations('tags');
   const typeLabels = useTagTypeLabels();
   const [name, setName] = useState('');
@@ -25,11 +38,19 @@ export function NewTagRow() {
 
   const submit = () => {
     if (!name.trim()) return;
-    create.mutate({ name: name.trim(), type }, { onSuccess: () => setName('') });
+    create.mutate(
+      { name: name.trim(), type },
+      {
+        onSuccess: (res) => {
+          setName('');
+          onCreated?.(res.tag);
+        },
+      },
+    );
   };
 
   return (
-    <div className="newrow-r">
+    <div className={full ? 'newrow-r newrow-full' : 'newrow-r'}>
       {/* Подпись — плейсхолдером, а не отдельным словом слева: рядом стоит
           поиск, тоже подписанный изнутри, и два поля в строке должны
           объясняться одинаково. aria-label держит имя для скринридера,
@@ -38,7 +59,7 @@ export function NewTagRow() {
         placeholder={t('newTagPlaceholder')}
         aria-label={t('newTagAriaLabel')}
         maxLength={30}
-        style={{ width: 180 }}
+        style={full ? undefined : { width: 180 }}
         value={name}
         onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && submit()}
@@ -50,6 +71,11 @@ export function NewTagRow() {
           </option>
         ))}
       </Select>
+      {onCancel && (
+        <Button variant="bare" onClick={onCancel}>
+          {tc('cancel')}
+        </Button>
+      )}
       <Button variant="solid" disabled={!name.trim() || create.isPending} onClick={submit}>
         {t('create')}
       </Button>

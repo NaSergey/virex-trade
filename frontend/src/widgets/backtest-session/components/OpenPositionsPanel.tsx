@@ -161,8 +161,10 @@ export function OpenPositionsPanel({
       renderAge={(p) => <span className="muted">{fmtSimAge(tradeOf(p).entryTime, cursor, units)}</span>}
       renderTags={(p) => {
         const trade = tradeOf(p);
+        // Теги открытой позиции в таблице не выводятся — только кнопка, которой
+        // они меняются: список тегов здесь лишний, а открыть его можно кнопкой.
         return (
-          <Tags tags={trade.tags}>
+          <Tags tags={[]}>
             <Tooltip text={t('addTag')}>
               <Button variant="add" tight aria-label={t('addTag')} onClick={() => onTags(trade)}>
                 <TagIcon size={ICON_SIZE} />

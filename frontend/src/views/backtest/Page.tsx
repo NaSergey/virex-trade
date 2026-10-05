@@ -8,7 +8,7 @@ import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader, useDial
 import { Wrap } from '@/shared/ui/Wrap';
 import { SessionsList } from './components/SessionsList';
 import { StartSession } from './components/StartSession';
-import { StatsBlock } from './components/StatsBlock';
+import { StatsBlock, TagStatsBlock } from './components/StatsBlock';
 import {
   pruneDrawings,
   useBacktestSessions,
@@ -52,14 +52,15 @@ export function BacktestPage() {
   return (
     <Wrap page style={{ paddingTop: 'var(--s4)' }}>
       <div className="asym">
-        <div>
+        <div className="bt-col">
+          <StatsBlock stats={stats.data} isLoading={stats.isLoading} />
           <SessionsList
             sessions={sessions.data?.sessions ?? []}
             isLoading={sessions.isLoading}
             onOpen={openSession}
             onDelete={setDeleting}
           />
-          <StatsBlock stats={stats.data} isLoading={stats.isLoading} />
+          <TagStatsBlock stats={stats.data} isLoading={stats.isLoading} />
         </div>
         <div className="marg">
           <StartSession onStarted={openSession} />

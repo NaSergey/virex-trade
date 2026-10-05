@@ -1,11 +1,13 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader, useDialogFade } from '@/shared/ui/dialog';
+import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, useDialogFade } from '@/shared/ui/dialog';
+import { Button } from '@/shared/ui/Button';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { useIdSet } from '@/shared/lib/hooks/useIdSet';
 import { useTags } from '../api/hooks';
+import { NewTagRow } from './NewTagRow';
 import { TagPicker } from './TagPicker';
 
 /**
@@ -35,10 +37,12 @@ export function TagsDialog({
   onSave: (tagIds: string[]) => void;
   onClose: () => void;
 }) {
+  const t = useTranslations('tags');
   const tc = useTranslations('common');
   const { data: tagsData } = useTags();
   const { selected, toggle, ids } = useIdSet(initialTagIds);
   const { closing, close } = useDialogFade(onClose);
+  const [creating, setCreating] = useState(false);
 
   return (
     <Dialog open={!closing} onOpenChange={(v) => !v && close()}>
@@ -46,6 +50,19 @@ export function TagsDialog({
         <DialogHeader title={title} subtitle={subtitle} />
         <DialogBody>
           <TagPicker tags={tagsData?.tags ?? []} selected={selected} onToggle={toggle} />
+          {/* Новый тег сразу отмечается у сделки: создавать его ради того, чтобы
+              потом искать в списке и отмечать второй раз, — лишний шаг. */}
+          {creating ? (
+            <div className="tags-new-full">
+              <NewTagRow full onCancel={() => setCreating(false)} onCreated={(tag) => { toggle(tag.id); setCreating(false); }} />
+            </div>
+          ) : (
+            <div className="tags-new-toggle">
+              <Button variant="bare" onClick={() => setCreating(true)}>
+                {t('newTagOpen')}
+              </Button>
+            </div>
+          )}
           {note && <p className="foot">{note}</p>}
           <ErrorNote
             error={error}
@@ -53,12 +70,14 @@ export function TagsDialog({
             style={{ marginTop: 'var(--s2)' }}
           />
         </DialogBody>
-        <DialogActions
-          confirmLabel={isPending ? tc('saving') : tc('save')}
-          confirmDisabled={isPending}
-          onConfirm={() => onSave(ids)}
-          onCancel={close}
-        />
+        <DialogFooter className="df-pair">
+          <Button variant="solid" disabled={isPending} onClick={() => onSave(ids)}>
+            {isPending ? tc('saving') : tc('save')}
+          </Button>
+          <Button variant="bare" onClick={close}>
+            {tc('back')}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

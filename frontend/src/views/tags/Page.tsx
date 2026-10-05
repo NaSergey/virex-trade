@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useTags, useTagStats, useCreateSavedCombo, type TagItem } from '@/entities/tag';
+import { useMemo, useState } from 'react';
+import { useTags, useTagStats, useCreateSavedCombo, type TagBucket, type TagItem } from '@/entities/tag';
 import { Wrap } from '@/shared/ui/Wrap';
 import { ConfirmDialog, type ConfirmRequest } from '@/shared/ui/ConfirmDialog';
 import { usePeriodFilter, PeriodStrip } from '@/features/period-filter';
@@ -10,6 +10,32 @@ import { ComboTable } from './components/ComboTable';
 import { AllTags } from './components/AllTags';
 import { EditTagDialog } from './components/EditTagDialog';
 import { CreateComboDialog } from './components/CreateComboDialog';
+
+/** Строка тега без сделок в периоде: все числа нулевые, как у бакета статистики без сделок. */
+function idleBucket(tag: TagItem): TagBucket {
+  const side = { trades: 0, wins: 0, losses: 0, totalPnl: 0, winRate: 0 };
+  return {
+    id: tag.id,
+    name: tag.name,
+    color: tag.color,
+    type: tag.type ?? 'setup',
+    trades: 0,
+    wins: 0,
+    losses: 0,
+    totalPnl: 0,
+    grossProfit: 0,
+    grossLoss: 0,
+    avgPnl: 0,
+    avgWin: 0,
+    avgLoss: 0,
+    profitFactor: 0,
+    winRate: 0,
+    wilsonLow: 0,
+    long: side,
+    short: side,
+    equity: [],
+  };
+}
 
 /**
  * Теги: сначала комбинации (что с чем встречалось вместе и чем это кончалось),
@@ -35,6 +61,16 @@ export function TagsPage() {
   const pin = useCreateSavedCombo();
   const { rows: comboRows, isLoading: combosLoading } = useComboRows(effectiveDays, setConfirm);
 
+  // Статистика периода знает только теги со сделками в нём. Теги без сделок —
+  // или только со сделками раньше периода — в ней просто нет, и таблица теряла
+  // их, хотя модалка сделки показывает весь список. Добавляем их с нулями.
+  const tableTags = useMemo<TagBucket[]>(() => {
+    if (!statsData) return [];
+    const seen = new Set(statsData.tags.map((b) => b.id));
+    const idle = (tagsData?.tags ?? []).filter((tag) => !seen.has(tag.id)).map(idleBucket);
+    return [...statsData.tags, ...idle];
+  }, [statsData, tagsData]);
+
   return (
     <Wrap page>
       <PeriodStrip spaced period={period} trades={statsData?.totalTrades} />
@@ -46,7 +82,7 @@ export function TagsPage() {
       <ComboTable rows={comboRows} isLoading={combosLoading} onCreate={() => setComboDialog(true)} />
 
       <AllTags
-        tags={statsData?.tags ?? []}
+        tags={tableTags}
         taggedTrades={(statsData?.totalTrades ?? 0) - (statsData?.untagged.trades ?? 0)}
         isLoading={statsLoading}
         onEditTag={(tagId) => {

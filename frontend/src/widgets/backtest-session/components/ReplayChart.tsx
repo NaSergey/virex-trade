@@ -128,6 +128,7 @@ export type LevelKind =
   | 'limitEntry'
   | 'gridUpper'
   | 'gridLower'
+  | 'gridStep'
   | 'gridTake'
   | 'pendingEntry';
 
@@ -181,6 +182,7 @@ const LEVEL_COLOR: Record<LevelKind, string> = {
   limitEntry: 'var(--color-fg)',
   gridUpper: 'var(--color-fg)',
   gridLower: 'var(--color-fg)',
+  gridStep: 'var(--color-fg)',
   gridTake: 'var(--profit)',
   pendingEntry: 'var(--color-fg)',
 };

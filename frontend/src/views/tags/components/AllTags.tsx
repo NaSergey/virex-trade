@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Tag, useDeleteTag, useTagTypeLabels, type TagBucket } from '@/entities/tag';
+import { NewTagRow, Tag, useDeleteTag, useTagTypeLabels, type TagBucket } from '@/entities/tag';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Field';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
@@ -10,7 +10,6 @@ import { Money } from '@/shared/ui/Money';
 import type { ConfirmRequest } from '@/shared/ui/ConfirmDialog';
 import { formatMoney, formatProfitFactor } from '@/shared/lib/utils/format';
 import { Sparkline } from './Sparkline';
-import { NewTagRow } from './NewTagRow';
 
 /** Колонки, по которым таблицу можно отсортировать, — только числовые. */
 type SortKey = 'trades' | 'winRate' | 'profitFactor' | 'avgWin' | 'avgLoss' | 'totalPnl';

@@ -3,6 +3,7 @@ export * from './api/hooks';
 export * from './api/combo-hooks';
 export * from './api/tagging-hooks';
 export * from './ui/Tag';
+export * from './ui/NewTagRow';
 export * from './ui/TagPicker';
 export * from './ui/TagsDialog';
 export * from './ui/useTagTypeLabels';

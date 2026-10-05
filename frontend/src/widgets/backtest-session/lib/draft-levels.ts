@@ -118,6 +118,13 @@ export function draftLevels({ tab, market, limit, scaled, livePrice, screenPrice
     if (scaled.lower != null && scaled.lower > 0) {
       list.push({ id: 'draft-grid-lower', kind: 'gridLower', price: scaled.lower, draggable: true });
     }
+    // Ордера сетки между верхом и низом — те же цены, что уйдут на сервер
+    // (`gridPrices`), по одной линии без захвата: двигается диапазон, а не
+    // промежуточный ордер. Верх и низ уже нарисованы выше, поэтому срез по краям.
+    if (scaled.upper != null && scaled.upper > 0 && scaled.lower != null && scaled.lower > 0 && scaled.count > 2) {
+      const steps = gridPrices(Math.min(scaled.lower, scaled.upper), Math.max(scaled.lower, scaled.upper), scaled.count).slice(1, -1);
+      steps.forEach((price, i) => list.push({ id: `draft-grid-step-${i}`, kind: 'gridStep', price, draggable: false }));
+    }
     // Стоп и тейк сетки — на весь её результат, поэтому и считаются от
     // среднего входа при полном исполнении (previewGrid), а не от одного уровня.
     const pricesReal =

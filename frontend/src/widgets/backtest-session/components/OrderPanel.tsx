@@ -98,7 +98,6 @@ const MAX_GRID_ORDERS = 10;
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const MIN_LEVERAGE = 1;
 const MAX_LEVERAGE = 100;
-const MAX_RISK_PCT = 10;
 /** Плечо — фиксированный список значений, не произвольное целое 1—100. */
 const LEVERAGE_OPTIONS = [1, 3, 5, 10, 25, 50, 100];
 
@@ -140,6 +139,7 @@ export function OrderPanel({
   onLeverageCommit,
   priceDecimals,
   lockedSides,
+  maxRisk: maxRiskSetting,
 }: {
   tab: OrderTab;
   onTab: (tab: OrderTab) => void;
@@ -176,6 +176,8 @@ export function OrderPanel({
    * (`withoutLockedLevels`).
    */
   lockedSides: readonly Direction[];
+  /** Верхняя граница ползунка риска, % депозита — из настроек терминала. */
+  maxRisk: number;
 }) {
   const t = useTranslations('backtest');
   const setScaled = (key: keyof ScaledDraft) => (e: ChangeEvent<HTMLInputElement>) =>
@@ -231,7 +233,9 @@ export function OrderPanel({
   // цена для стопа/тейка) движение мыши даёт мелкий шаг, у края диапазона —
   // крупный. Слайдер получает и отдаёт готовую экранную позицию (−100…100),
   // а не само значение — обратно в значение она переводится в onChange.
-  const riskPos = curvedSliderPos(clamp(risk || 0, 0, MAX_RISK_PCT), 0, MAX_RISK_PCT, 0);
+  // Ноль в настройках — не шкала: ползунок тогда не на чем стоять.
+  const maxRisk = Math.max(maxRiskSetting, 0.1);
+  const riskPos = curvedSliderPos(clamp(risk || 0, 0, maxRisk), 0, maxRisk, 0);
   const stopPos = stopSignedPct != null ? curvedSliderPos(stopSignedPct, -STOP_RISK_PCT, STOP_RISK_PCT, 0) : null;
   const takePos =
     takeRange && takeValue != null && screenPrice != null
@@ -478,7 +482,7 @@ export function OrderPanel({
             min={0}
             max={100}
             step={0.25}
-            onChange={(pos) => onDraft({ ...draft, risk: toInput(curvedSliderValue(pos, 0, MAX_RISK_PCT, 0)) })}
+            onChange={(pos) => onDraft({ ...draft, risk: toInput(curvedSliderValue(pos, 0, maxRisk, 0)) })}
             aria-label={t('risk')}
           />
         )}
@@ -569,11 +573,11 @@ export function OrderPanel({
           >
             {() => (
               <Slider
-                value={curvedSliderPos(clamp(lRisk || 0, 0, MAX_RISK_PCT), 0, MAX_RISK_PCT, 0)}
+                value={curvedSliderPos(clamp(lRisk || 0, 0, maxRisk), 0, maxRisk, 0)}
                 min={0}
                 max={100}
                 step={0.25}
-                onChange={(pos) => onLimitDraft({ ...limitDraft, risk: toInput(curvedSliderValue(pos, 0, MAX_RISK_PCT, 0)) })}
+                onChange={(pos) => onLimitDraft({ ...limitDraft, risk: toInput(curvedSliderValue(pos, 0, maxRisk, 0)) })}
                 aria-label={t('risk')}
               />
             )}
@@ -694,11 +698,11 @@ export function OrderPanel({
           >
             {() => (
               <Slider
-                value={curvedSliderPos(clamp(sRisk || 0, 0, MAX_RISK_PCT), 0, MAX_RISK_PCT, 0)}
+                value={curvedSliderPos(clamp(sRisk || 0, 0, maxRisk), 0, maxRisk, 0)}
                 min={0}
                 max={100}
                 step={0.25}
-                onChange={(pos) => onScaledDraft({ ...scaledDraft, risk: toInput(curvedSliderValue(pos, 0, MAX_RISK_PCT, 0)) })}
+                onChange={(pos) => onScaledDraft({ ...scaledDraft, risk: toInput(curvedSliderValue(pos, 0, maxRisk, 0)) })}
                 aria-label={t('risk')}
               />
             )}

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { useTranslations } from 'next-intl';
-import { Check, Settings as SettingsIcon, Volume2, VolumeX } from 'lucide-react';
+import { Settings as SettingsIcon, Volume2, VolumeX } from 'lucide-react';
 import { TagsDialog } from '@/entities/tag';
 import { useAuth } from '@/features/auth';
 import { useLocaleControl } from '@/shared/i18n';
@@ -48,6 +48,8 @@ import {
 import type { TerminalSound } from '../lib/sounds';
 import { useSessionActions, type TerminalActions } from '../model/actions';
 import { useRsiOn } from '../model/useChartSettings';
+import { useMaxRisk } from '../model/useRiskSettings';
+import { useLiveSymbol } from '../model/useLiveSymbol';
 import { useDefaultLeverage } from '../model/useDefaultLeverage';
 import { useDrawingTools } from '../model/useDrawingTools';
 import { useLiveFeed, type LiveSource } from '../model/useLiveFeed';
@@ -62,6 +64,7 @@ import { MarketCloseModal } from './MarketCloseModal';
 import { OpenPositionsPanel } from './OpenPositionsPanel';
 import { OrdersPanel } from './OrdersPanel';
 import { OrderPanel, type Draft, type LimitDraft, type OrderTab, type ScaledDraft } from './OrderPanel';
+import { ChartSettingsPanel } from './ChartSettingsPanel';
 import { ReplayChart, type Level, type LevelKind, type Marker } from './ReplayChart';
 import { SessionSummary } from './SessionSummary';
 import { SessionTrades } from './SessionTrades';
@@ -240,7 +243,12 @@ export function Terminal({
    * несколько, и график, черновики и уровни на нём — одной монеты, а таблицы
    * позиций, ордеров и истории — всех (спека 2026-09-26).
    */
-  const [symbol, setSymbol] = useState(DEFAULT_SYMBOL);
+  // В живом режиме монета запоминается на устройстве (`useLiveSymbol`); остальные
+  // режимы держат BTC в памяти экрана и ничего не пишут.
+  const [liveSymbol, setLiveSymbol] = useLiveSymbol();
+  const [localSymbol, setLocalSymbol] = useState(DEFAULT_SYMBOL);
+  const symbol = isLive ? liveSymbol : localSymbol;
+  const setSymbol = isLive ? setLiveSymbol : setLocalSymbol;
   // Своим useMemo — по той же причине, что и openTrades: levels сверяет по ссылке.
   const chartTrades = useMemo(() => openTrades.filter((x) => x.symbol === symbol), [openTrades, symbol]);
   // Стороны монеты графика с открытой позицией: «Лонг/Шорт» по ним доливает
@@ -268,25 +276,10 @@ export function Terminal({
   const tAudio = useTranslations('audio');
   const [soundOn, setSoundOn] = useTerminalSoundOn();
 
-  // Настройки графика — окошко под шестерёнкой: пока в нём один пункт, RSI.
+  // Настройки графика — правая панель на месте панели ордера (шестерёнка над
+  // графиком): индикаторы и верхняя граница ползунка риска.
   const [rsiOn, setRsiOn] = useRsiOn();
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const settingsRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!settingsOpen) return;
-    const onDown = (e: PointerEvent) => {
-      if (!settingsRef.current?.contains(e.target as Node)) setSettingsOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSettingsOpen(false);
-    };
-    document.addEventListener('pointerdown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [settingsOpen]);
+  const [chartSettingsOpen, setChartSettingsOpen] = useState(false);
   useSnapshotSound(
     detail,
     soundsOf ?? sessionSounds,
@@ -416,6 +409,8 @@ export function Terminal({
   // Черновик сетки фиксации: пока он есть, на месте панели ордера стоит панель
   // сетки, а её уровни — на графике (спека 2026-10-04-close-grid-panel-design.md).
   const [closeGrid, setCloseGrid] = useState<CloseGridDraft | null>(null);
+  // Верхняя граница ползунка риска — настройка меню шестерёнки над графиком.
+  const [maxRisk, setMaxRisk] = useMaxRisk();
   // Панели меняются анимацией (`.panel-swap`), но не на первой отрисовке
   // терминала: там нечего менять, панель ордера просто стоит.
   const [panelSwapped, setPanelSwapped] = useState(false);
@@ -557,7 +552,15 @@ export function Terminal({
     // как черновик ордера: в этом режиме человек занят сеткой, и совпавшая с ней
     // линия позиции не должна перехватывать захват.
     if (gridTrade && closeGrid && gridTrade.symbol === symbol) {
-      list.push(...closeGridLevels(gridTrade, closeGrid, scale));
+      // Ордера сетки, уже стоящие на бирже, — поверх её черновика: черновик
+      // ставится на те же цены (по умолчанию тейки 1 % и 3 %) и закрывал бы их
+      // плашки целиком. Захвата они не перехватывают — их не тянут, только ✕.
+      const standing = list.filter((l) => l.kind === 'limitClose' && l.tradeId === gridTrade.id);
+      return [
+        ...list.filter((l) => !standing.includes(l)),
+        ...closeGridLevels(gridTrade, closeGrid, scale),
+        ...standing.map((l) => ({ ...l, draggable: false })),
+      ];
     }
     return list;
   }, [
@@ -717,6 +720,8 @@ export function Terminal({
     const tradePrice = trade ? screenPriceOf(trade.symbol) : null;
     if (!trade || tradePrice == null) return;
     if (trade.symbol !== symbol) switchSymbol(trade.symbol);
+    // На месте панели одна: открытая сетка вытесняет настройки и наоборот.
+    setChartSettingsOpen(false);
     setCloseGrid(initCloseGrid(trade, scale, tradePrice, detail.closeOrders.filter((o) => o.tradeId === trade.id).length));
     setPanelSwapped(true);
   };
@@ -1064,34 +1069,20 @@ export function Terminal({
                 >
                   {soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />}
                 </Button>
-                <div className="chart-settings" ref={settingsRef}>
-                  <Button
-                    variant="bare"
-                    tight
-                    aria-label={t('chartSettings')}
-                    title={t('chartSettings')}
-                    aria-haspopup="menu"
-                    aria-expanded={settingsOpen}
-                    onClick={() => setSettingsOpen((v) => !v)}
-                  >
-                    <SettingsIcon size={16} />
-                  </Button>
-                  {settingsOpen && (
-                    <div className="chart-menu chart-settings-menu" role="menu" aria-label={t('chartSettings')}>
-                      <div className="chart-menu-head">{t('indicators')}</div>
-                      <Button
-                        variant="none"
-                        role="menuitemcheckbox"
-                        aria-checked={rsiOn}
-                        className="chart-menu-item chart-menu-check"
-                        onClick={() => setRsiOn(!rsiOn)}
-                      >
-                        <span className="chart-menu-mark">{rsiOn && <Check size={12} />}</span>
-                        {t('indicatorRsi')}
-                      </Button>
-                    </div>
-                  )}
-                </div>
+                <Button
+                  variant="bare"
+                  tight
+                  aria-label={t('chartSettings')}
+                  title={t('chartSettings')}
+                  aria-expanded={chartSettingsOpen}
+                  onClick={() => {
+                    // Одна панель на месте: настройки открываются вместо сетки и наоборот.
+                    if (!chartSettingsOpen) setCloseGrid(null);
+                    setChartSettingsOpen((v) => !v);
+                  }}
+                >
+                  <SettingsIcon size={16} />
+                </Button>
               </div>
             </div>
             <div className="chart-tools">
@@ -1198,11 +1189,19 @@ export function Terminal({
               уровни — на графике, и смотреть на них, настраивая, нужно рядом.
               Смена панели — сменой ключа: новая въезжает анимацией (.panel-swap). */}
           <div
-            key={gridTrade ? 'grid' : 'order'}
-            className={gridTrade ? 'panel-swap panel-swap-fill' : 'panel-swap'}
-            data-swap={panelSwapped ? (gridTrade ? 'in' : 'back') : undefined}
+            key={chartSettingsOpen ? 'settings' : gridTrade ? 'grid' : 'order'}
+            className={gridTrade || chartSettingsOpen ? 'panel-swap panel-swap-fill' : 'panel-swap'}
+            data-swap={panelSwapped ? (gridTrade || chartSettingsOpen ? 'in' : 'back') : undefined}
           >
-            {gridTrade && closeGrid ? (
+            {chartSettingsOpen ? (
+              <ChartSettingsPanel
+                rsiOn={rsiOn}
+                onRsi={setRsiOn}
+                maxRisk={maxRisk}
+                onMaxRisk={setMaxRisk}
+                onClose={() => setChartSettingsOpen(false)}
+              />
+            ) : gridTrade && closeGrid ? (
               <CloseGridPanel
                 trade={gridTrade}
                 draft={closeGrid}
@@ -1221,6 +1220,7 @@ export function Terminal({
                 <OrderPanel
                   tab={orderTab}
                   onTab={switchOrderTab}
+                  maxRisk={maxRisk}
                   draft={marketDraft}
                   onDraft={setDraft}
                   limitDraft={limitDraft}
