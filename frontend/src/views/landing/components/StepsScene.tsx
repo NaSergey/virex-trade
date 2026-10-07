@@ -11,12 +11,14 @@ import { registerGsap } from '../lib/gsapConfig';
 import { prefersReducedMotion } from '../lib/reducedMotion';
 import { revealOnEnter } from '../lib/reveal';
 
-const STEPS = [1, 2, 3] as const;
+const STEPS = [1, 2, 3, 4, 5] as const;
 
 /**
- * «Как это работает» — три шага пути продукта.
+ * «Как это работает» — что есть на платформе и что на ней делать: журнал,
+ * разметка и аналитика, терминал, бектест и тренажёр, игры. Единственный
+ * рассказ о продукте на главной — первый экран отдан знаку.
  *
- * Раскладка: слева липкий указатель с номерами, справа сами шаги. Активный
+ * Раскладка: слева липкий указатель с номерами, справа сами пункты. Активный
  * номер выворачивается плашкой — тем же способом, каким в продукте помечено
  * выбранное; ничего нового в язык страницы это не вводит.
  *
@@ -40,15 +42,23 @@ export function StepsScene() {
 
       // Указатель ведёт по шагам всегда — это навигация, а не эффект, и в
       // режиме уменьшенного движения он нужен ровно так же.
-      items.forEach((item, i) => {
-        ScrollTrigger.create({
-          trigger: item,
-          start: 'top 62%',
-          end: 'bottom 62%',
-          onToggle: (self) => {
-            if (self.isActive) setActive(i);
-          },
-        });
+      // Активен последний пункт, чей верх уже прошёл линию 62% экрана. Триггер
+      // каждого пункта живёт от этой линии до конца страницы, и номер — число
+      // активных минус один: так указатель верен и в промежутках между
+      // пунктами, и после прыжка скролла через несколько сразу (переключатель
+      // «вошёл — вышел» на каждом пункте в таких случаях оставлял старый номер).
+      const triggers: ScrollTrigger[] = [];
+      const sync = () => setActive(Math.max(0, triggers.filter((tr) => tr.isActive).length - 1));
+      items.forEach((item) => {
+        triggers.push(
+          ScrollTrigger.create({
+            trigger: item,
+            start: 'top 62%',
+            endTrigger: document.documentElement,
+            end: 'bottom bottom',
+            onToggle: sync,
+          }),
+        );
       });
 
       if (prefersReducedMotion()) return;
@@ -73,7 +83,7 @@ export function StepsScene() {
   );
 
   return (
-    <section className="ls-steps" ref={root}>
+    <section className="ls-steps" id="how" ref={root}>
       <Wrap className="ls-steps-wrap">
         <aside className="ls-steps-aside">
           <h2 className="ls-kicker">{t('stepsTitle')}</h2>

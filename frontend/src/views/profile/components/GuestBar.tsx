@@ -27,10 +27,10 @@ export function GuestBar() {
         </Link>
         <span className="pf-guest-gap" />
         <div className="top-r pf-guest-r">
-          <Button variant="bare" onClick={() => router.push(`/login?next=${encodeURIComponent(pathname)}`)}>
+          <Button variant="bare" onClick={() => router.push(`/?auth=login&next=${encodeURIComponent(pathname)}`)}>
             {t('guestSignIn')}
           </Button>
-          <Button variant="solid" onClick={() => router.push('/login?mode=register')}>
+          <Button variant="solid" onClick={() => router.push('/?auth=register')}>
             {t('guestSignUp')}
           </Button>
         </div>

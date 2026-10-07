@@ -124,25 +124,6 @@
   color: var(--ink);
   border-color: var(--ink);
 }
-/* Обёртка магнитной кнопки: её двигает GSAP, поэтому собственных
-   трансформаций у неё нет и быть не должно. */
-.ls-magnet {
-  display: inline-block;
-  will-change: transform;
-}
-
-/* ── шапка и служебное ─────────────────────────────────────────── */
-
-/* Только языковой переключатель, тем же приёмом, что на /login: fixed, виден
-   с первого кадра, не ждёт скролла. Марки, переключателя темы (на /login его
-   тоже нет — тема вне продукта не переключается) и ссылки входа (она стоит в
-   первом экране и в финале) здесь нет. */
-.ls-locale-fixed {
-  position: fixed;
-  top: var(--s4);
-  right: var(--s4);
-  z-index: 40;
-}
 
 /* Прочитанное — ещё одна линейка, а не полоска-виджет. */
 .ls-progress {
@@ -184,186 +165,6 @@ main:focus {
   outline: none;
 }
 
-/* ── первый экран ──────────────────────────────────────────────── */
-.ls-hero {
-  position: relative;
-  min-height: 100svh;
-  display: flex;
-  align-items: center;
-  overflow: clip;
-  padding: calc(var(--s6) + var(--s5)) 0 var(--s6);
-  border-bottom: 1px solid var(--hair);
-}
-
-/* Разлиновка листа: горизонтали шагом 48px, поднимающиеся ровно на свой шаг,
-   поэтому цикл незаметен. Маска гасит их к краям — сетка должна читаться как
-   фактура бумаги, а не как таблица поверх текста. */
-.ls-hero-grid {
-  position: absolute;
-  inset: -60px 0 -60px;
-  background-image: repeating-linear-gradient(
-    to bottom,
-    rgba(232, 228, 220, 0.055) 0 1px,
-    transparent 1px 48px
-  );
-  -webkit-mask-image: radial-gradient(120% 80% at 60% 40%, #000 0%, transparent 78%);
-  mask-image: radial-gradient(120% 80% at 60% 40%, #000 0%, transparent 78%);
-  pointer-events: none;
-}
-
-.ls-hero-wrap {
-  position: relative;
-  width: 100%;
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
-  align-items: center;
-  gap: var(--s6);
-}
-
-.ls-hero-copy {
-  position: relative;
-  z-index: 1;
-}
-
-.ls-eyebrow {
-  font-family: var(--font-mono);
-  font-size: var(--t-xs);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-  margin: 0 0 var(--s4);
-}
-/* Тонкая линейка перед надзаголовком — та же роль, что у линейки над итогом
-   в таблице: отмечает, где начинается речь. */
-.ls-eyebrow::before {
-  content: '';
-  display: inline-block;
-  width: 28px;
-  height: 1px;
-  margin-right: var(--s3);
-  vertical-align: middle;
-  background: var(--hair-2);
-}
-
-.ls-hero-title {
-  margin: 0 0 var(--s4);
-  max-width: 16ch;
-  font-size: clamp(34px, 5.4vw, 68px);
-  font-weight: 400;
-  line-height: 1.06;
-  letter-spacing: -0.02em;
-}
-
-/* Прорезь, из которой выезжает слово. Нижнее поле с обратным отступом —
-   чтобы `overflow: hidden` не срезал выносные элементы («у», «д», «р»). */
-.ls-word {
-  display: inline-block;
-  overflow: hidden;
-  vertical-align: bottom;
-  padding-bottom: 0.14em;
-  margin-bottom: -0.14em;
-}
-.ls-word-in {
-  display: inline-block;
-  will-change: transform;
-}
-
-.ls-hero .lp-cta {
-  margin-top: var(--s5);
-}
-.ls-hero .lp-note {
-  margin-top: var(--s3);
-}
-
-.ls-hero-mark {
-  position: relative;
-  z-index: 0;
-  justify-self: center;
-  width: min(100%, 420px);
-  will-change: transform;
-}
-.ls-hero-mark .virex-logo {
-  display: block;
-  width: 100%;
-  height: auto;
-  opacity: 0.92;
-}
-/* Уровень, медленно идущий по знаку. Тот же смысл, что горизонталь на
-   графике: цена, а не украшение, — поэтому линия хайрлайновая и без свечения. */
-.ls-scanline {
-  position: absolute;
-  left: -6%;
-  right: -6%;
-  height: 1px;
-  background: linear-gradient(to right, transparent, rgba(232, 228, 220, 0.5), transparent);
-  pointer-events: none;
-}
-
-.ls-hero-cue {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: var(--s4);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--s2);
-}
-.ls-cue-word {
-  font-family: var(--font-mono);
-  font-size: var(--t-xs);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
-.ls-cue-rail {
-  position: relative;
-  display: block;
-  width: 1px;
-  height: 44px;
-  overflow: hidden;
-  background: var(--hair);
-}
-.ls-cue-rail i {
-  position: absolute;
-  inset: 0 auto auto 0;
-  display: block;
-  width: 1px;
-  height: 14px;
-  background: var(--ink);
-}
-
-/* ── лента терминов ────────────────────────────────────────────── */
-.ls-rail {
-  overflow: hidden;
-  border-bottom: 1px solid var(--hair);
-  padding: var(--s3) 0;
-}
-.ls-rail-track {
-  display: flex;
-  width: max-content;
-  will-change: transform;
-}
-.ls-rail-run {
-  display: flex;
-  flex: none;
-}
-.ls-rail-item {
-  font-family: var(--font-mono);
-  font-size: var(--t-xs);
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-  padding: 0 var(--s5);
-  white-space: nowrap;
-}
-/* Разделитель — точка на базовой линии, а не слэш: в строке величин продукта
-   разделяют тем же. */
-.ls-rail-item::after {
-  content: '·';
-  margin-left: var(--s5);
-  color: var(--hair-2);
-}
 
 /* ── три шага ──────────────────────────────────────────────────── */
 .ls-steps {
@@ -455,194 +256,6 @@ main:focus {
   line-height: 1.65;
 }
 
-/* ── что внутри: единственная светлая полоса ───────────────────── */
-.ls-demo {
-  padding: var(--s6) 0;
-  /* Граница жёсткая, по линейке: выворот в этой системе включается сразу, а
-     не растворяется градиентом. */
-  border-top: 1px solid var(--hair);
-  border-bottom: 1px solid var(--hair);
-}
-.ls-demo-wrap {
-  width: 100%;
-}
-.ls-demo-cols {
-  display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
-  gap: var(--s6);
-  align-items: start;
-}
-.ls-demo-sticky {
-  position: sticky;
-  top: 12vh;
-}
-
-.ls-panel {
-  border: 1px solid var(--rule);
-  background: var(--ground);
-}
-.ls-panel-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--s3);
-  padding: var(--s2) var(--s3);
-  border-bottom: 1px solid var(--hair);
-  font-family: var(--font-mono);
-  font-size: var(--t-xs);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-.ls-panel-brand {
-  color: var(--ink-3);
-}
-.ls-panel-where {
-  color: var(--ink);
-}
-.ls-panel-part {
-  padding: var(--s3);
-  /* Приглушено всё, кроме того, о чём сейчас читают рядом. Не спрятано:
-     панель обязана оставаться одним экраном приложения, а не четырьмя
-     картинками, подменяющими друг друга. */
-  opacity: 0.3;
-  transition: opacity 0.45s ease;
-}
-.ls-panel-curve {
-  display: block;
-  width: 100%;
-  height: auto;
-  padding: 0 var(--s3);
-}
-.ls-panel[data-focus='overview'] .ls-panel-part[data-part='metrics'],
-.ls-panel[data-focus='overview'] .ls-panel-part[data-part='curve'],
-.ls-panel[data-focus='analytics'] .ls-panel-part[data-part='metrics'],
-.ls-panel[data-focus='market'] .ls-panel-part[data-part='curve'],
-.ls-panel[data-focus='tags'] .ls-panel-part[data-part='ledger'] {
-  opacity: 1;
-}
-.ls-panel-ledger {
-  min-width: 0;
-}
-.ls-panel-note {
-  margin: var(--s3) 0 0;
-  color: var(--ink-3);
-  font-size: var(--t-xs);
-  font-family: var(--font-mono);
-  letter-spacing: 0.04em;
-}
-
-.ls-demo-list {
-  display: grid;
-  gap: var(--s5);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.ls-demo-item {
-  border-left: 1px solid var(--hair);
-  padding-left: var(--s4);
-  transition: border-color 0.35s ease, opacity 0.35s ease;
-  opacity: 0.55;
-}
-.ls-demo-item.on {
-  border-color: var(--ink);
-  opacity: 1;
-}
-.ls-demo-item h3 {
-  display: flex;
-  align-items: baseline;
-  gap: var(--s3);
-  margin: 0 0 var(--s2);
-  font-size: var(--t-l);
-  font-weight: 400;
-  line-height: 1.2;
-}
-.ls-demo-n {
-  font-family: var(--font-mono);
-  font-size: var(--t-xs);
-  letter-spacing: 0.1em;
-  color: var(--ink-3);
-}
-.ls-demo-item p {
-  margin: 0;
-  max-width: 54ch;
-  color: var(--ink-2);
-  font-size: var(--t-s);
-  line-height: 1.65;
-}
-
-/* ── честно о состоянии ────────────────────────────────────────── */
-.ls-trust {
-  padding: var(--s6) 0;
-}
-.ls-trust-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--s6);
-  align-items: start;
-}
-.lp-honest {
-  display: grid;
-  gap: var(--s4);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.lp-honest li {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--s3);
-  border-left: 1px solid var(--hair);
-  padding-left: var(--s3);
-  color: var(--ink-2);
-  font-size: var(--t-s);
-  line-height: 1.65;
-}
-.ls-honest-n {
-  font-family: var(--font-mono);
-  font-size: var(--t-xs);
-  letter-spacing: 0.1em;
-  color: var(--ink-3);
-}
-
-/* ── финал ─────────────────────────────────────────────────────── */
-.ls-finale {
-  border-top: 1px solid var(--hair);
-  padding: var(--s6) 0 var(--s5);
-}
-.ls-finale-mark {
-  width: 72px;
-  margin-bottom: var(--s4);
-}
-.ls-finale-mark .virex-logo {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-/* Заголовок финала — речь, а не шапка раздела, поэтому глобальный вид `h2`
-   (моно, капитель, линейка снизу) снимается здесь целиком: в этой системе
-   такой набор означает «служебная подпись», и последняя фраза страницы им
-   набрана быть не может. */
-.ls-finale h2 {
-  margin: 0 0 var(--s3);
-  max-width: 20ch;
-  font-family: var(--font-serif);
-  font-size: clamp(26px, 3.4vw, 42px);
-  font-weight: 400;
-  line-height: 1.12;
-  letter-spacing: -0.01em;
-  text-transform: none;
-  color: var(--ink);
-  padding-bottom: 0;
-  border-bottom: 0;
-}
-.ls-finale .lp-body {
-  margin-bottom: var(--s5);
-}
-.ls-finale .lp-login {
-  display: inline-block;
-  margin-top: var(--s5);
-}
 
 /* ── футер ─────────────────────────────────────────────────────── */
 .lp-foot {
@@ -651,16 +264,240 @@ main:focus {
   font-size: var(--t-xs);
 }
 
+
+
+/* ── шапка главной ─────────────────────────────────────────────────
+   Знак, вкладки-якоря и справа язык с входом. Фон — лист страницы, снизу
+   линейка: шапка продукта устроена так же, а не плавает стеклом над
+   контентом. */
+.ls-nav,
+.ls-dark,
+.ls-ground {
+  --ls-nav-h: 56px;
+  /* Знак всегда серебряный: лендинг тёмный и у того, у кого светлая тема
+     продукта, а её токены перекрасили бы стекло в графит. */
+  --tpm-1: #ffffff;
+  --tpm-2: #6c727a;
+  --tpm-3: #dfe3e7;
+  --tpm-4: #474c52;
+  --tpm-5: #b3b9bf;
+  --tpm-edge: #fff;
+  --tpm-glow: rgb(255 255 255 / 0.2);
+}
+html {
+  scroll-padding-top: 56px;
+}
+.ls-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  background: #050505;
+  border-bottom: 1px solid var(--hair);
+}
+.ls-nav-in {
+  max-width: var(--wrap);
+  margin: 0 auto;
+  padding: 0 var(--s4);
+  height: var(--ls-nav-h);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--s5);
+}
+.ls-nav-mark {
+  display: flex;
+  color: inherit;
+}
+.ls-nav-tabs {
+  display: flex;
+  gap: var(--s1);
+  min-width: 0;
+}
+.ls-nav-tab,
+.ls-nav-signin {
+  padding: var(--s2) var(--s3);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+.ls-nav-tab:hover {
+  color: var(--ink);
+}
+/* Активная вкладка — выворот: единственный способ выделить в системе, где
+   цвет означает деньги. */
+.ls-nav-tab.on {
+  background: var(--ink);
+  color: var(--ground);
+}
+/* «Войти» — якорь к форме, но в рамке: это действие, а не раздел страницы. */
+.ls-nav-signin {
+  border: 1px solid var(--hair-2);
+  color: var(--ink);
+}
+.ls-nav-signin:hover {
+  border-color: var(--ink);
+}
+.ls-nav-r {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+}
+
+/* ── «Платформа»: знак, собираемый скроллом ────────────────────────
+   Высокая секция — путь скролла, внутри неё один липкий экран, и на нём
+   только знак: о платформе рассказывает «Как это работает». */
+.ls-plat {
+  height: 480svh;
+}
+.ls-plat-stick {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  padding-top: var(--ls-nav-h);
+  display: flex;
+}
+.ls-plat-wrap {
+  position: relative;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  padding-top: var(--s5);
+  padding-bottom: var(--s6);
+}
+/* Знак вписывается в экран целиком (`meet` у viewBox): по ширине до 1040px,
+   по высоте — сколько остаётся под шапкой. */
+.ls-plat-mark {
+  display: block;
+  width: min(100%, 1040px);
+  height: 100%;
+}
+.ls-plat-hint {
+  position: absolute;
+  bottom: var(--s4);
+  left: 50%;
+  translate: -50% 0;
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* Только для скринридера: заголовок страницы, которого нет на экране. */
+.ls-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ── сборка знака (MarkAssembly) ───────────────────────────────────
+   Линии разметки и каркаса — пунктир длиной в контур (`pathLength="1"`):
+   сдвиг пунктира на 1 прячет линию целиком, на 0 — показывает. Толщины — в
+   единицах рисунка, без `non-scaling-stroke`: с ним пунктир меряется в
+   пикселях экрана, и `pathLength` перестаёт прятать линию. */
+.mk-line {
+  fill: none;
+  stroke-dasharray: 1 1;
+}
+.mk-guide {
+  stroke: rgb(232 228 220 / 0.22);
+  stroke-width: 0.4;
+}
+.mk-outline {
+  stroke: #e8e4dc;
+  stroke-width: 0.8;
+  stroke-linejoin: miter;
+}
+.mk-wire {
+  stroke: rgb(232 228 220 / 0.42);
+  stroke-width: 0.35;
+}
+.mk-edge {
+  stroke: var(--tpm-edge);
+  stroke-width: 0.9;
+  stroke-linecap: round;
+}
+.mk-dot {
+  fill: #050505;
+  stroke: #e8e4dc;
+  stroke-width: 0.5;
+}
+.mk-sweep {
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+/* Начальное состояние — в CSS, а не в JS: разметка приходит с сервера уже
+   со скрытыми слоями, и до гидрации не мелькает собранный знак. Только при
+   обычном движении: при уменьшенном таймлайна нет, и знак стоит собранным. */
+@media (prefers-reduced-motion: no-preference) {
+  .mk-line {
+    stroke-dashoffset: 1;
+  }
+  .mk-dot,
+  .mk-fill,
+  .mk-facet,
+  .mk-crumple,
+  .mk-hatch,
+  .mk-glint {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mk-guides,
+  .mk-wires,
+  .mk-outline,
+  .mk-dots {
+    display: none;
+  }
+}
+
+/* ── регистрация ───────────────────────────────────────────────── */
+.ls-register {
+  padding: var(--s6) 0;
+  border-top: 1px solid var(--hair);
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+}
+.ls-register-wrap {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: var(--s6);
+  align-items: center;
+}
+.ls-register-title {
+  margin: 0 0 var(--s4);
+  max-width: 16ch;
+  font-size: clamp(28px, 3.6vw, 48px);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.ls-register-copy .lp-note {
+  margin-top: var(--s3);
+}
+.ls-register-form {
+  width: 100%;
+  max-width: 380px;
+  justify-self: end;
+}
+
 /* ── планшет ───────────────────────────────────────────────────── */
 @media (max-width: 1100px) {
-  .ls-hero-wrap {
-    gap: var(--s5);
-  }
-  .ls-hero-mark {
-    width: min(100%, 300px);
-  }
-  .ls-steps-wrap,
-  .ls-demo-cols {
+  .ls-steps-wrap {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--s5);
   }
@@ -672,113 +509,80 @@ main:focus {
   .ls-index {
     display: none;
   }
-  .ls-trust-grid {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--s5);
-  }
 }
 
 /* ── телефон ───────────────────────────────────────────────────── */
 @media (max-width: 720px) {
-  .ls-hero {
-    padding: calc(var(--s6) + var(--s3)) 0 calc(var(--s6) + var(--s4));
-    min-height: 100svh;
+  /* Шапка в две строки: знак с входом, ниже — вкладки. */
+  .ls-nav,
+  .ls-dark,
+  .ls-ground {
+    --ls-nav-h: 92px;
   }
-  .ls-hero-wrap {
-    grid-template-columns: minmax(0, 1fr);
+  html {
+    scroll-padding-top: 92px;
   }
-  /* Знак уходит за текст полупрозрачной подложкой: рядом с ним на такой
-     ширине не остаётся места ни ему, ни заголовку. */
-  /* Центрирование через `inset` + `margin: auto`, а не трансформацией:
-     трансформация этого элемента целиком принадлежит GSAP (дрейф и
-     параллакс), и он переписал бы центрирующий сдвиг первым же твином. */
-  .ls-hero-mark {
-    position: absolute;
-    inset: 0;
-    margin: auto;
-    width: min(78vw, 420px);
-    height: min(78vw, 420px);
-    opacity: 0.12;
+  .ls-nav-in {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    height: auto;
+    padding-top: var(--s2);
+    gap: var(--s2) var(--s3);
   }
-  .ls-hero-title {
-    max-width: none;
+  .ls-nav-r {
+    justify-self: end;
   }
-  .ls-rail-item {
-    padding: 0 var(--s4);
+  .ls-nav-tabs {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin: 0 calc(-1 * var(--s2));
+    overflow-x: auto;
+    scrollbar-width: none;
   }
-  .ls-rail-item::after {
-    margin-left: var(--s4);
+  .ls-nav-tab {
+    padding: var(--s2);
   }
-  .ls-steps,
-  .ls-demo,
-  .ls-trust,
-  .ls-finale {
+
+  .ls-steps {
     padding-top: var(--s5);
     padding-bottom: var(--s5);
   }
   .ls-steps-list {
     gap: var(--s5);
   }
-  /* Панель на телефоне не липнет и ничего не приглушает.
-     Липкость требует, чтобы панель была заметно ниже экрана, а на этой
-     ширине продукт раскладывает журнал записями-карточками (см. globals.css)
-     — панель выходит выше вьюпорта целиком, прилипнуть ей некуда, и
-     приглушение подсвечивало бы то, чего в этот момент на экране нет.
-     Поэтому здесь она просто иллюстрация в потоке, целиком видимая, а
-     разделы читаются под ней. */
-  .ls-demo-sticky {
-    position: static;
+
+  .ls-register {
+    padding: var(--s5) 0;
+    min-height: 0;
   }
-  .ls-panel-part {
-    opacity: 1;
+  .ls-register-wrap {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s5);
   }
-  .ls-panel-part,
-  .ls-panel-curve {
-    padding-left: var(--s2);
-    padding-right: var(--s2);
-  }
-  .ls-panel-curve {
-    max-height: 110px;
-  }
-  /* Надзаголовок на этой ширине не помещается в строку вместе с линейкой —
-     а перенос одного слова под неё читается как обрыв. Линейка уходит. */
-  .ls-eyebrow {
-    letter-spacing: 0.12em;
-  }
-  .ls-eyebrow::before {
-    display: none;
+  .ls-register-form {
+    justify-self: stretch;
+    max-width: none;
   }
 }
 
 /* ── уменьшенное движение ──────────────────────────────────────────
-   Ни одна сцена не полагается на анимацию, чтобы стать видимой: сцены сами
-   выставляют конечное состояние (см. prefersReducedMotion в компонентах), а
-   непрерывные движения — сетка, уровень по знаку, лента, подсказка скролла —
-   выключаются здесь, вместе с их разметкой. */
+   Знак стоит собранным, липкого экрана нет. */
 @media (prefers-reduced-motion: reduce) {
-  .ls-hero-grid,
-  .ls-scanline,
-  .ls-hero-cue {
+  .ls-plat {
+    height: auto;
+  }
+  .ls-plat-stick {
+    position: static;
+    height: auto;
+    padding-bottom: var(--s6);
+  }
+  .ls-plat-hint {
     display: none;
   }
-  .ls-rail-track {
-    width: auto;
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-  .ls-rail-run + .ls-rail-run {
-    display: none;
-  }
+  .ls-nav-tab,
+  .ls-nav-signin,
   .lp-login,
-  .ls-index-item,
-  .ls-demo-item,
-  .ls-panel-part {
+  .ls-index-item {
     transition: none;
-  }
-  /* Приглушение частей панели — способ перевести внимание, а не состояние
-     содержимого: без перехода оно превращается в текст на треть краски,
-     который просто плохо читается. Показываем панель целиком. */
-  .ls-panel-part {
-    opacity: 1;
   }
 }

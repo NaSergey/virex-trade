@@ -32,10 +32,10 @@ export function GuestGate() {
     <div className="pf-gate games-page">
       <EmptyState title={t('gateTitle')}>{t('gateBody')}</EmptyState>
       <div className="pf-gate-do">
-        <Button variant="solid" onClick={() => router.push('/login?mode=register')}>
+        <Button variant="solid" onClick={() => router.push('/?auth=register')}>
           {t('guestSignUp')}
         </Button>
-        <Button variant="bare" onClick={() => router.push(`/login?next=${encodeURIComponent(pathname)}`)}>
+        <Button variant="bare" onClick={() => router.push(`/?auth=login&next=${encodeURIComponent(pathname)}`)}>
           {t('guestSignIn')}
         </Button>
       </div>

@@ -23,7 +23,7 @@ export function useLenis(): void {
     registerGsap();
     if (prefersReducedMotion()) return;
 
-    const lenis = new Lenis({ autoRaf: false });
+    const lenis = new Lenis({ autoRaf: false, anchors: true });
     lenis.on('scroll', ScrollTrigger.update);
 
     const tick = (time: number) => lenis.raf(time * 1000);

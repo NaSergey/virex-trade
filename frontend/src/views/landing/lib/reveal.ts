@@ -33,17 +33,3 @@ export function revealOnEnter(
     scrollTrigger: { trigger: trigger ?? items[0], start, once: true },
   });
 }
-
-/**
- * Свечи знака печатаются из своей середины наружу — так же, как свеча растёт
- * на графике. Возвращает пять `<path>` в порядке «от центра», годном для
- * `stagger` без опции `from: 'center'`: та считает середину по позиции в DOM,
- * а нужный порядок задан смыслом рисунка, а не разметкой.
- */
-export function candlesFromCenter(root: Element | null): SVGPathElement[] {
-  if (!root) return [];
-  const order = ['center', 'left-center', 'right-center', 'left', 'right'];
-  return order
-    .map((id) => root.querySelector<SVGPathElement>(`[data-candle="${id}"]`))
-    .filter((el): el is SVGPathElement => el != null);
-}

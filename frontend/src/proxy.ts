@@ -47,14 +47,15 @@ export function proxy(request: NextRequest) {
   if (authed) return NextResponse.next();
 
   const url = request.nextUrl.clone();
-  url.pathname = '/login';
-  url.search = `next=${encodeURIComponent(request.nextUrl.pathname)}`;
+  // Входа-страницы больше нет: вход — окно на главной, оно открывается по `auth`.
+  url.pathname = '/';
+  url.search = `auth=login&next=${encodeURIComponent(request.nextUrl.pathname)}`;
   return NextResponse.redirect(url);
 }
 
 export const config = {
   // Всё, кроме статики Next, favicon, самих /api и /auth (это не страницы —
-  // их не на что редиректить) и /login (иначе вход стал бы недостижим).
+  // их не на что редиректить) и /login (только пересылает старые ссылки на главную).
   // Корень сюда попадает намеренно: развилка «лендинг или продукт» выше.
   //
   // `assets/` — картинки раздела игр из `public/`. Их нельзя защищать этим

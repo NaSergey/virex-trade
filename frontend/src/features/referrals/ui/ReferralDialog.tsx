@@ -55,7 +55,7 @@ export function ReferralDialog({
 
   const link =
     open && typeof window !== 'undefined'
-      ? `${window.location.origin}/login?mode=register&ref=${stats?.slug ?? userId}`
+      ? `${window.location.origin}/?auth=register&ref=${stats?.slug ?? userId}`
       : '';
 
   // Единая точка, откуда берутся и текст статуса, и его цвет — раньше это были
