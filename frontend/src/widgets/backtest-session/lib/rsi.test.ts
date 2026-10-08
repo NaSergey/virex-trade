@@ -55,7 +55,7 @@ describe('divergencesOf', () => {
     const rsi = series(40, 50, { 10: 85, 25: 78 });
     const highs = series(40, 90, { 10: 100, 25: 105 });
     expect(divergencesOf(rsi, highs, highs, O)).toEqual([
-      { kind: 'bear', from: 10, to: 25, fromValue: 85, toValue: 78, fromPrice: 100, toPrice: 105 },
+      { kind: 'bear', from: 10, to: 25, fromPrice: 100, toPrice: 105, rsiFrom: 10, rsiTo: 25, fromValue: 85, toValue: 78 },
     ]);
   });
 
@@ -63,7 +63,26 @@ describe('divergencesOf', () => {
     const rsi = series(40, 50, { 10: 15, 25: 22 });
     const lows = series(40, 110, { 10: 100, 25: 95 });
     expect(divergencesOf(rsi, lows, lows, O)).toEqual([
-      { kind: 'bull', from: 10, to: 25, fromValue: 15, toValue: 22, fromPrice: 100, toPrice: 95 },
+      { kind: 'bull', from: 10, to: 25, fromPrice: 100, toPrice: 95, rsiFrom: 10, rsiTo: 25, fromValue: 15, toValue: 22 },
+    ]);
+  });
+
+  it('вершины берутся на цене: пик RSI посреди импульса — не вершина', () => {
+    // Импульс: RSI на пике уже на 7-й свече, а цена растёт до 13-й. Прежний
+    // поиск по вершинам RSI вёл линию цены от 7-й — от середины рывка.
+    const rsi = series(45, 50, { 7: 88, 8: 70, 9: 70, 10: 70, 11: 70, 12: 70, 13: 76, 30: 66 });
+    const highs = series(45, 90, { 7: 95, 8: 96, 9: 97, 10: 98, 11: 99, 12: 99.5, 13: 100, 30: 104 });
+    expect(divergencesOf(rsi, highs, highs, O)).toEqual([
+      { kind: 'bear', from: 13, to: 30, fromPrice: 100, toPrice: 104, rsiFrom: 13, rsiTo: 30, fromValue: 76, toValue: 66 },
+    ]);
+  });
+
+  it('пик RSI берётся рядом с вершиной цены — импульс выдыхается раньше цены', () => {
+    // Вершины цены — 13 и 30, пики RSI — на две свечи раньше каждой.
+    const rsi = series(45, 50, { 11: 80, 28: 68 });
+    const highs = series(45, 90, { 13: 100, 30: 104 });
+    expect(divergencesOf(rsi, highs, highs, O)).toEqual([
+      { kind: 'bear', from: 13, to: 30, fromPrice: 100, toPrice: 104, rsiFrom: 11, rsiTo: 28, fromValue: 80, toValue: 68 },
     ]);
   });
 
@@ -106,6 +125,14 @@ describe('divergencesOf', () => {
     ]);
   });
 
+  it('вершина, продолжающая ту же дивергенцию, удлиняет линию, а не добавляет вторую', () => {
+    // 25-я — дивергенция к 10-й; 40-я выше по RSI, чем 25-я, но ниже 10-й:
+    // это та же дивергенция от 10-й, только длиннее, — веера из 10-й нет.
+    const rsi = series(55, 45, { 10: 85, 25: 70, 40: 75 });
+    const highs = series(55, 90, { 10: 100, 25: 102.5, 40: 106 });
+    expect(divergencesOf(rsi, highs, highs, O).map((d) => [d.from, d.to])).toEqual([[10, 40]]);
+  });
+
   it('без расхождения — без дивергенции', () => {
     // Цена выше, и RSI выше — это подтверждение, а не дивергенция.
     const rsi = series(40, 50, { 10: 78, 25: 85 });
@@ -118,6 +145,27 @@ describe('divergencesOf', () => {
     const rsi = series(50, 50, { 10: 85, 20: 60, 32: 78 });
     const highs = series(50, 90, { 10: 100, 20: 95, 32: 105 });
     expect(divergencesOf(rsi, highs, highs, O).map((d) => [d.from, d.to])).toEqual([[10, 32]]);
+  });
+
+  it('свеча между вершинами выше линии цены — пары нет', () => {
+    // 18-я выше линии 10→30: смотрят на неё, и к 30-й RSI вырос — не дивергенция.
+    const rsi = series(45, 50, { 10: 80, 18: 75, 30: 77 });
+    const highs = series(45, 90, { 10: 100, 18: 103, 30: 104 });
+    expect(divergencesOf(rsi, highs, highs, O).map((d) => [d.from, d.to])).toEqual([[10, 18]]);
+  });
+
+  it('RSI между вершинами выше своей линии — пары нет', () => {
+    // Всплеск RSI до 90 без вершины цены: линия 80→70 прошла бы под ним.
+    const rsi = series(45, 50, { 10: 80, 20: 90, 30: 70 });
+    const highs = series(45, 90, { 10: 100, 30: 104 });
+    expect(divergencesOf(rsi, highs, highs, O)).toEqual([]);
+  });
+
+  it('плато RSI у самой вершины линию не пересекает', () => {
+    // RSI держится у 90 ещё две свечи — это всё та же вершина, а не новая.
+    const rsi = series(45, 50, { 10: 90, 11: 89.5, 12: 89.5, 30: 70 });
+    const highs = series(45, 90, { 10: 100, 30: 104 });
+    expect(divergencesOf(rsi, highs, highs, O).map((d) => [d.from, d.to])).toEqual([[10, 30]]);
   });
 
   it('вершина подтверждается только через rightBars баров', () => {

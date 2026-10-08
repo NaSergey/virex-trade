@@ -1262,9 +1262,18 @@ export const ReplayChart = memo(function ReplayChart({
       avg: line(rsiData.avg),
       over: zone((v) => v > RSI_DEFAULTS.overbought),
       under: zone((v) => v < RSI_DEFAULTS.oversold),
+      // Линии цены и RSI — каждая по своим точкам: пик RSI стоит у вершины цены, но не обязательно на ней.
       divergences: rsiData.divergences
-        .filter((dv) => dv.to >= from && dv.from < to)
-        .map((dv) => ({ ...dv, x1: xOf(dv.from), y1: yOf(dv.fromValue), x2: xOf(dv.to), y2: yOf(dv.toValue) })),
+        .filter((dv) => Math.max(dv.to, dv.rsiTo) >= from && Math.min(dv.from, dv.rsiFrom) < to)
+        .map((dv) => ({
+          ...dv,
+          px1: xOf(dv.from),
+          px2: xOf(dv.to),
+          x1: xOf(dv.rsiFrom),
+          y1: yOf(dv.fromValue),
+          x2: xOf(dv.rsiTo),
+          y2: yOf(dv.toValue),
+        })),
     };
   }, [rsiData, candles.length, startIdx, endIdx, frameStart, slot, rsiTop, rsiH, rsiLo, rsiHi]);
   const rsiLast = rsiData ? rsiData.rsi[rsiData.rsi.length - 1] : NaN;
@@ -1543,15 +1552,15 @@ export const ReplayChart = memo(function ReplayChart({
               );
             })}
 
-            {/* Дивергенция на самих свечах — между максимумами (минимумами) тех же
-                двух свечей, что и на панели RSI: расхождение видно там, где его и
-                ищут, — цена идёт в одну сторону, индикатор в другую. */}
+            {/* Дивергенция на самих свечах — между максимумами (минимумами) двух
+                вершин цены, по которым она и найдена: расхождение видно там, где
+                его и ищут, — цена идёт в одну сторону, индикатор в другую. */}
             {rsiPaths?.divergences.map((dv) => (
               <line
                 key={`p-${dv.kind}-${dv.from}-${dv.to}`}
-                x1={dv.x1}
+                x1={dv.px1}
                 y1={y(dv.fromPrice)}
-                x2={dv.x2}
+                x2={dv.px2}
                 y2={y(dv.toPrice)}
                 stroke={DIV_COLOR[dv.kind]}
                 strokeWidth={px(1.5)}
@@ -1699,7 +1708,7 @@ export const ReplayChart = memo(function ReplayChart({
           const price = drag?.id === l.id ? drag.price : l.price;
           const impact = l.impactAt?.(price) ?? null;
           return (
-            <g key={l.id}>
+            <g key={l.id} data-tour={`term-lvl-${l.kind}`}>
               <line
                 x1={0}
                 x2={PW}
@@ -1787,6 +1796,7 @@ export const ReplayChart = memo(function ReplayChart({
                       </g>
                       {canPick && (
                         <g
+                          data-tour="term-plate-pick"
                           style={{ cursor: 'pointer' }}
                           // Зажать и тянуть: у входа — от цены, стоп или тейк по стороне сделки
                           // (startGhost); у стопа и тейка — сам уровень.
@@ -1804,6 +1814,7 @@ export const ReplayChart = memo(function ReplayChart({
                       )}
                       {hasGrid && (
                         <g
+                          data-tour="term-plate-grid"
                           style={{ cursor: 'pointer' }}
                           onPointerDown={(e) => e.stopPropagation()}
                           onClick={() => onCloseGrid!(l.tradeId!)}
@@ -1821,6 +1832,7 @@ export const ReplayChart = memo(function ReplayChart({
                       )}
                       {onX && (
                         <g
+                          data-tour="term-plate-x"
                           style={{ cursor: 'pointer' }}
                           onPointerDown={(e) => e.stopPropagation()}
                           onClick={onX}

@@ -253,7 +253,7 @@ export function CloseGridPanel({
   );
 
   return (
-    <div className="order-panel cg-panel">
+    <div className="order-panel cg-panel" data-tour="term-close-grid">
       <SectionHead title={t('closeGridTitle')} className="cg-head" />
 
       {levelField(t('closeGridFirst'), first, (v) => onDraft({ ...draft, first: v }))}

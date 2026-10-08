@@ -23,7 +23,15 @@ export function useLenis(): void {
     registerGsap();
     if (prefersReducedMotion()) return;
 
-    const lenis = new Lenis({ autoRaf: false, anchors: true });
+    const lenis = new Lenis({
+      autoRaf: false,
+      anchors: true,
+      // Колесо над графиком терминала — его масштаб, а не прокрутка страницы.
+      // График отменяет событие сам (`useNonPassiveWheel`), но Lenis слушает
+      // окно и `defaultPrevented` не смотрит — без этого крутились бы оба.
+      // Класс — обёртка графика: сам `svg` не HTMLElement, и Lenis его пропустит.
+      prevent: (node) => node.classList.contains('replay-chart-wrap'),
+    });
     lenis.on('scroll', ScrollTrigger.update);
 
     const tick = (time: number) => lenis.raf(time * 1000);

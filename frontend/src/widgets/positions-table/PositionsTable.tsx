@@ -44,7 +44,8 @@ export function PositionsTable({
   renderAge: (p: ExchangePosition) => ReactNode;
   /** Колонка «Вход в диапазоне» — только там, где рыночный контекст вообще есть. */
   renderRange?: (p: ExchangePosition) => ReactNode;
-  renderTags: (p: ExchangePosition) => ReactNode;
+  /** Колонка тегов; не задана — колонки нет (терминал на главной: теги — у вошедшего). */
+  renderTags?: (p: ExchangePosition) => ReactNode;
   /** Что добавляется поверх общего набора: колонка действий бектеста. */
   extraColumns?: LedgerColumn<ExchangePosition>[];
   /**
@@ -98,7 +99,9 @@ export function PositionsTable({
       cellClassName: 'n',
       render: (p) => <Money value={parseFloat(p.unrealisedPnl ?? '') || 0} large />,
     },
-    { key: 'tags', header: t('colTags'), cellClassName: 'cell-tags', render: renderTags },
+    ...(renderTags
+      ? [{ key: 'tags', header: t('colTags'), cellClassName: 'cell-tags', render: renderTags } satisfies LedgerColumn<ExchangePosition>]
+      : []),
     ...(extraColumns ?? []),
   ];
 

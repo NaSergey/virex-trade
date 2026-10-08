@@ -17,7 +17,7 @@ describe('MarketDataService.getCandles', () => {
   it('отвергает таймфрейм вне списка, а не отдаёт пустоту', async () => {
     const { service } = makeService();
 
-    await expect(service.getCandles({ timeframe: 30 })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.getCandles({ timeframe: 45 })).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('фильтрует по символу, таймфрейму и диапазону', async () => {
@@ -74,7 +74,7 @@ describe('MarketDataService.getCoverage', () => {
 
     const coverage = await service.getCoverage();
 
-    expect(coverage.map((c) => c.timeframe)).toEqual([1, 5, 15, 60, 240, 1440]);
+    expect(coverage.map((c) => c.timeframe)).toEqual([1, 5, 15, 30, 60, 240, 1440]);
     expect(coverage[0].from).toEqual(new Date('2026-01-01T00:00:00Z'));
   });
 

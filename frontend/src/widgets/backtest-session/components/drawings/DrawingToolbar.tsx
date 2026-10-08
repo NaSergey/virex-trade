@@ -106,7 +106,7 @@ export function DrawingToolbar({
   };
 
   return (
-    <div className="draw-bar" ref={rootRef} role="toolbar" aria-label={t('toolbar')}>
+    <div className="draw-bar" ref={rootRef} role="toolbar" aria-label={t('toolbar')} data-tour="term-draw">
       {GROUPS.map((group, gi) => {
         const current = group.includes(tool as ToolId) ? (tool as ToolId) : (lastOf[gi] ?? group[0]);
         const Glyph = TOOL_ICON[current];

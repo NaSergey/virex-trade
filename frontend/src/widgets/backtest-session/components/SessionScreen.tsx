@@ -186,6 +186,12 @@ export interface TerminalProps {
    * монета одна).
    */
   history?: ComponentType<{ onSymbol?: (symbol: string) => void }>;
+  /**
+   * Теги позиций и сделок; по умолчанию есть. Терминал на главной их выключает:
+   * список тегов живёт на сервере, а гость не вошёл — запрос получил бы 401, и
+   * его обработчик увёл бы со страницы.
+   */
+  tags?: boolean;
 }
 
 /**
@@ -204,6 +210,7 @@ export function Terminal({
   badge,
   soundsOf,
   history: History,
+  tags = true,
 }: TerminalProps) {
   const t = useTranslations('backtest');
   const { locale } = useLocaleControl();
@@ -1063,6 +1070,7 @@ export function Terminal({
                   variant="bare"
                   tight
                   aria-label={tAudio('sound')}
+                  data-tour="term-sound"
                   aria-pressed={soundOn}
                   title={soundOn ? tAudio('mute') : tAudio('unmute')}
                   onClick={() => setSoundOn(!soundOn)}
@@ -1160,7 +1168,11 @@ export function Terminal({
                   />
                 </>
               )}
-              {isLive && <span className="muted">{badge ?? t('liveBadge')}</span>}
+              {isLive && (
+                <span className="muted" data-tour="term-badge">
+                  {badge ?? t('liveBadge')}
+                </span>
+              )}
               {session.dataSource === 'synthetic' && <span className="muted">{t('syntheticBadge')}</span>}
               {onLeave && (
                 <Button tight onClick={() => void leave()}>
@@ -1169,6 +1181,7 @@ export function Terminal({
               )}
               <Seg
                 className="view-switch"
+                data-tour="term-tables"
                 options={[
                   { value: 'open' as const, label: t('openPositionsTab') },
                   { value: 'orders' as const, label: t('ordersTab') },
@@ -1276,11 +1289,12 @@ export function Terminal({
             onMarket={(trade) => setMarketModalFor(trade.id)}
             onChangeLevels={(trade) => setLevelsModalFor(trade.id)}
             onCloseGrid={(trade) => onCloseGrid(trade.id)}
-            onTags={(trade) => setTagsModalFor(trade.id)}
+            onTags={tags ? (trade) => setTagsModalFor(trade.id) : undefined}
             onSymbol={pickSymbol}
           />
         )}
         {tab === 'orders' && (
+          <div data-tour="term-orders">
           <OrdersPanel
             trades={openTrades}
             scale={scale}
@@ -1292,20 +1306,24 @@ export function Terminal({
             decimalsOf={decimalsOf}
             onSymbol={pickSymbol}
           />
+          </div>
         )}
-        {tab === 'history' &&
-          (History ? (
+        {tab === 'history' && (
+          <div data-tour="term-history">
+          {History ? (
             <History onSymbol={pickSymbol} />
           ) : (
             <SessionTrades
               trades={trades}
               scale={scale}
               labelFor={labelFor}
-              onEditTags={(trade) => setHistoryTagsFor(trade.id)}
+              onEditTags={tags ? (trade) => setHistoryTagsFor(trade.id) : undefined}
               decimalsOf={decimalsOf}
               onSymbol={pickSymbol}
             />
-          ))}
+          )}
+          </div>
+        )}
       </div>
 
       {/* Окна позиции берут цену монеты своей сделки, а не графика. */}

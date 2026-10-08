@@ -22,15 +22,18 @@ function SegInner<T extends string | number>({
   onChange,
   className,
   ariaLabel,
+  'data-tour': dataTour,
 }: {
   options: readonly SegOption<T>[];
   value: T;
   onChange: (value: T) => void;
   className?: string;
   ariaLabel?: string;
+  /** Метка для обучения и подсказок при наведении — см. тот же проп у `Field`. */
+  'data-tour'?: string;
 }) {
   return (
-    <div className={cn('seg', className)} role="group" aria-label={ariaLabel}>
+    <div className={cn('seg', className)} role="group" aria-label={ariaLabel} data-tour={dataTour}>
       {options.map((opt) => (
         <Button
           key={opt.value}

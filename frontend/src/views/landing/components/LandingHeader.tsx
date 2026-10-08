@@ -7,12 +7,13 @@ import { cn } from '@/shared/lib/utils/css';
 import type { AuthMode } from '@/features/auth';
 import { useActiveSection } from '../lib/useActiveSection';
 
-export const NAV_SECTIONS = ['platform', 'how', 'register'] as const;
+export const NAV_SECTIONS = ['platform', 'how', 'terminal', 'register'] as const;
 export type NavSection = (typeof NAV_SECTIONS)[number];
 
 const LABEL: Record<NavSection, string> = {
   platform: 'navPlatform',
   how: 'navHow',
+  terminal: 'navTerminal',
   register: 'navRegister',
 };
 

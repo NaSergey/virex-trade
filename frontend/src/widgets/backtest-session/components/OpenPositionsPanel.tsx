@@ -76,7 +76,8 @@ export function OpenPositionsPanel({
   onChangeLevels: (trade: BacktestTrade) => void;
   /** Сетка фиксации — лимиты закрытия и стоп за тейками. */
   onCloseGrid: (trade: BacktestTrade) => void;
-  onTags: (trade: BacktestTrade) => void;
+  /** Теги позиции; не задано — кнопки нет. */
+  onTags?: (trade: BacktestTrade) => void;
   /** Нажатие на символ монеты — открыть её на графике (терминал); не задано — символ просто текст. */
   onSymbol?: (symbol: string) => void;
 }) {
@@ -159,7 +160,7 @@ export function OpenPositionsPanel({
       title={t('openPositionsTitle')}
       totalPnl={totalPnl}
       renderAge={(p) => <span className="muted">{fmtSimAge(tradeOf(p).entryTime, cursor, units)}</span>}
-      renderTags={(p) => {
+      renderTags={onTags && ((p) => {
         const trade = tradeOf(p);
         // Теги открытой позиции в таблице не выводятся — только кнопка, которой
         // они меняются: список тегов здесь лишний, а открыть его можно кнопкой.
@@ -172,7 +173,7 @@ export function OpenPositionsPanel({
             </Tooltip>
           </Tags>
         );
-      }}
+      })}
       extraColumns={actions}
       priceDecimals={decimalsOf && ((p) => decimalsOf(p.symbol))}
       onSymbol={onSymbol}

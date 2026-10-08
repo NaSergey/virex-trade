@@ -9,7 +9,7 @@
  * - `ta.pivothigh` / `ta.pivotlow` — вершина строго выше `left` баров слева и
  *   не ниже `right` баров справа (у впадины — зеркально); подтверждается только
  *   через `right` баров, поэтому последние `right` баров вершиной не бывают;
- * - дивергенция — между вершинами RSI (медвежья: цена выше, RSI ниже) или
+ * - дивергенция — между вершинами цены (медвежья: цена выше, RSI ниже) или
  *   впадинами (бычья: цена ниже, RSI выше); правила пары — у `divergencesOf`.
  *
  * Считается по всем загруженным свечам таймфрейма, как у TradingView по всем
@@ -27,6 +27,8 @@ export interface RsiOptions {
   /** Сколько свечей может лежать между вершинами пары — как у встроенного индикатора дивергенций TradingView. */
   minRange: number;
   maxRange: number;
+  /** На сколько свечей пик RSI может отстоять от вершины цены: импульс выдыхается раньше цены. */
+  lag: number;
 }
 
 /** Умолчания скрипта владельца. */
@@ -39,18 +41,25 @@ export const RSI_DEFAULTS: RsiOptions = {
   rightBars: 5,
   minRange: 5,
   maxRange: 60,
+  lag: 3,
 };
 
 export interface Divergence {
   kind: 'bear' | 'bull';
-  /** Индексы свечей двух вершин (впадин) RSI и значения RSI в них. */
+  /** Индексы свечей двух вершин (впадин) цены и цена в них: максимум у медвежьей, минимум у бычьей. По ним линия на графике цены. */
   from: number;
   to: number;
-  fromValue: number;
-  toValue: number;
-  /** Цена в тех же точках: максимум свечи у медвежьей, минимум — у бычьей. По ним линия на графике цены. */
   fromPrice: number;
   toPrice: number;
+  /**
+   * Пики RSI у этих вершин — свои индексы, до `lag` свечей от вершины цены, и
+   * значения в них. По ним линия на панели RSI: пик импульса стоит раньше
+   * вершины цены, и линия от свечи вершины начиналась бы со склона.
+   */
+  rsiFrom: number;
+  rsiTo: number;
+  fromValue: number;
+  toValue: number;
 }
 
 export interface RsiSeries {
@@ -112,66 +121,121 @@ function isPivot(values: readonly number[], p: number, left: number, right: numb
   return true;
 }
 
-interface Anchor {
+interface Swing {
+  /** Вершина цены: свеча и цена. */
   bar: number;
-  value: number;
   price: number;
+  /** Пик RSI у неё: свеча и значение. */
+  rsiBar: number;
+  value: number;
+  /** Конец найденной дивергенции — может начать следующую и вне зоны. */
+  chained: boolean;
 }
 
 /**
- * Дивергенции — в том порядке, в каком их находит проход по барам слева
- * направо: вершина в точке `p` подтверждается на баре `p + right`.
+ * Дивергенции одной стороны — `bear` по максимумам, `bull` по минимумам — в
+ * порядке подтверждения вершин: вершина в точке `p` подтверждается на баре
+ * `p + right`.
  *
- * Правило строже по смыслу и мягче по форме, чем в исходном скрипте, — тот
- * требовал, чтобы ОБЕ вершины стояли в зоне перекупленности (впадины — в
- * перепроданности), и пропускал самый частый случай: RSI был выше 70, а на
- * следующем максимуме цены не дотянул и до 70. Здесь (запрос владельца
- * 2026-09-30 — «лучше отображал дивергенции»):
+ * Вершины ищутся на цене, а не на RSI (жалоба владельца 2026-10-08: «часто
+ * показывает неправильно, на дневке — вообще не так»). Пик RSI приходится на
+ * середину импульса, а цена после него ещё растёт, — линия по цене в свече
+ * пика RSI начиналась со склона, а не с вершины: на 1000 дневных свечах BTC
+ * так стояла половина концов. Дивергенцию читают по вершинам цены — «цена
+ * выше, RSI ниже», — поэтому RSI берётся у них: самый крайний в окне ±`lag`
+ * свечей.
+ *
+ * Правила пары — те же, что были для вершин RSI (запрос владельца 2026-09-30 —
+ * «лучше отображал дивергенции»):
  *
  * - в зоне должна быть ПЕРВАЯ вершина пары — «якорь»; вторая — выше 50 (у
  *   впадин — ниже 50), иначе это уже не ослабление роста, а другой рынок;
- * - между ними от `minRange` до `maxRange` свечей: без потолка пары тянулись бы
- *   через полграфика;
- * - промежуточная вершина ниже якоря и с ценой ниже его не сбивает пару: самая
- *   классическая дивергенция идёт через такой провал;
+ * - между ними от `minRange` до `maxRange` свечей;
  * - найденная дивергенция сама становится якорем: следующее ослабление
- *   продолжает цепочку отрезком от неё, а не веером из одной точки.
+ *   продолжает цепочку отрезком от неё.
+ *
+ * Пара ищется среди прежних вершин от ближней к дальней, поэтому промежуточный
+ * провал её не сбивает. Зато ни одна свеча между вершинами не должна заходить
+ * за линию — ни ценой, ни RSI: иначе смотрят на ту, что зашла, и линия мимо неё
+ * врёт. У самих вершин (в их `left`/`right` свечах) предел — вершина, а не
+ * линия: плато RSI у пика — всё тот же пик. Новая вершина, продолжающая
+ * дивергенцию от того же якоря, удлиняет её линию, а не ставит вторую рядом.
  */
+function divergencesOfSide(
+  kind: 'bear' | 'bull',
+  rsi: readonly number[],
+  price: readonly number[],
+  o: RsiOptions,
+): Divergence[] {
+  // Знак стороны: «выше» у медвежьей — больше, у бычьей — меньше.
+  const s = kind === 'bear' ? 1 : -1;
+  const zone = kind === 'bear' ? o.overbought : o.oversold;
+  const beyond = (a: number, b: number) => s * (a - b) > 0;
+  const crosses = (values: readonly number[], a: number, va: number, b: number, vb: number) => {
+    for (let i = a + 1; i < b; i++) {
+      const line = va + ((vb - va) * (i - a)) / (b - a);
+      const limit = i <= a + o.rightBars ? (beyond(va, line) ? va : line) : i >= b - o.leftBars ? (beyond(vb, line) ? vb : line) : line;
+      if (beyond(values[i], limit)) return true;
+    }
+    return false;
+  };
+
+  const out: Divergence[] = [];
+  // Якорь → индекс его дивергенции в `out`: продолжение заменяет её.
+  const started = new Map<number, number>();
+  const swings: Swing[] = [];
+  for (let p = o.leftBars; p + o.rightBars < price.length; p++) {
+    if (!isPivot(price, p, o.leftBars, o.rightBars, kind === 'bear' ? 'high' : 'low')) continue;
+    let rb = -1;
+    for (let k = Math.max(0, p - o.lag); k <= Math.min(rsi.length - 1, p + o.lag); k++) {
+      if (!Number.isNaN(rsi[k]) && (rb < 0 || beyond(rsi[k], rsi[rb]))) rb = k;
+    }
+    if (rb < 0) continue;
+    const here: Swing = { bar: p, price: price[p], rsiBar: rb, value: rsi[rb], chained: false };
+    if (beyond(here.value, 50)) {
+      for (let j = swings.length - 1; j >= 0; j--) {
+        const a = swings[j];
+        if (p - a.bar < o.minRange) continue;
+        if (p - a.bar > o.maxRange) break;
+        if (!beyond(here.price, a.price) || !beyond(a.value, here.value)) continue;
+        if (!a.chained && beyond(zone, a.value)) continue;
+        if (a.rsiBar >= rb) continue;
+        if (crosses(price, a.bar, a.price, p, here.price) || crosses(rsi, a.rsiBar, a.value, rb, here.value)) continue;
+        const dv: Divergence = {
+          kind,
+          from: a.bar,
+          to: p,
+          fromPrice: a.price,
+          toPrice: here.price,
+          rsiFrom: a.rsiBar,
+          rsiTo: rb,
+          fromValue: a.value,
+          toValue: here.value,
+        };
+        const was = started.get(a.bar);
+        if (was === undefined) {
+          started.set(a.bar, out.length);
+          out.push(dv);
+        } else {
+          out[was] = dv;
+        }
+        here.chained = true;
+        break;
+      }
+    }
+    swings.push(here);
+  }
+  return out;
+}
+
+/** Медвежьи и бычьи дивергенции — по порядку подтверждения второй вершины. */
 export function divergencesOf(
   rsi: readonly number[],
   highs: readonly number[],
   lows: readonly number[],
   o: RsiOptions,
 ): Divergence[] {
-  const out: Divergence[] = [];
-  let top: Anchor | null = null;
-  let bottom: Anchor | null = null;
-  const inRange = (a: Anchor, p: number) => p - a.bar >= o.minRange && p - a.bar <= o.maxRange;
-
-  for (let p = o.leftBars; p + o.rightBars < rsi.length; p++) {
-    const v = rsi[p];
-    if (isPivot(rsi, p, o.leftBars, o.rightBars, 'high')) {
-      if (top && p - top.bar > o.maxRange) top = null;
-      const here = { bar: p, value: v, price: highs[p] };
-      if (top && inRange(top, p) && v > 50 && highs[p] > top.price && v < top.value) {
-        out.push({ kind: 'bear', from: top.bar, to: p, fromValue: top.value, toValue: v, fromPrice: top.price, toPrice: highs[p] });
-        top = here;
-      } else if (v >= o.overbought) {
-        top = here;
-      }
-    }
-    if (isPivot(rsi, p, o.leftBars, o.rightBars, 'low')) {
-      if (bottom && p - bottom.bar > o.maxRange) bottom = null;
-      const here = { bar: p, value: v, price: lows[p] };
-      if (bottom && inRange(bottom, p) && v < 50 && lows[p] < bottom.price && v > bottom.value) {
-        out.push({ kind: 'bull', from: bottom.bar, to: p, fromValue: bottom.value, toValue: v, fromPrice: bottom.price, toPrice: lows[p] });
-        bottom = here;
-      } else if (v <= o.oversold) {
-        bottom = here;
-      }
-    }
-  }
-  return out;
+  return [...divergencesOfSide('bear', rsi, highs, o), ...divergencesOfSide('bull', rsi, lows, o)].sort((a, b) => a.to - b.to);
 }
 
 /** Всё, что рисует панель RSI, по свечам графика. */

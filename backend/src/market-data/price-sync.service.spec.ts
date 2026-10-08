@@ -128,7 +128,7 @@ describe('PriceSyncService', () => {
     await service.sync();
 
     const timeframes = fetchKlines.mock.calls.map((c) => c[1]);
-    expect(timeframes).toEqual([1440, 240, 60, 15, 5, 1]);
+    expect(timeframes).toEqual([1440, 240, 60, 30, 15, 5, 1]);
   });
 
   it('второй одновременный проход не запускается поверх идущего', async () => {

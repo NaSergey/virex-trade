@@ -138,7 +138,7 @@ export const closeSide = (direction: Direction): 'Buy' | 'Sell' => (direction ==
 
 /** Таймфрейм в минутах → интервал Bybit. Неизвестный — null. */
 export function bybitInterval(tf: number): string | null {
-  const map: Record<number, string> = { 1: '1', 5: '5', 15: '15', 60: '60', 240: '240', 1440: 'D' };
+  const map: Record<number, string> = { 1: '1', 5: '5', 15: '15', 30: '30', 60: '60', 240: '240', 1440: 'D' };
   return map[tf] ?? null;
 }
 

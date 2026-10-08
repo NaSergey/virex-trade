@@ -13,17 +13,20 @@ import { RegisterScene } from './components/RegisterScene';
 import { SceneBackground } from './components/SceneBackground';
 import { ScrollProgress } from './components/ScrollProgress';
 import { StepsScene } from './components/StepsScene';
+import { TerminalScene } from './components/TerminalScene';
 
 /**
  * Главная — единственная страница продукта, открытая тому, у кого ещё нет
  * аккаунта, и она же — единственный вход: страницы `/login` и окна входа нет.
  *
  * Продукт — платформа, а не дневник сделок: журнал и аналитика, терминал,
- * тренажёр и игры. Три секции, по вкладке-якорю в шапке на каждую:
+ * тренажёр и игры. Секции, по вкладке-якорю в шапке на каждую:
  *
  *   «Платформа»  — знак, собираемый скроллом, текст по краям;
- *   «Как это работает» — три шага пути (единственная секция, оставшаяся от
- *                  прежней главной);
+ *   «Как это работает» — пять пунктов о том, что есть на платформе;
+ *   «Терминал»   — настоящий терминал продукта на демо-счёте гостя:
+ *                  позиции открываются в браузере, наведение на любую часть
+ *                  объясняет, что она делает;
  *   «Регистрация» — форма; «Войти» в шапке ведёт к ней же в режиме входа.
  *
  * Адрес `/?auth=login|register&next=…&ref=…` — сюда ведут гейт `proxy.ts`,
@@ -65,6 +68,7 @@ export function LandingPage() {
       <main className="ls-dark" id="content" tabIndex={-1}>
         <PlatformScene />
         <StepsScene />
+        <TerminalScene />
         <RegisterScene mode={mode} onMode={setMode} next={next} refCode={refCode} />
       </main>
 

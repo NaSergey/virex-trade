@@ -4,7 +4,6 @@ import { memo, useRef } from 'react';
 import { useGSAP } from '@gsap/react';
 import { gsap } from 'gsap';
 import {
-  CRUMPLE,
   EDGES,
   GLINTS,
   H,
@@ -68,8 +67,8 @@ const FACETS = SHARDS.flatMap(({ id, facets }) =>
  *
  *   1. разметка — построечные линии и вершины;
  *   2. каркас — контуры осколков, затем триангуляция граней проволокой;
- *   3. текстура — отлив, грани по свету, мятое стекло, штриховка; разметка и
- *      проволока гаснут;
+ *   3. текстура — отлив, грани по свету, штриховка; разметка и проволока
+ *      гаснут;
  *   4. кромки прорисовываются, по стеклу проходит блик;
  *   5. искры на углах.
  *
@@ -103,7 +102,6 @@ export const MarkAssembly = memo(function MarkAssembly({ className }: { classNam
       const wire = q('.mk-wire');
       const fills = q('.mk-fill');
       const facets = q('.mk-facet');
-      const crumple = q('.mk-crumple');
       const hatch = q('.mk-hatch');
       const edges = q('.mk-edge');
       const sweep = svg.querySelector('.mk-sweep-grad');
@@ -130,7 +128,6 @@ export const MarkAssembly = memo(function MarkAssembly({ className }: { classNam
         .to(dots, { opacity: 0, scale: 0.4, duration: 0.6, stagger: 0.01 }, 5)
         .to(fills, { opacity: 1, duration: 1, stagger: 0.25 }, 5.2)
         .to(facets, { opacity: 1, duration: 0.5, stagger: 0.035 }, 5.5)
-        .to(crumple, { opacity: 1, duration: 1.2 }, 7)
         .to(hatch, { opacity: 1, duration: 0.8, stagger: 0.15 }, 7.6)
         .to(wire, { opacity: 0, duration: 1 }, 7.6)
         .to(outline, { opacity: 0, duration: 1 }, 8.2)
@@ -219,19 +216,6 @@ export const MarkAssembly = memo(function MarkAssembly({ className }: { classNam
           fillOpacity={Math.abs(tone)}
         />
       ))}
-      <g className="mk-crumple" clipPath="url(#mk-clip)">
-        {CRUMPLE.map(({ tone, d }) => (
-          <path
-            key={tone}
-            d={d}
-            fill={tone > 0 ? '#fff' : '#000'}
-            fillOpacity={Math.abs(tone)}
-            stroke="#fff"
-            strokeOpacity={0.07}
-            strokeWidth={0.35}
-          />
-        ))}
-      </g>
       {SHARDS.flatMap(({ id, outline, hatch = [] }) =>
         hatch.map((angle) => (
           <polygon

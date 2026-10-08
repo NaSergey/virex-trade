@@ -417,8 +417,8 @@ export function OrderPanel({
 
   return (
     <div className="order-panel">
-      <div className="panel-top">
-        <div className="lev" ref={leverageRef}>
+      <div className="panel-top" data-tour="term-deposit">
+        <div className="lev" ref={leverageRef} data-tour="term-leverage">
           <Button
             variant="none"
             className="lev-btn"
@@ -465,7 +465,7 @@ export function OrderPanel({
 
       {tab === 'market' && (
         <>
-      <Field
+      <Field data-tour="term-risk"
         label={
           <span className="fld-head">
             <span className="fld-left">
@@ -488,7 +488,7 @@ export function OrderPanel({
         )}
       </Field>
 
-      <Field
+      <Field data-tour="term-take"
         label={
           <span className="fld-head">
             <TakeTitle profit={takeProfit} />
@@ -514,7 +514,7 @@ export function OrderPanel({
           )
         }
       </Field>
-      <Field
+      <Field data-tour="term-stop"
         label={
           <span className="fld-head">
             <span>{t('stop')}</span>
@@ -539,13 +539,13 @@ export function OrderPanel({
         }
       </Field>
 
-      <div className="size-preview">
+      <div className="size-preview" data-tour="term-size">
         <KeyValue label={t('sizeCoin')}>{preview ? formatQty(Number(preview.qty.toFixed(3))) : '—'}</KeyValue>
         <KeyValue label={t('notionalLabel')}>{preview ? `${formatPriceGrouped(preview.notional)} USDT` : '—'}</KeyValue>
       </div>
       {hint && <p className="neg">{hint}</p>}
 
-      <div className="order-actions">
+      <div className="order-actions" data-tour="term-market-buttons">
         <Button variant="long" onClick={() => onOpen('long')} disabled={disabled || balance <= 0}>
           {t('long')}
         </Button>
@@ -558,7 +558,7 @@ export function OrderPanel({
 
       {tab === 'limit' && (
         <>
-          <Field
+          <Field data-tour="term-risk"
             label={
               <span className="fld-head">
                 <span className="fld-left">
@@ -583,7 +583,7 @@ export function OrderPanel({
             )}
           </Field>
 
-          <Field
+          <Field data-tour="term-entry-price"
             label={
               <span className="fld-head">
                 <span>{t('entryPrice')}</span>
@@ -610,7 +610,7 @@ export function OrderPanel({
             )}
           </Field>
 
-          <Field
+          <Field data-tour="term-take"
             label={
               <span className="fld-head">
                 <TakeTitle profit={lTakeProfit} />
@@ -638,7 +638,7 @@ export function OrderPanel({
               )
             }
           </Field>
-          <Field
+          <Field data-tour="term-stop"
             label={
               <span className="fld-head">
                 <span>{t('stop')}</span>
@@ -664,13 +664,13 @@ export function OrderPanel({
             }
           </Field>
 
-          <div className="size-preview">
+          <div className="size-preview" data-tour="term-size">
             <KeyValue label={t('sizeCoin')}>{lPreview ? formatQty(Number(lPreview.qty.toFixed(3))) : '—'}</KeyValue>
             <KeyValue label={t('notionalLabel')}>{lPreview ? `${formatPriceGrouped(lPreview.notional)} USDT` : '—'}</KeyValue>
           </div>
           {limitHint && <p className="neg">{limitHint}</p>}
 
-          <div className="order-actions">
+          <div className="order-actions" data-tour="term-limit-buttons">
             <Button variant="long" onClick={() => onOpenLimit('long')} disabled={disabled || balance <= 0}>
               {t('long')}
             </Button>
@@ -683,7 +683,7 @@ export function OrderPanel({
 
       {tab === 'scaled' && (
         <>
-          <Field
+          <Field data-tour="term-risk"
             label={
               <span className="fld-head">
                 <span className="fld-left">
@@ -708,7 +708,7 @@ export function OrderPanel({
             )}
           </Field>
 
-          <Field label={t('entryUpper')}>
+          <Field data-tour="term-scaled-range" label={t('entryUpper')}>
             {() =>
               sRange &&
               sUpperPos != null &&
@@ -726,7 +726,7 @@ export function OrderPanel({
               )
             }
           </Field>
-          <Field label={t('entryLower')}>
+          <Field data-tour="term-scaled-range" label={t('entryLower')}>
             {() =>
               sRange &&
               sLowerPos != null &&
@@ -744,7 +744,7 @@ export function OrderPanel({
               )
             }
           </Field>
-          <Field
+          <Field data-tour="term-take"
             label={
               <span className="fld-head">
                 <TakeTitle profit={sTakeProfit} />
@@ -772,7 +772,7 @@ export function OrderPanel({
               )
             }
           </Field>
-          <Field
+          <Field data-tour="term-stop"
             label={
               <span className="fld-head">
                 <span>{t('stop')}</span>
@@ -798,7 +798,7 @@ export function OrderPanel({
             }
           </Field>
 
-          <div className="size-preview">
+          <div className="size-preview" data-tour="term-scaled-count">
             <KeyValue label={t('ordersCount')} control valueClassName="">
               <Input
                 className="order-count"
@@ -810,13 +810,13 @@ export function OrderPanel({
             </KeyValue>
             <KeyValue label={t('gridAvgEntry')}>{sAvgEntry != null ? formatPriceGrouped(sAvgEntry, priceDecimals) : '—'}</KeyValue>
           </div>
-          <div className="size-preview">
+          <div className="size-preview" data-tour="term-size">
             <KeyValue label={t('sizeCoin')}>{sPreview ? formatQty(Number(sPreview.qty.toFixed(3))) : '—'}</KeyValue>
             <KeyValue label={t('notionalLabel')}>{sPreview ? `${formatPriceGrouped(sPreview.notional)} USDT` : '—'}</KeyValue>
           </div>
           {scaledHint && <p className="neg">{scaledHint}</p>}
 
-          <div className="order-actions">
+          <div className="order-actions" data-tour="term-scaled-buttons">
             <Button variant="long" onClick={() => onOpenScaled('long')} disabled={disabled || balance <= 0}>
               {t('long')}
             </Button>

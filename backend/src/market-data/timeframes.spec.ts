@@ -11,8 +11,8 @@ import {
 } from './timeframes';
 
 describe('timeframes', () => {
-  it('перечисляет ровно шесть поддерживаемых таймфреймов, в минутах', () => {
-    expect(TIMEFRAMES).toEqual([1, 5, 15, 60, 240, 1440]);
+  it('перечисляет ровно семь поддерживаемых таймфреймов, в минутах', () => {
+    expect(TIMEFRAMES).toEqual([1, 5, 15, 30, 60, 240, 1440]);
   });
 
   it('держит символ и начало истории константами', () => {
@@ -21,12 +21,13 @@ describe('timeframes', () => {
   });
 
   it('синкает от крупного к мелкому — дневной график появляется первым', () => {
-    expect(SYNC_ORDER).toEqual([1440, 240, 60, 15, 5, 1]);
+    expect(SYNC_ORDER).toEqual([1440, 240, 60, 30, 15, 5, 1]);
   });
 
   it('отвергает таймфрейм вне списка', () => {
     expect(isValidTimeframe(60)).toBe(true);
-    expect(isValidTimeframe(30)).toBe(false);
+    expect(isValidTimeframe(30)).toBe(true);
+    expect(isValidTimeframe(45)).toBe(false);
     expect(isValidTimeframe(0)).toBe(false);
   });
 
@@ -34,13 +35,14 @@ describe('timeframes', () => {
     expect(toBinanceInterval(1)).toBe('1m');
     expect(toBinanceInterval(5)).toBe('5m');
     expect(toBinanceInterval(15)).toBe('15m');
+    expect(toBinanceInterval(30)).toBe('30m');
     expect(toBinanceInterval(60)).toBe('1h');
     expect(toBinanceInterval(240)).toBe('4h');
     expect(toBinanceInterval(1440)).toBe('1d');
   });
 
   it('падает на неизвестном таймфрейме, а не отдаёт undefined в URL', () => {
-    expect(() => toBinanceInterval(30)).toThrow(/30/);
+    expect(() => toBinanceInterval(45)).toThrow(/45/);
   });
 
   it('переводит таймфрейм в миллисекунды', () => {

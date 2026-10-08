@@ -9,7 +9,7 @@ import { cn } from '@/shared/lib/utils/css';
 import { Wrap } from '@/shared/ui/Wrap';
 import { registerGsap } from '../lib/gsapConfig';
 import { prefersReducedMotion } from '../lib/reducedMotion';
-import { revealOnEnter } from '../lib/reveal';
+import { PLAY_ONCE, revealOnEnter } from '../lib/reveal';
 
 const STEPS = [1, 2, 3, 4, 5] as const;
 
@@ -67,7 +67,7 @@ export function StepsScene() {
         const rule = item.querySelector<HTMLElement>('.ls-step-rule');
         const body = gsap.utils.toArray<HTMLElement>('.ls-step-line', item);
         gsap
-          .timeline({ scrollTrigger: { trigger: item, start: 'top 82%', once: true } })
+          .timeline({ scrollTrigger: { trigger: item, start: 'top 82%', toggleActions: PLAY_ONCE } })
           .fromTo(rule, { scaleY: 0 }, { scaleY: 1, duration: 0.7, ease: 'power2.out' }, 0)
           .fromTo(body, { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: 0.8, stagger: 0.1, ease: 'power3.out' }, 0.1);
       });

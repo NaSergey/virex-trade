@@ -167,8 +167,10 @@ main:focus {
 
 
 /* ── три шага ──────────────────────────────────────────────────── */
+/* Нижнего отступа нет: за секцией идёт «Терминал» с линейкой и своим верхним —
+   два вместе давали бы двойной зазор. */
 .ls-steps {
-  padding: var(--s6) 0;
+  padding: var(--s6) 0 0;
 }
 .ls-steps-wrap {
   display: grid;
@@ -256,6 +258,105 @@ main:focus {
   line-height: 1.65;
 }
 
+
+/* ── терминал: настоящий экран продукта на демо-счёте ──────────────── */
+.ls-term {
+  padding-top: var(--s6);
+  border-top: 1px solid var(--hair);
+}
+.ls-term-copy {
+  display: grid;
+  gap: var(--s3);
+  justify-items: start;
+}
+.ls-term-copy .ls-kicker {
+  margin-bottom: 0;
+}
+.ls-term-title {
+  margin: 0;
+  max-width: 22ch;
+  font-size: clamp(28px, 3.6vw, 48px);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+/* Терминал считает свою высоту от шапки продукта (`--top-h` в `.bt-live`); на
+   главной шапка своя. Краски — тёмной темы целиком, включая исходные
+   `--color-*`, которыми терминал красит график: главная тёмная и у того, у кого
+   в продукте выбрана светлая тема. */
+/* Нижний отступ терминала (`.bt-live` в globals.css) на главной не нужен:
+   дальше идёт следующая секция со своим. */
+.ls-tdemo .bt-live {
+  padding-bottom: 0;
+}
+/* Терминал стоит в той же полосе (`Wrap`), что и текст страницы, поэтому свои
+   боковые поля (`px-4` у `.bt-live`) ему не нужны — иначе они сложились бы с
+   полями полосы. */
+.ls-tdemo .bt-live {
+  padding-left: 0;
+  padding-right: 0;
+}
+/* Линия взятой позиции (белая сплошная) на главной тоньше и прозрачнее: рядом
+   с графиком она не должна спорить с ценой и стопом. Только линия — плашка
+   позиции остаётся как есть. */
+.ls-tdemo [data-tour='term-lvl-entry'] > line {
+  stroke-opacity: 0.6;
+  stroke-width: 0.75px;
+  vector-effect: non-scaling-stroke;
+}
+.ls-tdemo {
+  --top-h: var(--ls-nav-h);
+  --color-app: #050505;
+  --color-band: #0b0b0a;
+  --color-surface: #0b0b0a;
+  --color-elevated: #0b0b0a;
+  --color-elevated-2: #0b0b0a;
+  --color-fg: #e8e4dc;
+  --color-muted: #8e887e;
+  --color-subtle: #565149;
+  --color-line: rgba(232, 228, 220, 0.14);
+  --color-line-2: rgba(232, 228, 220, 0.26);
+  --color-line-strong: rgba(232, 228, 220, 0.3);
+  --color-major: rgba(232, 228, 220, 0.85);
+  --color-meta: #7c8ca6;
+  --color-meta-dim: #5d6b80;
+  --color-up: #5ba378;
+  --color-down: #c9524a;
+  --color-warn: #b8893f;
+  --color-accent: #e8e4dc;
+  --color-background: #050505;
+  --color-foreground: #e8e4dc;
+  --color-muted-foreground: #8e887e;
+  --color-ring: #e8e4dc;
+  --ground-rgb: 5 5 5;
+  --scheme: dark;
+}
+
+/* Подсказка при наведении — выворот, как выбранное в системе. Стоит в окне
+   (`fixed`) у курсора; место пишет `TerminalHints` прямо в `translate`. */
+.ls-hint {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 45;
+  display: grid;
+  gap: var(--s1);
+  width: max-content;
+  max-width: min(300px, calc(100vw - 16px));
+  padding: var(--s2) var(--s3);
+  background: var(--ink);
+  color: var(--ground);
+  font-size: var(--t-xs);
+  line-height: 1.5;
+  pointer-events: none;
+}
+.ls-hint strong {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
 
 /* ── футер ─────────────────────────────────────────────────────── */
 .lp-foot {
@@ -448,7 +549,6 @@ html {
   .mk-dot,
   .mk-fill,
   .mk-facet,
-  .mk-crumple,
   .mk-hatch,
   .mk-glint {
     opacity: 0;
@@ -545,12 +645,16 @@ html {
 
   .ls-steps {
     padding-top: var(--s5);
-    padding-bottom: var(--s5);
+    padding-bottom: 0;
   }
   .ls-steps-list {
     gap: var(--s5);
   }
 
+  .ls-term {
+    padding-top: var(--s5);
+  }
+  
   .ls-register {
     padding: var(--s5) 0;
     min-height: 0;

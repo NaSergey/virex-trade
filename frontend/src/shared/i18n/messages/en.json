@@ -724,6 +724,143 @@
     "navLabel": "Page sections",
     "navPlatform": "Platform",
     "navHow": "How it works",
+    "navTerminal": "Terminal",
+    "term": {
+      "kicker": "Terminal",
+      "title": "The same terminal as inside. Try it",
+      "lede": "Live market, size from risk, limit orders, a take-profit grid and a stop that trails the targets. Hover any part and it explains what it does. You can really open a position: it stays in your browser.",
+      "badge": "Demo · account in your browser",
+          "errors": {
+        "noBalance": "The demo deposit is gone — start over",
+        "stopSide": "The stop is on the wrong side of the entry",
+        "takeSide": "The target is on the wrong side of the entry",
+        "margin": "Margin exceeds the deposit — lower the risk or raise the leverage",
+        "qty": "The size exceeds what is left of the position",
+        "gone": "The position is already closed"
+      },
+      "hints": {
+        "sound": {
+          "title": "Sound",
+          "body": "Signals for a fill, a target, a stop, a placed and a cancelled order. The melody tells it: up is good, down is bad."
+        },
+        "draw": {
+          "title": "Drawing",
+          "body": "Lines, rays, levels, Fibonacci, long and short position, brush, ruler. The magnet snaps a point to a candle's price."
+        },
+        "position": {
+          "title": "Position on the chart",
+          "body": "Result now and size. ⇅ — press and drag to set a stop or a target. The ladder — take-profit grid, ✕ — close at market."
+        },
+        "stopLine": {
+          "title": "Stop",
+          "body": "Drag the line to move the level. The label shows how much you lose if it fires."
+        },
+        "takeLine": {
+          "title": "Target",
+          "body": "Drag the line to move it. The label shows what closing there brings, ✕ removes the target."
+        },
+        "liq": {
+          "title": "Liquidation",
+          "body": "The price at which the exchange would close the position. The higher the leverage, the closer it is to the entry."
+        },
+        "limitClose": {
+          "title": "Closing limit",
+          "body": "Part of the position closes when price reaches the level. Drag to move, ✕ to cancel."
+        },
+        "pendingEntry": {
+          "title": "Entry limit",
+          "body": "Waits for its price. Once filled, it opens a position with its own stop and target, or adds to the open one. Drag to move, ✕ to cancel."
+        },
+        "gridTake": {
+          "title": "Grid levels",
+          "body": "The first and last target can be dragged; the ones between sit at an equal step."
+        },
+        "draft": {
+          "title": "Order draft",
+          "body": "This is where the order will sit if you send it. Drag the line — the panel field moves with it."
+        },
+        "platePick": {
+          "title": "Set a stop or a target",
+          "body": "Press and drag from the price: towards a loss — a stop, towards a profit — a target."
+        },
+        "plateGrid": {
+          "title": "Take-profit grid",
+          "body": "Opens the grid panel: several limits that close the position in parts and a stop that trails the targets."
+        },
+        "plateX": {
+          "title": "Close or cancel",
+          "body": "On a position — close at market, on a target — remove it, on an order — cancel it."
+        },
+        "badge": {
+          "title": "Demo account",
+          "body": "10,000 USDT that live only in your browser. In the product this spot says \"Live\" or \"Bybit · real account\"."
+        },
+        "tables": {
+          "title": "Tables",
+          "body": "Open positions, pending orders and the history of closed trades."
+        },
+        "orders": {
+          "title": "Orders",
+          "body": "Entry limits and closing limits. Any of them can be cancelled here or on the chart."
+        },
+        "history": {
+          "title": "History",
+          "body": "Closed trades: the result in USDT and in R — in units of the risk you put on them."
+        },
+        "deposit": {
+          "title": "Deposit",
+          "body": "The risk of every trade is computed from it. Closed trades change it by their result after fees."
+        },
+        "leverage": {
+          "title": "Leverage",
+          "body": "Goes with every order. It does not change the position size — only the margin behind it and the liquidation price."
+        },
+        "risk": {
+          "title": "Risk",
+          "body": "The share of the deposit you lose if the stop fires. The same amount in USDT is on the right."
+        },
+        "take": {
+          "title": "Target",
+          "body": "The profit-taking price, optional. On the right — percent from the entry."
+        },
+        "stop": {
+          "title": "Stop",
+          "body": "Mandatory: the size is computed from it. Risk ÷ distance to the stop = position size."
+        },
+        "entryPrice": {
+          "title": "Limit price",
+          "body": "A buy sits below the current price, a sell — above. The slider is in percent of the price; you can also type a number."
+        },
+        "scaledRange": {
+          "title": "Grid range",
+          "body": "The top and bottom between which entry orders sit at an equal step."
+        },
+        "scaledCount": {
+          "title": "Number of orders",
+          "body": "How many limits to split the entry into, 1 to 10. Next to it — the average price if all fill."
+        },
+        "size": {
+          "title": "Size",
+          "body": "Computed for you: risk ÷ |entry − stop|. Next to it — the position's notional in USDT."
+        },
+        "marketButtons": {
+          "title": "Long and short",
+          "body": "Enter at market. If a position on that side is already open, the order adds to it at its stop."
+        },
+        "limitButtons": {
+          "title": "Place a limit",
+          "body": "Long — a buy order below the price, short — a sell above. The order appears on the chart."
+        },
+        "scaledButtons": {
+          "title": "Place the grid",
+          "body": "Places every level at once; each one that fills opens the position or adds to it."
+        },
+        "closeGrid": {
+          "title": "Take-profit grid",
+          "body": "Targets in parts: you set the first and the last, the rest sit at an equal step. The checkbox makes the stop trail: to breakeven after the first, then to the previous target's price."
+        }
+      }
+    },
     "navRegister": "Sign up",
     "platformTitle": "Trade Play — a platform for traders",
     "registerTitle": "Start with ten tagged trades",
@@ -1011,6 +1148,7 @@
       "1": "1m",
       "5": "5m",
       "15": "15m",
+      "30": "30m",
       "60": "1h",
       "240": "4h",
       "1440": "1d"
