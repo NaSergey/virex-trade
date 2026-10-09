@@ -21,6 +21,7 @@ import {
 } from '../lib/motion';
 import type { Candle } from '../lib/candles';
 import { RSI_DEFAULTS, rsiSeries } from '../lib/rsi';
+import type { ChartRange } from '../lib/ranges';
 
 const W = 720;
 /** Высота холста до первого замера коробки; дальше её задаёт сама коробка (см. H в компоненте). */
@@ -260,6 +261,7 @@ export const ReplayChart = memo(function ReplayChart({
   onCancelOrder,
   onCloseGrid,
   rsi = false,
+  ranges,
 }: {
   /** ТФ свечей в `candles`, в минутах. */
   timeframe: number;
@@ -299,6 +301,11 @@ export const ReplayChart = memo(function ReplayChart({
    * не нужен.
    */
   rsi?: boolean;
+  /**
+   * Рамки боковиков (`lib/ranges.ts`) и диапазоны грид-бота — во времени и
+   * экранных ценах. Ссылка стабильная — см. memo.
+   */
+  ranges?: ChartRange[];
 }) {
   const t = useTranslations('backtest');
   const svgRef = useRef<SVGSVGElement>(null);
@@ -1279,6 +1286,47 @@ export const ReplayChart = memo(function ReplayChart({
   const rsiLast = rsiData ? rsiData.rsi[rsiData.rsi.length - 1] : NaN;
 
   /**
+   * Рамки боковиков: пунктир — задним числом (от вершины импульса до свечи, на
+   * которой о рамке узнали), дальше — заливка и границы ступенями, какими их
+   * знали. Диапазон бота — двумя линиями, без пунктира и заливки. Несколько путей
+   * на весь кадр, тем же приёмом, что свечи.
+   */
+  const rangePaths = useMemo(() => {
+    if (!ranges || ranges.length === 0 || candles.length === 0) return null;
+    const r = (v: number) => Math.round(v * 100) / 100;
+    const xAt = (t: number) => (frameAtTime(candles, t) - frameStart) * slot;
+    const plotHeight = plotBottom - PT;
+    const yOf = (p: number) => PT + ((hi - p) / (hi - lo)) * plotHeight;
+    const lastT = candles[candles.length - 1].t + timeframe * 60_000;
+    let dash = '';
+    let edge = '';
+    let fill = '';
+    let bot = '';
+    for (const rg of ranges) {
+      const x0 = xAt(rg.from);
+      const x1 = xAt(rg.seen);
+      const x2 = xAt(rg.end ?? lastT);
+      if (x2 < -slot || x0 > PW + slot) continue;
+      const s0 = rg.steps[0];
+      if (rg.kind === 'bot') {
+        bot += `M${r(x1)} ${r(yOf(s0.hi))}H${r(x2)}M${r(x1)} ${r(yOf(s0.lo))}H${r(x2)}`;
+        continue;
+      }
+      if (x1 > x0) dash += `M${r(x0)} ${r(yOf(s0.hi))}H${r(x1)}V${r(yOf(s0.lo))}H${r(x0)}z`;
+      rg.steps.forEach((st, k) => {
+        const a = xAt(st.t);
+        const b = k + 1 < rg.steps.length ? xAt(rg.steps[k + 1].t) : x2;
+        fill += `M${r(a)} ${r(yOf(st.hi))}H${r(b)}V${r(yOf(st.lo))}H${r(a)}z`;
+        edge += `M${r(a)} ${r(yOf(st.hi))}H${r(b)}M${r(a)} ${r(yOf(st.lo))}H${r(b)}`;
+      });
+      edge += `M${r(x1)} ${r(yOf(s0.hi))}V${r(yOf(s0.lo))}`;
+      const sl = rg.steps[rg.steps.length - 1];
+      if (rg.end != null) edge += `M${r(x2)} ${r(yOf(sl.hi))}V${r(yOf(sl.lo))}`;
+    }
+    return { dash, edge, fill, bot };
+  }, [ranges, candles, frameStart, slot, plotBottom, hi, lo, timeframe, PW]);
+
+  /**
    * Последняя свеча, линия текущей цены и её плашка пишутся прямо в DOM, как
    * перекрестие (см. updateCross): кадр анимации зовёт это без рендера, а после
    * каждого рендера эффект ниже ставит их заново по новой геометрии — пан, зум и
@@ -1486,6 +1534,27 @@ export const ReplayChart = memo(function ReplayChart({
             {/* Всё, что относится к цене, — в поле цены: при ручном зуме свечи и
                 рисунки иначе заходили бы на панель RSI. */}
             <g clipPath={`url(#${clipId}-price)`}>
+            {/* Рамки боковиков — под свечами: свечи важнее разметки поверх них. */}
+            {rangePaths && (
+              <g pointerEvents="none">
+                <path d={rangePaths.fill} fill="var(--color-fg)" fillOpacity={0.05} />
+                <path
+                  d={rangePaths.dash}
+                  fill="none"
+                  stroke="var(--color-muted)"
+                  strokeWidth={px(1)}
+                  strokeDasharray={`${px(4)} ${px(4)}`}
+                />
+                <path d={rangePaths.edge} fill="none" stroke="var(--color-fg)" strokeOpacity={0.55} strokeWidth={px(1)} />
+                <path
+                  d={rangePaths.bot}
+                  fill="none"
+                  stroke="var(--color-muted)"
+                  strokeWidth={px(1)}
+                  strokeDasharray={`${px(2)} ${px(3)}`}
+                />
+              </g>
+            )}
             <path d={candlePaths.upWicks} stroke="var(--profit)" strokeWidth={px(1)} fill="none" />
             <path d={candlePaths.downWicks} stroke="var(--loss)" strokeWidth={px(1)} fill="none" />
             <path d={candlePaths.upBodies} fill="var(--profit)" />

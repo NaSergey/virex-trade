@@ -44,7 +44,32 @@ describe('draftLevels', () => {
     };
     expect(ids({ ...drafts, tab: 'market' })).toEqual(['draft-stop']);
     expect(ids({ ...drafts, tab: 'limit' })).toEqual(['draft-limit-entry', 'draft-limit-stop', 'draft-limit-take']);
-    expect(ids({ ...drafts, tab: 'scaled' })).toEqual(['draft-grid-upper', 'draft-grid-lower', 'draft-grid-stop', 'draft-grid-take']);
+    // Три ордера сетки: верх, низ и один промежуточный между ними.
+    expect(ids({ ...drafts, tab: 'scaled' })).toEqual([
+      'draft-grid-upper',
+      'draft-grid-lower',
+      'draft-grid-step-0',
+      'draft-grid-stop',
+      'draft-grid-take',
+    ]);
+  });
+
+  it('«Бот»: верх, низ, промежуточные покупки без захвата и стоп; без черновика — ничего', () => {
+    const bot = { upper: 64_000, lower: 60_000, stop: 59_000, count: 4 };
+    const levels = draftLevels({ ...base, tab: 'bot', bot });
+    expect(levels.map((l) => l.id)).toEqual([
+      'draft-bot-upper',
+      'draft-bot-lower',
+      'draft-bot-step-1',
+      'draft-bot-step-2',
+      'draft-bot-step-3',
+      'draft-bot-stop',
+    ]);
+    expect(levels.filter((l) => l.kind === 'gridStep').map((l) => l.price)).toEqual([61_000, 62_000, 63_000]);
+    expect(levels.filter((l) => l.kind === 'gridStep').every((l) => !l.draggable)).toBe(true);
+    // Бот работает — черновика нет; другая вкладка — тоже.
+    expect(ids({ tab: 'bot', bot: null })).toEqual([]);
+    expect(ids({ tab: 'market', bot })).toEqual([]);
   });
 
   it('лимит считает размер от своей цены входа, а не от рыночной', () => {

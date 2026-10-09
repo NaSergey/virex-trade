@@ -11,14 +11,15 @@ import {
   useVolatility,
   useLiquidityHistory,
 } from './api/hooks';
-import { useHourlyStats, useMarketCorrelation } from './api/market-events-hooks';
+import { useHourlyStats } from './api/market-events-hooks';
+import { useSeasonality } from '@/entities/market-seasonality';
 import { Wrap } from '@/shared/ui/Wrap';
 import { Seg } from '@/shared/ui/Seg';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { MacroSnapshot } from './components/MacroSnapshot';
 import { Positioning } from './components/Positioning';
 import { HourlyVolatility } from './components/HourlyVolatility';
-import { WeekdayOdds } from './components/WeekdayOdds';
+import { TimeOdds } from './components/TimeOdds';
 
 const SYMBOLS = [
   { value: 'BTCUSDT', label: 'BTC' },
@@ -44,8 +45,10 @@ const SYMBOLS = [
  *   на бэкенде живёт дольше остального на странице, а потому что новая точка
  *   там физически не появляется чаще: `LiquiditySnapshotService` пишет её
  *   раз в 15 минут — снимать книгу заявок глубиной 200 уровней чаще незачем;
- * - **справа — «как обычно»**: дни недели и часы. Оба считаются по одной и той
- *   же истории в год или два и меняются раз в полчаса.
+ * - **справа — «как обычно»**: «Когда BTC чаще растёт» (по дню недели и
+ *   времени, на выбранном таймфрейме — спека 2026-10-08) и волатильность по
+ *   часам. Обе считаются по одной и той же истории в год или два и меняются
+ *   раз в полчаса.
  *
  * Отсюда и место тумблеров: инструмент управляет только «Позиционированием» и
  * стоит на его линейке, глубина истории — обеими разбивками справа и стоит на
@@ -55,18 +58,23 @@ const SYMBOLS = [
  * укладываются в один.
  *
  * Пропорция 7 к 5 (`.asym.pair`), а не обычные 8 к 3: справа не маргиналия при
- * тексте, а вторая полноценная дорожка — семь строк недели требуют ширины под
- * полосу, иначе она схлопывается в огрызок.
+ * тексте, а вторая полноценная дорожка — строкам времени нужна ширина под
+ * полосу «рост / падение», иначе она схлопывается в огрызок.
  */
 export const MarketPage = () => {
   const t = useTranslations('market');
   const [symbol, setSymbol] = useState('BTCUSDT');
   const [historyDays, setHistoryDays] = useState(365);
+  const [oddsTf, setOddsTf] = useState(60);
+  const tb = useTranslations('backtest');
 
   const HISTORY = [
     { value: 365, label: t('history1y') },
     { value: 730, label: t('history2y') },
   ];
+  // Только 1ч, 4ч и 1д (владелец 2026-10-08 снял 15м и 30м): мельче — десятки
+  // строк в дне. В терминале мелкие таймфреймы остаются.
+  const ODDS_TFS = [60, 240, 1440].map((tf) => ({ value: tf, label: tb(`tf.${tf}`) }));
 
   // isLoading, а не isFetching: смена инструмента или глубины истории
   // перечитывает срез, и подменять уже показанные числа заглушками значило бы
@@ -75,7 +83,7 @@ export const MarketPage = () => {
   const { data: volatility, isLoading: volatilityLoading } = useVolatility(symbol);
   const { data: liquidityHistory, isLoading: liquidityLoading } = useLiquidityHistory(symbol);
   const { data: hourly, isLoading: hourlyLoading } = useHourlyStats(historyDays);
-  const { data: corr, isLoading: corrLoading } = useMarketCorrelation(historyDays);
+  const { data: odds, isLoading: oddsLoading } = useSeasonality(oddsTf, historyDays);
   const { data: marketData, isLoading: marketLoading } = useMarketData();
   const { data: fearGreed, isLoading: fearGreedLoading } = useFearAndGreed();
   const { data: cmc20, isLoading: cmc20Loading } = useCMC20();
@@ -111,10 +119,13 @@ export const MarketPage = () => {
         </div>
 
         <aside className="marg">
-          <SectionHead title={t('weekdayOddsTitle')}>
-            <Seg options={HISTORY} value={historyDays} onChange={setHistoryDays} ariaLabel={t('historyDepthAriaLabel')} />
+          <SectionHead title={t('oddsTitle')}>
+            <div className="to-ctl">
+              <Seg options={ODDS_TFS} value={oddsTf} onChange={setOddsTf} ariaLabel={t('oddsTfAriaLabel')} />
+              <Seg options={HISTORY} value={historyDays} onChange={setHistoryDays} ariaLabel={t('historyDepthAriaLabel')} />
+            </div>
           </SectionHead>
-          <WeekdayOdds corr={corr} isLoading={corrLoading} />
+          <TimeOdds data={odds} isLoading={oddsLoading} period={historyDays === 730 ? t('history2y') : t('history1y')} />
 
           <SectionHead title={t('hourlyVolatilityTitle')} style={{ marginTop: 'var(--s5)' }} />
           <HourlyVolatility hours={hourly?.hourly ?? []} isLoading={hourlyLoading} />

@@ -105,6 +105,7 @@ export const MarkAssembly = memo(function MarkAssembly({ className }: { classNam
       const hatch = q('.mk-hatch');
       const edges = q('.mk-edge');
       const sweep = svg.querySelector('.mk-sweep-grad');
+      const sweepRect = svg.querySelector('.mk-sweep');
       const glints = q('.mk-glint');
       const glintK = glints.map((g) => Number(g.dataset.k ?? 1));
 
@@ -133,7 +134,12 @@ export const MarkAssembly = memo(function MarkAssembly({ className }: { classNam
         .to(outline, { opacity: 0, duration: 1 }, 8.2)
         // 4 · кромки и блик
         .to(edges, { ...draw, duration: 0.6, stagger: 0.02, ease: 'power1.out' }, 8.4)
+        // Блик рисуется только на своём отрезке: наложение `screen` на весь
+        // знак — больше половины растра каждого кадра сборки, даже когда
+        // полоса стоит за краем знака и ничего не видно.
+        .set(sweepRect, { display: 'inline' }, 9)
         .fromTo(sweep, { attr: { x1: -90, x2: -20 } }, { attr: { x1: W + 40, x2: W + 110 }, duration: 1.6, ease: 'power1.inOut' }, 9)
+        .set(sweepRect, { display: 'none' }, 10.6)
         // 5 · искры
         .to(glints, { opacity: (i: number) => glintK[i], scale: 1, duration: 0.7, stagger: 0.12, ease: 'back.out(3)' }, 9.8)
         // Хвост: знак стоит собранным, пока скролл доезжает до конца секции.

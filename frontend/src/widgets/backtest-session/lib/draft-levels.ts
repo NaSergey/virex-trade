@@ -10,6 +10,8 @@ export interface DraftLevelsInput {
   market: { stop: number; take: number | null; risk: number };
   limit: { entry: number | null; stop: number; take: number | null; risk: number };
   scaled: { upper: number | null; lower: number | null; stop: number; take: number | null; count: number; risk: number };
+  /** Черновик грид-бота; null — бот работает или вкладки нет. */
+  bot?: { upper: number | null; lower: number | null; stop: number; count: number } | null;
   /** Настоящая цена и она же в экранных единицах; null — цены ещё нет. */
   livePrice: number | null;
   screenPrice: number | null;
@@ -31,7 +33,7 @@ export interface DraftLevelsInput {
  * тейк, и линии закрытых вкладок висели бы на графике уровнями ордера,
  * которого никто не собирается отправлять.
  */
-export function draftLevels({ tab, market, limit, scaled, livePrice, screenPrice, balance, leverage, scale }: DraftLevelsInput): Level[] {
+export function draftLevels({ tab, market, limit, scaled, bot, livePrice, screenPrice, balance, leverage, scale }: DraftLevelsInput): Level[] {
   const list: Level[] = [];
 
   if (tab === 'market' && market.stop > 0 && livePrice != null && screenPrice != null) {
@@ -142,6 +144,21 @@ export function draftLevels({ tab, market, limit, scaled, livePrice, screenPrice
     if (scaled.take != null && scaled.take > 0) {
       list.push({ id: 'draft-grid-take', kind: 'take', price: scaled.take, draggable: true, impactAt });
     }
+  }
+
+  // Черновик грид-бота: верх и низ тянутся, промежуточные покупки — без захвата
+  // (двигается диапазон, а не отдельный уровень), стоп тянется.
+  if (tab === 'bot' && bot && livePrice != null) {
+    const { upper, lower, stop, count } = bot;
+    if (upper != null && upper > 0) list.push({ id: 'draft-bot-upper', kind: 'gridUpper', price: upper, draggable: true });
+    if (lower != null && lower > 0) list.push({ id: 'draft-bot-lower', kind: 'gridLower', price: lower, draggable: true });
+    if (upper != null && lower != null && upper > lower && count >= 2) {
+      const step = (upper - lower) / count;
+      for (let j = 1; j < count; j++) {
+        list.push({ id: `draft-bot-step-${j}`, kind: 'gridStep', price: lower + j * step, draggable: false });
+      }
+    }
+    if (stop > 0) list.push({ id: 'draft-bot-stop', kind: 'stop', price: stop, draggable: true });
   }
 
   return list;

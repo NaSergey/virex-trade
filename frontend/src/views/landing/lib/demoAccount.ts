@@ -21,7 +21,8 @@ import type {
  * ему приносит опрос рынка.
  */
 
-type VarsOf<K extends keyof TerminalActions> = Parameters<TerminalActions[K]['mutateAsync']>[0];
+/** Одиночные действия терминала — без набора грид-бота (`bot`) и признаков исполнителя. */
+type VarsOf<K extends Exclude<keyof TerminalActions, 'bot' | 'gridStopAfter'>> = Parameters<TerminalActions[K]['mutateAsync']>[0];
 export type OpenVars = VarsOf<'open'>;
 export type AddVars = VarsOf<'addToTrade'>;
 export type ModifyVars = VarsOf<'modify'>;
@@ -155,15 +156,20 @@ export function addToTrade(s: DemoState, v: AddVars): DemoState {
   return addInto(s, openOf(s, v.tradeId), v);
 }
 
-/** Объём добора — от риска входа и стопа позиции: уровни у позиции одни (`addInTx`). */
+/**
+ * Объём добора — от риска входа и стопа позиции: уровни у позиции одни. Средняя и
+ * маржа — от остатка (`qty − closedQty`), как у сервера (`addCore`): `qty` —
+ * всё, что вошло в позицию, и проданный объём не должен тянуть среднюю.
+ */
 function addInto(s: DemoState, trade: BacktestTrade, v: { entryTime: string; entryPrice: number; riskPct: number }): DemoState {
   if (s.balance <= 0) throw new DemoError('noBalance');
   const addRisk = (s.balance * v.riskPct) / 100;
   const addQty = addRisk / Math.abs(v.entryPrice - trade.stopLoss);
+  const remaining = trade.qty - trade.closedQty;
   const qty = trade.qty + addQty;
-  const entryPrice = (trade.qty * trade.entryPrice + addQty * v.entryPrice) / qty;
+  const entryPrice = (remaining * trade.entryPrice + addQty * v.entryPrice) / (remaining + addQty);
   checkSides(trade.direction, entryPrice, trade.stopLoss, trade.takeProfit);
-  if ((qty * entryPrice) / trade.leverage > s.balance) throw new DemoError('margin');
+  if (((remaining + addQty) * entryPrice) / trade.leverage > s.balance) throw new DemoError('margin');
   const riskUsdt = trade.riskUsdt + addRisk;
   return replaceTrade(s, {
     ...trade,
@@ -262,7 +268,7 @@ export function createEntryOrders(s0: DemoState, v: EntryOrdersVars, now: number
   for (const price of v.prices) checkSides(v.direction, price, v.stopLoss, v.takeProfit);
   let s = s0;
   const orders: BacktestEntryOrder[] = [];
-  for (const price of v.prices) {
+  for (const [i, price] of v.prices.entries()) {
     const [id, s1] = nextId(s);
     s = s1;
     orders.push({
@@ -271,7 +277,8 @@ export function createEntryOrders(s0: DemoState, v: EntryOrdersVars, now: number
       symbol: v.symbol ?? DEFAULT_SYMBOL,
       direction: v.direction,
       price,
-      riskPct: v.riskPct,
+      // Риск уровня из таблицы «Сетки», если она его задала.
+      riskPct: v.riskPcts?.[i] ?? v.riskPct,
       stopLoss: v.stopLoss,
       takeProfit: v.takeProfit ?? null,
       leverage: v.leverage,

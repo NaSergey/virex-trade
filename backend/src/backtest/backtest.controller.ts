@@ -16,6 +16,7 @@ import {
   OpenTradeDto,
   SetBacktestTagsDto,
   SetLeverageDto,
+  StartBotDto,
 } from './dto/backtest.dto';
 
 @UseGuards(JwtAuthGuard)
@@ -130,6 +131,16 @@ export class BacktestController {
   @Delete('entry-orders/:id')
   cancelEntryOrder(@CurrentUser('userId') userId: string, @Param('id') id: string) {
     return this.backtest.cancelEntryOrder(userId, id);
+  }
+
+  @Post('sessions/:id/bots')
+  startBot(@CurrentUser('userId') userId: string, @Param('id') id: string, @Body() dto: StartBotDto) {
+    return this.backtest.startBot(userId, id, { ...dto, entryTime: new Date(dto.entryTime) });
+  }
+
+  @Post('bots/:id/stop')
+  stopBot(@CurrentUser('userId') userId: string, @Param('id') id: string) {
+    return this.backtest.stopBot(userId, id);
   }
 
   @Get('stats')

@@ -1,16 +1,14 @@
 'use client';
 
-import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Equal } from 'lucide-react';
 import { Button } from '@/shared/ui/Button';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { Field, Input } from '@/shared/ui/Field';
+import { EditCell, SplitHeader, withPin } from './EditCell';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import { KeyValue } from '@/shared/ui/Lookup';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { Slider } from '@/shared/ui/Slider';
-import { Tooltip } from '@/shared/ui/Tooltip';
 import { fmtPctSigned, formatMoney, formatPriceGrouped, formatQty, moneyClass } from '@/shared/lib/utils/format';
 import type { BacktestTrade } from '../api/types';
 import { checkCloseGridSide, closeGridAnchor, closeGridFromDraft, type CloseGridDraft, type CloseGridRow } from '../lib/close-grid';
@@ -24,82 +22,6 @@ export interface CloseGridSubmit {
   qtys: number[];
   stops?: number[];
   stopFollow: boolean;
-}
-
-/** Закрепление по номеру уровня: число — закрепить, null — снять. */
-const withPin = (pins: Record<number, number>, i: number, v: number | null): Record<number, number> => {
-  const next = { ...pins };
-  if (v == null) delete next[i];
-  else next[i] = v;
-  return next;
-};
-
-/**
- * Ячейка таблицы, которую правят руками: тихая заливка без рамки, как поля
- * биржевых терминалов, под курсором — плотнее, в фокусе — черта снизу.
- * Посчитанное значение приглушено, закреплённое руками — ярче и с чертой слева.
- * `note` — мелкая подпись в той же ячейке слева (монеты у доли объёма).
- *
- * В фокусе — свой текст, как его набирают; ушёл фокус или нажат Enter —
- * значение закрепляется, пустое снимает закрепление, неразборчивое оставляет
- * прежнее, Esc отменяет правку.
- */
-function EditCell({
-  display,
-  note,
-  pinned,
-  ignored,
-  label,
-  hint,
-  onCommit,
-}: {
-  display: string;
-  note?: string;
-  pinned: boolean;
-  /** Закреплённое ничего не изменит (стоп слабее прежнего) — значение зачёркнуто. */
-  ignored?: boolean;
-  label: string;
-  hint: string;
-  onCommit: (v: number | null) => void;
-}) {
-  const [text, setText] = useState<string | null>(null);
-  const cancelled = useRef(false);
-  const commit = () => {
-    const raw = (text ?? '').replace(/[\s%]/g, '').replace(',', '.');
-    setText(null);
-    if (cancelled.current) {
-      cancelled.current = false;
-      return;
-    }
-    if (text == null) return;
-    if (raw === '') return onCommit(null);
-    const v = Number(raw);
-    if (Number.isFinite(v) && v > 0) onCommit(v);
-  };
-  return (
-    <label className="cg-edit" data-pinned={pinned || undefined} data-ignored={ignored || undefined} title={hint}>
-      {note != null && <span className="cg-note">{note}</span>}
-      <Input
-        className="cg-cell"
-        inputMode="decimal"
-        aria-label={label}
-        value={text ?? display}
-        onFocus={(e) => {
-          setText(display.replace(/[\s%]/g, ''));
-          e.currentTarget.select();
-        }}
-        onChange={(e) => setText(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') e.currentTarget.blur();
-          if (e.key === 'Escape') {
-            cancelled.current = true;
-            e.currentTarget.blur();
-          }
-        }}
-      />
-    </label>
-  );
 }
 
 /**
@@ -173,14 +95,8 @@ export function CloseGridPanel({
     {
       key: 'qty',
       label: t('colOrderQty'),
-      // Заголовок — кнопка: снять закрепления и поделить объём поровну.
       header: (
-        <Tooltip text={t('closeGridSplit')}>
-          <Button variant="none" className="cg-split" onClick={() => onDraft({ ...draft, qtyPins: {} })}>
-            <Equal size={9} aria-hidden />
-            {t('colOrderQty')}
-          </Button>
-        </Tooltip>
+        <SplitHeader label={t('colOrderQty')} hint={t('closeGridSplit')} onSplit={() => onDraft({ ...draft, qtyPins: {} })} />
       ),
       align: 'right',
       render: (r) => (

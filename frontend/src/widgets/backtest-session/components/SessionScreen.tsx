@@ -13,7 +13,7 @@ import { SectionHead } from '@/shared/ui/SectionHead';
 import { Seg, type SegOption } from '@/shared/ui/Seg';
 import { Wrap } from '@/shared/ui/Wrap';
 import { formatPriceGrouped } from '@/shared/lib/utils/format';
-import { useBacktestSession, isLiveSession, useDecimalsOf, useFinishSession, useLivePrices, useLiveSymbols } from '../api/hooks';
+import { fetchCandles, useBacktestSession, isLiveSession, useDecimalsOf, useFinishSession, useLivePrices, useLiveSymbols } from '../api/hooks';
 import {
   DEFAULT_SYMBOL,
   type BacktestTrade,
@@ -25,6 +25,9 @@ import {
 import { TIMEFRAMES, dayNumber, scaleCandle } from '../lib/candles';
 import { CLOSE_GRID_FIRST_ID, CLOSE_GRID_LAST_ID, closeGridLevels, initCloseGrid, type CloseGridDraft } from '../lib/close-grid';
 import { draftLevels } from '../lib/draft-levels';
+import { atrOf, findRanges, toChartRanges, type ChartRange } from '../lib/ranges';
+import { entryGridTable } from '../lib/level-table';
+import { BOT_ENABLED, BOT_MAX_LEVELS } from '../lib/bot-grid';
 import { isPartialExit } from '../lib/fills';
 import {
   applyEntryChange,
@@ -47,12 +50,13 @@ import {
 } from '../lib/money';
 import type { TerminalSound } from '../lib/sounds';
 import { useSessionActions, type TerminalActions } from '../model/actions';
-import { useRsiOn } from '../model/useChartSettings';
+import { useRangesOn, useRsiOn } from '../model/useChartSettings';
+import { useRangeCandles, type Load4h } from '../model/useRangeCandles';
 import { useMaxRisk } from '../model/useRiskSettings';
 import { useLiveSymbol } from '../model/useLiveSymbol';
 import { useDefaultLeverage } from '../model/useDefaultLeverage';
 import { useDrawingTools } from '../model/useDrawingTools';
-import { useLiveFeed, type LiveSource } from '../model/useLiveFeed';
+import { SESSION_SOURCE, useLiveFeed, type LiveSource } from '../model/useLiveFeed';
 import { SPEEDS, useReplay } from '../model/useReplay';
 import { sessionSounds, useSnapshotSound, useTerminalSoundOn } from '../model/useTerminalSound';
 import { DrawingStyleBar } from './drawings/DrawingStyleBar';
@@ -63,6 +67,7 @@ import { LimitCloseModal } from './LimitCloseModal';
 import { MarketCloseModal } from './MarketCloseModal';
 import { OpenPositionsPanel } from './OpenPositionsPanel';
 import { OrdersPanel } from './OrdersPanel';
+import { BotPanel, botFromDraft, type BotDraft } from './BotPanel';
 import { OrderPanel, type Draft, type LimitDraft, type OrderTab, type ScaledDraft } from './OrderPanel';
 import { ChartSettingsPanel } from './ChartSettingsPanel';
 import { ReplayChart, type Level, type LevelKind, type Marker } from './ReplayChart';
@@ -192,6 +197,12 @@ export interface TerminalProps {
    * его обработчик увёл бы со страницы.
    */
   tags?: boolean;
+  /**
+   * Терминала не видно: часы и хвост живой ленты стоят. Терминал на главной
+   * уезжает за экран, а тик часов четыре раза в секунду перерисовывал бы его и
+   * там, отнимая кадры у прокрутки. Снят — хвост забирается сразу.
+   */
+  paused?: boolean;
 }
 
 /**
@@ -211,6 +222,7 @@ export function Terminal({
   soundsOf,
   history: History,
   tags = true,
+  paused = false,
 }: TerminalProps) {
   const t = useTranslations('backtest');
   const { locale } = useLocaleControl();
@@ -261,6 +273,17 @@ export function Terminal({
   // Стороны монеты графика с открытой позицией: «Лонг/Шорт» по ним доливает
   // позицию по её стопу, и стоп с тейком черновика туда не ставятся.
   const lockedSides = useMemo(() => [...new Set(chartTrades.map((x) => x.direction))], [chartTrades]);
+  // Грид-бот — там, где у счёта есть боты и набор действий `bot` (спека
+  // 2026-10-09-grid-tables-and-bot-everywhere-design.md). Бот монеты графика:
+  // работающий или последний остановленный — его итог показывает вкладка.
+  const botActions = BOT_ENABLED && detail.bots !== undefined ? actions.bot : undefined;
+  const chartBots = useMemo(() => (detail.bots ?? []).filter((b) => b.symbol === symbol), [detail.bots, symbol]);
+  const activeBot = chartBots.find((b) => b.status === 'active') ?? null;
+  const shownBot = activeBot ?? chartBots.at(-1) ?? null;
+  // Для уровней графика — булевы, а не сами объекты: набор действий новый на
+  // каждом рендере, бот меняется с каждым его тейком, и `levels` (а с ними
+  // memo(ReplayChart)) пересчитывались бы на каждом тике прокрутки.
+  const botDraftOn = botActions != null && activeBot == null;
 
   const {
     open: openM,
@@ -367,13 +390,31 @@ export function Terminal({
     // и открытая позиция ещё не в `detail.trades`: курсор придержан внутри advance()
     // (см. параметр `pending` там), автопрокрутка тем временем просто не отдаёт
     // тиков, а не встаёт видимо для пользователя.
-    openM.isPending || addToTradeM.isPending || createEntryOrdersM.isPending || closeM.isPending,
+    openM.isPending ||
+      addToTradeM.isPending ||
+      createEntryOrdersM.isPending ||
+      closeM.isPending ||
+      (actions.bot?.start.isPending ?? false) ||
+      (actions.bot?.stop.isPending ?? false),
     !isLive,
   );
   // Хуки нельзя вызывать по условию, поэтому вызываются оба, а спит тот, чья
   // очередь не настала: в эфире свечи идут живым хвостом, а не прокруткой.
-  const liveFeed = useLiveFeed(detail, isLive, symbol, source);
+  const liveFeed = useLiveFeed(detail, isLive, symbol, source, paused);
   const replay = isLive ? liveFeed : replayFeed;
+
+  // Индикатор боковиков: свои закрытые 4ч-свечи до «сейчас» терминала (в
+  // прокрутке — курсор), на любом таймфрейме графика.
+  const [rangesOn, setRangesOn] = useRangesOn();
+  const loadRange4h = useCallback<Load4h>(
+    (range) =>
+      isLive
+        ? (source ?? SESSION_SOURCE).candles(240, range, symbol)
+        : fetchCandles({ id: session.id, dataSource: session.dataSource }, 240, range, symbol),
+    [isLive, source, session.id, session.dataSource, symbol],
+  );
+  const candles4h = useRangeCandles(rangesOn, loadRange4h, `${session.id}:${symbol}`, replay.ready ? replay.cursor : null);
+  const rangeBoxes = useMemo(() => (rangesOn ? findRanges(candles4h) : []), [rangesOn, candles4h]);
 
   // Рынок — свой у того, кто его передал (биржа); иначе монеты и цены эфира с сервера.
   const { data: symbolsData } = useLiveSymbols(isLive && !symbols);
@@ -405,7 +446,27 @@ export function Terminal({
   const [draft, setDraft] = useState<Draft>({ risk: '1', stop: '', take: '', leverage: toInput(defaultLeverage) });
   const [orderTab, setOrderTab] = useState<OrderTab>('market');
   const [limitDraft, setLimitDraft] = useState<LimitDraft>({ risk: '1', stop: '', take: '', entry: '' });
-  const [scaledDraft, setScaledDraft] = useState<ScaledDraft>({ risk: '1', stop: '', take: '', upper: '', lower: '', count: '5' });
+  const [scaledDraft, setScaledDraft] = useState<ScaledDraft>({
+    risk: '1',
+    stop: '',
+    take: '',
+    upper: '',
+    lower: '',
+    count: '5',
+    qtyPins: {},
+    stopPins: {},
+    stopFollow: false,
+  });
+  const [botDraft, setBotDraft] = useState<BotDraft>({
+    risk: '1',
+    stop: '',
+    upper: '',
+    lower: '',
+    count: '4',
+    qtyPins: {},
+    stopPins: {},
+    stopFollow: false,
+  });
   const [hint, setHint] = useState<string | null>(null);
   const [limitHint, setLimitHint] = useState<string | null>(null);
   const [scaledHint, setScaledHint] = useState<string | null>(null);
@@ -456,6 +517,22 @@ export function Terminal({
   const sCountN = Math.min(10, Math.max(1, Math.round(Number(scaledDraft.count) || 1)));
 
   const screenCandles = useMemo(() => replay.candles.map((c) => scaleCandle(c, scale)), [replay.candles, scale]);
+  const chartRanges = useMemo<ChartRange[]>(() => {
+    const list = toChartRanges(rangeBoxes, candles4h, (p) => toScreen(p, scale));
+    // Диапазон грид-бота — от запуска до остановки (время сессии).
+    for (const b of chartBots) {
+      const from = Date.parse(b.startedAt);
+      list.push({
+        id: `bot-${b.id}`,
+        kind: 'bot',
+        from,
+        seen: from,
+        end: b.stoppedAt ? Date.parse(b.stoppedAt) : null,
+        steps: [{ t: from, lo: toScreen(b.lower, scale), hi: toScreen(b.upper, scale) }],
+      });
+    }
+    return list;
+  }, [rangeBoxes, candles4h, chartBots, scale]);
 
   const screenGlide = useMemo(
     () => (replay.glide ? { minute: scaleCandle(replay.glide.minute, scale), durationMs: replay.glide.durationMs } : null),
@@ -484,6 +561,16 @@ export function Terminal({
           market: { stop: stopN, take: takeN, risk: draftRisk },
           limit: { entry: lEntryN, stop: lStopN, take: lTakeN, risk: Number(limitDraft.risk) },
           scaled: { upper: sUpperN, lower: sLowerN, stop: sStopN, take: sTakeN, count: sCountN, risk: Number(scaledDraft.risk) },
+          bot: botDraftOn
+            ? {
+                upper: botDraft.upper.trim() ? Number(botDraft.upper) : null,
+                lower: botDraft.lower.trim() ? Number(botDraft.lower) : null,
+                stop: Number(botDraft.stop),
+                // Не больше, чем примет сервер: поле — это набор цифр, и «100000»
+                // нарисовало бы сто тысяч линий.
+                count: Math.min(BOT_MAX_LEVELS, Math.round(Number(botDraft.count)) || 0),
+              }
+            : null,
           livePrice,
           screenPrice,
           balance,
@@ -590,6 +677,11 @@ export function Terminal({
     sTakeN,
     sCountN,
     scaledDraft.risk,
+    botDraft.upper,
+    botDraft.lower,
+    botDraft.stop,
+    botDraft.count,
+    botDraftOn,
     livePrice,
     screenPrice,
     balance,
@@ -674,7 +766,8 @@ export function Terminal({
   const clearDraftLevels = () => {
     setDraft((prev) => ({ ...prev, stop: '', take: '' }));
     setLimitDraft((prev) => ({ ...prev, stop: '', take: '', entry: '' }));
-    setScaledDraft((prev) => ({ ...prev, stop: '', take: '', upper: '', lower: '' }));
+    setScaledDraft((prev) => ({ ...prev, stop: '', take: '', upper: '', lower: '', qtyPins: {}, stopPins: {} }));
+    setBotDraft((prev) => ({ ...prev, stop: '', upper: '', lower: '', qtyPins: {}, stopPins: {} }));
     setHint(null);
     setLimitHint(null);
     setScaledHint(null);
@@ -683,6 +776,29 @@ export function Terminal({
   const switchOrderTab = (next: OrderTab) => {
     setOrderTab(next);
     clearDraftLevels();
+    if (next === 'bot' && screenPrice != null) {
+      // По умолчанию — живая рамка индикатора на этой монете, иначе ±5 % от цены;
+      // стоп — на 0,5 ATR(4ч) под низом, как в исследовании, без ATR — на 1 % ниже.
+      const live = rangeBoxes.at(-1);
+      const box = live && live.endAt === null ? live.steps[live.steps.length - 1] : null;
+      const lo = box ? toScreen(box.lo, scale) : screenPrice * 0.95;
+      const hi = box ? toScreen(box.hi, scale) : screenPrice * 1.05;
+      const atr = candles4h.length > 14 ? atrOf(candles4h, 14).at(-1) : undefined;
+      const stop = atr != null ? lo - toScreen(atr, scale) * 0.5 : lo * 0.99;
+      setBotDraft((prev) => ({ ...prev, upper: toInputPrice(hi), lower: toInputPrice(lo), stop: toInputPrice(stop) }));
+    }
+  };
+
+  /** Запуск бота — по цене и моменту терминала, как вход по рынку. */
+  const startBot = () => {
+    if (!botActions || replay.price == null) return;
+    botActions.start.mutate({
+      symbol,
+      ...botFromDraft(botDraft, scale).submit,
+      leverage: draftLeverage,
+      entryTime: new Date(replay.cursor).toISOString(),
+      entryPrice: replay.price,
+    });
   };
 
   /**
@@ -825,20 +941,41 @@ export function Terminal({
     const err = checkEntrySide(direction, pricesScreen, screenPrice) ?? checkGridLevels(direction, pricesScreen, sStopN, sTakeN);
     setScaledHint(err ? t(err) : null);
     if (err) return;
+    // Таблица уровней: объёмы по долям и цели стопа после исполнения — то же,
+    // что показывает вкладка; риск каждого уровня сервер обратит в его объём.
+    const table = entryGridTable({
+      prices: pricesScreen.map((p) => fromScreen(p, scale)),
+      direction,
+      stop: fromScreen(sStopN, scale),
+      riskPct: risk,
+      balance,
+      qtyPins: scaledDraft.qtyPins,
+      stopTargets: Object.fromEntries(Object.entries(scaledDraft.stopPins).map(([k, v]) => [k, fromScreen(v, scale)])),
+      stopFollow: actions.gridStopAfter === true && scaledDraft.stopFollow,
+    });
+    if (table.over) {
+      setScaledHint(t('closeGridPinnedOver'));
+      return;
+    }
+    if (table.blocked) {
+      setScaledHint(t('gridStopBlocks'));
+      return;
+    }
     createEntryOrdersM.mutate(
       {
         symbol,
         direction,
         stopLoss: fromScreen(sStopN, scale),
         takeProfit: sTakeN != null ? fromScreen(sTakeN, scale) : undefined,
-        // Общий риск сетки — поровну на каждый уровень: то же самое, что
-        // сервер сложил бы обратно, если каждый уровень добирать по одному.
+        // Запасной риск уровня — для исполнителя, который не читает `riskPcts`.
         riskPct: risk / pricesScreen.length,
         leverage: draftLeverage,
-        prices: pricesScreen.map((p) => fromScreen(p, scale)),
+        prices: table.prices,
+        riskPcts: table.riskPcts,
+        stopsAfter: table.stopsAfter,
       },
       {
-        onSuccess: () => setScaledDraft((prev) => ({ ...prev, stop: '', take: '', upper: '', lower: '' })),
+        onSuccess: () => setScaledDraft((prev) => ({ ...prev, stop: '', take: '', upper: '', lower: '', qtyPins: {}, stopPins: {} })),
       },
     );
   };
@@ -915,9 +1052,11 @@ export function Terminal({
       return;
     }
     if (kind === 'gridUpper' || kind === 'gridLower') {
-      // Черновик сетки — просто верх/низ диапазона, без стороны и без
+      // Черновик сетки (и бота) — просто верх/низ диапазона, без стороны и без
       // зеркалирования: у него нет второго уровня, который надо сверять.
-      setScaledDraft((prev) => ({ ...prev, [kind === 'gridUpper' ? 'upper' : 'lower']: toInputPrice(price) }));
+      const key = kind === 'gridUpper' ? 'upper' : 'lower';
+      if (dragCtxRef.current.orderTab === 'bot') setBotDraft((prev) => ({ ...prev, [key]: toInputPrice(price) }));
+      else setScaledDraft((prev) => ({ ...prev, [key]: toInputPrice(price) }));
       return;
     }
     if (kind !== 'stop' && kind !== 'take') return;
@@ -933,6 +1072,10 @@ export function Terminal({
     }
     if (tradeId == null && activeTab === 'scaled') {
       setScaledDraft((prev) => ({ ...prev, [kind]: toInputPrice(price) }));
+      return;
+    }
+    if (tradeId == null && activeTab === 'bot') {
+      if (kind === 'stop') setBotDraft((prev) => ({ ...prev, stop: toInputPrice(price) }));
       return;
     }
     if (tradeId != null) {
@@ -1136,6 +1279,7 @@ export function Terminal({
                     drawing={drawings.chart}
                     priceDecimals={chartDecimals}
                     rsi={rsiOn}
+                    ranges={chartRanges}
                   />
                 ) : (
                   <ChartSkeleton />
@@ -1210,6 +1354,8 @@ export function Terminal({
               <ChartSettingsPanel
                 rsiOn={rsiOn}
                 onRsi={setRsiOn}
+                rangesOn={rangesOn}
+                onRanges={setRangesOn}
                 maxRisk={maxRisk}
                 onMaxRisk={setMaxRisk}
                 onClose={() => setChartSettingsOpen(false)}
@@ -1253,6 +1399,26 @@ export function Terminal({
                   onLeverageCommit={setDefaultLeverage}
                   priceDecimals={chartDecimals}
                   lockedSides={lockedSides}
+                  botLong={activeBot != null}
+                  gridStopAfter={actions.gridStopAfter === true}
+                  bot={
+                    botActions ? (
+                      <BotPanel
+                        draft={botDraft}
+                        onDraft={setBotDraft}
+                        price={replay.price}
+                        scale={scale}
+                        balance={session.balance}
+                        maxRisk={maxRisk}
+                        priceDecimals={chartDecimals}
+                        bot={shownBot}
+                        error={botActions.start.error ?? botActions.stop.error}
+                        busy={botActions.start.isPending || botActions.stop.isPending}
+                        onStart={startBot}
+                        onStop={(botId) => botActions.stop.mutate(botId)}
+                      />
+                    ) : undefined
+                  }
                 />
                 <ErrorNote error={openM.error ?? addToTradeM.error ?? createEntryOrdersM.error ?? finishM.error} fallback={t('actionFailed')} />
               </>

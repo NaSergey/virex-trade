@@ -6,6 +6,7 @@ import { Field } from '@/shared/ui/Field';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { Slider } from '@/shared/ui/Slider';
 import { DEFAULT_MAX_RISK } from '../model/useRiskSettings';
+import { RANGES_ENABLED } from '../model/useChartSettings';
 
 /** Проценты без хвоста: 10%, 2.5%. */
 const fmtRisk = (v: number) => `${Number.isInteger(v) ? v : v.toFixed(1)}%`;
@@ -20,12 +21,16 @@ const fmtRisk = (v: number) => `${Number.isInteger(v) ? v : v.toFixed(1)}%`;
 export function ChartSettingsPanel({
   rsiOn,
   onRsi,
+  rangesOn,
+  onRanges,
   maxRisk,
   onMaxRisk,
   onClose,
 }: {
   rsiOn: boolean;
   onRsi: (on: boolean) => void;
+  rangesOn: boolean;
+  onRanges: (on: boolean) => void;
   maxRisk: number;
   onMaxRisk: (value: number) => void;
   onClose: () => void;
@@ -47,6 +52,11 @@ export function ChartSettingsPanel({
       >
         {t('indicatorRsi')}
       </Button>
+      {RANGES_ENABLED && (
+        <Button variant="none" className="cs-indicator" aria-pressed={rangesOn} onClick={() => onRanges(!rangesOn)}>
+          {t('indicatorRanges')}
+        </Button>
+      )}
 
       <Field
         label={

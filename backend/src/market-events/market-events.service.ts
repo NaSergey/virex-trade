@@ -16,6 +16,28 @@ export interface WeekdayHourBucket {
   avgVolatilityPct: number; // avg (high-low)/open
 }
 
+/**
+ * Отрезок недели для «когда BTC чаще растёт» (спека 2026-10-08): все свечи
+ * одного таймфрейма, открывшиеся в этот день недели и в это время суток.
+ */
+export interface TimeSlot {
+  weekday: number; // getUTCDay() открытия свечи: 0 = воскресенье
+  minute: number; // минута суток UTC открытия свечи; у дневной — 0
+  samples: number;
+  upSamples: number; // закрылись выше открытия
+  downSamples: number; // закрылись ниже открытия
+  /** Доля роста среди свечей, которые сдвинулись: свеча на месте — ни рост, ни падение. */
+  upPct: number;
+  avgChangePct: number;
+}
+
+/**
+ * Таймфреймы, по которым считаются слоты, — те, что выбирает страница «Рынок».
+ * Мельче не нужно: у 15м в дне 96 строк, у минутки — десять тысяч слотов в
+ * неделе и миллион строк из базы на один расчёт.
+ */
+export const SLOT_TIMEFRAMES = [60, 240, 1440] as const;
+
 export interface HourlyBucket {
   hour: number; // UTC hour, 0-23 (candle open time)
   samples: number;
@@ -127,6 +149,48 @@ export class MarketEventsService {
     }));
 
     return { hourly, totalSamples: candles.length };
+  }
+
+  /**
+   * «Когда BTC чаще растёт»: по каждому времени недели — как часто свеча этого
+   * таймфрейма закрывалась ростом и падением. Читает страница «Рынок»;
+   * таймфрейм — выбранный там, а не часовик для всех: доля роста четырёхчасовой
+   * свечи из часовых не выводится.
+   */
+  async getTimeSlots(timeframe: number, days = 730) {
+    return this.cached(`timeSlots${timeframe}`, days, () => this.computeTimeSlots(timeframe, days));
+  }
+
+  private async computeTimeSlots(timeframe: number, days: number) {
+    const since = new Date(Date.now() - days * 86_400_000);
+    const candles = await this.marketData.getCandles({ timeframe, from: since });
+
+    const agg = new Map<number, { weekday: number; minute: number; samples: number; up: number; down: number; changeSum: number }>();
+    for (const c of candles) {
+      const weekday = c.time.getUTCDay();
+      const minute = c.time.getUTCHours() * 60 + c.time.getUTCMinutes();
+      const key = weekday * 1440 + minute;
+      let a = agg.get(key);
+      if (!a) agg.set(key, (a = { weekday, minute, samples: 0, up: 0, down: 0, changeSum: 0 }));
+      a.samples++;
+      if (c.close > c.open) a.up++;
+      else if (c.close < c.open) a.down++;
+      a.changeSum += changePct(c);
+    }
+
+    const slots: TimeSlot[] = [...agg.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([, a]) => ({
+        weekday: a.weekday,
+        minute: a.minute,
+        samples: a.samples,
+        upSamples: a.up,
+        downSamples: a.down,
+        upPct: a.up + a.down > 0 ? (a.up / (a.up + a.down)) * 100 : 50,
+        avgChangePct: a.changeSum / a.samples,
+      }));
+
+    return { timeframe, slots, totalSamples: candles.length };
   }
 
   /**

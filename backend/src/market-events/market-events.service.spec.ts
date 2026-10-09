@@ -79,6 +79,76 @@ describe('MarketEventsService', () => {
     expect(cell?.avgVolatilityPct).toBeCloseTo(20, 6);
   });
 
+  describe('getTimeSlots — «когда BTC чаще растёт»', () => {
+    // 2026-01-01 — четверг; шаг в неделю держит день недели и время.
+    const weekly = (n: number, time: string, up: (i: number) => boolean | null) =>
+      Array.from({ length: n }, (_, i) => {
+        const iso = new Date(Date.parse(`2026-01-01T${time}:00Z`) + i * 7 * 86_400_000).toISOString();
+        const dir = up(i);
+        return dir === null ? candle(iso, 100, 100) : dir ? candle(iso, 100, 101) : candle(iso, 100, 99);
+      });
+
+    it('читает свечи того таймфрейма, о котором спрашивают', async () => {
+      const { service, getCandles } = makeService([]);
+
+      await service.getTimeSlots(240, 730);
+
+      expect(getCandles).toHaveBeenCalledWith(expect.objectContaining({ timeframe: 240, from: expect.any(Date) }));
+    });
+
+    it('слот — день недели и время открытия свечи по UTC; доля роста — среди свечей, которые сдвинулись', async () => {
+      const { service } = makeService([
+        ...weekly(6, '14:15', (i) => i < 3), // 3 роста, 3 падения
+        ...weekly(4, '14:30', (i) => (i === 0 ? null : i < 3)), // свеча на месте, 2 роста, 1 падение
+      ]);
+
+      const { timeframe, slots, totalSamples } = await service.getTimeSlots(15, 730);
+
+      expect(timeframe).toBe(15);
+      expect(totalSamples).toBe(10);
+      expect(slots).toEqual([
+        { weekday: 4, minute: 14 * 60 + 15, samples: 6, upSamples: 3, downSamples: 3, upPct: 50, avgChangePct: 0 },
+        expect.objectContaining({ weekday: 4, minute: 14 * 60 + 30, samples: 4, upSamples: 2, downSamples: 1 }),
+      ]);
+      expect(slots[1].upPct).toBeCloseTo((2 / 3) * 100, 6);
+      expect(slots[1].avgChangePct).toBeCloseTo(0.25, 6); // (0 + 1 + 1 − 1) / 4
+    });
+
+    it('слоты идут по неделе: с воскресенья, внутри дня по времени', async () => {
+      const { service } = makeService([
+        candle('2026-01-05T08:00:00Z', 100, 101), // понедельник
+        candle('2026-01-04T23:00:00Z', 100, 101), // воскресенье
+        candle('2026-01-04T01:00:00Z', 100, 99), // воскресенье
+      ]);
+
+      const { slots } = await service.getTimeSlots(60, 730);
+
+      expect(slots.map((s) => [s.weekday, s.minute])).toEqual([
+        [0, 60],
+        [0, 23 * 60],
+        [1, 8 * 60],
+      ]);
+    });
+
+    it('слот без единого движения — доля роста 50, а не деление на ноль', async () => {
+      const { service } = makeService([candle('2026-01-01T00:00:00Z', 100, 100)]);
+
+      const { slots } = await service.getTimeSlots(1440, 730);
+
+      expect(slots[0]).toEqual(expect.objectContaining({ samples: 1, upSamples: 0, downSamples: 0, upPct: 50 }));
+    });
+
+    it('кэш — на таймфрейм и окно: другой ТФ читает свечи заново, тот же — нет', async () => {
+      const { service, getCandles } = makeService([]);
+
+      await service.getTimeSlots(60, 730);
+      await service.getTimeSlots(60, 730);
+      await service.getTimeSlots(240, 730);
+
+      expect(getCandles).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('кэш агрегатов (TTL 1 час, ключ — метрика + days)', () => {
     afterEach(() => {
       jest.restoreAllMocks();

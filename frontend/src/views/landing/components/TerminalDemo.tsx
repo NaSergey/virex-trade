@@ -18,36 +18,42 @@ const noop = () => () => undefined;
  * Поднимается, только когда секция подъезжает к экрану: терминал опрашивает
  * рынок раз в две секунды, и делать это у каждого, кто открыл главную и не
  * долистал, незачем. И только в браузере: счёт читается из его хранилища.
+ * Уехав за экран, терминал стоит (`paused`): его часы тикают четыре раза в
+ * секунду и перерисовывали бы его, пока листают знак.
  */
 export function TerminalDemo() {
   const t = useTranslations('landing.term');
   const root = useRef<HTMLDivElement>(null);
+  /** Был у экрана — поднят и дальше не снимается; у экрана сейчас — идёт. */
   const [near, setNear] = useState(false);
+  const [onScreen, setOnScreen] = useState(false);
   const client = useSyncExternalStore(noop, () => true, () => false);
 
   useEffect(() => {
     const el = root.current;
-    if (!el || near) return;
+    if (!el) return;
     const io = new IntersectionObserver(
       (entries) => {
-        if (entries.some((e) => e.isIntersecting)) setNear(true);
+        const hit = entries.some((e) => e.isIntersecting);
+        setOnScreen(hit);
+        if (hit) setNear(true);
       },
       { rootMargin: '600px 0px' },
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [near]);
+  }, []);
 
   return (
     <Wrap className="ls-tdemo">
       <div ref={root}>
-        {client && near ? <DemoTerminal /> : <TerminalSkeleton live badge={t('badge')} leave={false} />}
+        {client && near ? <DemoTerminal paused={!onScreen} /> : <TerminalSkeleton live badge={t('badge')} leave={false} />}
       </div>
     </Wrap>
   );
 }
 
-function DemoTerminal() {
+function DemoTerminal({ paused }: { paused: boolean }) {
   const t = useTranslations('landing.term');
   const { detail, actions, priceOf } = useDemoTerminal();
 
@@ -62,6 +68,7 @@ function DemoTerminal() {
         priceOf={priceOf}
         badge={t('badge')}
         tags={false}
+        paused={paused}
       />
     </TerminalHints>
   );

@@ -14,8 +14,12 @@ import {
   useMoveEntryOrder,
   useOpenTrade,
   useSetBacktestTags,
+  useStartBot,
+  useStopBot,
 } from '../api/hooks';
-import type { Direction, ExitReason } from '../api/types';
+import type { Direction, ExitReason, StartBotVars } from '../api/types';
+
+export type { StartBotVars };
 
 /**
  * Одно действие терминала — то, что экрану нужно от мутации: отправить,
@@ -71,6 +75,10 @@ export interface EntryOrdersVars {
   riskPct: number;
   leverage: number;
   prices: number[];
+  /** Риск каждого уровня — объёмы из таблицы «Сетки»; по одному на цену. */
+  riskPcts?: number[];
+  /** Цель стопа после исполнения уровня; 0 — стоп не двигается. По одному на цену. */
+  stopsAfter?: number[];
 }
 
 /**
@@ -109,6 +117,14 @@ export interface TerminalActions {
   closeGrid: TerminalAction<CloseGridVars>;
   finish: TerminalAction<void>;
   tags: TerminalAction<{ tradeId: string; tagIds: string[] }>;
+  /** Грид-бот; нет набора — нет вкладки «Бот». */
+  bot?: { start: TerminalAction<StartBotVars>; stop: TerminalAction<string> };
+  /**
+   * «Стоп после исполнения» у «Сетки» исполнитель умеет: у сессии его ставит
+   * сервер на исполнении ордера. Нет — галочки во вкладке нет, а не молча
+   * пропущенная цель.
+   */
+  gridStopAfter?: boolean;
 }
 
 /** Действия сессии бектеста и турнира — те же мутации, что и раньше, одним набором. */
@@ -127,5 +143,8 @@ export function useSessionActions(sessionId: string): TerminalActions {
     closeGrid: useCreateCloseGrid(sessionId),
     finish: useFinishSession(sessionId),
     tags: useSetBacktestTags(sessionId),
+    // Бот — во всех сессиях сервера, турнирных тоже.
+    bot: { start: useStartBot(sessionId), stop: useStopBot(sessionId) },
+    gridStopAfter: true,
   };
 }

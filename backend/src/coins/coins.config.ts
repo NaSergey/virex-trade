@@ -26,7 +26,7 @@ export const STARTING_COINS = 1000;
  * регистрируется. Начисляется по факту регистрации, а не по факту активности
  * приглашённого — см. `AuthService.register`.
  */
-export const REFERRAL_BONUS_COINS = 1000;
+export const REFERRAL_BONUS_COINS = 3000;
 
 /**
  * Потолок одной суммы в монетах: взноса в турнир и добавки в призовой фонд.

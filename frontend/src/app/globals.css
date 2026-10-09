@@ -822,6 +822,8 @@
   .replay-chart .draw-hit { cursor: move; }
   .replay-chart .draw-anchor { cursor: pointer; }
   .order-panel { display: grid; gap: var(--s3); align-content: start; }
+  /* Работающий грид-бот на месте полей вкладки «Бот». */
+  .bot-card { display: grid; gap: var(--s2); }
   /* Подписи тикета — на ступень светлее общего .lbl (--ink-2 вместо самого
      тихого --ink-3): на тесной панели с мелким кеглем самая приглушённая
      краска системы читалась плохо, а тут именно по подписям (риск, стоп,
@@ -2278,6 +2280,62 @@
     font-size: 9px;
     color: var(--ink-3);
     text-align: center;
+  }
+  /* «Когда BTC чаще растёт» (TimeOdds): строка — отрезок времени, полоса —
+     доля роста зелёным слева, остаток красным, справа словами и средний ход.
+     Строка «сейчас» — с чертой слева; черта есть у всех строк прозрачной,
+     иначе текущая сдвигалась бы на её ширину. Список своей высоты: у 1ч в
+     дне 24 строки. На узком экране полоса уходит второй строкой под числа:
+     в одну строку ей оставалось бы несколько пикселей. */
+  .to-ctl { display: flex; flex-wrap: wrap; gap: var(--s2); }
+  .to-now { margin: 0 0 var(--s3); }
+  .to-days { margin-bottom: var(--s2); }
+  .to-list {
+    display: flex;
+    flex-direction: column;
+    max-height: 440px;
+    overflow-y: auto;
+  }
+  .to-row {
+    display: grid;
+    grid-template-columns: 136px minmax(0, 1fr) 96px 64px;
+    gap: var(--s3);
+    align-items: center;
+    flex: none;
+    min-height: 30px;
+    padding-left: var(--s2);
+    border-bottom: 1px solid var(--hair);
+    border-left: 2px solid transparent;
+  }
+  .to-row.is-now { border-left-color: var(--ink); background: var(--hair); }
+  .to-t {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-2);
+    white-space: nowrap;
+  }
+  .to-mark {
+    margin-left: var(--s1);
+    font-size: var(--t-xs);
+    color: var(--ink);
+  }
+  .to-bar { position: relative; height: 8px; background: var(--color-down); }
+  .to-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--color-up); }
+  .to-bar-empty { background: var(--hair); }
+  .to-v,
+  .to-a {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    text-align: right;
+    white-space: nowrap;
+  }
+  @media (max-width: 640px) {
+    .to-row {
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      row-gap: var(--s1);
+      padding-block: var(--s1);
+    }
+    .to-bar { grid-column: 1 / -1; grid-row: 2; }
   }
 
   /* ═══════════════ ПРИВЫЧКИ ═══════════════ */

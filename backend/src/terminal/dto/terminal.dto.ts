@@ -46,6 +46,15 @@ export class PlaceOrderDto {
   @Max(100)
   riskPct: number;
 
+  // Риск каждого уровня сетки отдельно — объёмы из таблицы «Сетки»; по одному на цену.
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_GRID)
+  @IsNumber({}, { each: true })
+  @Min(0.0001, { each: true })
+  @Max(100, { each: true })
+  riskPcts?: number[];
+
   // Не нужен только доливу позиции, у которой стоп уже стоит.
   @IsOptional()
   @IsNumber()

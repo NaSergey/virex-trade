@@ -4,6 +4,7 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
+  IsInt,
   IsISO8601,
   IsNumber,
   IsOptional,
@@ -214,6 +215,23 @@ export class CreateEntryOrdersDto {
   @ArrayMaxSize(10)
   @IsPositive({ each: true })
   prices: number[];
+
+  /** Риск каждого уровня отдельно — объёмы из таблицы «Сетки»; по одному на цену. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsNumber({}, { each: true })
+  @Min(0.0001, { each: true })
+  @Max(100, { each: true })
+  riskPcts?: number[];
+
+  /** Цель стопа после исполнения уровня; 0 — стоп не двигается. По одному на цену. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsNumber({}, { each: true })
+  @Min(0, { each: true })
+  stopsAfter?: number[];
 }
 
 export class SetBacktestTagsDto {
@@ -221,4 +239,63 @@ export class SetBacktestTagsDto {
   @ArrayMaxSize(20)
   @IsString({ each: true })
   tagIds: string[];
+}
+
+/** Запуск грид-бота (спека 2026-10-09-range-indicator-and-grid-bot-design.md). */
+export class StartBotDto {
+  /** Монета; не задана — BTC. */
+  @IsOptional()
+  @IsIn(LIVE_SYMBOL_IDS)
+  symbol?: string;
+
+  @IsPositive()
+  lower: number;
+
+  @IsPositive()
+  upper: number;
+
+  @IsPositive()
+  stopLoss: number;
+
+  @IsInt()
+  @Min(2)
+  @Max(20)
+  levels: number;
+
+  /** Общий риск сетки: потеря, если исполнились все покупки и сработал стоп. */
+  @IsNumber()
+  @Min(0.01)
+  @Max(100)
+  riskPct: number;
+
+  @IsNumber()
+  @Min(1)
+  @Max(100)
+  leverage: number;
+
+  /** Момент и цена запуска — как у входа по рынку; в эфире их ставит сервер. */
+  @IsISO8601()
+  entryTime: string;
+
+  @IsPositive()
+  entryPrice: number;
+
+  /** Доли уровней снизу вверх, в сумме 1; нет — поровну. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsPositive({ each: true })
+  shares?: number[];
+
+  /** «Стоп после тейка»: цель стопа после продажи уровня; 0 — стоп стоит. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsNumber({}, { each: true })
+  @Min(0, { each: true })
+  stopsAfter?: number[];
+
+  @IsOptional()
+  @IsBoolean()
+  stopFollow?: boolean;
 }

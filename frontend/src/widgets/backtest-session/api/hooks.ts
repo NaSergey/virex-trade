@@ -5,6 +5,8 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import { apiJson, qs } from '@/shared/api/http';
 import { candlesPath, fromApi, type ApiCandle, type Candle } from '../lib/candles';
 import type {
+  BacktestBot,
+  StartBotVars,
   BacktestCloseOrder,
   BacktestEntryOrder,
   BacktestSession,
@@ -145,6 +147,8 @@ export const useDeleteSession = () => {
 export const useOpenTrade = (id: string) => {
   const qc = useQueryClient();
   return useMutation({
+    // Ответ `trade: null` — ордер, который исполняла прокрутка, уже снят
+    // (бот остановлен, его стоп в той же минутке, перенос): исполнять нечего.
     mutationFn: (input: {
       /** Не задана — BTC. */
       symbol?: string;
@@ -156,8 +160,14 @@ export const useOpenTrade = (id: string) => {
       riskPct: number;
       leverage: number;
       entryOrderId?: string;
-    }) => apiJson<{ trade: BacktestTrade }>(`/api/backtest/sessions/${id}/trades`, json('POST', input)),
-    onSettled: () => refresh(qc, id),
+    }) => apiJson<{ trade: BacktestTrade | null }>(`/api/backtest/sessions/${id}/trades`, json('POST', input)),
+    // Перечитку дожидаемся, как у закрытия: исполнение ордера грид-бота ставит на
+    // сервере его следующий ордер, и прокрутка, пока тот не приехал, могла бы
+    // пройти его уровень (спека 2026-10-09).
+    onSettled: async () => {
+      refresh(qc);
+      await qc.invalidateQueries({ queryKey: sessionKey(id) });
+    },
   });
 };
 
@@ -189,7 +199,34 @@ export const useAddToTrade = (id: string) => {
       riskPct: number;
       entryOrderId?: string;
     }) => apiJson<{ trade: BacktestTrade }>(`/api/backtest/trades/${tradeId}/add`, json('POST', body)),
-    onSettled: () => refresh(qc, id),
+    // См. useOpenTrade — добор по ордеру бота тоже ставит его продажу.
+    onSettled: async () => {
+      refresh(qc);
+      await qc.invalidateQueries({ queryKey: sessionKey(id) });
+    },
+  });
+};
+
+/** Запуск грид-бота: перечитку дожидаемся — следующий шаг прокрутки обязан видеть его ордера. */
+export const useStartBot = (id: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: StartBotVars) => apiJson<{ bot: BacktestBot }>(`/api/backtest/sessions/${id}/bots`, json('POST', body)),
+    onSettled: async () => {
+      refresh(qc);
+      await qc.invalidateQueries({ queryKey: sessionKey(id) });
+    },
+  });
+};
+
+export const useStopBot = (id: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (botId: string) => apiJson<{ bot: BacktestBot }>(`/api/backtest/bots/${botId}/stop`, json('POST')),
+    onSettled: async () => {
+      refresh(qc);
+      await qc.invalidateQueries({ queryKey: sessionKey(id) });
+    },
   });
 };
 
@@ -298,6 +335,8 @@ export const useCreateEntryOrders = (id: string) => {
       riskPct: number;
       leverage: number;
       prices: number[];
+      riskPcts?: number[];
+      stopsAfter?: number[];
     }) => apiJson<{ entryOrders: BacktestEntryOrder[] }>(`/api/backtest/sessions/${id}/entry-orders`, json('POST', input)),
     onSettled: () => refresh(qc, id),
   });

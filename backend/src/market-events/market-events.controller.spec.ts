@@ -8,7 +8,7 @@ import { MarketEventsController } from './market-events.controller';
  */
 function makeController() {
   const marketEvents = {
-    getCorrelation: jest.fn().mockResolvedValue({ success: true }),
+    getTimeSlots: jest.fn().mockResolvedValue({ success: true }),
     getHourlyStats: jest.fn().mockResolvedValue({ success: true }),
   };
   const controller = new MarketEventsController(marketEvents as any);
@@ -18,14 +18,14 @@ function makeController() {
 describe('MarketEventsController — зажим `days` (T-final-review)', () => {
   it('без параметра — дефолт 730', async () => {
     const { controller, marketEvents } = makeController();
-    await controller.getCorrelation(undefined);
-    expect(marketEvents.getCorrelation).toHaveBeenCalledWith(730);
+    await controller.getSeasonality(undefined, undefined);
+    expect(marketEvents.getTimeSlots).toHaveBeenCalledWith(60, 730);
   });
 
   it('экстремально большое значение — клампится к 730, не идёт мусором дальше', async () => {
     const { controller, marketEvents } = makeController();
-    await controller.getCorrelation('100000');
-    expect(marketEvents.getCorrelation).toHaveBeenCalledWith(730);
+    await controller.getSeasonality('240', '100000');
+    expect(marketEvents.getTimeSlots).toHaveBeenCalledWith(240, 730);
   });
 
   it('нечисловое значение (NaN из parseInt) — дефолт 730', async () => {
@@ -36,11 +36,26 @@ describe('MarketEventsController — зажим `days` (T-final-review)', () => 
 
   it('ноль и отрицательное — дефолт 730, а не 0/отрицательное окно', async () => {
     const { controller, marketEvents } = makeController();
-    await controller.getCorrelation('0');
-    expect(marketEvents.getCorrelation).toHaveBeenLastCalledWith(730);
+    await controller.getSeasonality('60', '0');
+    expect(marketEvents.getTimeSlots).toHaveBeenLastCalledWith(60, 730);
 
-    await controller.getCorrelation('-5');
-    expect(marketEvents.getCorrelation).toHaveBeenLastCalledWith(730);
+    await controller.getSeasonality('60', '-5');
+    expect(marketEvents.getTimeSlots).toHaveBeenLastCalledWith(60, 730);
+  });
+
+  it('таймфрейм — только из списка слотов; мелкие и мусор — часовик', async () => {
+    const { controller, marketEvents } = makeController();
+    await controller.getSeasonality('1', '365');
+    expect(marketEvents.getTimeSlots).toHaveBeenLastCalledWith(60, 365);
+
+    await controller.getSeasonality('15', '365');
+    expect(marketEvents.getTimeSlots).toHaveBeenLastCalledWith(60, 365);
+
+    await controller.getSeasonality('abc', '365');
+    expect(marketEvents.getTimeSlots).toHaveBeenLastCalledWith(60, 365);
+
+    await controller.getSeasonality('1440', '365');
+    expect(marketEvents.getTimeSlots).toHaveBeenLastCalledWith(1440, 365);
   });
 
   it('валидное значение в пределах диапазона проходит как есть', async () => {

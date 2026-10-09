@@ -88,6 +88,18 @@ export function visibleCandles(p: { closed: Candle[]; anchor: number; minutes: C
   return [...past, ...aggregate(p.minutes, p.tf, p.anchor, p.cursor)];
 }
 
+/**
+ * Граница показа минуток в момент cursor: время первой ещё не наступившей
+ * (∞ — наступили все). `m.t < cursor` и `m.t < граница` отбирают одни и те же
+ * минутки, но граница, в отличие от момента, меняется только с приходом новой
+ * минутки — по ней свечи эфира не пересобираются на каждом тике часов.
+ */
+export function visibleUntil(minutes: Candle[], cursor: number): number {
+  let until = Infinity;
+  for (let i = minutes.length - 1; i >= 0 && minutes[i].t >= cursor; i--) until = minutes[i].t;
+  return until;
+}
+
 /** Цена последней показанной минутки — по ней входят и закрываются вручную. */
 export function lastPrice(minutes: Candle[], cursor: number): number | null {
   for (let i = minutes.length - 1; i >= 0; i--) {

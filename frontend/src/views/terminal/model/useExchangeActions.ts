@@ -125,6 +125,7 @@ export function useExchangeActions(): TerminalActions {
           kind: 'limit',
           prices: v.prices,
           riskPct: v.riskPct,
+          riskPcts: v.riskPcts,
           stopLoss: v.stopLoss,
           takeProfit: v.takeProfit,
           leverage: v.leverage,

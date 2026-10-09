@@ -96,6 +96,8 @@ export interface BacktestTrade {
    */
   markPrice?: number | null;
   unrealisedPnl?: number | null;
+  /** Позиция грид-бота. */
+  botId?: string | null;
 }
 
 /**
@@ -111,6 +113,8 @@ export interface BacktestCloseOrder {
   price: number;
   qty: number;
   createdAt: string;
+  /** Продажа грид-бота. */
+  botId?: string | null;
 }
 
 /** Уровень сетки на вход (Scaled order) — до срабатывания цены сделки ещё нет,
@@ -131,6 +135,8 @@ export interface BacktestEntryOrder {
    * сессии поля нет: объём посчитает сервер на срабатывании, от риска и стопа.
    */
   qty?: number;
+  /** Покупка грид-бота. */
+  botId?: string | null;
 }
 
 /**
@@ -164,7 +170,50 @@ export interface SessionDetail {
   trades: BacktestTrade[];
   closeOrders: BacktestCloseOrder[];
   entryOrders: BacktestEntryOrder[];
+  /** Грид-боты сессии; у счёта биржи их нет. */
+  bots?: BacktestBot[];
   summary: Summary & { maxDrawdownPct: number };
+}
+
+/** Запуск грид-бота: сетка, общий риск и момент запуска — как у входа по рынку. */
+export interface StartBotVars {
+  symbol?: string;
+  lower: number;
+  upper: number;
+  stopLoss: number;
+  levels: number;
+  riskPct: number;
+  leverage: number;
+  entryTime: string;
+  entryPrice: number;
+  /** Доли уровней снизу вверх, в сумме 1. */
+  shares?: number[];
+  /** «Стоп после тейка» уровней; 0 — стоп стоит. */
+  stopsAfter?: number[];
+  stopFollow?: boolean;
+}
+
+/** Грид-бот сессии (спека 2026-10-09-range-indicator-and-grid-bot-design.md). */
+export interface BacktestBot {
+  id: string;
+  sessionId: string;
+  symbol: string;
+  lower: number;
+  upper: number;
+  stopLoss: number;
+  levels: number;
+  /** Общий риск сетки, % депозита. */
+  riskPct: number;
+  leverage: number;
+  status: 'active' | 'stopped';
+  /** 'user' — «Остановить»; иначе причина закрытия его позиции. */
+  stopReason: string | null;
+  /** Время сессии. */
+  startedAt: string;
+  stoppedAt: string | null;
+  createdAt: string;
+  /** Результат закрытых выходов его позиций, частичных тоже. */
+  closedPnl: number;
 }
 
 export interface SessionListItem extends BacktestSession {

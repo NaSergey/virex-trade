@@ -9,6 +9,7 @@ import {
   lastPrice,
   loadedUntil,
   visibleCandles,
+  visibleUntil,
   type ApiCandle,
   type Candle,
 } from '../lib/candles';
@@ -40,7 +41,7 @@ export interface LiveSource {
 }
 
 /** Рынок продукта: у свечей `real` id сессии в адрес не входит. */
-const SESSION_SOURCE: LiveSource = {
+export const SESSION_SOURCE: LiveSource = {
   tail: fetchLiveTail,
   candles: (tf, range, symbol) => fetchCandles({ id: '', dataSource: 'real' }, tf, range, symbol),
 };
@@ -80,6 +81,8 @@ export function useLiveFeed(
   enabled: boolean,
   symbol: string,
   source: LiveSource = SESSION_SOURCE,
+  /** Терминала не видно: часы и хвост стоят, загруженное остаётся. */
+  paused = false,
 ): Replay {
   const { session } = detail;
   const endTime = session.endTime ? Date.parse(session.endTime) : null;
@@ -105,7 +108,7 @@ export function useLiveFeed(
   // Живой хвост: раз в две секунды. Минутки сливаются по времени, свежая
   // версия последней замещает прежнюю (см. mergeMinutes).
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || paused) return;
     let alive = true;
     // Запрос прежней монеты мог остаться в пути: флаг занятости — у каждой
     // монеты свой, иначе новая ждала бы ответа, который всё равно выбросится.
@@ -150,15 +153,15 @@ export function useLiveFeed(
       alive = false;
       clearInterval(timer);
     };
-  }, [enabled, session.id, symbol, source]);
+  }, [enabled, paused, session.id, symbol, source]);
 
   // Часы между запросами хвоста: момент обязан идти ровно, а не рывками раз в
   // две секунды — на нём держится подпись времени и «Закрыть по рынку».
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || paused) return;
     const timer = setInterval(() => setNow(Date.now() - skew.current), 250);
     return () => clearInterval(timer);
-  }, [enabled]);
+  }, [enabled, paused]);
 
   // Закрытые свечи выбранного таймфрейма.
   useEffect(() => {
@@ -216,9 +219,13 @@ export function useLiveFeed(
     }
   }, [closed, historyLoading, shownTf, symbol, source]);
 
+  // Свечи — по границе показа минуток, а не по моменту: момент тикает четыре
+  // раза в секунду, и новый массив свечей на каждом тике перерисовывал весь
+  // график, хотя минутки меняются раз в две секунды, с хвостом.
+  const until = visibleUntil(minutes, cursor);
   const candles = useMemo(
-    () => (anchor == null ? NO_CANDLES : visibleCandles({ closed, anchor, minutes, tf: shownTf, cursor })),
-    [anchor, closed, minutes, shownTf, cursor],
+    () => (anchor == null ? NO_CANDLES : visibleCandles({ closed, anchor, minutes, tf: shownTf, cursor: until })),
+    [anchor, closed, minutes, shownTf, until],
   );
 
   const noop = useCallback(async () => undefined, []);

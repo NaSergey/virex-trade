@@ -10,6 +10,7 @@ import {
   nextStop,
   scaleCandle,
   visibleCandles,
+  visibleUntil,
   type Candle,
 } from './candles';
 
@@ -74,6 +75,30 @@ describe('visibleCandles', () => {
   it('минутки после момента сессии не видны', () => {
     const out = visibleCandles({ closed: [], anchor: at(12), minutes: mins(at(12), 120), tf: 1, cursor: at(12, 5) });
     expect(out).toHaveLength(5);
+  });
+});
+
+describe('visibleUntil', () => {
+  const minutes = mins(at(12), 10);
+
+  it('граница — первая ещё не наступившая минутка', () => {
+    expect(visibleUntil(minutes, at(12, 3))).toBe(at(12, 3));
+    expect(visibleUntil(minutes, at(12, 3) + 1)).toBe(at(12, 4));
+  });
+
+  it('все минутки наступили — границы нет', () => {
+    expect(visibleUntil(minutes, at(13))).toBe(Infinity);
+    expect(visibleUntil([], at(13))).toBe(Infinity);
+  });
+
+  // Ради этого она и есть: момент тикает, а граница стоит, пока не пришла
+  // следующая минутка, — и свечи по ней те же, что по моменту.
+  it('свечи по границе — те же, что по моменту, и между минутками она не меняется', () => {
+    const p = { closed: [], anchor: at(12), minutes, tf: 5 };
+    for (const cursor of [at(12), at(12, 2) + 1, at(12, 2) + 59_000, at(12, 7) + 30_000, at(14)]) {
+      expect(visibleCandles({ ...p, cursor: visibleUntil(minutes, cursor) })).toEqual(visibleCandles({ ...p, cursor }));
+    }
+    expect(visibleUntil(minutes, at(12, 2) + 1)).toBe(visibleUntil(minutes, at(12, 2) + 59_000));
   });
 });
 

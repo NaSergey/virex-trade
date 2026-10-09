@@ -255,6 +255,26 @@ describe('TerminalService', () => {
       ]);
     });
 
+    it('риск уровня из таблицы «Сетки» — свой объём у каждого лимита', async () => {
+      const { service, orders } = setup();
+
+      await service.placeOrders('u1', {
+        symbol: 'BTCUSDT',
+        direction: 'long',
+        kind: 'limit',
+        prices: [59_900, 59_700],
+        riskPct: 0.5,
+        riskPcts: [0.4, 0.6],
+        stopLoss: 59_500,
+      });
+
+      // 40 USDT до стопа 400 → 0.1; 60 USDT до стопа 200 → 0.3.
+      expect(orders().map((o) => [o.price, o.qty])).toEqual([
+        ['59900.00', '0.100'],
+        ['59700.00', '0.300'],
+      ]);
+    });
+
     it('sends nothing when one level of a grid does not pass', async () => {
       // Второй уровень — по ту сторону стопа: сетка не должна оставить на бирже первый.
       const { service, posts } = setup();

@@ -385,6 +385,7 @@ model BacktestSession {
 
   trades      BacktestTrade[]
   entryOrders BacktestEntryOrder[]
+  bots        BacktestBot[]
 
   @@unique([tournamentId, userId])
   @@index([userId, status])
@@ -510,6 +511,8 @@ model BacktestTrade {
   /// (первый), дальше — на цену предыдущего исполненного лимита. Ставится сеткой
   /// фиксации (BacktestService.createCloseGrid), исполняется в applyClose.
   stopFollow Boolean         @default(false)
+  /// Позиция грид-бота (BacktestBot): её закрытие не продажей бота останавливает бота.
+  botId      String?
   exitTime   DateTime?
   exitPrice  Float?
   exitReason String? // 'stop' | 'take' | 'manual' | 'finish' | 'limit'
@@ -573,6 +576,9 @@ model BacktestCloseOrder {
   qty       Float
   /// Цель стопа, когда этот лимит исполнится (сетка фиксации); null — правило «вход, дальше предыдущий тейк».
   stopAfter Float?
+  /// Продажа грид-бота; исполнившись, возвращает покупку на `botBuyPrice`.
+  botId       String?
+  botBuyPrice Float?
   createdAt DateTime      @default(now())
 
   @@index([tradeId])
@@ -596,10 +602,48 @@ model BacktestEntryOrder {
   stopLoss   Float
   takeProfit Float?
   leverage   Float
+  /// Покупка грид-бота.
+  botId      String?
+  /// Цель стопа позиции, когда этот ордер исполнится («Стоп после» у «Сетки»); null — стоп не двигается.
+  stopAfter  Float?
   createdAt  DateTime        @default(now())
 
   @@index([sessionId])
   @@map("backtest_entry_orders")
+}
+
+/// Грид-бот сессии бектеста (спека 2026-10-09-range-indicator-and-grid-bot-design.md):
+/// лонг-сетка в диапазоне, который задал человек. Его ордера — обычные лимиты на
+/// вход и лимиты закрытия с `botId`; следующий ордер бота сервер ставит в той же
+/// транзакции, где исполнился предыдущий.
+model BacktestBot {
+  id         String          @id @default(uuid())
+  sessionId  String
+  session    BacktestSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  symbol     String          @default("BTCUSDT")
+  lower      Float
+  upper      Float
+  stopLoss   Float
+  levels     Int
+  /// Общий риск сетки, % депозита: потеря, если исполнились все покупки и сработал стоп.
+  riskPct    Float
+  leverage   Float
+  /// Доли уровней снизу вверх, в сумме 1; пусто — поровну.
+  shares     Float[]         @default([])
+  /// «Стоп после тейка»: цель стопа позиции после продажи уровня i; 0 — стоп не двигается.
+  stopsAfter Float[]         @default([])
+  stopFollow Boolean         @default(false)
+  status     String          @default("active") // 'active' | 'stopped'
+  /// 'user' — «Остановить» или сетка фиксации; 'hopeless' — его покупку нельзя исполнить (депозит, маржа, сторона стопа);
+  /// иначе причина закрытия позиции: 'stop' | 'manual' | 'take' | 'finish' | 'limit'.
+  stopReason String?
+  /// Время сессии — по нему график рисует диапазон бота.
+  startedAt  DateTime
+  stoppedAt  DateTime?
+  createdAt  DateTime        @default(now())
+
+  @@index([sessionId])
+  @@map("backtest_bots")
 }
 
 /// Теги на сделках бектеста. Устроено как TradeTag, но отдельной таблицей:

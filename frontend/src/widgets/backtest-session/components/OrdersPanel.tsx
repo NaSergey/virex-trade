@@ -87,7 +87,12 @@ export function OrdersPanel({
       header: t('colOrderDirection'),
       render: (o) => {
         const trade = tradeById.get(o.tradeId);
-        return trade ? dir(trade.direction) : '—';
+        return (
+          <>
+            {trade ? dir(trade.direction) : '—'}
+            {o.botId ? <span className="muted"> · {t('orderBotMark')}</span> : null}
+          </>
+        );
       },
     },
     {
@@ -125,7 +130,16 @@ export function OrdersPanel({
           } satisfies LedgerColumn<BacktestEntryOrder>,
         ]
       : []),
-    { key: 'direction', header: t('colOrderDirection'), render: (o) => dir(o.direction) },
+    {
+      key: 'direction',
+      header: t('colOrderDirection'),
+      render: (o) => (
+        <>
+          {dir(o.direction)}
+          {o.botId ? <span className="muted"> · {t('orderBotMark')}</span> : null}
+        </>
+      ),
+    },
     {
       key: 'price',
       header: t('colOrderPrice'),

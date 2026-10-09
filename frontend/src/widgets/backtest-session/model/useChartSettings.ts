@@ -12,3 +12,18 @@ const encodeOn = (on: boolean) => (on ? null : '0');
  * возвращаться на бирже.
  */
 export const useRsiOn = () => usePersistentValue('virex.terminal.rsi', decodeOn, true, encodeOn);
+
+/**
+ * Рамки боковиков на графике (`lib/ranges.ts`). Включены, пока их не выключили в
+ * настройках графика; выбор на устройстве и общий для всех терминалов — как у RSI.
+ */
+export const RANGES_ENABLED = false;
+
+/**
+ * Выключено, пока не решим, как показывать боковики: переключатель скрыт
+ * (`RANGES_ENABLED` в `ChartSettingsPanel`), а сохранённый выбор не даёт включить.
+ */
+export const useRangesOn = (): [boolean, (on: boolean) => void] => {
+  const [on, setOn] = usePersistentValue('virex.terminal.ranges', decodeOn, true, encodeOn);
+  return [RANGES_ENABLED && on, setOn];
+};

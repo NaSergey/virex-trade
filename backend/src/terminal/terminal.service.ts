@@ -219,6 +219,9 @@ export class TerminalService {
   async placeOrders(userId: string, dto: PlaceOrderDto) {
     const limit = dto.kind === 'limit';
     if (limit && !dto.prices?.length) throw new BadRequestException('Лимитному ордеру нужна цена');
+    if (dto.riskPcts && (!limit || dto.riskPcts.length !== dto.prices!.length)) {
+      throw new BadRequestException('Риск уровней — по одному на цену лимита');
+    }
 
     const creds = await this.creds(userId);
     const inst = await this.market.requireInstrument(dto.symbol);
@@ -243,10 +246,12 @@ export class TerminalService {
     // Сначала считается всё, потом отправляется: сетка, у которой третий
     // уровень не проходит по размеру, не должна оставить на бирже первые два.
     const entries = limit ? dto.prices! : [last!];
-    const plan = entries.map((entry) => {
+    const plan = entries.map((entry, i) => {
       const err = levelsError(dto.direction, entry, stop, take);
       if (err) throw err === 'stopSide' ? stopSide() : takeSide();
-      const qty = floorToStep(qtyByRisk(wallet.balance, dto.riskPct, entry, stop) ?? 0, inst.qtyStep);
+      // Риск уровня — свой, если таблица «Сетки» задала объёмы; иначе общий на ордер.
+      const riskPct = dto.riskPcts?.[i] ?? dto.riskPct;
+      const qty = floorToStep(qtyByRisk(wallet.balance, riskPct, entry, stop) ?? 0, inst.qtyStep);
       const n = Number(qty);
       if (!(n >= inst.minQty) || n * entry < inst.minNotional) throw qtyTooSmall(dto.symbol, String(inst.minQty));
       const max = limit ? inst.maxQty : inst.maxMarketQty;
