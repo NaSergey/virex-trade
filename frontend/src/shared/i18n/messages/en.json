@@ -461,6 +461,7 @@
     "lede": "USDT on TRON (TRC20). The transfer goes straight to the project wallet.",
     "purpose": "The money goes to the domain, market-data subscriptions and building the service.",
     "purposeFree": "The service is free. When a subscription appears, your support will be counted.",
+    "coinsNote": "Support gives coins: {rate} per USDT plus a {bonus}% bonus on top. Your referral link earns {referral}% of the coins your invited friends buy.",
     "disabled": "Donations are not configured right now.",
     "amountLabel": "Amount",
     "startButton": "Support the project",
@@ -488,7 +489,7 @@
   },
   "referrals": {
     "title": "Invite a friend",
-    "lede": "A permanent link — share it, and you get 3000 coins for every friend who signs up.",
+    "lede": "A permanent link — share it, and you get 1000 coins for every friend who signs up, and they get 1000 on top of the starting coins. You also get 10% of the coins your friends buy with a donation.",
     "linkLabel": "Link",
     "totalLabel": "Registered",
     "copy": "copy",

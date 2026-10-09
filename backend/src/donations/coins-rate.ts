@@ -16,3 +16,12 @@ export function coinsForDonation(requestedUnits: bigint): number {
   if (requestedUnits <= 0n) return 0;
   return Number((requestedUnits * BigInt(COINS_PER_USDT)) / UNITS_PER_USDT);
 }
+
+/**
+ * Процент от монет доната — бонус покупателю и реферальные пригласившему.
+ * Вниз до целого, как и сами монеты.
+ */
+export function percentOfCoins(coins: number, percent: number): number {
+  if (coins <= 0) return 0;
+  return Math.floor((coins * percent) / 100);
+}

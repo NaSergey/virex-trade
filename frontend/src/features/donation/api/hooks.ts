@@ -17,6 +17,10 @@ export interface DonationConfig {
   maxSurcharge: string;
   /** Сколько монет даёт один USDT — курс сервера, второй копии во фронте нет. */
   coinsPerUsdt: number;
+  /** Бонус к купленным монетам, % — сверху, тем же балансом. */
+  donationBonusPercent: number;
+  /** Процент от монет друга за донат — пригласившему. */
+  referralDonationPercent: number;
   /** Сколько собрано за всё время — сумма подтверждённых донатов. */
   totalRaised: string;
 }

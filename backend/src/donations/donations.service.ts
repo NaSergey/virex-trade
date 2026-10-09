@@ -8,9 +8,13 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma, Donation } from '@prisma/client';
-import { COINS_PER_USDT } from '../coins/coins.config';
+import {
+  COINS_PER_USDT,
+  DONATION_BONUS_PERCENT,
+  REFERRAL_DONATION_PERCENT,
+} from '../coins/coins.config';
 import { CoinsService } from '../coins/coins.service';
-import { coinsForDonation } from './coins-rate';
+import { coinsForDonation, percentOfCoins } from './coins-rate';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramService } from '../telegram/telegram.service';
 import {
@@ -117,6 +121,10 @@ export class DonationsService {
        * фронте: курс — решение сервера, и второй его копии быть не должно.
        */
       coinsPerUsdt: COINS_PER_USDT,
+      /** Бонус к купленным монетам, % — сверху, тем же балансом. */
+      donationBonusPercent: DONATION_BONUS_PERCENT,
+      /** Процент от монет друга за донат — пригласившему. */
+      referralDonationPercent: REFERRAL_DONATION_PERCENT,
     };
   }
 
@@ -362,14 +370,32 @@ export class DonationsService {
         if (res.count !== 1) return false; // кто-то успел раньше
 
         // Анонимный донат монет не даёт — начислять их некому.
+        // Бонус покупателю и реферальный процент пригласившему — от купленных
+        // монет, в той же транзакции: повтор перевода откатит их вместе с
+        // самим зачислением.
         if (donation.userId) {
+          const coins = coinsForDonation(donation.requestedUnits);
+          await this.coins.credit(tx, donation.userId, coins, 'DONATION', donation.id);
           await this.coins.credit(
             tx,
             donation.userId,
-            coinsForDonation(donation.requestedUnits),
-            'DONATION',
+            percentOfCoins(coins, DONATION_BONUS_PERCENT),
+            'DONATION_BONUS',
             donation.id,
           );
+          const donor = await tx.user.findUnique({
+            where: { id: donation.userId },
+            select: { invitedById: true },
+          });
+          if (donor?.invitedById) {
+            await this.coins.credit(
+              tx,
+              donor.invitedById,
+              percentOfCoins(coins, REFERRAL_DONATION_PERCENT),
+              'REFERRAL_DONATION',
+              donation.id,
+            );
+          }
         }
         return true;
       });

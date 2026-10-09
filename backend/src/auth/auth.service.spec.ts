@@ -1,6 +1,6 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { REFERRAL_BONUS_COINS } from '../coins/coins.config';
+import { REFERRAL_BONUS_COINS, REFERRAL_WELCOME_COINS } from '../coins/coins.config';
 
 // Минимальные ручные стабы вместо полного PrismaService/JwtService — login с
 // несуществующим email не доходит ни до bcrypt, ни до jwt.sign, так что оба
@@ -116,6 +116,13 @@ describe('AuthService.register', () => {
         userId: 'inviter-1',
         amount: REFERRAL_BONUS_COINS,
         kind: 'REFERRAL_BONUS',
+        refId: 'new-user-id',
+      },
+      {
+        tx: expect.anything(),
+        userId: 'new-user-id',
+        amount: REFERRAL_WELCOME_COINS,
+        kind: 'REFERRAL_WELCOME',
         refId: 'new-user-id',
       },
     ]);

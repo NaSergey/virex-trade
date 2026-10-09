@@ -146,6 +146,13 @@ export function DonateDialog({ open, onClose }: { open: boolean; onClose: () => 
               <div className="don-purpose" id="donation-amount-note">
                 <p>{t('purpose')}</p>
                 <p>{t('purposeFree')}</p>
+                <p>
+                  {t('coinsNote', {
+                    rate: config.coinsPerUsdt,
+                    bonus: config.donationBonusPercent,
+                    referral: config.referralDonationPercent,
+                  })}
+                </p>
               </div>
               <ErrorNote error={create.error} fallback={t('createFailed')} />
             </>

@@ -88,7 +88,11 @@ const harness = (opts: {
 
   // Отдельный объект, а не сам prisma: тесты проверяют, что монеты зачисляются
   // ИМЕННО в транзакции зачёта, а не рядом с ней.
-  const txClient = { donation };
+  const txClient = {
+    donation,
+    // Пригласивший донора — отдельный сценарий; по умолчанию донор без него.
+    user: { findUnique: jest.fn().mockResolvedValue({ invitedById: null }) },
+  };
 
   const prisma = {
     donationAmountLock: {
@@ -261,7 +265,27 @@ describe('DonationsService.claimByAmount — монеты', () => {
     // платежа, продавать за неё монеты было бы странно.
     expect(h.credits).toEqual([
       { client: h.txClient, userId: 'user-a', amount: 2500, kind: 'DONATION', refId: 'don-1' },
+      { client: h.txClient, userId: 'user-a', amount: 250, kind: 'DONATION_BONUS', refId: 'don-1' },
     ]);
+  });
+
+  it('пригласивший донора получает 10% от купленных монет', async () => {
+    const h = harness({
+      lock: { expectedUnits: 5_004_300n, donation: donationRow() },
+    });
+    (h.txClient as { user: { findUnique: jest.Mock } }).user.findUnique.mockResolvedValueOnce({
+      invitedById: 'inviter-x',
+    });
+
+    await h.service.claimByAmount(transfer());
+
+    expect(h.credits).toContainEqual({
+      client: h.txClient,
+      userId: 'inviter-x',
+      amount: 250,
+      kind: 'REFERRAL_DONATION',
+      refId: 'don-1',
+    });
   });
 
   it('анонимный донат монет не даёт — начислять их некому', async () => {

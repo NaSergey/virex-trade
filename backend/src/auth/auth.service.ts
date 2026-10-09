@@ -15,7 +15,7 @@ import { resolveJwtAccessSecret } from './jwt-secret';
 import { isOwnerEmail } from '../admin/owner';
 import { TagsService } from '../tags/tags.service';
 import { CoinsService } from '../coins/coins.service';
-import { REFERRAL_BONUS_COINS } from '../coins/coins.config';
+import { REFERRAL_BONUS_COINS, REFERRAL_WELCOME_COINS } from '../coins/coins.config';
 import { avatarUrl } from '../profile/avatar';
 
 export interface PublicUser {
@@ -92,6 +92,7 @@ export class AuthService {
       });
       if (invitedById) {
         await this.coins.credit(tx, invitedById, REFERRAL_BONUS_COINS, 'REFERRAL_BONUS', created.id);
+        await this.coins.credit(tx, created.id, REFERRAL_WELCOME_COINS, 'REFERRAL_WELCOME', created.id);
       }
       return created;
     });
