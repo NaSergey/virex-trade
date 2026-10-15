@@ -1,6 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FocusEvent,
+  type KeyboardEvent,
+  type PointerEvent,
+} from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -17,25 +27,29 @@ import { ThemeToggle } from '@/shared/ui/ThemeToggle';
 import { TradePlayMark } from '@/shared/ui/TradePlayMark';
 import { useLocaleControl } from '@/shared/i18n';
 import { isGamesDarkRoute } from '@/shared/lib/utils/games-dark-route';
+import { JOURNAL_PAGES, isJournalPage, isJournalPath } from '@/shared/lib/utils/journal-route';
 
-type Tab = 'terminal' | 'overview' | 'tags' | 'analytics' | 'market' | 'backtest' | 'games' | 'settings' | 'admin';
+type Tab = 'terminal' | 'journal' | 'market' | 'backtest' | 'games' | 'settings' | 'admin';
 
-type NavItem = { id: Tab; labelKey: Tab };
+type NavItem = { id: Tab; labelKey: Tab; href: string };
 
 /**
- * Биржевой терминал — первым, перед «Обзором», и только у того, чей ключ
+ * Биржевой терминал — первым, перед «Дневником», и только у того, чей ключ
  * умеет ставить ордера (решение владельца 2026-09-30). В общем списке его нет:
  * пункт, обещающий торговлю ключу «только чтение», вёл бы на страницу отказа.
  */
-const TERMINAL: NavItem = { id: 'terminal', labelKey: 'terminal' };
+const TERMINAL: NavItem = { id: 'terminal', labelKey: 'terminal', href: '/terminal' };
 
+/**
+ * «Дневник» — один пункт на три страницы: обзор, теги, аналитика (решение
+ * владельца 2026-10-14). Ведёт на обзор, а между страницами переключают
+ * вкладки самого дневника (`widgets/journal-nav`).
+ */
 const NAV: NavItem[] = [
-  { id: 'overview', labelKey: 'overview' },
-  { id: 'tags', labelKey: 'tags' },
-  { id: 'analytics', labelKey: 'analytics' },
-  { id: 'market', labelKey: 'market' },
-  { id: 'backtest', labelKey: 'backtest' },
-  { id: 'games', labelKey: 'games' },
+  { id: 'journal', labelKey: 'journal', href: '/overview' },
+  { id: 'market', labelKey: 'market', href: '/market' },
+  { id: 'backtest', labelKey: 'backtest', href: '/backtest' },
+  { id: 'games', labelKey: 'games', href: '/games' },
 ];
 
 /**
@@ -44,8 +58,10 @@ const NAV: NavItem[] = [
  * Не строгое равенство: у раздела могут появиться вложенные адреса
  * (`/tags/<id>`), и пункт обязан оставаться подсвеченным внутри своей ветки.
  * Граница проверяется по слэшу, иначе `/lab` подсвечивался бы на `/labels`.
+ * «Дневник» — открыт на любой из своих страниц.
  */
-const isActive = (pathname: string, id: Tab) => pathname === `/${id}` || pathname.startsWith(`/${id}/`);
+const isActive = (pathname: string, id: Tab) =>
+  id === 'journal' ? isJournalPath(pathname) : pathname === `/${id}` || pathname.startsWith(`/${id}/`);
 
 /**
  * Разделы стоят горизонтальной рейкой в шапке, а не колонкой сбоку: страницы
@@ -123,6 +139,51 @@ export function TopNav({
   // столов и турниры сюда не входят — там обычная тема (`isGamesDarkRoute`).
   const inGames = isGamesDarkRoute(pathname);
 
+  // Страницы «Дневника» — панелью под пунктом по наведению на него
+  // (решение владельца 2026-10-14). Закрытие — с задержкой: курсор, идущий с
+  // пункта на панель, на миг не над тем и не над другим. Панель висит от
+  // левого края самого пункта — его место снимается при открытии, а не
+  // считается заранее, — и не выходит за правый край окна.
+  const [journalOpen, setJournalOpen] = useState(false);
+  const [journalX, setJournalX] = useState(0);
+  const headerRef = useRef<HTMLElement>(null);
+  const journalRef = useRef<HTMLAnchorElement>(null);
+  const journalMenuRef = useRef<HTMLDivElement>(null);
+  const journalTimer = useRef<number | undefined>(undefined);
+  const openJournal = () => {
+    window.clearTimeout(journalTimer.current);
+    const link = journalRef.current;
+    const header = headerRef.current;
+    const menu = journalMenuRef.current;
+    if (link && header && menu) {
+      const base = header.getBoundingClientRect();
+      const room = base.width - menu.offsetWidth - 16;
+      setJournalX(Math.max(16, Math.min(link.getBoundingClientRect().left - base.left, room)));
+    }
+    setJournalOpen(true);
+  };
+  const closeJournal = (delay = 160) => {
+    window.clearTimeout(journalTimer.current);
+    journalTimer.current = window.setTimeout(() => setJournalOpen(false), delay);
+  };
+  useEffect(() => () => window.clearTimeout(journalTimer.current), []);
+  // Наведение — только мышью: касание на телефоне вызывает те же события, и
+  // панель раскрывалась бы под пальцем на пути к переходу. Там страницы
+  // дневника — вкладками на самой странице (`widgets/journal-nav`).
+  const onJournalEnter = (e: PointerEvent) => {
+    if (e.pointerType === 'mouse') openJournal();
+  };
+  const onJournalBlur = (e: FocusEvent) => {
+    const next = e.relatedTarget as Node | null;
+    if (next && (journalRef.current?.contains(next) || journalMenuRef.current?.contains(next))) return;
+    closeJournal(0);
+  };
+  const onJournalKey = (e: KeyboardEvent) => {
+    if (e.key !== 'Escape') return;
+    closeJournal(0);
+    journalRef.current?.focus();
+  };
+
   // На узком экране разделы стоят рейкой, которая листается вбок, и выбранный
   // может оказаться за её краем — после перезагрузки страницы или перехода не
   // мышью. Рейка подводит его к себе сама; block: 'nearest' держит при этом
@@ -185,7 +246,7 @@ export function TopNav({
   }, [menuOpen, closeMenu]);
 
   return (
-    <header className={`top${inGames ? ' top-game' : ''}`}>
+    <header className={`top${inGames ? ' top-game' : ''}`} ref={headerRef}>
       <div className="top-in">
         <Link href="/overview" className="mark">
           <TradePlayMark width={46} height={28} />
@@ -212,15 +273,34 @@ export function TopNav({
               aria-hidden
             />
           )}
-          {nav.map((item) => (
-            <Link
-              key={item.id}
-              href={`/${item.id}`}
-              aria-current={isActive(pathname, item.id) ? 'page' : undefined}
-            >
-              {t(item.labelKey)}
-            </Link>
-          ))}
+          {nav.map((item) =>
+            item.id === 'journal' ? (
+              <Link
+                key={item.id}
+                ref={journalRef}
+                href={item.href}
+                aria-current={isActive(pathname, item.id) ? 'page' : undefined}
+                aria-haspopup="true"
+                aria-expanded={journalOpen}
+                onPointerEnter={onJournalEnter}
+                onPointerLeave={() => closeJournal()}
+                onFocus={openJournal}
+                onBlur={onJournalBlur}
+                onKeyDown={onJournalKey}
+                onClick={() => closeJournal(0)}
+              >
+                {t(item.labelKey)}
+              </Link>
+            ) : (
+              <Link
+                key={item.id}
+                href={item.href}
+                aria-current={isActive(pathname, item.id) ? 'page' : undefined}
+              >
+                {t(item.labelKey)}
+              </Link>
+            ),
+          )}
         </nav>
 
         <div className="top-r" ref={menuRef}>
@@ -359,6 +439,36 @@ export function TopNav({
             </div>
           )}
         </div>
+      </div>
+
+      {/* Панель страниц «Дневника» — под пунктом, по наведению на него. Всегда
+          в разметке, спрятана стилем: так ей есть откуда раскрываться и куда
+          уходить, а не только где появляться. Миниатюры экранов и строки
+          описаний в ней стояли и сняты владельцем 2026-10-14 («борщанул»). */}
+      <div
+        className="jmenu"
+        ref={journalMenuRef}
+        data-open={journalOpen}
+        style={{ left: journalX }}
+        onPointerEnter={onJournalEnter}
+        onPointerLeave={() => closeJournal()}
+        onBlur={onJournalBlur}
+        onKeyDown={onJournalKey}
+      >
+        <nav aria-label={t('journalSections')}>
+          {JOURNAL_PAGES.map((id, i) => (
+            <Link
+              key={id}
+              className="jmenu-item"
+              href={`/${id}`}
+              aria-current={isJournalPage(pathname, id) ? 'page' : undefined}
+              style={{ '--i': i } as CSSProperties}
+              onClick={() => closeJournal(0)}
+            >
+              <span className="jmenu-t">{t(id)}</span>
+            </Link>
+          ))}
+        </nav>
       </div>
 
       {/* Окно живёт в шапке, а не в разделе: шапка есть на каждой странице

@@ -13,6 +13,8 @@ const MAX_CALLBACK_DATA = 64;
 // "attach this chat to that account", so an unused one shouldn't stay live
 // indefinitely in a chat history, a screenshot or a URL bar.
 const LINK_CODE_TTL_MS = 15 * 60_000;
+// Загрузка файла до 50 МБ: без потолка зависший запрос держал бы бэкап вечно.
+const UPLOAD_TIMEOUT_MS = 5 * 60_000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -91,12 +93,14 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
 
   // ── Bot API plumbing ──
 
-  private async api<T = unknown>(method: string, body?: object, signal?: AbortSignal): Promise<T | null> {
+  private async api<T = unknown>(method: string, body?: object | FormData, signal?: AbortSignal): Promise<T | null> {
+    // Файл уходит multipart'ом: заголовок с границей частей fetch ставит сам.
+    const form = body instanceof FormData;
     try {
       const res = await fetch(`${TG_API}/bot${this.token}/${method}`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: body ? JSON.stringify(body) : undefined,
+        headers: form ? undefined : { 'content-type': 'application/json' },
+        body: form ? body : body ? JSON.stringify(body) : undefined,
         signal,
       });
       const data = (await res.json().catch(() => null)) as { ok?: boolean; result?: T; description?: string } | null;
@@ -133,6 +137,20 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
       parse_mode: 'HTML',
       ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     });
+    return res != null;
+  }
+
+  /** Файл в чат (бэкап базы). Лимит Bot API — 50 МБ на файл; режет вызывающий. */
+  async sendDocument(chatId: string, file: Uint8Array, filename: string, caption?: string): Promise<boolean> {
+    if (!this.enabled) return false;
+    const form = new FormData();
+    form.append('chat_id', chatId);
+    if (caption) {
+      form.append('caption', caption);
+      form.append('parse_mode', 'HTML');
+    }
+    form.append('document', new Blob([new Uint8Array(file)]), filename);
+    const res = await this.api('sendDocument', form, AbortSignal.timeout(UPLOAD_TIMEOUT_MS));
     return res != null;
   }
 

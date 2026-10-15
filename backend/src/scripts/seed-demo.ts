@@ -29,6 +29,7 @@ import 'reflect-metadata';
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { CTX_VERSION } from '../trades/trade-context.service';
+import { seedDemoBacktests } from './seed-demo-backtests';
 
 /**
  * Учётка публична по назначению: её вводит кнопка «Посмотреть демо» на входе
@@ -951,6 +952,9 @@ async function main() {
       // по которой карточка находится, а не пересобирается заново.
       data: { userId: user.id, tagIds: pinned, key: pinned.join('|') },
     });
+
+    // Бектесты — отдельное зерно и отдельный ГПСЧ: журнал выше от них не меняется.
+    await seedDemoBacktests(prisma, user.id, now);
 
     const totalTrades = await prisma.trade.count({ where: { userId: user.id } });
     const pnl = positions.reduce(

@@ -1,115 +1,183 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import Image from 'next/image';
+import { useLocale, useTranslations } from 'next-intl';
 import { useGSAP } from '@gsap/react';
 import { gsap } from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { cn } from '@/shared/lib/utils/css';
+import { Button } from '@/shared/ui/Button';
 import { Wrap } from '@/shared/ui/Wrap';
+import { SceneHead } from './SceneHead';
 import { registerGsap } from '../lib/gsapConfig';
 import { prefersReducedMotion } from '../lib/reducedMotion';
-import { PLAY_ONCE, revealOnEnter } from '../lib/reveal';
+import { revealOnEnter } from '../lib/reveal';
 
-const STEPS = [1, 2, 3, 4, 5] as const;
+/** Пункт и его экран: снимок настоящей страницы платформы (`public/assets/landing`). */
+const STEPS = [
+  { n: 1, shot: 'journal' },
+  { n: 2, shot: 'tags' },
+  { n: 3, shot: 'terminal' },
+  { n: 4, shot: 'backtest' },
+  { n: 5, shot: 'games' },
+] as const;
+
+/** Сколько пункт стоит, прежде чем выбор перейдёт к следующему. Та же длина — у полосы. */
+const TOUR_MS = 7000;
 
 /**
- * «Как это работает» — что есть на платформе и что на ней делать: журнал,
- * разметка и аналитика, терминал, бектест и тренажёр, игры. Единственный
- * рассказ о продукте на главной — первый экран отдан знаку.
+ * «Что внутри» — пять разделов платформы и их настоящие экраны.
  *
- * Раскладка: слева липкий указатель с номерами, справа сами пункты. Активный
- * номер выворачивается плашкой — тем же способом, каким в продукте помечено
- * выбранное; ничего нового в язык страницы это не вводит.
+ * Подача — по лучшим продуктовым страницам (Mercury, TradeZella): показ
+ * продукта, а не описание. Слева пять пунктов, раскрыт один — фраза о разделе;
+ * справа большой экран этого раздела. Экраны — снимки страниц платформы на
+ * демо-счёте (как снять заново — в CLAUDE.md, раздел главной), под ними это
+ * сказано словами.
  *
- * Липкость сделана `position: sticky`, а не пином ScrollTrigger. Пин
- * вырезает блок из потока, подменяет его распоркой и меняет высоту
- * документа — от этого разъезжались границы соседних сцен, и прежняя главная
- * держала на это отдельный набор оговорок. Sticky делает то же самое
- * средствами браузера, высоты документа не трогает и не ломается на
- * разрывном прыжке скролла.
+ * Движение:
+ *  - **Въезд** — экран поднимается из наклона в плоскость, пока секция
+ *    въезжает (scrub): лежит «столом» и встаёт к зрителю.
+ *  - **Смена** — новый экран выезжает шторкой снизу поверх прежнего и медленно
+ *    наплывает, пока стоит (CSS: `.ls-shot.on`).
+ *  - **Сама** — под активным пунктом бежит полоса; дошла — выбор переходит
+ *    дальше. Конец полосы и есть таймер (`onAnimationEnd`), второго счётчика
+ *    времени нет. Полоса стоит, пока секция не на экране и пока курсор над
+ *    блоком; клик по пункту автосмену выключает — дальше выбирает человек.
+ *
+ * Сняты владельцем 2026-10-14 — не возвращать: липкий указатель с пятью
+ * длинными абзацами, строки-ведомость, аккордеон из крупных названий, пять граф
+ * текстом и переход «лист открывается слева направо».
  */
 export function StepsScene() {
   const t = useTranslations('landing');
+  const locale = useLocale() === 'en' ? 'en' : 'ru';
   const root = useRef<HTMLElement>(null);
+  const tour = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
+  const [prev, setPrev] = useState<number | null>(null);
+  const [auto, setAuto] = useState(true);
+  const [inView, setInView] = useState(false);
+  const [hover, setHover] = useState(false);
+
+  // Автосмена только на экране: за его краем полоса стоит, а не листает пункты
+  // впустую. Уменьшенное движение автосмену снимает в CSS: у полосы нет
+  // анимации — нет и её конца, который переключил бы пункт.
+  useEffect(() => {
+    const el = tour.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), { threshold: 0.35 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  const show = (next: number) => {
+    if (next === active) return;
+    setPrev(active);
+    setActive(next);
+  };
 
   useGSAP(
     () => {
       registerGsap();
-      const items = gsap.utils.toArray<HTMLElement>('.ls-step', root.current ?? undefined);
-      if (items.length === 0) return;
+      const el = root.current;
+      if (!el || prefersReducedMotion()) return;
 
-      // Указатель ведёт по шагам всегда — это навигация, а не эффект, и в
-      // режиме уменьшенного движения он нужен ровно так же.
-      // Активен последний пункт, чей верх уже прошёл линию 62% экрана. Триггер
-      // каждого пункта живёт от этой линии до конца страницы, и номер — число
-      // активных минус один: так указатель верен и в промежутках между
-      // пунктами, и после прыжка скролла через несколько сразу (переключатель
-      // «вошёл — вышел» на каждом пункте в таких случаях оставлял старый номер).
-      const triggers: ScrollTrigger[] = [];
-      const sync = () => setActive(Math.max(0, triggers.filter((tr) => tr.isActive).length - 1));
-      items.forEach((item) => {
-        triggers.push(
-          ScrollTrigger.create({
-            trigger: item,
-            start: 'top 62%',
-            endTrigger: document.documentElement,
-            end: 'bottom bottom',
-            onToggle: sync,
-          }),
-        );
-      });
-
-      if (prefersReducedMotion()) return;
-
-      items.forEach((item) => {
-        const rule = item.querySelector<HTMLElement>('.ls-step-rule');
-        const body = gsap.utils.toArray<HTMLElement>('.ls-step-line', item);
-        gsap
-          .timeline({ scrollTrigger: { trigger: item, start: 'top 82%', toggleActions: PLAY_ONCE } })
-          .fromTo(rule, { scaleY: 0 }, { scaleY: 1, duration: 0.7, ease: 'power2.out' }, 0)
-          .fromTo(body, { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: 0.8, stagger: 0.1, ease: 'power3.out' }, 0.1);
-      });
-
-      revealOnEnter(gsap.utils.toArray<HTMLElement>('.ls-index-item', root.current ?? undefined), {
-        trigger: root.current,
-        start: 'top 70%',
-        y: 14,
+      gsap.fromTo(
+        '.ls-tour-frame',
+        { rotationX: 24, y: 90, scale: 0.9, opacity: 0.35, transformPerspective: 1400, transformOrigin: '50% 100%' },
+        {
+          rotationX: 0,
+          y: 0,
+          scale: 1,
+          opacity: 1,
+          ease: 'power2.out',
+          scrollTrigger: { trigger: '.ls-tour', start: 'top 95%', end: 'top 35%', scrub: 0.6 },
+        },
+      );
+      revealOnEnter(gsap.utils.toArray<HTMLElement>('.ls-tour-item', el), {
+        trigger: el.querySelector('.ls-tour'),
+        start: 'top 75%',
+        y: 18,
         stagger: 0.08,
       });
     },
     { scope: root },
   );
 
-  return (
-    <section className="ls-steps" id="how" ref={root}>
-      <Wrap className="ls-steps-wrap">
-        <aside className="ls-steps-aside">
-          <h2 className="ls-kicker">{t('stepsTitle')}</h2>
-          <ol className="ls-index">
-            {STEPS.map((n, i) => (
-              <li className={cn('ls-index-item', i === active && 'on')} key={n}>
-                <span className="ls-index-n">{`0${n}`}</span>
-                <span className="ls-index-t">{t(`step${n}Title`)}</span>
-              </li>
-            ))}
-          </ol>
-        </aside>
+  const run = auto && inView && !hover;
 
-        <ol className="ls-steps-list">
-          {STEPS.map((n) => (
-            <li className="ls-step" key={n}>
-              <span className="ls-step-rule" aria-hidden />
-              <div className="ls-step-body">
-                <span className="ls-step-n ls-step-line">{`0${n}`}</span>
-                <h3 className="ls-step-line">{t(`step${n}Title`)}</h3>
-                <p className="ls-step-line">{t(`step${n}Body`)}</p>
+  return (
+    <section className="ls-steps" id="how" ref={root} aria-labelledby="how-title">
+      <div className="ls-steps-in">
+        <Wrap>
+          <SceneHead kicker={t('stepsTitle')} kickerId="how-title" />
+          <div
+            className="ls-tour"
+            ref={tour}
+            data-run={run}
+            data-auto={auto}
+            style={{ '--tour-ms': `${TOUR_MS}ms` } as CSSProperties}
+            onPointerEnter={() => setHover(true)}
+            onPointerLeave={() => setHover(false)}
+          >
+            <ol className="ls-tour-list" role="tablist" aria-orientation="vertical">
+              {STEPS.map(({ n }, i) => {
+                const on = i === active;
+                return (
+                  <li className={cn('ls-tour-item', on && 'on')} key={n}>
+                    <Button
+                      variant="none"
+                      className="ls-tour-tab"
+                      role="tab"
+                      id={`how-tab-${n}`}
+                      aria-selected={on}
+                      aria-controls="how-screen"
+                      onClick={() => {
+                        setAuto(false);
+                        show(i);
+                      }}
+                    >
+                      <span className="ls-tour-n">{`0${n}`}</span>
+                      <span className="ls-tour-t">{t(`step${n}Title`)}</span>
+                    </Button>
+                    <div className="ls-tour-body">
+                      <p>{t(`step${n}Body`)}</p>
+                    </div>
+                    {on && (
+                      <span
+                        className="ls-tour-bar"
+                        aria-hidden
+                        onAnimationEnd={() => show((i + 1) % STEPS.length)}
+                      />
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+
+            <figure className="ls-tour-stage">
+              <div
+                className="ls-tour-frame"
+                id="how-screen"
+                role="tabpanel"
+                aria-labelledby={`how-tab-${STEPS[active].n}`}
+              >
+                {STEPS.map(({ n, shot }, i) => (
+                  <div className={cn('ls-shot', i === active && 'on', i === prev && 'was')} key={shot}>
+                    <Image
+                      src={`/assets/landing/${shot}-${locale}-v4.webp`}
+                      alt={i === active ? t(`step${n}Title`) : ''}
+                      fill
+                      sizes="(max-width: 1100px) 100vw, 62vw"
+                    />
+                  </div>
+                ))}
               </div>
-            </li>
-          ))}
-        </ol>
-      </Wrap>
+              <figcaption className="ls-tour-note">{t('stepsDemo')}</figcaption>
+            </figure>
+          </div>
+        </Wrap>
+      </div>
     </section>
   );
 }

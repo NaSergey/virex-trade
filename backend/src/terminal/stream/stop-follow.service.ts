@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { BybitCredentials } from '../../bybit/services/bybit-auth.service';
 import { BybitTerminalClient } from '../bybit-terminal.client';
-import { roundToTick, toPosition } from '../terminal-math';
+import { roundToTick, toPosition, type Direction } from '../terminal-math';
 import { TerminalMarketService } from '../terminal-market.service';
 import { TerminalService } from '../terminal.service';
 import { crossed, followTarget } from './follow-rule';
@@ -9,9 +9,9 @@ import { StopFollowStore, type FollowPlan, type FollowUpdate } from './stop-foll
 import type { StreamState } from './stream-state';
 
 /** Bybit: «стоп и тейк уже такие» — не отказ. */
-const LEVELS_NOT_MODIFIED = 34040;
+export const LEVELS_NOT_MODIFIED = 34040;
 /** Bybit: «ордера уже нет» — исполнен или снят, снимать нечего. */
-const ORDER_GONE = 110001;
+export const ORDER_GONE = 110001;
 /** Стоп не встал (шлюз занят, биржа отказала) — повтор через столько. */
 const RETRY_MS = 10_000;
 /**
@@ -21,7 +21,7 @@ const RETRY_MS = 10_000;
  */
 const UNKNOWN_TRIES = 18;
 /** Ордер больше не висит: исполнен — шаг переноса; иначе исполниться уже не может. */
-const DONE = new Set(['Filled', 'Cancelled', 'Rejected', 'Deactivated']);
+export const DONE = new Set(['Filled', 'Cancelled', 'Rejected', 'Deactivated']);
 
 /** Что поток знает о пользователе: ключ и живое состояние счёта (берётся в момент шага). */
 export interface StreamContext {
@@ -42,7 +42,7 @@ export interface StreamListener {
 }
 export const STREAM_LISTENER = Symbol('STREAM_LISTENER');
 
-const positive = (v: unknown): number | null => {
+export const positive = (v: unknown): number | null => {
   const n = parseFloat(String(v ?? ''));
   return Number.isFinite(n) && n > 0 ? n : null;
 };
@@ -56,7 +56,7 @@ const followLooser = (direction: 'long' | 'short', stop: number, target: number)
   direction === 'long' ? stop < target : stop > target;
 
 /** Строка позиции плана в состоянии потока, или null — позиции нет. */
-function positionOf(state: StreamState | null, plan: FollowPlan): { row: any; stop: number | null } | null {
+export function positionOf(state: StreamState | null, plan: { symbol: string; direction: Direction }): { row: any; stop: number | null } | null {
   for (const row of Object.values(state?.positions ?? {})) {
     const p = toPosition(row);
     if (p && p.symbol === plan.symbol && p.direction === plan.direction) return { row, stop: p.stopLoss };

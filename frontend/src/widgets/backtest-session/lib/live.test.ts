@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { liveAnchor, mergeMinutes, mergeTagged, ofSymbol } from './live';
+import { visibleUntil, lastPrice } from './candles';
+import { liveAnchor, mergeMinutes, mergeTagged, nextChange, ofSymbol } from './live';
 
 const MIN = 60_000;
 const T = Date.UTC(2026, 8, 19, 12, 0, 0);
@@ -102,5 +103,67 @@ describe('минутки, помеченные монетой', () => {
     expect(ofSymbol(state, 'ETHUSDT')).toBeNull();
     expect(ofSymbol(state, 'BTCUSDT')).toBe(state);
     expect(ofSymbol(null, 'BTCUSDT')).toBeNull();
+  });
+});
+
+/**
+ * Часы эфира тикают раз в 250 мс, но экран обновляют только на порогах
+ * (`nextChange`): до порога ничего видимого не меняется — ни свечи, ни цена, ни
+ * «закрыть можно», ни возраст позиции, ни конец сессии. Тест держит именно это:
+ * все состояния на отрезке (from, X] совпадают с состоянием в from, а сразу за
+ * порогом что-то меняется.
+ */
+describe('nextChange', () => {
+  const minutes = Array.from({ length: 10 }, (_, i) => c(T + i * MIN, 100 + i));
+  const view = (t: number, anchors: number[], end: number | null) => {
+    const cursor = Math.min(t, end ?? t);
+    return JSON.stringify({
+      until: visibleUntil(minutes, cursor),
+      price: lastPrice(minutes, cursor),
+      canClose: anchors.map((a) => !(a >= cursor)),
+      age: anchors.map((a) => Math.floor((cursor - a) / MIN)),
+      ended: end != null && t >= end,
+    });
+  };
+
+  it('без позиций — граница следующей минуты; на самой границе — она же', () => {
+    expect(nextChange(T + 15_000, [], null)).toBe(T + MIN);
+    expect(nextChange(T + MIN, [], null)).toBe(T + MIN);
+  });
+
+  it('вход свежей позиции впереди момента — порог на нём', () => {
+    expect(nextChange(T + 15_000, [T + 15_200], null)).toBe(T + 15_199);
+    expect(nextChange(T + 15_200, [T + 15_200], null)).toBe(T + 15_200);
+  });
+
+  it('у открытой позиции — каждая целая минута от входа, если она раньше границы минуты', () => {
+    expect(nextChange(T + 30_000, [T - 10_000], null)).toBe(T + 49_999);
+    expect(nextChange(T + 30_000, [T + 20_000], null)).toBe(T + MIN);
+  });
+
+  it('конец сессии — порог; прошедший конец — нет', () => {
+    expect(nextChange(T + 15_000, [], T + 20_000)).toBe(T + 19_999);
+    expect(nextChange(T + 30_000, [], T + 20_000)).toBe(T + MIN);
+  });
+
+  it('до порога видимое не меняется, за порогом — меняется', () => {
+    const cases: [number, number[], number | null][] = [
+      [T + 15_000, [], null],
+      [T + MIN, [], null],
+      [T + 15_000, [T + 15_200], null],
+      [T + 30_000, [T + 20_000], null],
+      [T + 2 * MIN + 5_000, [T + 2 * MIN + 59_999, T + 10_000], null],
+      [T + 15_000, [T + 5_000], T + 40_000],
+      [T + 3 * MIN - 1, [T + 3 * MIN - 1], null],
+    ];
+    for (const [from, anchors, end] of cases) {
+      const x = nextChange(from, anchors, end);
+      const before = view(from, anchors, end);
+      for (let t = from; t <= x; t += Math.max(1, Math.floor((x - from) / 37))) {
+        expect(view(t, anchors, end), `from ${from - T} t ${t - T} x ${x - T}`).toBe(before);
+      }
+      expect(view(x, anchors, end)).toBe(before);
+      expect(view(x + 1, anchors, end)).not.toBe(before);
+    }
   });
 });

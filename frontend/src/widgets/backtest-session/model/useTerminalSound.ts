@@ -127,9 +127,17 @@ export function useSnapshotSound<T>(
   const seenErrors = useRef(errors);
 
   // Контекст заводится заранее: до первого сигнала он должен успеть
-  // разблокироваться кликом по терминалу.
+  // разблокироваться кликом по терминалу. Заводится в простой браузера, а не
+  // в эффекте монтирования: создание контекста — десятки миллисекунд, и в общем
+  // куске с подъёмом терминала они удлиняли задачу, которая держит прокрутку.
   useEffect(() => {
-    if (audible) audioContext();
+    if (!audible) return;
+    if (!window.requestIdleCallback) {
+      audioContext();
+      return;
+    }
+    const id = window.requestIdleCallback(() => audioContext(), { timeout: 2000 });
+    return () => window.cancelIdleCallback(id);
   }, [audible]);
 
   useEffect(() => {

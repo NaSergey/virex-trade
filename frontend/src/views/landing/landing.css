@@ -140,6 +140,9 @@
   background: var(--color-fg, #e8e4dc);
   transform: scaleX(0);
   transform-origin: 0 50%;
+  /* Свой слой: полоска меняется каждый кадр прокрутки, и без слоя каждый кадр
+     перерисовывал бы и пересобирал слои страницы. */
+  will-change: transform;
 }
 
 .ls-skip {
@@ -166,119 +169,424 @@ main:focus {
 }
 
 
-/* ── три шага ──────────────────────────────────────────────────── */
-/* Нижнего отступа нет: за секцией идёт «Терминал» с линейкой и своим верхним —
-   два вместе давали бы двойной зазор. */
-.ls-steps {
-  padding: var(--s6) 0 0;
+/* ── секции ────────────────────────────────────────────────────────
+   Секции идут подряд; переход на въезде ведёт сама сцена: дорога
+   прокладывается, экран разделов встаёт из наклона, регистрация сходится. У первого
+   экрана и терминала переходов нет — сняты владельцем. Ничего не
+   замирает на полпути: прежняя лента, где секция липла низом к экрану, пока на
+   неё наезжала следующая, оставляла её стоять со срезанным верхом (владелец
+   2026-10-13). Граница между секциями — линейка; шапка секции, доехавшей до
+   верха, встаёт под меню. */
+.ls-about,
+.ls-term,
+.ls-steps,
+.ls-register {
+  border-top: 1px solid var(--hair);
 }
-.ls-steps-wrap {
-  display: grid;
-  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
-  gap: var(--s6);
-  align-items: start;
+.ls-about-in,
+.ls-term-in,
+.ls-steps-in,
+.ls-register {
+  padding-top: calc(var(--ls-nav-h) + var(--s5));
 }
 
-.ls-steps-aside {
-  position: sticky;
-  top: 22vh;
-}
-.ls-index {
+/* ── шапка секции (SceneHead) ──────────────────────────────────────
+   Одна на все кадры: раздел капителью под линейкой, заголовок слева, лид
+   справа по нижнему краю. */
+.ls-head {
   display: grid;
-  gap: var(--s2);
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: var(--s3) var(--s6);
+  align-items: end;
+}
+.ls-head .ls-kicker {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.ls-head-title {
+  font-size: clamp(26px, 2.8vw, 44px);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.ls-head .lp-lede {
+  max-width: 54ch;
+  font-size: var(--t-s);
+  line-height: 1.65;
+}
+.ls-head-stack {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+.ls-head-stack .ls-head-title {
+  max-width: 16ch;
+}
+
+
+/* ── «О проекте»: дорожная карта ────────────────────────────────────
+   Этапы колонками одной ширины. У каждого этапа свой отрезок дороги сверху,
+   от его станции до следующей: сплошной у запущенного, пунктир у планов.
+   Запущенное — приглушённый список названий, планы — название и подпись:
+   колонка запущенного не должна перевешивать (владелец 2026-10-13). */
+.ls-about-in {
+  padding-bottom: var(--s6);
+}
+.ls-about-wrap {
+  display: grid;
+  gap: var(--s5);
+}
+.ls-rm {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin: 0;
   padding: 0;
   list-style: none;
 }
-.ls-index-item {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--s3);
-  align-items: baseline;
-  padding: var(--s2) var(--s3);
-  margin: 0 calc(-1 * var(--s3));
-  color: var(--ink-3);
-  font-size: var(--t-s);
-  line-height: 1.4;
-  transition: color 0.3s ease, background-color 0.3s ease;
+.ls-rm-phase {
+  position: relative;
+  padding: 56px var(--s4) 0 0;
 }
-.ls-index-n {
+.ls-rm-seg {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 20px;
+  border-top: 2px dashed var(--ink-3);
+  transform-origin: 0 0;
+}
+.ls-rm-phase.done .ls-rm-seg {
+  border-top-style: solid;
+  border-top-color: var(--ink-2);
+}
+/* Станция — ромб; поворот отдельным свойством `rotate`: `transform` занят
+   появлением. */
+.ls-rm-node {
+  position: absolute;
+  left: -1px;
+  top: 14px;
+  width: 14px;
+  height: 14px;
+  rotate: 45deg;
+  border: 2px solid var(--ink-3);
+  background: var(--ground);
+}
+.ls-rm-phase.done .ls-rm-node {
+  background: var(--ink-2);
+  border-color: var(--ink-2);
+}
+.ls-rm-label,
+.ls-rm-now {
   font-family: var(--font-mono);
   font-size: var(--t-xs);
-  letter-spacing: 0.1em;
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
-/* Активный шаг — выворотная плашка: единственный способ выделить в системе,
-   где цвет означает деньги. Тот же приём, что у выбранной кнопки в .seg. */
-.ls-index-item.on {
+.ls-rm-label {
+  position: absolute;
+  left: 24px;
+  top: 2px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: var(--ink-2);
+}
+.ls-rm-label span {
+  margin-left: var(--s2);
+  color: var(--ink-3);
+}
+/* «Сейчас» — выворот, как выбранное в системе: на стыке запущенного и планов. */
+.ls-rm-now {
+  position: absolute;
+  left: -16px;
+  top: -6px;
+  translate: -50% 0;
+  padding: 2px 8px;
+  font-size: 10px;
   background: var(--ink);
   color: var(--ground);
 }
 
-.ls-steps-list {
+.ls-rm-items {
   display: grid;
-  gap: var(--s6);
+  gap: 14px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
-.ls-step {
-  position: relative;
-  padding-left: var(--s4);
+.ls-rm-item {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
 }
-.ls-step-rule {
+.ls-rm-mark {
+  width: 7px;
+  height: 7px;
+  rotate: 45deg;
+  translate: 0 -2px;
+  border: 1.5px solid var(--ink-2);
+}
+.ls-rm-title {
+  font-size: 17px;
+  line-height: 1.25;
+  color: var(--ink);
+}
+.ls-rm-desc {
+  margin-top: 2px;
+  font-size: var(--t-s);
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.ls-rm-phase.done .ls-rm-items {
+  gap: 10px;
+}
+.ls-rm-phase.done .ls-rm-mark {
+  background: var(--ink-2);
+}
+.ls-rm-phase.done .ls-rm-title {
+  font-size: 15px;
+  color: var(--ink-2);
+}
+
+/* Начальное состояние — в CSS: до гидрации собранная карта не мелькает. */
+@media (prefers-reduced-motion: no-preference) {
+  .ls-rm-seg {
+    transform: scaleX(0);
+  }
+  .ls-rm-node {
+    transform: scale(0);
+  }
+  .ls-rm-label,
+  .ls-rm-item,
+  .ls-rm-now {
+    opacity: 0;
+  }
+}
+
+/* Телефон: дорога сверху вниз слева, этапы друг под другом. Та же граница —
+   `VERTICAL` в `AboutScene`. */
+@media (max-width: 720px) {
+  .ls-rm {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ls-rm-phase {
+    padding: 30px 0 var(--s4) 32px;
+  }
+  .ls-rm-seg {
+    left: 6px;
+    right: auto;
+    top: 7px;
+    bottom: 0;
+    border-top: 0;
+    border-left: 2px dashed var(--ink-3);
+  }
+  .ls-rm-phase.done .ls-rm-seg {
+    border-left-style: solid;
+    border-left-color: var(--ink-2);
+  }
+  .ls-rm-node {
+    left: 0;
+    top: 0;
+  }
+  .ls-rm-label {
+    left: 32px;
+    top: 0;
+  }
+  .ls-rm-now {
+    left: auto;
+    right: 0;
+    top: -2px;
+    translate: none;
+  }
+}
+@media (max-width: 720px) and (prefers-reduced-motion: no-preference) {
+  .ls-rm-seg {
+    transform: scaleY(0);
+  }
+}
+
+
+
+/* ── как это работает: пять разделов и их экраны ──────────────────────
+   Слева пункты, справа экран раздела (`StepsScene`). Активный пункт —
+   светлый, с фразой и бегущей полосой; дошла полоса — выбор переходит
+   дальше. */
+.ls-steps-in {
+  padding-bottom: var(--s6);
+}
+.ls-tour {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 9fr);
+  gap: var(--s6);
+  align-items: center;
+  margin-top: var(--s5);
+}
+
+.ls-tour-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--hair);
+}
+.ls-tour-item {
+  position: relative;
+  border-bottom: 1px solid var(--hair);
+}
+.ls-tour-tab {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: baseline;
+  width: 100%;
+  padding: var(--s3) 0;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.35s ease;
+}
+.ls-tour-tab:hover,
+.ls-tour-tab:focus-visible {
+  color: var(--ink-2);
+}
+.ls-tour-item.on .ls-tour-tab {
+  color: var(--ink);
+}
+.ls-tour-n {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  letter-spacing: 0.14em;
+}
+.ls-tour-t {
+  font-size: clamp(20px, 1.8vw, 26px);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+/* Фраза раскрывается строками сетки 0fr → 1fr, без замера высоты в JS. */
+.ls-tour-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.5s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.ls-tour-item.on .ls-tour-body {
+  grid-template-rows: 1fr;
+}
+.ls-tour-body p {
+  min-height: 0;
+  overflow: hidden;
+  margin: 0;
+  padding-left: 44px;
+  max-width: 46ch;
+  color: var(--ink-2);
+  font-size: var(--t-s);
+  line-height: 1.6;
+  opacity: 0;
+  transition: opacity 0.3s ease, padding-bottom 0.5s ease;
+}
+.ls-tour-item.on .ls-tour-body p {
+  padding-bottom: var(--s4);
+  opacity: 1;
+  transition-delay: 0.15s, 0s;
+}
+/* Полоса времени поверх нижней линейки пункта; её конец переключает пункт. */
+.ls-tour-bar {
   position: absolute;
   left: 0;
-  top: 4px;
-  bottom: 4px;
-  width: 1px;
-  background: var(--hair-2);
-  transform-origin: 50% 0%;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: var(--ink);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  animation: ls-tour-fill var(--tour-ms) linear forwards;
 }
-.ls-step-n {
-  display: block;
+.ls-tour[data-run='false'] .ls-tour-bar {
+  animation-play-state: paused;
+}
+.ls-tour[data-auto='false'] .ls-tour-bar {
+  animation: none;
+  transform: scaleX(1);
+}
+@keyframes ls-tour-fill {
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* Экран. Наклон на въезде ставит GSAP (`StepsScene`). */
+.ls-tour-stage {
+  margin: 0;
+}
+.ls-tour-frame {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border: 1px solid var(--hair-2);
+  background: #000;
+}
+/* Смена: новый экран выезжает шторкой снизу поверх прежнего (`.was`) и
+   медленно наплывает, пока стоит. Остальные спрятаны и сброшены — следующий
+   въезд начнётся снизу заново. */
+.ls-shot {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  clip-path: inset(100% 0 0 0);
+}
+.ls-shot img {
+  object-fit: cover;
+  object-position: left top;
+}
+.ls-shot.was {
+  z-index: 1;
+  visibility: visible;
+  clip-path: inset(0);
+}
+.ls-shot.on {
+  z-index: 2;
+  visibility: visible;
+  clip-path: inset(0);
+  transition: clip-path 0.9s cubic-bezier(0.7, 0, 0.2, 1);
+}
+.ls-shot.on img {
+  animation: ls-shot-in var(--tour-ms) cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.ls-shot.was img {
+  transform: scale(1);
+}
+@keyframes ls-shot-in {
+  from {
+    transform: scale(1.12);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+.ls-tour-note {
+  margin-top: var(--s2);
   font-family: var(--font-mono);
   font-size: var(--t-xs);
   letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--ink-3);
-  margin-bottom: var(--s3);
-}
-.ls-step h3 {
-  margin: 0 0 var(--s3);
-  max-width: 20ch;
-  font-size: clamp(22px, 2.6vw, 34px);
-  font-weight: 400;
-  line-height: 1.15;
-  letter-spacing: -0.01em;
-}
-.ls-step p {
-  margin: 0;
-  max-width: 60ch;
-  color: var(--ink-2);
-  font-size: var(--t-m);
-  line-height: 1.65;
 }
 
 
 /* ── терминал: настоящий экран продукта на демо-счёте ──────────────── */
-.ls-term {
-  padding-top: var(--s6);
-  border-top: 1px solid var(--hair);
+.ls-term-in {
+  padding-bottom: var(--s5);
 }
-.ls-term-copy {
-  display: grid;
-  gap: var(--s3);
-  justify-items: start;
+.ls-term-in .ls-head {
+  margin-bottom: var(--s4);
 }
-.ls-term-copy .ls-kicker {
-  margin-bottom: 0;
-}
-.ls-term-title {
-  margin: 0;
-  max-width: 22ch;
-  font-size: clamp(28px, 3.6vw, 48px);
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  color: var(--ink);
+
+/* Заглушка терминала вдали от экрана не мерцает (`TerminalDemo`, `data-far`):
+   её волна перерисовывала область каждый кадр, пока гость смотрит первый экран. */
+.ls-tdemo [data-far] .skel {
+  animation-play-state: paused;
 }
 
 /* Терминал считает свою высоту от шапки продукта (`--top-h` в `.bt-live`); на
@@ -385,8 +693,10 @@ main:focus {
   --tpm-edge: #fff;
   --tpm-glow: rgb(255 255 255 / 0.2);
 }
+/* Секции сами отступают под меню: якорь ставит секцию краем к верху экрана,
+   и шапка встаёт под меню. */
 html {
-  scroll-padding-top: 56px;
+  scroll-padding-top: 0;
 }
 .ls-nav {
   position: fixed;
@@ -413,7 +723,8 @@ html {
 }
 .ls-nav-tabs {
   display: flex;
-  gap: var(--s1);
+  position: relative;
+  align-self: stretch;
   min-width: 0;
 }
 .ls-nav-tab,
@@ -428,11 +739,36 @@ html {
   white-space: nowrap;
   transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
 }
+/* Вкладки устроены как рейка продукта (`.nav` в globals.css): на всю высоту
+   шапки, тот же трекинг, плашка активной едет по ним. */
+.ls-nav-tab {
+  display: inline-flex;
+  position: relative;
+  z-index: 1;
+  align-items: center;
+  padding: 0 var(--s3);
+  letter-spacing: 0.14em;
+  transition: color 0.12s;
+}
+.ls-nav-indicator {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  z-index: 0;
+  background: var(--ink);
+  transform-origin: 0 0;
+}
+.ls-nav-indicator.is-moving {
+  transition: transform 0.22s ease;
+}
 .ls-nav-tab:hover {
   color: var(--ink);
 }
 /* Активная вкладка — выворот: единственный способ выделить в системе, где
-   цвет означает деньги. */
+   цвет означает деньги. Фон остаётся и рядом с едущей плашкой — подстраховка
+   первого кадра, пока плашка не измерена (как у `.nav a[aria-current]`). */
 .ls-nav-tab.on {
   background: var(--ink);
   color: var(--ground);
@@ -453,9 +789,13 @@ html {
 
 /* ── «Платформа»: знак, собираемый скроллом ────────────────────────
    Высокая секция — путь скролла, внутри неё один липкий экран, и на нём
-   только знак: о платформе рассказывает «Как это работает». */
+   только знак: о платформе рассказывает «О проекте». */
+/* `clip` по x: буквы в начале сборки стоят за краями знака, и без этого страница
+   получала бы горизонтальную прокрутку. У `clip`, в отличие от `hidden`, липкость
+   `.ls-plat-stick` не ломается. */
 .ls-plat {
-  height: 480svh;
+  height: 200svh;
+  overflow-x: clip;
 }
 .ls-plat-stick {
   position: sticky;
@@ -507,18 +847,56 @@ html {
    сдвиг пунктира на 1 прячет линию целиком, на 0 — показывает. Толщины — в
    единицах рисунка, без `non-scaling-stroke`: с ним пунктир меряется в
    пикселях экрана, и `pathLength` перестаёт прятать линию. */
+/* Знак — стопка слоёв в одной рамке (`MarkAssembly`): у каждой SVG один
+   viewBox и рамка во весь контейнер, поэтому части сходятся точь-в-точь.
+   Буква — свой слой на видеокарте: разъезд и парение двигают готовую
+   картинку. Стекло, сетка граней и контур — свои слои: их проявление и
+   угасание — прозрачность слоя, без перерисовки. */
+.mk {
+  position: relative;
+}
+.mk-defs {
+  position: absolute;
+}
+.mk-layer,
+.mk-letter,
+.mk-float,
+.mk-title-wrap {
+  position: absolute;
+  inset: 0;
+}
+.mk-layer {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+/* Разъезд (`transform` у буквы) и парение (`translate` у вложенного слоя) —
+   оба на видеокарте: без своего слоя парящий блок перерисовывал бы слой буквы
+   на каждом кадре. */
+.mk-letter,
+.mk-float {
+  will-change: transform;
+}
+.mk-body,
+.mk-wires,
+.mk-outlines {
+  will-change: opacity;
+}
 .mk-line {
   fill: none;
   stroke-dasharray: 1 1;
-}
-.mk-guide {
-  stroke: rgb(232 228 220 / 0.22);
-  stroke-width: 0.4;
 }
 .mk-outline {
   stroke: #e8e4dc;
   stroke-width: 0.8;
   stroke-linejoin: miter;
+}
+.mk-title {
+  fill: #e8e4dc;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  pointer-events: none;
 }
 .mk-wire {
   stroke: rgb(232 228 220 / 0.42);
@@ -528,11 +906,6 @@ html {
   stroke: var(--tpm-edge);
   stroke-width: 0.9;
   stroke-linecap: round;
-}
-.mk-dot {
-  fill: #050505;
-  stroke: #e8e4dc;
-  stroke-width: 0.5;
 }
 .mk-sweep {
   mix-blend-mode: screen;
@@ -549,48 +922,34 @@ html {
   .mk-line {
     stroke-dashoffset: 1;
   }
-  .mk-dot,
-  .mk-fill,
-  .mk-facet,
-  .mk-hatch,
+  .mk-body,
+  .mk-title,
   .mk-glint {
     opacity: 0;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .mk-guides,
-  .mk-wires,
   .mk-outline,
-  .mk-dots {
+  .mk-title,
+  .mk-wire {
     display: none;
   }
 }
 
+
 /* ── регистрация ───────────────────────────────────────────────── */
+/* Последний кадр ленты: не ниже экрана — иначе он не закрыл бы предыдущий.
+   Шапка — под меню, как у всех кадров, а не по центру экрана. */
 .ls-register {
-  padding: var(--s6) 0;
-  border-top: 1px solid var(--hair);
+  padding-bottom: var(--s6);
   min-height: 100svh;
-  display: flex;
-  align-items: center;
 }
 .ls-register-wrap {
   width: 100%;
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
   gap: var(--s6);
-  align-items: center;
-}
-.ls-register-title {
-  margin: 0 0 var(--s4);
-  max-width: 16ch;
-  font-size: clamp(28px, 3.6vw, 48px);
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-}
-.ls-register-copy .lp-note {
-  margin-top: var(--s3);
+  align-items: start;
 }
 .ls-register-form {
   width: 100%;
@@ -600,17 +959,18 @@ html {
 
 /* ── планшет ───────────────────────────────────────────────────── */
 @media (max-width: 1100px) {
-  .ls-steps-wrap {
+  /* Экран — над пунктами, во всю ширину: рядом со списком он стал бы мелким. */
+  .ls-tour {
     grid-template-columns: minmax(0, 1fr);
-    gap: var(--s5);
+    gap: var(--s4);
   }
-  /* Указатель шагов на узком экране не липнет и не дублирует заголовки
-     справа: сам список шагов и есть навигация по ним. */
-  .ls-steps-aside {
-    position: static;
+  .ls-tour-stage {
+    order: -1;
   }
-  .ls-index {
-    display: none;
+
+  .ls-head {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
   }
 }
 
@@ -621,9 +981,6 @@ html {
   .ls-dark,
   .ls-ground {
     --ls-nav-h: 92px;
-  }
-  html {
-    scroll-padding-top: 92px;
   }
   .ls-nav-in {
     grid-template-columns: auto minmax(0, 1fr);
@@ -644,23 +1001,31 @@ html {
   }
   .ls-nav-tab {
     padding: var(--s2);
+    min-height: 36px;
   }
 
-  .ls-steps {
-    padding-top: var(--s5);
-    padding-bottom: 0;
-  }
-  .ls-steps-list {
-    gap: var(--s5);
-  }
-
-  .ls-term {
-    padding-top: var(--s5);
-  }
-  
+  .ls-about-in,
+  .ls-term-in,
+  .ls-steps-in,
   .ls-register {
-    padding: var(--s5) 0;
-    min-height: 0;
+    padding-top: calc(var(--ls-nav-h) + var(--s4));
+  }
+  .ls-about-in {
+    padding-bottom: var(--s5);
+  }
+
+  .ls-steps-in {
+    padding-bottom: var(--s5);
+  }
+  .ls-tour-tab {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+  .ls-tour-body p {
+    padding-left: 32px;
+  }
+
+  .ls-register {
+    padding-bottom: var(--s5);
   }
   .ls-register-wrap {
     grid-template-columns: minmax(0, 1fr);
@@ -673,8 +1038,21 @@ html {
 }
 
 /* ── уменьшенное движение ──────────────────────────────────────────
-   Знак стоит собранным, липкого экрана нет. */
+   Знак стоит собранным, липкого экрана нет, переходов нет. */
 @media (prefers-reduced-motion: reduce) {
+  .ls-tour-tab,
+  .ls-tour-body,
+  .ls-tour-body p,
+  .ls-shot.on {
+    transition: none;
+  }
+  .ls-shot.on img,
+  .ls-tour-bar {
+    animation: none;
+  }
+  .ls-tour-bar {
+    transform: scaleX(1);
+  }
   .ls-plat {
     height: auto;
   }
@@ -688,8 +1066,7 @@ html {
   }
   .ls-nav-tab,
   .ls-nav-signin,
-  .lp-login,
-  .ls-index-item {
+  .lp-login {
     transition: none;
   }
 }

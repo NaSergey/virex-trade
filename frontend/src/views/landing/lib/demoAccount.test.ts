@@ -138,6 +138,49 @@ describe('demoAccount: исполнение по цене', () => {
     expect(s.entryOrders).toHaveLength(0);
   });
 
+  describe('стоп после исполнения у лимита сетки', () => {
+    const grid = (stopsAfter: number[], prices = [95, 92]) =>
+      createEntryOrders(
+        emptyDemo(T0),
+        { symbol: 'BTCUSDT', direction: 'long', stopLoss: 90, riskPct: 1, leverage: 10, prices, stopsAfter },
+        T0,
+      );
+
+    it('исполнился лимит — стоп позиции подтягивается на цель, объём — от стопа ордера', () => {
+      let s = grid([93, 0]);
+      s = tick(s, 'BTCUSDT', 94.5, T0 + 60_000);
+      expect(s.trades[0].stopLoss).toBe(93);
+      // 1 % от 10 000 = 100 USDT до стопа ордера 90 (а не до подтянутого 93).
+      expect(s.trades[0].qty).toBeCloseTo(100 / (95 - 90), 8);
+    });
+
+    it('0 у уровня — стоп не двигается', () => {
+      let s = grid([0, 0]);
+      s = tick(s, 'BTCUSDT', 94.5, T0 + 60_000);
+      expect(s.trades[0].stopLoss).toBe(90);
+    });
+
+    it('второй уровень с более слабой целью стоп первого не ослабляет', () => {
+      let s = grid([94, 91]);
+      s = tick(s, 'BTCUSDT', 91.5, T0 + 60_000);
+      // Цена прошла оба уровня за один опрос: сработали оба.
+      expect(s.trades).toHaveLength(1);
+      expect(s.entryOrders).toHaveLength(0);
+      expect(s.trades[0].stopLoss).toBe(94);
+    });
+
+    it('цель не по ту сторону от цены уровня — отказ при создании', () => {
+      expect(() => grid([96, 0])).toThrow(DemoError);
+    });
+
+    it('перенос лимита под цель — отказ, цель остаётся по свою сторону', () => {
+      const s0 = grid([93, 0]);
+      expect(() => moveEntryOrder(s0, { orderId: s0.entryOrders[0].id, price: 92 }, T0)).toThrow(DemoError);
+      const moved = moveEntryOrder(s0, { orderId: s0.entryOrders[0].id, price: 96 }, T0);
+      expect(moved.entryOrders.find((o) => o.price === 96)?.stopAfter).toBe(93);
+    });
+  });
+
   it('перенос лимита на вход — новый id', () => {
     const s0 = createEntryOrders(
       emptyDemo(T0),

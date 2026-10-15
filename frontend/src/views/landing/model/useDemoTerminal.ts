@@ -122,6 +122,8 @@ export function useDemoTerminal(): {
     // Завершать демо-счёт нечего, теги у гостя выключены.
     finish: useLocalAction<void>(opNothing, exec, fail),
     tags: useLocalAction<{ tradeId: string; tagIds: string[] }>(opNothing, exec, fail),
+    // «Стоп после исполнения» у сетки входа считает сам демо-счёт (`tightenStop`).
+    gridStopAfter: true,
   };
 
   // Исполнение: раз в две секунды цены монет, по которым есть позиции и лимиты, —

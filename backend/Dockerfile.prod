@@ -21,7 +21,10 @@ RUN npm run build
 FROM node:20-alpine AS runtime
 WORKDIR /app
 
-RUN apk add --no-cache openssl
+# pg_dump — для еженедельного бэкапа базы (src/backup). Та же major-версия, что
+# у сервера (postgres:16-alpine): архив более нового pg_dump pg_restore 16 может
+# не прочитать.
+RUN apk add --no-cache openssl postgresql16-client
 
 ENV NODE_ENV=production
 

@@ -10,6 +10,7 @@ import {
   closeGridPlan,
   closeGridPrices,
   closeGridQtys,
+  distributionWeights,
   initCloseGrid,
 } from './close-grid';
 import { unrealizedPnl } from './money';
@@ -128,10 +129,11 @@ describe('checkCloseGridSide', () => {
 });
 
 describe('closeGridCount', () => {
-  it('целое от 1 до 10, мусор в поле — один ордер', () => {
+  it('целое от 1 до 30, мусор в поле — один ордер', () => {
     expect(closeGridCount('3')).toBe(3);
     expect(closeGridCount('2.6')).toBe(3);
-    expect(closeGridCount('25')).toBe(10);
+    expect(closeGridCount('25')).toBe(25);
+    expect(closeGridCount('45')).toBe(30);
     expect(closeGridCount('')).toBe(1);
     expect(closeGridCount('abc')).toBe(1);
   });
@@ -143,7 +145,7 @@ describe('initCloseGrid', () => {
   it('тейки — +1 % и +3 % от точки отсчёта, три ордера, без закреплений', () => {
     const d = initCloseGrid(trade, 1, 110, 0);
     expect(d.tradeId).toBe('t1');
-    expect(d).toMatchObject({ qtyPins: {}, stopPins: {} });
+    expect(d).toMatchObject({ qtyPins: {}, stopPins: {}, tilt: 0 });
     expect(d.first).toBeCloseTo(111.1, 10);
     expect(d.last).toBeCloseTo(113.3, 10);
     expect(d.count).toBe('3');
@@ -164,7 +166,7 @@ describe('initCloseGrid', () => {
 
 describe('closeGridLevels', () => {
   const trade = { direction: 'long' as const, entryPrice: 100, stopLoss: 95, qty: 1, closedQty: 0.1 };
-  const draft = { tradeId: 't1', first: 105, last: 115, count: '3', stopFollow: false, qtyPins: {}, stopPins: {} };
+  const draft = { tradeId: 't1', first: 105, last: 115, count: '3', stopFollow: false, qtyPins: {}, stopPins: {}, tilt: 0 };
 
   it('линия на уровень, тянутся только первый и последний тейк', () => {
     const levels = closeGridLevels(trade, draft, 1);
@@ -197,10 +199,31 @@ describe('closeGridFromDraft', () => {
   const trade = { direction: 'long' as const, entryPrice: 100, stopLoss: 95, qty: 1, closedQty: 0 };
 
   it('закреплённая доля — в монетах от остатка, цель стопа — в настоящей цене, остальное посчитано', () => {
-    const draft = { tradeId: 't1', first: 210, last: 230, count: '3', stopFollow: true, qtyPins: { 0: 50 }, stopPins: { 0: 202 } };
+    const draft = { tradeId: 't1', first: 210, last: 230, count: '3', stopFollow: true, qtyPins: { 0: 50 }, stopPins: { 0: 202 }, tilt: 0 };
     const { prices, split, plan } = closeGridFromDraft(trade, draft, 2);
     expect(prices).toEqual([105, 110, 115]);
     expect(split.qtys).toEqual([0.5, 0.25, 0.25]);
     expect(plan.rows.map((r) => r.stopTarget)).toEqual([101, 105, null]);
+  });
+});
+
+describe('распределение объёма сетки фиксации', () => {
+  it('без наклона — поровну, как раньше', () => {
+    expect(closeGridQtys(10, 4, {}, distributionWeights([1, 2, 3, 4], 0)).qtys).toEqual([2.5, 2.5, 2.5, 2.5]);
+  });
+
+  it('наклон к верху — больше объёма у дорогих уровней, сумма равна позиции', () => {
+    const { qtys } = closeGridQtys(10, 3, {}, distributionWeights([100, 110, 120], 80));
+    expect(qtys[0]).toBeLessThan(qtys[1]);
+    expect(qtys[1]).toBeLessThan(qtys[2]);
+    expect(qtys.reduce((a, b) => a + b, 0)).toBeCloseTo(10, 10);
+  });
+
+  it('закреплённый уровень держит своё, остальные делят остаток по весам', () => {
+    const { qtys, pinned } = closeGridQtys(10, 3, { 0: 50 }, distributionWeights([100, 110, 120], -80));
+    expect(pinned).toEqual([true, false, false]);
+    expect(qtys[0]).toBeCloseTo(5, 10);
+    expect(qtys[1]).toBeGreaterThan(qtys[2]);
+    expect(qtys.reduce((a, b) => a + b, 0)).toBeCloseTo(10, 10);
   });
 });

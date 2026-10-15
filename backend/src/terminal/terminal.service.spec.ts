@@ -56,6 +56,8 @@ interface Setup {
   stream?: unknown;
   /** Позиции с активным планом стопа за тейками — ключи `символ:сторона`. */
   follow?: string[];
+  /** Запись целей «стопа после исполнения» падает — база мигнула. */
+  entryFollowFails?: boolean;
 }
 
 function setup(s: Setup = {}) {
@@ -98,6 +100,11 @@ function setup(s: Setup = {}) {
     remove: jest.fn(async () => undefined),
     activeKeys: jest.fn(async () => new Set(s.follow ?? [])),
   };
+  const entryFollows = {
+    add: jest.fn(async () => {
+      if (s.entryFollowFails) throw new Error('db down');
+    }),
+  };
   const service = new TerminalService(
     credentials as any,
     bybit as any,
@@ -105,9 +112,10 @@ function setup(s: Setup = {}) {
     apiKeys as any,
     streams as any,
     follows as any,
+    entryFollows as any,
   );
   const orders = () => posts.filter((p) => p.path === '/order/create').map((p) => p.body);
-  return { service, posts, orders, bybit, streams, follows };
+  return { service, posts, orders, bybit, streams, follows, entryFollows };
 }
 
 const market = (extra: Record<string, unknown> = {}) => ({
@@ -273,6 +281,82 @@ describe('TerminalService', () => {
         ['59900.00', '0.100'],
         ['59700.00', '0.300'],
       ]);
+    });
+
+    describe('стоп после исполнения у сетки входа', () => {
+      const grid = (extra: Record<string, unknown> = {}) => ({
+        symbol: 'BTCUSDT',
+        direction: 'long' as const,
+        kind: 'limit' as const,
+        prices: [59_900, 59_700],
+        riskPct: 0.5,
+        stopLoss: 59_500,
+        ...extra,
+      });
+
+      it('записывает цель каждого лимита, у которого она задана, по orderId биржи', async () => {
+        const { service, entryFollows } = setup();
+
+        await service.placeOrders('u1', grid({ stopsAfter: [59_800, 0] }));
+
+        // Второй уровень — «стоп не двигается» (0): вести его не за чем.
+        expect(entryFollows.add).toHaveBeenCalledWith('u1', [
+          { symbol: 'BTCUSDT', direction: 'long', orderId: 'o-1', price: 59_900, stopAfter: 59_800 },
+        ]);
+      });
+
+      it('без целей ничего не пишет', async () => {
+        const { service, entryFollows } = setup();
+
+        await service.placeOrders('u1', grid());
+        await service.placeOrders('u1', grid({ stopsAfter: [0, 0] }));
+
+        expect(entryFollows.add).not.toHaveBeenCalled();
+      });
+
+      it('цель не по ту сторону от цены уровня — отказ, на биржу ничего не уходит', async () => {
+        const { service, posts, entryFollows } = setup();
+
+        // Для лонга цель выше цены входа 59 900 — это не стоп.
+        await expect(service.placeOrders('u1', grid({ stopsAfter: [59_950, 0] }))).rejects.toMatchObject({
+          response: { code: 'TERMINAL_STOP_SIDE' },
+        });
+        expect(posts).toHaveLength(0);
+        expect(entryFollows.add).not.toHaveBeenCalled();
+      });
+
+      it('целей должно быть по одной на цену, и только у лимитов', async () => {
+        const { service, posts } = setup();
+
+        await expect(service.placeOrders('u1', grid({ stopsAfter: [59_800] }))).rejects.toThrow('по одной на цену');
+        await expect(service.placeOrders('u1', market({ stopsAfter: [59_800] }))).rejects.toThrow('по одной на цену');
+        expect(posts).toHaveLength(0);
+      });
+
+      it('сетка встала не целиком — цели записываются у тех, что встали', async () => {
+        const { service, entryFollows } = setup({
+          post: (path, _body, n) => {
+            if (path === '/order/create' && n === 2) throw exchangeRejected(110007, 'ab not enough for new order');
+            return undefined;
+          },
+        });
+
+        await expect(service.placeOrders('u1', grid({ stopsAfter: [59_800, 59_600] }))).rejects.toMatchObject({
+          response: { code: 'TERMINAL_GRID_PARTIAL' },
+        });
+        expect(entryFollows.add).toHaveBeenCalledWith('u1', [
+          { symbol: 'BTCUSDT', direction: 'long', orderId: 'o-1', price: 59_900, stopAfter: 59_800 },
+        ]);
+      });
+
+      it('не записались цели — отказ говорит, что стоп сам не поедет, хотя сетка уже на бирже', async () => {
+        const { service, orders } = setup({ entryFollowFails: true });
+
+        await expect(service.placeOrders('u1', grid({ stopsAfter: [59_800, 59_600] }))).rejects.toMatchObject({
+          response: { code: 'TERMINAL_ENTRY_FOLLOW_NOT_SAVED' },
+        });
+        expect(orders()).toHaveLength(2);
+      });
     });
 
     it('sends nothing when one level of a grid does not pass', async () => {

@@ -117,30 +117,39 @@ export function CloseGridPanel({
       cellClassName: 'n',
       render: (r) => <span className={moneyClass(r.pnl)}>{formatMoney(r.pnl)}</span>,
     },
-    ...(stopFollow
-      ? [
-          {
-            key: 'stop',
-            header: t('closeGridStopAfter'),
-            align: 'right' as const,
-            render: (r: Row) => {
-              if (r.stopTarget == null) return <span className="cg-none">—</span>;
-              const pin = draft.stopPins[r.i];
-              const ignored = pin != null && r.stopAfter !== r.stopTarget;
-              return (
-                <EditCell
-                  display={pin != null ? formatPriceGrouped(pin, decimals) : r.stopAfter != null ? price(r.stopAfter) : ''}
-                  pinned={pin != null}
-                  ignored={ignored}
-                  label={`${t('closeGridStopAfter')} ${r.i + 1}`}
-                  hint={ignored ? t('closeGridStopIgnored') : t('closeGridStopHint')}
-                  onCommit={(v) => onDraft({ ...draft, stopPins: withPin(draft.stopPins, r.i, v) })}
-                />
-              );
-            },
-          },
-        ]
-      : []),
+    // Галочка «переносить стоп за тейками» живёт в шапке своей колонки, как у «Сетки»:
+    // отдельная строка под полями отнимала место у таблицы. Выключена — колонка пуста.
+    {
+      key: 'stop',
+      header: (
+        <label className="cg-follow" title={t('closeGridFollow')}>
+          <input
+            type="checkbox"
+            checked={stopFollow}
+            onChange={(e) => onDraft({ ...draft, stopFollow: e.target.checked })}
+            aria-label={t('closeGridFollow')}
+          />
+          <span>{t('closeGridStopAfter')}</span>
+        </label>
+      ),
+      label: t('closeGridStopAfter'),
+      align: 'right',
+      render: (r) => {
+        if (!stopFollow || r.stopTarget == null) return <span className="cg-none">—</span>;
+        const pin = draft.stopPins[r.i];
+        const ignored = pin != null && r.stopAfter !== r.stopTarget;
+        return (
+          <EditCell
+            display={pin != null ? formatPriceGrouped(pin, decimals) : r.stopAfter != null ? price(r.stopAfter) : ''}
+            pinned={pin != null}
+            ignored={ignored}
+            label={`${t('closeGridStopAfter')} ${r.i + 1}`}
+            hint={ignored ? t('closeGridStopIgnored') : t('closeGridStopHint')}
+            onCommit={(v) => onDraft({ ...draft, stopPins: withPin(draft.stopPins, r.i, v) })}
+          />
+        );
+      },
+    },
   ];
 
   const levelField = (label: string, value: number, set: (v: number) => void) => (
@@ -177,10 +186,25 @@ export function CloseGridPanel({
       <Field label={t('ordersCount')}>
         {(id) => <Input id={id} full inputMode="numeric" value={count} onChange={(e) => onDraft({ ...draft, count: e.target.value })} />}
       </Field>
-      <label className="opt" data-on={stopFollow}>
-        <input type="checkbox" checked={stopFollow} onChange={(e) => onDraft({ ...draft, stopFollow: e.target.checked })} />
-        <span className="opt-n">{t('closeGridFollow')}</span>
-      </label>
+      <Field
+        label={
+          <span className="fld-head">
+            <span>{t('gridTilt')}</span>
+            <span className="fld-val">{draft.tilt === 0 ? t('gridTiltEven') : draft.tilt < 0 ? t('gridTiltDown') : t('gridTiltUp')}</span>
+          </span>
+        }
+      >
+        {() => (
+          <Slider
+            value={draft.tilt}
+            min={-100}
+            max={100}
+            step={1}
+            onChange={(v) => onDraft({ ...draft, tilt: v })}
+            aria-label={t('gridTilt')}
+          />
+        )}
+      </Field>
 
       <div className="cg-table">
         <LedgerTable columns={columns} rows={plan.rows.map((r, i) => ({ ...r, i }))} rowKey={(r) => String(r.i)} />

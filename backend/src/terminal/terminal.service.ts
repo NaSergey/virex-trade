@@ -3,9 +3,11 @@ import { BybitApiKeyService } from '../bybit/services/bybit-api-key.service';
 import { BybitCredentials } from '../bybit/services/bybit-auth.service';
 import { CredentialsService } from '../credentials/credentials.service';
 import { readAccount } from './account-snapshot';
+import { stopOnRightSide } from '../backtest/backtest-math';
 import { BybitTerminalClient } from './bybit-terminal.client';
 import { CloseGridDto, ClosePositionDto, MoveOrderDto, PlaceOrderDto, SetLevelsDto } from './dto/terminal.dto';
 import {
+  entryFollowNotSaved,
   followNotSaved,
   gridInvalid,
   gridPartial,
@@ -38,6 +40,7 @@ import {
 import { TerminalMarketService } from './terminal-market.service';
 import { StateCache } from './state-cache';
 import { balanceOf, keyHash, project, usable, walletOf, type StreamState } from './stream/stream-state';
+import { EntryFollowStore } from './stream/entry-follow.store';
 import { StopFollowStore } from './stream/stop-follow.store';
 import { TerminalStreamStore } from './stream/terminal-stream.store';
 
@@ -128,6 +131,7 @@ export class TerminalService {
     private readonly apiKeys: BybitApiKeyService,
     private readonly streams: TerminalStreamStore,
     private readonly follows: StopFollowStore,
+    private readonly entryFollows: EntryFollowStore,
   ) {}
 
   /**
@@ -222,6 +226,9 @@ export class TerminalService {
     if (dto.riskPcts && (!limit || dto.riskPcts.length !== dto.prices!.length)) {
       throw new BadRequestException('Риск уровней — по одному на цену лимита');
     }
+    if (dto.stopsAfter && (!limit || dto.stopsAfter.length !== dto.prices!.length)) {
+      throw new BadRequestException('Цель стопа после исполнения — по одной на цену лимита');
+    }
 
     const creds = await this.creds(userId);
     const inst = await this.market.requireInstrument(dto.symbol);
@@ -249,6 +256,9 @@ export class TerminalService {
     const plan = entries.map((entry, i) => {
       const err = levelsError(dto.direction, entry, stop, take);
       if (err) throw err === 'stopSide' ? stopSide() : takeSide();
+      // Цель стопа после исполнения — по свою сторону от цены уровня, как сам стоп.
+      const after = dto.stopsAfter?.[i];
+      if (after && !stopOnRightSide(dto.direction, entry, after)) throw stopSide();
       // Риск уровня — свой, если таблица «Сетки» задала объёмы; иначе общий на ордер.
       const riskPct = dto.riskPcts?.[i] ?? dto.riskPct;
       const qty = floorToStep(qtyByRisk(wallet.balance, riskPct, entry, stop) ?? 0, inst.qtyStep);
@@ -285,12 +295,35 @@ export class TerminalService {
       } catch (e) {
         if (placed.length === 0) throw e;
         this.logger.warn(`user ${userId}: grid ${dto.symbol} stopped at ${placed.length}/${plan.length}`);
+        // Что встало, то и ведётся: цели записываются и у неполной сетки.
+        await this.recordEntryFollow(userId, dto, placed).catch(() => undefined);
         throw gridPartial(placed.length, plan.length, reasonOf(e));
       }
     }
 
+    await this.recordEntryFollow(userId, dto, placed);
     this.logger.log(`user ${userId}: ${dto.kind} ${dto.direction} ${dto.symbol} × ${placed.length}`);
     return { success: true, orders: placed };
+  }
+
+  /**
+   * Цели «стопа после исполнения» — после того, как лимиты встали: в строке их
+   * `orderId`. Не записались — сетка уже на бирже, поэтому отказ говорит именно это.
+   */
+  private async recordEntryFollow(userId: string, dto: PlaceOrderDto, placed: { orderId: string; price: number | null }[]) {
+    const rows = placed.flatMap((o, i) => {
+      const stopAfter = dto.stopsAfter?.[i] ?? 0;
+      return stopAfter > 0 && o.price != null
+        ? [{ symbol: dto.symbol, direction: dto.direction, orderId: o.orderId, price: o.price, stopAfter }]
+        : [];
+    });
+    if (rows.length === 0) return;
+    try {
+      await this.entryFollows.add(userId, rows);
+    } catch (e) {
+      this.logger.error(`user ${userId}: цели стопа после исполнения не записаны — ${(e as Error).message}`);
+      throw entryFollowNotSaved();
+    }
   }
 
   /** Висящий лимит перенесён на графике: меняется цена, объём остаётся — как при правке ордера на бирже. */

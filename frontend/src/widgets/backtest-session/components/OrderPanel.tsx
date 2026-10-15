@@ -93,6 +93,8 @@ export interface ScaledDraft {
   /** Цели стопа после исполнения (экранные цены) — по номеру строки. */
   stopPins: Record<number, number>;
   stopFollow: boolean;
+  /** Распределение объёма по цене: −100 — к низу, 0 — равномерно, 100 — к верху. */
+  tilt: number;
 }
 
 /** Какой тикет открыт. Живёт у родителя: переключение чистит уровни
@@ -100,7 +102,7 @@ export interface ScaledDraft {
 export type OrderTab = 'market' | 'limit' | 'scaled' | 'bot';
 
 const MIN_GRID_ORDERS = 1;
-const MAX_GRID_ORDERS = 10;
+const MAX_GRID_ORDERS = 30;
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const MIN_LEVERAGE = 1;
@@ -426,6 +428,7 @@ export function OrderPanel({
           qtyPins: scaledDraft.qtyPins,
           stopTargets: Object.fromEntries(Object.entries(scaledDraft.stopPins).map(([k, v]) => [k, fromScreen(v, scale)])),
           stopFollow: gridStopAfter && scaledDraft.stopFollow,
+          tilt: scaledDraft.tilt,
         })
       : null;
   const sPreview = sTable
@@ -482,22 +485,45 @@ export function OrderPanel({
       cellClassName: 'n',
       render: (r) => `${formatPriceGrouped(r.riskUsd, 2)}`,
     },
-    ...(gridStopAfter && scaledDraft.stopFollow
+    // Галочка «переносить стоп после исполнения» живёт в шапке своей колонки: отдельная
+    // строка под ползунком отнимала место у таблицы. Включена — в ячейках цели (правило
+    // или своя цена), выключена — колонка пуста, и от неё остаётся один флажок.
+    ...(gridStopAfter
       ? [
           {
             key: 'stop',
-            header: t('gridStopAfter'),
-            align: 'right' as const,
-            render: (r: GridRow) => (
-              <EditCell
-                display={scaledDraft.stopPins[r.i] != null ? formatPriceGrouped(scaledDraft.stopPins[r.i], priceDecimals) : ''}
-                pinned={scaledDraft.stopPins[r.i] != null}
-                ignored={r.blocked}
-                label={`${t('gridStopAfter')} ${r.i + 1}`}
-                hint={r.blocked ? t('gridStopBlocks') : t('gridStopHint')}
-                onCommit={(v) => onScaledDraft({ ...scaledDraft, stopPins: withPin(scaledDraft.stopPins, r.i, v) })}
-              />
+            header: (
+              <label className="cg-follow" title={t('gridStopFollow')}>
+                <input
+                  type="checkbox"
+                  checked={scaledDraft.stopFollow}
+                  onChange={(e) => onScaledDraft({ ...scaledDraft, stopFollow: e.target.checked })}
+                  aria-label={t('gridStopFollow')}
+                />
+                <span>{t('gridStopAfter')}</span>
+              </label>
             ),
+            label: t('gridStopAfter'),
+            align: 'right' as const,
+            render: (r: GridRow) =>
+              scaledDraft.stopFollow ? (
+                <EditCell
+                  display={
+                    scaledDraft.stopPins[r.i] != null
+                      ? formatPriceGrouped(scaledDraft.stopPins[r.i], priceDecimals)
+                      : r.stopAfter != null
+                        ? formatPriceGrouped(toScreen(r.stopAfter, scale), priceDecimals)
+                        : ''
+                  }
+                  pinned={r.stopPinned}
+                  ignored={r.blocked}
+                  label={`${t('gridStopAfter')} ${r.i + 1}`}
+                  hint={r.blocked ? t('gridStopBlocks') : t('gridStopHint')}
+                  onCommit={(v) => onScaledDraft({ ...scaledDraft, stopPins: withPin(scaledDraft.stopPins, r.i, v) })}
+                />
+              ) : (
+                <span className="cg-none">—</span>
+              ),
           },
         ]
       : []),
@@ -629,19 +655,21 @@ export function OrderPanel({
         }
       </Field>
 
-      <div className="size-preview" data-tour="term-size">
-        <KeyValue label={t('sizeCoin')}>{preview ? formatQty(Number(preview.qty.toFixed(3))) : '—'}</KeyValue>
-        <KeyValue label={t('notionalLabel')}>{preview ? `${formatPriceGrouped(preview.notional)} USDT` : '—'}</KeyValue>
-      </div>
-      {hint && <p className="neg">{hint}</p>}
+      <div className="order-foot">
+        <div className="size-preview" data-tour="term-size">
+          <KeyValue label={t('sizeCoin')}>{preview ? formatQty(Number(preview.qty.toFixed(3))) : '—'}</KeyValue>
+          <KeyValue label={t('notionalLabel')}>{preview ? `${formatPriceGrouped(preview.notional)} USDT` : '—'}</KeyValue>
+        </div>
+        {hint && <p className="neg">{hint}</p>}
 
-      <div className="order-actions" data-tour="term-market-buttons">
-        <Button variant="long" onClick={() => onOpen('long')} disabled={disabled || balance <= 0 || botLong}>
-          {t('long')}
-        </Button>
-        <Button variant="short" onClick={() => onOpen('short')} disabled={disabled || balance <= 0}>
-          {t('short')}
-        </Button>
+        <div className="order-actions" data-tour="term-market-buttons">
+          <Button variant="long" onClick={() => onOpen('long')} disabled={disabled || balance <= 0 || botLong}>
+            {t('long')}
+          </Button>
+          <Button variant="short" onClick={() => onOpen('short')} disabled={disabled || balance <= 0}>
+            {t('short')}
+          </Button>
+        </div>
       </div>
         </>
       )}
@@ -754,19 +782,21 @@ export function OrderPanel({
             }
           </Field>
 
-          <div className="size-preview" data-tour="term-size">
-            <KeyValue label={t('sizeCoin')}>{lPreview ? formatQty(Number(lPreview.qty.toFixed(3))) : '—'}</KeyValue>
-            <KeyValue label={t('notionalLabel')}>{lPreview ? `${formatPriceGrouped(lPreview.notional)} USDT` : '—'}</KeyValue>
-          </div>
-          {limitHint && <p className="neg">{limitHint}</p>}
+          <div className="order-foot">
+            <div className="size-preview" data-tour="term-size">
+              <KeyValue label={t('sizeCoin')}>{lPreview ? formatQty(Number(lPreview.qty.toFixed(3))) : '—'}</KeyValue>
+              <KeyValue label={t('notionalLabel')}>{lPreview ? `${formatPriceGrouped(lPreview.notional)} USDT` : '—'}</KeyValue>
+            </div>
+            {limitHint && <p className="neg">{limitHint}</p>}
 
-          <div className="order-actions" data-tour="term-limit-buttons">
-            <Button variant="long" onClick={() => onOpenLimit('long')} disabled={disabled || balance <= 0 || botLong}>
-              {t('long')}
-            </Button>
-            <Button variant="short" onClick={() => onOpenLimit('short')} disabled={disabled || balance <= 0}>
-              {t('short')}
-            </Button>
+            <div className="order-actions" data-tour="term-limit-buttons">
+              <Button variant="long" onClick={() => onOpenLimit('long')} disabled={disabled || balance <= 0 || botLong}>
+                {t('long')}
+              </Button>
+              <Button variant="short" onClick={() => onOpenLimit('short')} disabled={disabled || balance <= 0}>
+                {t('short')}
+              </Button>
+            </div>
           </div>
         </>
       )}
@@ -901,16 +931,27 @@ export function OrderPanel({
             </KeyValue>
             <KeyValue label={t('gridAvgEntry')}>{sAvgEntry != null ? formatPriceGrouped(sAvgEntry, priceDecimals) : '—'}</KeyValue>
           </div>
-          {gridStopAfter && (
-            <label className="opt" data-on={scaledDraft.stopFollow}>
-              <input
-                type="checkbox"
-                checked={scaledDraft.stopFollow}
-                onChange={(e) => onScaledDraft({ ...scaledDraft, stopFollow: e.target.checked })}
+          <Field
+            label={
+              <span className="fld-head">
+                <span>{t('gridTilt')}</span>
+                <span className="fld-val">
+                  {scaledDraft.tilt === 0 ? t('gridTiltEven') : scaledDraft.tilt < 0 ? t('gridTiltDown') : t('gridTiltUp')}
+                </span>
+              </span>
+            }
+          >
+            {() => (
+              <Slider
+                value={scaledDraft.tilt}
+                min={-100}
+                max={100}
+                step={1}
+                onChange={(v) => onScaledDraft({ ...scaledDraft, tilt: v })}
+                aria-label={t('gridTilt')}
               />
-              <span className="opt-n">{t('gridStopFollow')}</span>
-            </label>
-          )}
+            )}
+          </Field>
           {sTable && (
             <div className="cg-table">
               <LedgerTable columns={gridColumns} rows={sTable.rows.map((r, i) => ({ ...r, i }))} rowKey={(r) => String(r.i)} />
@@ -918,19 +959,21 @@ export function OrderPanel({
           )}
           {sTable?.over && <p className="neg">{t('closeGridPinnedOver')}</p>}
           {sTable?.blocked && <p className="neg">{t('gridStopBlocks')}</p>}
-          <div className="size-preview" data-tour="term-size">
-            <KeyValue label={t('sizeCoin')}>{sPreview ? formatQty(Number(sPreview.qty.toFixed(3))) : '—'}</KeyValue>
-            <KeyValue label={t('notionalLabel')}>{sPreview ? `${formatPriceGrouped(sPreview.notional)} USDT` : '—'}</KeyValue>
-          </div>
-          {scaledHint && <p className="neg">{scaledHint}</p>}
+          <div className="order-foot">
+            <div className="size-preview" data-tour="term-size">
+              <KeyValue label={t('sizeCoin')}>{sPreview ? formatQty(Number(sPreview.qty.toFixed(3))) : '—'}</KeyValue>
+              <KeyValue label={t('notionalLabel')}>{sPreview ? `${formatPriceGrouped(sPreview.notional)} USDT` : '—'}</KeyValue>
+            </div>
+            {scaledHint && <p className="neg">{scaledHint}</p>}
 
-          <div className="order-actions" data-tour="term-scaled-buttons">
-            <Button variant="long" onClick={() => onOpenScaled('long')} disabled={disabled || balance <= 0 || botLong}>
-              {t('long')}
-            </Button>
-            <Button variant="short" onClick={() => onOpenScaled('short')} disabled={disabled || balance <= 0}>
-              {t('short')}
-            </Button>
+            <div className="order-actions" data-tour="term-scaled-buttons">
+              <Button variant="long" onClick={() => onOpenScaled('long')} disabled={disabled || balance <= 0 || botLong}>
+                {t('long')}
+              </Button>
+              <Button variant="short" onClick={() => onOpenScaled('short')} disabled={disabled || balance <= 0}>
+                {t('short')}
+              </Button>
+            </div>
           </div>
         </>
       )}

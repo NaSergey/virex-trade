@@ -64,3 +64,32 @@ export const ofSymbol = <T extends { symbol: string }>(state: T | null, symbol: 
 export function mergeTagged(prev: TaggedMinutes, symbol: string, fresh: Candle[]): TaggedMinutes {
   return { symbol, rows: mergeMinutes(prev.symbol === symbol ? prev.rows : [], fresh) };
 }
+
+/**
+ * Ближайший порог после момента `from`: перейдя его (`момент > порог`), часы
+ * эфира обязаны обновить экран, а до него ничего видимого не меняется. Часы
+ * тикают раз в 250 мс, но состояние трогают только на пороге: каждый тик
+ * перерисовывал весь терминал, и на слабом устройстве это был пропущенный кадр
+ * четыре раза в секунду (замер 2026-10-13).
+ *
+ * Пороги — всё, что читает момент на экране:
+ * - свечи и цена: минутка видна, когда момент перешёл её начало, — граница
+ *   минуты (`visibleUntil`, `lastPrice`; 4-часовая свеча — тоже граница минуты);
+ * - позиции (`anchors` — их входы): «закрыть можно», когда момент перешёл
+ *   вход, а возраст меняется каждую целую минуту от входа;
+ * - конец сессии: `ended` — момент дошёл до `endTime`.
+ *
+ * Время входа и выхода действий берётся не отсюда, а точным моментом в миг
+ * клика (`Replay.moment`).
+ */
+export function nextChange(from: number, anchors: readonly number[], endTime: number | null): number {
+  let next = Math.ceil(from / MINUTE) * MINUTE;
+  for (const a of anchors) {
+    // Вход впереди: возраст сменится, когда момент дойдёт до входа (`>=`), а
+    // «закрыть можно» — когда перейдёт его (`>`); первый порог — раньше на мс.
+    const x = a > from ? a - 1 : a === from ? a : a + Math.ceil((from - a + 1) / MINUTE) * MINUTE - 1;
+    if (x < next) next = x;
+  }
+  if (endTime != null && endTime - 1 >= from && endTime - 1 < next) next = endTime - 1;
+  return next;
+}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { fetchCandles, fetchLiveTail } from '../api/hooks';
 import {
   DAY,
@@ -13,7 +13,7 @@ import {
   type ApiCandle,
   type Candle,
 } from '../lib/candles';
-import { liveAnchor, mergeTagged, ofSymbol, type TaggedMinutes } from '../lib/live';
+import { liveAnchor, mergeTagged, nextChange, ofSymbol, type TaggedMinutes } from '../lib/live';
 import type { Replay } from './useReplay';
 
 /** Как часто забирать живой хвост. Столько же, сколько тик серверного движка. */
@@ -24,6 +24,7 @@ const CLOSED_LIMIT = 300;
 const HISTORY_CHUNK = 500;
 
 const NO_CANDLES: Candle[] = [];
+const NO_ANCHORS: readonly number[] = [];
 
 /**
  * Откуда лента берёт свечи. У эфира бектеста это рынок продукта
@@ -83,6 +84,11 @@ export function useLiveFeed(
   source: LiveSource = SESSION_SOURCE,
   /** Терминала не видно: часы и хвост стоят, загруженное остаётся. */
   paused = false,
+  /**
+   * Входы открытых позиций: момент на экране обязан пройти их вовремя —
+   * от них «закрыть можно» и возраст позиции (`nextChange`).
+   */
+  anchors: readonly number[] = NO_ANCHORS,
 ): Replay {
   const { session } = detail;
   const endTime = session.endTime ? Date.parse(session.endTime) : null;
@@ -96,6 +102,18 @@ export function useLiveFeed(
   /** Часы браузера минус часы сервера. Момент ведём по серверным. */
   const skew = useRef(0);
   const loading = useRef(false);
+  /** Момент в состоянии — от него часы считают следующий порог. */
+  const shown = useRef(now);
+  const show = useCallback((t: number) => {
+    shown.current = t;
+    setNow(t);
+  }, []);
+  // Пороги часы читают из рефа: интервал не перезапускается на каждой новой
+  // позиции и каждом рендере.
+  const thresholds = useRef({ anchors, endTime });
+  useLayoutEffect(() => {
+    thresholds.current = { anchors, endTime };
+  });
 
   const closedOf = ofSymbol(closedState, symbol);
   const closed = closedOf?.rows ?? NO_CANDLES;
@@ -129,7 +147,7 @@ export function useLiveFeed(
           if (gapFrom != null && fresh.length && fresh[0].t > gapFrom) void fillGap(gapFrom, fresh[0].t);
           return mergeTagged(prev, symbol, fresh);
         });
-        setNow(Date.now() - skew.current);
+        show(Date.now() - skew.current);
         setError(null);
       } catch (e) {
         if (alive) setError(e);
@@ -153,17 +171,30 @@ export function useLiveFeed(
       alive = false;
       clearInterval(timer);
     };
-  }, [enabled, paused, session.id, symbol, source]);
+  }, [enabled, paused, session.id, symbol, source, show]);
 
-  // Часы между запросами хвоста: момент обязан идти ровно, а не рывками раз в
-  // две секунды — на нём держится подпись времени и «Закрыть по рынку».
+  // Часы между запросами хвоста. Смотрят на время четыре раза в секунду, а
+  // состояние трогают только на пороге, где что-то видимое меняется
+  // (`nextChange`): граница минуты, вход свежей позиции, конец сессии. Каждый
+  // тик перерисовывал весь терминал — пропущенный кадр на слабом устройстве
+  // четыре раза в секунду (замер 2026-10-14). Точное время для действий —
+  // `moment()`.
   useEffect(() => {
     if (!enabled || paused) return;
-    const timer = setInterval(() => setNow(Date.now() - skew.current), 250);
+    const timer = setInterval(() => {
+      const t = Date.now() - skew.current;
+      const { anchors, endTime } = thresholds.current;
+      if (t > nextChange(shown.current, anchors, endTime)) show(t);
+    }, 250);
     return () => clearInterval(timer);
-  }, [enabled, paused]);
+  }, [enabled, paused, show]);
 
-  // Закрытые свечи выбранного таймфрейма.
+  // Закрытые свечи выбранного таймфрейма. Приход истории — переход
+  // (`startTransition`), а не срочное обновление: он перерисовывает весь
+  // терминал с новыми свечами, и одним куском это была самая длинная задача
+  // экрана (~400 мс при ЦП ×4, замер 2026-10-13) — прокрутка и клики вставали.
+  // Переход React режет на части и прерывает ради срочного; хвост и часы
+  // остаются срочными.
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
@@ -171,7 +202,8 @@ export function useLiveFeed(
       try {
         const rows = await source.candles(tf, { to: Date.now(), limit: CLOSED_LIMIT }, symbol);
         if (!alive) return;
-        setClosedState({ symbol, tf, rows, anchor: liveAnchor(rows, tf, Date.now()) });
+        const anchor = liveAnchor(rows, tf, Date.now());
+        startTransition(() => setClosedState({ symbol, tf, rows, anchor }));
       } catch (e) {
         if (alive) setError(e);
       }
@@ -183,7 +215,9 @@ export function useLiveFeed(
 
   // Минутки для сборки текущей свечи: с полуночи UTC вчерашнего дня и до
   // сейчас — из них собирается недоформированная свеча даже дневного
-  // таймфрейма. Один раз на монету; дальше их продлевает хвост.
+  // таймфрейма. Один раз на монету; дальше их продлевает хвост. Переходом, как
+  // и история: слияние — функцией от прежнего, и срочный хвост, пришедший
+  // посреди, не теряется.
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
@@ -191,7 +225,7 @@ export function useLiveFeed(
       const from = Math.floor(Date.now() / DAY) * DAY - DAY;
       try {
         const rows = await source.candles(1, { from, limit: 5000 }, symbol);
-        if (alive) setMinutesState((prev) => mergeTagged(prev, symbol, rows));
+        if (alive) startTransition(() => setMinutesState((prev) => mergeTagged(prev, symbol, rows)));
       } catch (e) {
         if (alive) setError(e);
       }
@@ -219,9 +253,9 @@ export function useLiveFeed(
     }
   }, [closed, historyLoading, shownTf, symbol, source]);
 
-  // Свечи — по границе показа минуток, а не по моменту: момент тикает четыре
-  // раза в секунду, и новый массив свечей на каждом тике перерисовывал весь
-  // график, хотя минутки меняются раз в две секунды, с хвостом.
+  // Свечи — по границе показа минуток, а не по моменту: момент меняется и на
+  // пороге позиции, а свечи от него не зависят — новый массив перерисовывал бы
+  // весь график.
   const until = visibleUntil(minutes, cursor);
   const candles = useMemo(
     () => (anchor == null ? NO_CANDLES : visibleCandles({ closed, anchor, minutes, tf: shownTf, cursor: until })),
@@ -229,9 +263,16 @@ export function useLiveFeed(
   );
 
   const noop = useCallback(async () => undefined, []);
+  // Точный момент по часам сервера — время входа и выхода действий. Момент в
+  // состоянии отстаёт до минуты: он меняется только на порогах.
+  const moment = useCallback(() => {
+    const t = Date.now() - skew.current;
+    return endTime == null ? t : Math.min(t, endTime);
+  }, [endTime]);
 
   return {
     cursor,
+    moment,
     tf,
     shownTf,
     setTf,
@@ -248,8 +289,8 @@ export function useLiveFeed(
     speed: null,
     setSpeed: () => undefined,
     // По `now` (часы сервера в состоянии), а не по `Date.now()` в рендере:
-    // момент и так тикает четыре раза в секунду, а чтение часов и рефа при
-    // отрисовке делает результат непредсказуемым.
+    // конец сессии — порог часов, а чтение часов и рефа при отрисовке делает
+    // результат непредсказуемым.
     ended: endTime != null && now >= endTime,
     error,
     flush: noop,

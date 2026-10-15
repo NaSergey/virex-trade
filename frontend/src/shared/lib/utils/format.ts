@@ -1,3 +1,5 @@
+import { dateFormat } from './intl';
+
 /**
  * Разряды тонким пробелом: 118 420.50 читается с одного взгляда, 118420.50 —
  * нет. Пробел именно тонкий (U+2009), а не обычный: в моноширинной колонке
@@ -118,13 +120,11 @@ export function durationUnitLabels(locale: 'ru' | 'en'): { d: string; h: string;
  * @returns Formatted date string
  */
 export function formatTradeDate(iso: string, locale = 'ru-RU'): string {
-  return new Date(iso).toLocaleString(locale, {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  // Форматтер из кеша: строка таблицы сделок зовёт это на каждый рендер, а
+  // `toLocaleString` создавал бы `Intl.DateTimeFormat` заново на каждый вызов.
+  return dateFormat(locale, TRADE_DATE).format(new Date(iso));
 }
+const TRADE_DATE: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' };
 
 /**
  * Профит-фактор в читаемом виде — одна формулировка на все места, где он

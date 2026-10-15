@@ -12,7 +12,7 @@
  * - `worker` — ровно один процесс: фоновые сервисы (trade-sync,
  *   price-sync, liquidity-snapshot, market-alerts,
  *   weekly-report, usage-cleanup, refresh-token-cleanup, tron-watcher,
- *   tournament-runner, live-session-runner, terminal-stream) + telegram-поллинг, без
+ *   tournament-runner, live-session-runner, terminal-stream, db-backup) + telegram-поллинг, без
  *   HTTP-порта.
  * - `games` — ровно один процесс: покер, блэкджек, джетпак и их сокет. Раздачи
  *   и раунд живут в его памяти, и второй такой процесс на старте вернул бы

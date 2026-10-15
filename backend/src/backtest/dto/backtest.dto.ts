@@ -16,6 +16,9 @@ import {
 import { LIVE_SYMBOL_IDS } from '../../market-data/symbols';
 import type { Direction, ExitReason } from '../backtest-math';
 
+/** Больше тридцати ордеров одной сеткой панель и не ставит. */
+const MAX_GRID = 30;
+
 export class CreateSessionDto {
   @IsNumber()
   @Min(100)
@@ -133,14 +136,14 @@ export class CreateCloseOrderDto {
 export class CreateCloseGridDto {
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(10)
+  @ArrayMaxSize(MAX_GRID)
   @IsPositive({ each: true })
   prices: number[];
 
   /** Объёмы уровней в монете — закреплённые руками и поделённые остальными; нет — поровну. */
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(10)
+  @ArrayMaxSize(MAX_GRID)
   @IsNumber({}, { each: true })
   @IsPositive({ each: true })
   qtys?: number[];
@@ -148,7 +151,7 @@ export class CreateCloseGridDto {
   /** Цель стопа после исполнения уровня; 0 — правило (вход, дальше предыдущий тейк). */
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(10)
+  @ArrayMaxSize(MAX_GRID)
   @IsNumber({}, { each: true })
   @Min(0, { each: true })
   stops?: number[];
@@ -212,14 +215,14 @@ export class CreateEntryOrdersDto {
   /** Цена каждого уровня сетки, по одной строке на цену. */
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(10)
+  @ArrayMaxSize(MAX_GRID)
   @IsPositive({ each: true })
   prices: number[];
 
   /** Риск каждого уровня отдельно — объёмы из таблицы «Сетки»; по одному на цену. */
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(10)
+  @ArrayMaxSize(MAX_GRID)
   @IsNumber({}, { each: true })
   @Min(0.0001, { each: true })
   @Max(100, { each: true })
@@ -228,7 +231,7 @@ export class CreateEntryOrdersDto {
   /** Цель стопа после исполнения уровня; 0 — стоп не двигается. По одному на цену. */
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(10)
+  @ArrayMaxSize(MAX_GRID)
   @IsNumber({}, { each: true })
   @Min(0, { each: true })
   stopsAfter?: number[];

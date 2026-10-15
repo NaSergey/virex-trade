@@ -42,6 +42,12 @@ interface ClosedSet {
 
 export interface Replay {
   cursor: number;
+  /**
+   * Момент для действий — время входа и выхода, взятое в миг клика. У прокрутки
+   * это `cursor`; у эфира `cursor` меняется только на порогах (`nextChange`) и
+   * отстаёт до минуты, а `moment` — точные часы сервера.
+   */
+  moment: () => number;
   /** Выбранный ТФ. */
   tf: number;
   /** ТФ свечей в `candles` — отстаёт от `tf`, пока история выбранного ещё грузится. */
@@ -374,6 +380,9 @@ export function useReplay(
     return () => clearInterval(h);
   }, [speed]);
 
+  // Прокрутка стоит между шагами: момент действия — тот же, что на экране.
+  const moment = useCallback(() => cursor, [cursor]);
+
   // Момент сохраняется не чаще раза в SAVE_EVERY_MS: автопрокрутка на ×16
   // дала бы шестнадцать запросов в секунду. Сервер двигает момент только вперёд,
   // так что опоздавшее сохранение ничего не отмотает.
@@ -431,6 +440,7 @@ export function useReplay(
 
   return {
     cursor,
+    moment,
     tf,
     shownTf,
     setTf,

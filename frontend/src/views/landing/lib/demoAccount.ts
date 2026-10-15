@@ -115,10 +115,12 @@ function checkSides(direction: Direction, entry: number, stop: number, take: num
  */
 export function openTrade(s0: DemoState, v: OpenVars): DemoState {
   checkSides(v.direction, v.entryPrice, v.stopLoss, v.takeProfit);
+  const order = v.entryOrderId ? s0.entryOrders.find((o) => o.id === v.entryOrderId) : undefined;
   const s = v.entryOrderId ? { ...s0, entryOrders: s0.entryOrders.filter((o) => o.id !== v.entryOrderId) } : s0;
   const symbol = v.symbol ?? DEFAULT_SYMBOL;
   const open = s.trades.find((x) => x.exitTime == null && x.symbol === symbol && x.direction === v.direction);
-  if (open) return addInto(s, open, v);
+  // Лимит со «стопом после»: объём — от стопа самого ордера (`sizeStopOf` сервера), а не от подтянутого стопа позиции.
+  if (open) return tightenStop(addInto(s, open, v, order?.stopAfter != null ? order.stopLoss : undefined), open.id, order?.stopAfter, v.entryPrice);
   if (s.balance <= 0) throw new DemoError('noBalance');
   const riskUsdt = (s.balance * v.riskPct) / 100;
   const qty = riskUsdt / Math.abs(v.entryPrice - v.stopLoss);
@@ -148,7 +150,19 @@ export function openTrade(s0: DemoState, v: OpenVars): DemoState {
     tags: [],
     entries: [{ id: `${id}-e1`, qty, price: v.entryPrice, time: v.entryTime }],
   };
-  return { ...s1, trades: [...s1.trades, trade] };
+  return tightenStop({ ...s1, trades: [...s1.trades, trade] }, id, order?.stopAfter, v.entryPrice);
+}
+
+/**
+ * Стоп после исполнения лимита сетки (`tightenStop` сервера): только по свою
+ * сторону от цены исполнения и только теснее нынешнего.
+ */
+function tightenStop(s: DemoState, tradeId: string, target: number | null | undefined, fillPrice: number): DemoState {
+  if (!target) return s;
+  const trade = s.trades.find((x) => x.id === tradeId);
+  if (!trade || trade.exitTime != null || !stopOnRightSide(trade.direction, fillPrice, target)) return s;
+  const tighter = trade.direction === 'long' ? target > trade.stopLoss : target < trade.stopLoss;
+  return tighter ? replaceTrade(s, { ...trade, stopLoss: target }) : s;
 }
 
 /** Добор по id позиции — «Лонг/Шорт» по занятой стороне. */
@@ -161,10 +175,15 @@ export function addToTrade(s: DemoState, v: AddVars): DemoState {
  * маржа — от остатка (`qty − closedQty`), как у сервера (`addCore`): `qty` —
  * всё, что вошло в позицию, и проданный объём не должен тянуть среднюю.
  */
-function addInto(s: DemoState, trade: BacktestTrade, v: { entryTime: string; entryPrice: number; riskPct: number }): DemoState {
+function addInto(
+  s: DemoState,
+  trade: BacktestTrade,
+  v: { entryTime: string; entryPrice: number; riskPct: number },
+  sizeStop?: number,
+): DemoState {
   if (s.balance <= 0) throw new DemoError('noBalance');
   const addRisk = (s.balance * v.riskPct) / 100;
-  const addQty = addRisk / Math.abs(v.entryPrice - trade.stopLoss);
+  const addQty = addRisk / Math.abs(v.entryPrice - (sizeStop ?? trade.stopLoss));
   const remaining = trade.qty - trade.closedQty;
   const qty = trade.qty + addQty;
   const entryPrice = (remaining * trade.entryPrice + addQty * v.entryPrice) / (remaining + addQty);
@@ -265,7 +284,12 @@ export const moveCloseOrder = (s: DemoState, v: MoveVars): DemoState => ({
 
 /** Лимиты на вход — сколько угодно, открытая позиция им не мешает. */
 export function createEntryOrders(s0: DemoState, v: EntryOrdersVars, now: number): DemoState {
-  for (const price of v.prices) checkSides(v.direction, price, v.stopLoss, v.takeProfit);
+  for (const [i, price] of v.prices.entries()) {
+    checkSides(v.direction, price, v.stopLoss, v.takeProfit);
+    // Цель стопа после исполнения — по свою сторону от цены уровня, как сам стоп.
+    const after = v.stopsAfter?.[i];
+    if (after && !stopOnRightSide(v.direction, price, after)) throw new DemoError('stopSide');
+  }
   let s = s0;
   const orders: BacktestEntryOrder[] = [];
   for (const [i, price] of v.prices.entries()) {
@@ -283,6 +307,8 @@ export function createEntryOrders(s0: DemoState, v: EntryOrdersVars, now: number
       takeProfit: v.takeProfit ?? null,
       leverage: v.leverage,
       createdAt: iso(now),
+      // 0 — уровень таблицы со «стопом после», но без своей цели: стоп не двигается, объём — от стопа ордера.
+      stopAfter: v.stopsAfter ? v.stopsAfter[i] || 0 : null,
     });
   }
   return { ...s, entryOrders: [...s.entryOrders, ...orders] };
@@ -298,6 +324,7 @@ export function moveEntryOrder(s: DemoState, v: MoveVars, now: number): DemoStat
   const order = s.entryOrders.find((o) => o.id === v.orderId);
   if (!order) throw new DemoError('gone');
   checkSides(order.direction, v.price, order.stopLoss, order.takeProfit);
+  if (order.stopAfter && !stopOnRightSide(order.direction, v.price, order.stopAfter)) throw new DemoError('stopSide');
   const [id, s1] = nextId(s);
   return {
     ...s1,

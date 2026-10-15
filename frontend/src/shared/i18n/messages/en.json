@@ -37,7 +37,8 @@
   "nav": {
     "sections": "Sections",
     "terminal": "Terminal",
-    "overview": "Overview",
+    "journal": "Journal",
+    "journalSections": "Journal pages",    "overview": "Overview",
     "tags": "Tags",
     "analytics": "Analytics",
     "settings": "Settings",
@@ -724,24 +725,92 @@
   "landing": {
     "skipToContent": "Skip to content",
     "scrollHint": "Scroll",
+    "heroTitleA": "A platform",
+    "heroTitleB": "for traders",
     "signIn": "Sign in",
-    "stepsTitle": "How it works",
+    "stepsTitle": "What's inside",
     "step1Title": "Trade journal",
-    "step1Body": "Connect a read-only exchange key and trades arrive on their own: positions, sizes, fees and funding. No manual logging. Bybit is verified with live trades; adapters for other exchanges are written but not yet verified.",
+    "step1Body": "Connect an exchange key and trades arrive on their own: positions, sizes, fees and funding. A read-only key is enough.",
     "step2Title": "Tagging & analytics",
-    "step2Body": "You tag why you entered a trade, with a list you invent yourself. The platform measures each tag and their combinations, compares samples by your own conditions and rates repeatability rather than profit size: Edge Score, profit factor, drawdown.",
+    "step2Body": "Tag why you entered, and the platform measures every tag and their combinations — and shows what actually works.",
     "step3Title": "Exchange terminal",
-    "step3Body": "With a Bybit key that is allowed to trade, orders go straight from the platform. Size is calculated from risk and the stop, profit is taken by a grid of limit orders, and the stop trails filled take-profits on its own.",
+    "step3Body": "Orders go to Bybit straight from the platform. Size comes from risk and the stop, profit is taken by a grid of limits, and the stop trails take-profits on its own.",
+    "stepsDemo": "Platform screens on a demo account",
     "navLabel": "Page sections",
     "navPlatform": "Platform",
-    "navHow": "How it works",
+    "navAbout": "About",
+    "navHow": "What's inside",
+    "about": {
+      "kicker": "About",
+      "title": "Trade Play roadmap",
+      "lede": "Everything a trader needs in one place: journal, terminal, practice and games under one account. What already works — and what we build next, from simple to hard.",
+      "now": "Now",
+      "phases": {
+        "live": "Live",
+        "soon": "Soon",
+        "next": "Next",
+        "later": "Later"
+      },
+      "items": {
+        "journal": {
+          "title": "Trade journal"
+        },
+        "tags": {
+          "title": "Tags & analytics"
+        },
+        "terminal": {
+          "title": "Bybit terminal"
+        },
+        "backtest": {
+          "title": "Backtest & simulator"
+        },
+        "tournaments": {
+          "title": "Trading tournaments"
+        },
+        "games": {
+          "title": "Poker · blackjack · jetpack"
+        },
+        "season": {
+          "title": "Season & rewards"
+        },
+        "profile": {
+          "title": "Player profile",
+          "desc": "Stats across games, tournaments and trades"
+        },
+        "gridBots": {
+          "title": "Grid bots",
+          "desc": "An order grid that trades on its own"
+        },
+        "exchanges": {
+          "title": "More exchanges",
+          "desc": "OKX, Bitget, Binance and more"
+        },
+        "learning": {
+          "title": "Learning",
+          "desc": "How to build a system of your own setups"
+        },
+        "newGames": {
+          "title": "New games",
+          "desc": "The games lineup keeps growing"
+        },
+        "characters": {
+          "title": "Characters & skins",
+          "desc": "Your own hero in the profile and games with your characters"
+        },
+        "market": {
+          "title": "Marketplace",
+          "desc": "Skins, items, setups and strategies"
+        },
+        "usdtGames": {
+          "title": "USDT games",
+          "desc": "Stakes beyond coins"
+        }
+      }
+    },
     "navTerminal": "Terminal",
     "term": {
-      "kicker": "Terminal",
-      "title": "The same terminal as inside. Try it",
-      "lede": "Live market, size from risk, limit orders, a take-profit grid and a stop that trails the targets. Hover any part and it explains what it does. You can really open a position: it stays in your browser.",
-      "badge": "Demo · account in your browser",
-          "errors": {
+      "kicker": "Advanced terminal",
+      "errors": {
         "noBalance": "The demo deposit is gone — start over",
         "stopSide": "The stop is on the wrong side of the entry",
         "takeSide": "The target is on the wrong side of the entry",
@@ -848,7 +917,7 @@
         },
         "scaledCount": {
           "title": "Number of orders",
-          "body": "How many limits to split the entry into, 1 to 10. Next to it — the average price if all fill."
+          "body": "How many limits to split the entry into, 1 to 30. Next to it — the average price if all fill."
         },
         "size": {
           "title": "Size",
@@ -874,14 +943,14 @@
     },
     "navRegister": "Sign up",
     "platformTitle": "Trade Play — a platform for traders",
-    "registerTitle": "Start with ten tagged trades",
-    "registerBody": "Connect your keys, wait for the sync, tag your latest trades and come back to Overview. Until you tag, half of the conclusions simply aren't computed.",
-    "registerNote": "Free. Only exchange read-only keys are needed.",
+    "registerTitle": "One account — the whole platform",
+    "registerBody": "Connect a Bybit key and your trades arrive on their own. Without an exchange you still get backtests, the simulator and games — you start with 1,000 coins.",
+    "registerNote": "Free. A read-only key is enough for the journal.",
     "footer": "Trade Play — a platform for traders: journal, terminal, simulator and games.",
     "step4Title": "Backtest & simulator",
-    "step4Body": "Test a system without account money: replay history, practice on a generated market, or trade the live market across several coins. The terminal is the same as for real trades, so the skill carries over one to one.",
+    "step4Body": "Test a system without account money: replay history, a generated market or the live market. The terminal is the same as for real trades.",
     "step5Title": "Games & tournaments",
-    "step5Body": "Trading tournaments with a prize pool, poker, blackjack and jetpack — on internal coins; account money never takes part. Games earn season XP, and levels earn rewards."
+    "step5Body": "Trading tournaments, poker, blackjack and jetpack — on internal coins. Account money never takes part in games."
   },
   "market": {
     "history1y": "1 year",
@@ -1193,9 +1262,9 @@
       "liq": "liquidation",
       "limitClose": "limit close",
       "limitEntry": "limit",
-      "gridUpper": "grid upper",
-      "gridLower": "grid lower",
-      "gridStep": "grid order",
+      "gridUpper": "max price",
+      "gridLower": "min price",
+      "gridStep": "order",
       "gridTake": "take",
       "pendingEntry": "limit"
     },
@@ -1372,15 +1441,19 @@
     "botStopHint": "Where the position stop goes when this level's sell fills. Empty — the stop stays. Bot buys at the stop and below are cancelled.",
     "gridStopFollow": "Move the stop after a fill",
     "gridStopAfter": "Stop after",
-    "gridStopHint": "Where the position stop goes when this level fills. Empty — the stop stays.",
+    "gridStopHint": "Where the position stop goes when this level fills. An empty field restores the rule: halfway from the stop to the last level to fill.",
     "gridStopBlocks": "A stop after a level sits at or beyond a level that fills later — that one would never fill. Move the target past those levels.",
     "gridQtyHint": "Share of the grid volume, %. Typed values are pinned, other levels split the rest; empty — unpin.",
     "gridLevelRisk": "Risk",
     "entryPrice": "Entry price",
-    "entryUpper": "Entry upper",
-    "entryLower": "Entry lower",
+    "entryUpper": "Max price",
+    "entryLower": "Min price",
     "ordersCount": "Number of orders",
     "gridAvgEntry": "Average entry price",
+    "gridTilt": "Volume distribution",
+    "gridTiltEven": "even",
+    "gridTiltDown": "toward bottom",
+    "gridTiltUp": "toward top",
     "limitCloseOrdersTitle": "Limit close orders",
     "pendingEntryOrdersTitle": "Entry limits",
     "colOrderSymbol": "Coin",
@@ -1436,8 +1509,8 @@
       "welcomeP2Body": "Analytics compares a selection matching your conditions against all your other trades. The question it answers is “what if I only traded like this?” — and the answer arrives before you put money behind it.",
       "welcomeP3Title": "Make the result stable",
       "welcomeP3Body": "Edge Score measures not the size of the profit but how repeatable it is. Together with the equity curve, drawdown and profit factor it answers the real question: has the system become steadier or not.",
-      "navTitle": "Five sections",
-      "navBody": "Overview — what the period came to. Tags — why you entered and how it ended. Analytics — one slice of trades compared against all the rest. Market — the backdrop you traded against. Settings — exchange keys.",
+      "navTitle": "Sections",
+      "navBody": "Journal — your trades in three tabs: overview — what the period came to, tags — why you entered and how it ended, analytics — one slice of trades compared against all the rest. Market — the backdrop you traded against. Settings and exchange keys live in the profile menu.",
       "periodTitle": "Period",
       "periodBody": "Everything on this page is counted over the range picked here. Next to it — how many trades fell inside it: when that number is small, treat the conclusions below with care.",
       "summaryTitle": "Summary",

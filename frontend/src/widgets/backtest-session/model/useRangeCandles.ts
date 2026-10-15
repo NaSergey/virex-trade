@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { startTransition, useEffect, useMemo, useState } from 'react';
 import type { Candle } from '../lib/candles';
 import { H4 } from '../lib/ranges';
 
@@ -37,11 +37,15 @@ export function useRangeCandles(enabled: boolean, load: Load4h, key: string, now
     load(range)
       .then((rows) => {
         if (!alive) return;
-        setState((prev) => {
-          const base = prev?.key === key && range.from != null ? prev.rows : [];
-          const last = base.at(-1)?.t ?? -Infinity;
-          return { key, rows: [...base, ...rows.filter((c) => c.t > last)] };
-        });
+        // Переходом, как история ленты: 1000 свечей перерисовывают график, и
+        // срочным обновлением это одна длинная задача.
+        startTransition(() =>
+          setState((prev) => {
+            const base = prev?.key === key && range.from != null ? prev.rows : [];
+            const last = base.at(-1)?.t ?? -Infinity;
+            return { key, rows: [...base, ...rows.filter((c) => c.t > last)] };
+          }),
+        );
       })
       // Не загрузилось — рамок просто нет; следующая свеча попробует снова.
       .catch(() => undefined);

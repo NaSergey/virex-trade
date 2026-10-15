@@ -1,11 +1,9 @@
 import { useId, type SVGProps } from 'react';
 
 import {
-  CRUMPLE,
   EDGES,
   GLINTS,
   H,
-  HATCH_ANGLES,
   SHARDS,
   STOPS,
   W,
@@ -15,9 +13,9 @@ import {
 /**
  * Знак Trade Play: курсивное «TP» из стеклянных осколков.
  *
- * Слои снизу вверх: отлив → крупные грани → мятое стекло → штриховка →
- * кромки → искры. В кегле шапки мелкие слои сливаются в зерно и блеск, в
- * крупном виде читаются по отдельности.
+ * Слои снизу вверх: отлив → грани → кромки → искры. Мелкой сетки «мятого»
+ * стекла и штриховки нет: в кегле шапки они читались клетчатым узором и
+ * прозрачными линиями поверх граней (снято владельцем 2026-10-13).
  *
  * Отлив — один градиент на весь знак, а не свой у каждого осколка: полоса
  * блика проходит через щели между ними, и осколки читаются кусками одного
@@ -34,9 +32,7 @@ import {
 export function TradePlayMark({ className, ...props }: SVGProps<SVGSVGElement>) {
   const uid = `tpm-${useId()}`;
   const sheen = `${uid}-sheen`;
-  const clip = `${uid}-clip`;
   const glint = `${uid}-glint`;
-  const hatch = (angle: number) => `${uid}-hatch${HATCH_ANGLES.indexOf(angle)}`;
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -53,23 +49,6 @@ export function TradePlayMark({ className, ...props }: SVGProps<SVGSVGElement>) 
             <stop key={offset} offset={offset} style={{ stopColor: `var(--tpm-${i + 1})` }} />
           ))}
         </linearGradient>
-        <clipPath id={clip}>
-          {SHARDS.map(({ id, outline }) => (
-            <polygon key={id} points={pts(outline)} />
-          ))}
-        </clipPath>
-        {HATCH_ANGLES.map((angle) => (
-          <pattern
-            key={angle}
-            id={hatch(angle)}
-            width="12"
-            height="2.2"
-            patternUnits="userSpaceOnUse"
-            patternTransform={`rotate(${angle})`}
-          >
-            <rect width="12" height="0.45" fill="#fff" />
-          </pattern>
-        ))}
         <radialGradient id={glint}>
           <stop offset="0" stopColor="#fff" />
           <stop offset="0.25" stopColor="#fff" stopOpacity="0.45" />
@@ -89,24 +68,6 @@ export function TradePlayMark({ className, ...props }: SVGProps<SVGSVGElement>) 
           ))}
         </g>
       ))}
-      <g clipPath={`url(#${clip})`}>
-        {CRUMPLE.map(({ tone, d }) => (
-          <path
-            key={tone}
-            d={d}
-            fill={tone > 0 ? '#fff' : '#000'}
-            fillOpacity={Math.abs(tone)}
-            stroke="#fff"
-            strokeOpacity={0.07}
-            strokeWidth={0.35}
-          />
-        ))}
-      </g>
-      {SHARDS.flatMap(({ id, outline, hatch: angles = [] }) =>
-        angles.map((angle) => (
-          <polygon key={`${id}${angle}`} points={pts(outline)} fill={`url(#${hatch(angle)})`} fillOpacity={0.16} />
-        )),
-      )}
       <g className="tp-mark-edge">
         {EDGES.map(({ key, a, b, opacity }) => (
           <line key={key} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} strokeOpacity={opacity} />

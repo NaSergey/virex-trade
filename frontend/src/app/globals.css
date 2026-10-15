@@ -508,6 +508,128 @@
     background: var(--ink);
     color: var(--ground);
   }
+  /* Страницы «Дневника» — ряд под пунктом по наведению на него (`TopNav`,
+     решение владельца 2026-10-14). Левый край — край пункта (ставит разметка).
+     Миниатюры экранов и строки описаний стояли и сняты («борщанул») — только
+     названия, в ряд (столбиком стояли и переставлены владельцем).
+
+     Движение: панель раскрывается вниз из-под шапки (`clip-path`), пункты
+     поднимаются следом по очереди (`--i`). Под курсором подчёркивание
+     вырастает слева направо; у открытой страницы оно стоит всегда. Уход —
+     быстрое угасание целиком: обратный показ того же движения медлил бы с
+     переходом.
+
+     Фон почти глухой, не блюр: `backdrop-filter` внутри шапки с её же блюром
+     размывал бы только саму шапку (она — корень своего фона). */
+  .jmenu {
+    position: absolute;
+    top: 100%;
+    padding: 0 var(--s2);
+    border: 1px solid var(--rule);
+    border-top: 0;
+    background: rgb(var(--ground-rgb) / 0.97);
+    visibility: hidden;
+    opacity: 0;
+    clip-path: inset(0 0 100% 0);
+    transition: opacity 0.14s ease, visibility 0s linear 0.14s, clip-path 0s linear 0.14s;
+  }
+  .jmenu[data-open="true"] {
+    visibility: visible;
+    opacity: 1;
+    clip-path: inset(0 -1px -1px -1px);
+    transition: clip-path 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.1s ease, visibility 0s;
+  }
+  .jmenu nav {
+    display: flex;
+  }
+  .jmenu-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    height: 44px;
+    padding: 0 var(--s3);
+    white-space: nowrap;
+    color: var(--ink-2);
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    text-decoration: none;
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  .jmenu[data-open="true"] .jmenu-item {
+    opacity: 1;
+    transform: none;
+    transition:
+      color 0.12s,
+      opacity 0.28s ease calc(0.06s + var(--i) * 0.05s),
+      transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) calc(0.06s + var(--i) * 0.05s);
+  }
+  .jmenu-item::before {
+    content: "";
+    position: absolute;
+    left: var(--s3);
+    right: var(--s3);
+    bottom: 12px;
+    height: 1px;
+    background: var(--ink);
+    transform: scaleX(0);
+    transform-origin: 0 50%;
+    transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .jmenu-item:hover,
+  .jmenu-item:focus-visible,
+  .jmenu-item[aria-current="page"] {
+    color: var(--ink);
+  }
+  .jmenu-item:hover::before,
+  .jmenu-item:focus-visible::before,
+  .jmenu-item[aria-current="page"]::before {
+    transform: scaleX(1);
+  }
+
+  /* Вкладки «Дневника» (`JournalNav`) — только на сенсорных экранах (см.
+     выше): второй уровень под рейкой, та же моно-капитель, выбранная
+     подчёркнута на линейке, а не вывернута — плашка уже стоит у «Дневника». */
+  /* Линейка ряда — фоном, а не рамкой: ряд листается вбок (`overflow-x`) и
+     срезал бы подчёркивание вкладки, наложенное на свою рамку, а фон лежит под
+     детьми, и подчёркивание ложится поверх него. Не тенью: тени снимает
+     глобальный сброс в `@layer base`. */
+  .subnav {
+    display: flex;
+    gap: var(--s4);
+    margin-top: var(--s3);
+    background: linear-gradient(var(--hair), var(--hair)) left bottom / 100% 1px no-repeat;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .subnav a {
+    padding: var(--s2) 0;
+    border-bottom: 1px solid transparent;
+    color: var(--ink-3);
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color 0.12s, border-color 0.12s;
+  }
+  .subnav a:hover { color: var(--ink-2); }
+  .subnav a[aria-current="page"] {
+    border-bottom-color: var(--ink);
+    color: var(--ink);
+  }
+  /* Наведения нет — нет и полоски: на сенсорном экране страницы дневника —
+     вкладками на самой странице (`.subnav`), а с мышью вкладок нет. После
+     правил `.subnav`, а не до: при равной специфичности решает порядок. */
+  @media (hover: none) {
+    .jmenu { display: none; }
+  }
+  @media (hover: hover) {
+    .subnav { display: none; }
+  }
   .top-r {
     display: flex;
     align-items: center;
@@ -821,7 +943,9 @@
   .draw-width span { width: 14px; display: block; background: var(--ink); }
   .replay-chart .draw-hit { cursor: move; }
   .replay-chart .draw-anchor { cursor: pointer; }
-  .order-panel { display: grid; gap: var(--s3); align-content: start; }
+  /* Колонка, а не сетка: подвал с размером и кнопками (.order-foot) прижимается к низу
+     через margin-top: auto, когда панель короче окна колонки. */
+  .order-panel { display: flex; flex-direction: column; gap: var(--s3); flex: 1; }
   /* Работающий грид-бот на месте полей вкладки «Бот». */
   .bot-card { display: grid; gap: var(--s2); }
   /* Подписи тикета — на ступень светлее общего .lbl (--ink-2 вместо самого
@@ -972,7 +1096,8 @@
   .newrow-full { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s2); width: 100%; }
   .newrow-full > input { flex: 1; min-width: 0; }
   .newrow-full > .btn { white-space: nowrap; }
-  .cg-foot {
+  .cg-foot,
+  .order-foot {
     margin-top: auto;
     position: sticky;
     bottom: 0;
@@ -985,7 +1110,12 @@
   }
   /* Отрицательный отступ .size-preview подтягивает итог к полям тикета; в подвале
      он наехал бы на его линейку. */
-  .cg-foot .size-preview { margin-top: 0; }
+  .cg-foot .size-preview,
+  .order-foot .size-preview { margin-top: 0; }
+  /* Флажок «переносить стоп» — в шапке своей колонки, а не отдельной строкой: подпись колонки
+     та же, что у соседей, с квадратом слева. */
+  .cg-follow { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; text-transform: inherit; letter-spacing: inherit; }
+  .cg-follow input { accent-color: var(--ink); margin: 0; flex: none; }
   /* Таблица уровней в колонке 360px: общая мерка .ledger (760px) уводила её в
      горизонтальную прокрутку с пустыми промежутками между колонками. Строки
      плотнее, чем в журнале, — уровней до десяти, и все должны быть видны. */

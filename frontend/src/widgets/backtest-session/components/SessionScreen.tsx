@@ -23,6 +23,7 @@ import {
   type SessionDetail,
 } from '../api/types';
 import { TIMEFRAMES, dayNumber, scaleCandle } from '../lib/candles';
+import { terminalIntl, timeLabelFormats } from '../lib/time-labels';
 import { CLOSE_GRID_FIRST_ID, CLOSE_GRID_LAST_ID, closeGridLevels, initCloseGrid, type CloseGridDraft } from '../lib/close-grid';
 import { draftLevels } from '../lib/draft-levels';
 import { atrOf, findRanges, toChartRanges, type ChartRange } from '../lib/ranges';
@@ -181,8 +182,8 @@ export interface TerminalProps {
   decimalsOf?: (symbol: string) => number | undefined;
   /** Цена монеты, которой нет на графике; не задано — цены эфира с сервера. */
   priceOf?: (symbol: string) => number | null;
-  /** Подпись у переключателя таблиц вместо «Эфир». */
-  badge?: string;
+  /** Подпись у переключателя таблиц вместо «Эфир»; `false` — без подписи (терминал на главной). */
+  badge?: string | false;
   /** Сигналы по разнице снимков; не задано — правила сессии (`soundsOf`). Ссылка — стабильная. */
   soundsOf?: (was: SessionDetail, next: SessionDetail) => readonly TerminalSound[];
   /**
@@ -197,6 +198,12 @@ export interface TerminalProps {
    * его обработчик увёл бы со страницы.
    */
   tags?: boolean;
+  /**
+   * Вкладки и таблицы под графиком (открытые позиции, ордера, история); по
+   * умолчанию есть. Терминал на главной их убирает (владелец 2026-10-13): гостю
+   * показывают график и панель ордера, а уровни он двигает прямо на графике.
+   */
+  tables?: boolean;
   /**
    * Терминала не видно: часы и хвост живой ленты стоят. Терминал на главной
    * уезжает за экран, а тик часов четыре раза в секунду перерисовывал бы его и
@@ -222,11 +229,12 @@ export function Terminal({
   soundsOf,
   history: History,
   tags = true,
+  tables = true,
   paused = false,
 }: TerminalProps) {
   const t = useTranslations('backtest');
   const { locale } = useLocaleControl();
-  const intl = locale === 'en' ? 'en-US' : 'ru-RU';
+  const intl = terminalIntl(locale);
   const { session, trades } = detail;
   const scale = session.priceScale;
   const startMs = Date.parse(session.startTime);
@@ -400,7 +408,13 @@ export function Terminal({
   );
   // Хуки нельзя вызывать по условию, поэтому вызываются оба, а спит тот, чья
   // очередь не настала: в эфире свечи идут живым хвостом, а не прокруткой.
-  const liveFeed = useLiveFeed(detail, isLive, symbol, source, paused);
+  // Входы открытых позиций — пороги часов эфира: от них «закрыть можно» и
+  // возраст позиции. Время входа биржи бывает неизвестно — такой вход не порог.
+  const entryAnchors = useMemo(
+    () => openTrades.map((x) => Date.parse(x.entryTime)).filter(Number.isFinite),
+    [openTrades],
+  );
+  const liveFeed = useLiveFeed(detail, isLive, symbol, source, paused, entryAnchors);
   const replay = isLive ? liveFeed : replayFeed;
 
   // Индикатор боковиков: свои закрытые 4ч-свечи до «сейчас» терминала (в
@@ -456,6 +470,7 @@ export function Terminal({
     qtyPins: {},
     stopPins: {},
     stopFollow: false,
+    tilt: 0,
   });
   const [botDraft, setBotDraft] = useState<BotDraft>({
     risk: '1',
@@ -487,6 +502,9 @@ export function Terminal({
       openTrades, а история правит сделки, которых там уже нет. */
   const [historyTagsFor, setHistoryTagsFor] = useState<string | null>(null);
   const [tab, setTab] = useState<'open' | 'orders' | 'history'>('open');
+  // Строка под графиком: кнопки прокрутки, подпись счёта, «К списку», вкладки.
+  // У терминала на главной нет ничего из этого — строки нет вовсе.
+  const controlsShown = !isLive || badge !== false || tables || Boolean(onLeave);
   // Ошибки действий над открытыми позициями — своя строка над таблицей позиций, а не
   // `hint` панели ордера: панель про следующий ордер и чужих отказов не показывает.
   const [positionHint, setPositionHint] = useState<string | null>(null);
@@ -560,7 +578,16 @@ export function Terminal({
           tab: orderTab,
           market: { stop: stopN, take: takeN, risk: draftRisk },
           limit: { entry: lEntryN, stop: lStopN, take: lTakeN, risk: Number(limitDraft.risk) },
-          scaled: { upper: sUpperN, lower: sLowerN, stop: sStopN, take: sTakeN, count: sCountN, risk: Number(scaledDraft.risk) },
+          scaled: {
+            upper: sUpperN,
+            lower: sLowerN,
+            stop: sStopN,
+            take: sTakeN,
+            count: sCountN,
+            risk: Number(scaledDraft.risk),
+            qtyPins: scaledDraft.qtyPins,
+            tilt: scaledDraft.tilt,
+          },
           bot: botDraftOn
             ? {
                 upper: botDraft.upper.trim() ? Number(botDraft.upper) : null,
@@ -677,6 +704,8 @@ export function Terminal({
     sTakeN,
     sCountN,
     scaledDraft.risk,
+    scaledDraft.qtyPins,
+    scaledDraft.tilt,
     botDraft.upper,
     botDraft.lower,
     botDraft.stop,
@@ -737,15 +766,19 @@ export function Terminal({
   // Скрытая дата: день недели и время суток видны (биржевые сессии, выходные),
   // год и число — нет; вместо даты — номер дня от старта. useCallback по той же
   // причине, что и levels выше — стабильная ссылка нужна memo(ReplayChart).
+  // Форматтеры — один раз на локаль: `toLocale*String` создавал их заново на
+  // каждый вызов, а подписи времени графика зовут `labelFor` на каждый его
+  // рендер (ось и перекрестие), — первый пункт профиля прихода свечей.
+  const dateFmt = useMemo(() => timeLabelFormats(intl), [intl]);
   const labelFor = useCallback(
     (ms: number) => {
       const d = new Date(ms);
-      const time = d.toLocaleTimeString(intl, { hour: '2-digit', minute: '2-digit' });
+      const time = dateFmt.time.format(d);
       return session.hideDate
-        ? `${d.toLocaleDateString(intl, { weekday: 'short' })} ${time} · ${t('dayN', { n: dayNumber(ms, startMs) })}`
-        : `${d.toLocaleDateString(intl, { day: 'numeric', month: 'short', year: '2-digit' })} ${time}`;
+        ? `${dateFmt.weekday.format(d)} ${time} · ${t('dayN', { n: dayNumber(ms, startMs) })}`
+        : `${dateFmt.day.format(d)} ${time}`;
     },
-    [intl, session.hideDate, startMs, t],
+    [dateFmt, session.hideDate, startMs, t],
   );
   // Тем же поводом, что и labelFor выше — стабильная ссылка для memo(ReplayChart).
   const levelLabel = useCallback((kind: LevelKind) => t(`level.${kind}`), [t]);
@@ -796,7 +829,7 @@ export function Terminal({
       symbol,
       ...botFromDraft(botDraft, scale).submit,
       leverage: draftLeverage,
-      entryTime: new Date(replay.cursor).toISOString(),
+      entryTime: new Date(replay.moment()).toISOString(),
       entryPrice: replay.price,
     });
   };
@@ -866,7 +899,7 @@ export function Terminal({
       setHint(null);
       addToTradeM.mutate({
         tradeId: existing.id,
-        entryTime: new Date(replay.cursor).toISOString(),
+        entryTime: new Date(replay.moment()).toISOString(),
         entryPrice: replay.price,
         riskPct: risk,
       });
@@ -880,7 +913,7 @@ export function Terminal({
     openM.mutate({
       symbol,
       direction,
-      entryTime: new Date(replay.cursor).toISOString(),
+      entryTime: new Date(replay.moment()).toISOString(),
       // Настоящая цена минутки, а не обратный пересчёт экранной: без округлений.
       entryPrice: replay.price,
       stopLoss: fromScreen(stopN, scale),
@@ -952,6 +985,7 @@ export function Terminal({
       qtyPins: scaledDraft.qtyPins,
       stopTargets: Object.fromEntries(Object.entries(scaledDraft.stopPins).map(([k, v]) => [k, fromScreen(v, scale)])),
       stopFollow: actions.gridStopAfter === true && scaledDraft.stopFollow,
+      tilt: scaledDraft.tilt,
     });
     if (table.over) {
       setScaledHint(t('closeGridPinnedOver'));
@@ -1143,7 +1177,7 @@ export function Terminal({
   const submitMarket = (trade: BacktestTrade, qty: number) => {
     const price = priceOf(trade.symbol);
     if (price == null || !canClose(trade)) return;
-    void closeTrade(trade, replay.cursor, price, 'manual', qty).then(() => setMarketModalFor(null)).catch(() => undefined);
+    void closeTrade(trade, replay.moment(), price, 'manual', qty).then(() => setMarketModalFor(null)).catch(() => undefined);
   };
 
   const finishing = useRef(false);
@@ -1155,7 +1189,7 @@ export function Terminal({
       // Позицию закрывает браузер — он знает цену момента; сервер лишь проверяет, что открытых нет.
       for (const trade of openTrades) {
         const price = priceOf(trade.symbol);
-        if (price != null && canClose(trade)) await closeTrade(trade, replay.cursor, price, 'finish');
+        if (price != null && canClose(trade)) await closeTrade(trade, replay.moment(), price, 'finish');
       }
       await replay.flush();
       await finishM.mutateAsync();
@@ -1296,46 +1330,50 @@ export function Terminal({
               место под тикетом справа иначе пустовало бы, а переключателю
               таблицы было бы тесно. */}
           <div className="terminal-controls">
-            <div className="replay-controls">
-              {/* В эфире время ведут часы, а не участник: шагать и ускорять
-                  нечего, и кнопки, которые ничего не делают, тут не стоят. */}
-              {!isLive && (
-                <>
-                  <Button variant="solid" onClick={() => void replay.step()} disabled={!replay.ready || replay.ended}>
-                    {t('step')} ▶
+            {controlsShown && (
+              <div className="replay-controls">
+                {/* В эфире время ведут часы, а не участник: шагать и ускорять
+                    нечего, и кнопки, которые ничего не делают, тут не стоят. */}
+                {!isLive && (
+                  <>
+                    <Button variant="solid" onClick={() => void replay.step()} disabled={!replay.ready || replay.ended}>
+                      {t('step')} ▶
+                    </Button>
+                    <Seg
+                      options={speedOptions}
+                      value={replay.speed ?? 0}
+                      onChange={(v) => replay.setSpeed(v || null)}
+                      ariaLabel={t('speed')}
+                    />
+                  </>
+                )}
+                {isLive && badge !== false && (
+                  <span className="muted" data-tour="term-badge">
+                    {badge ?? t('liveBadge')}
+                  </span>
+                )}
+                {session.dataSource === 'synthetic' && <span className="muted">{t('syntheticBadge')}</span>}
+                {onLeave && (
+                  <Button tight onClick={() => void leave()}>
+                    {detail.tournament ? t('backToTournament') : t('backToList')}
                   </Button>
+                )}
+                {tables && (
                   <Seg
-                    options={speedOptions}
-                    value={replay.speed ?? 0}
-                    onChange={(v) => replay.setSpeed(v || null)}
-                    ariaLabel={t('speed')}
+                    className="view-switch"
+                    data-tour="term-tables"
+                    options={[
+                      { value: 'open' as const, label: t('openPositionsTab') },
+                      { value: 'orders' as const, label: t('ordersTab') },
+                      { value: 'history' as const, label: t('historyTab') },
+                    ]}
+                    value={tab}
+                    onChange={setTab}
+                    ariaLabel={t('openPositionsTab')}
                   />
-                </>
-              )}
-              {isLive && (
-                <span className="muted" data-tour="term-badge">
-                  {badge ?? t('liveBadge')}
-                </span>
-              )}
-              {session.dataSource === 'synthetic' && <span className="muted">{t('syntheticBadge')}</span>}
-              {onLeave && (
-                <Button tight onClick={() => void leave()}>
-                  {detail.tournament ? t('backToTournament') : t('backToList')}
-                </Button>
-              )}
-              <Seg
-                className="view-switch"
-                data-tour="term-tables"
-                options={[
-                  { value: 'open' as const, label: t('openPositionsTab') },
-                  { value: 'orders' as const, label: t('ordersTab') },
-                  { value: 'history' as const, label: t('historyTab') },
-                ]}
-                value={tab}
-                onChange={setTab}
-                ariaLabel={t('openPositionsTab')}
-              />
-            </div>
+                )}
+              </div>
+            )}
             {replay.ended && <p className="muted">{t('historyEnded')}</p>}
             <ErrorNote error={replay.error} fallback={t('loadFailed')} />
           </div>
@@ -1347,7 +1385,7 @@ export function Terminal({
               Смена панели — сменой ключа: новая въезжает анимацией (.panel-swap). */}
           <div
             key={chartSettingsOpen ? 'settings' : gridTrade ? 'grid' : 'order'}
-            className={gridTrade || chartSettingsOpen ? 'panel-swap panel-swap-fill' : 'panel-swap'}
+            className="panel-swap panel-swap-fill"
             data-swap={panelSwapped ? (gridTrade || chartSettingsOpen ? 'in' : 'back') : undefined}
           >
             {chartSettingsOpen ? (
@@ -1436,61 +1474,63 @@ export function Terminal({
         </p>
       )}
 
-      <div className="bt-table">
-        {/* Над любой вкладкой: уровни и ордера двигают и снимают прямо на графике,
-            какая бы таблица ни была открыта под ним. */}
-        {positionHint && <p className="neg">{positionHint}</p>}
-        <ErrorNote
-          error={modifyM.error ?? moveEntryOrderM.error ?? moveCloseOrderM.error ?? cancelOrderM.error ?? cancelEntryOrderM.error}
-          fallback={t('actionFailed')}
-        />
-        {tab === 'open' && (
-          <OpenPositionsPanel
-            trades={openTrades}
-            scale={scale}
-            priceOf={priceOf}
-            decimalsOf={decimalsOf}
-            cursor={replay.cursor}
-            onLimit={(trade) => setLimitModalFor(trade.id)}
-            onMarket={(trade) => setMarketModalFor(trade.id)}
-            onChangeLevels={(trade) => setLevelsModalFor(trade.id)}
-            onCloseGrid={(trade) => onCloseGrid(trade.id)}
-            onTags={tags ? (trade) => setTagsModalFor(trade.id) : undefined}
-            onSymbol={pickSymbol}
+      {tables && (
+        <div className="bt-table">
+          {/* Над любой вкладкой: уровни и ордера двигают и снимают прямо на графике,
+              какая бы таблица ни была открыта под ним. */}
+          {positionHint && <p className="neg">{positionHint}</p>}
+          <ErrorNote
+            error={modifyM.error ?? moveEntryOrderM.error ?? moveCloseOrderM.error ?? cancelOrderM.error ?? cancelEntryOrderM.error}
+            fallback={t('actionFailed')}
           />
-        )}
-        {tab === 'orders' && (
-          <div data-tour="term-orders">
-          <OrdersPanel
-            trades={openTrades}
-            scale={scale}
-            closeOrders={detail.closeOrders}
-            entryOrders={detail.entryOrders}
-            onCancelOrder={(id) => cancelOrderM.mutate(id)}
-            onCancelEntryOrder={(id) => cancelEntryOrderM.mutate(id)}
-            showSymbol={isLive}
-            decimalsOf={decimalsOf}
-            onSymbol={pickSymbol}
-          />
-          </div>
-        )}
-        {tab === 'history' && (
-          <div data-tour="term-history">
-          {History ? (
-            <History onSymbol={pickSymbol} />
-          ) : (
-            <SessionTrades
-              trades={trades}
+          {tab === 'open' && (
+            <OpenPositionsPanel
+              trades={openTrades}
               scale={scale}
-              labelFor={labelFor}
-              onEditTags={tags ? (trade) => setHistoryTagsFor(trade.id) : undefined}
+              priceOf={priceOf}
               decimalsOf={decimalsOf}
+              cursor={replay.cursor}
+              onLimit={(trade) => setLimitModalFor(trade.id)}
+              onMarket={(trade) => setMarketModalFor(trade.id)}
+              onChangeLevels={(trade) => setLevelsModalFor(trade.id)}
+              onCloseGrid={(trade) => onCloseGrid(trade.id)}
+              onTags={tags ? (trade) => setTagsModalFor(trade.id) : undefined}
               onSymbol={pickSymbol}
             />
           )}
-          </div>
-        )}
-      </div>
+          {tab === 'orders' && (
+            <div data-tour="term-orders">
+            <OrdersPanel
+              trades={openTrades}
+              scale={scale}
+              closeOrders={detail.closeOrders}
+              entryOrders={detail.entryOrders}
+              onCancelOrder={(id) => cancelOrderM.mutate(id)}
+              onCancelEntryOrder={(id) => cancelEntryOrderM.mutate(id)}
+              showSymbol={isLive}
+              decimalsOf={decimalsOf}
+              onSymbol={pickSymbol}
+            />
+            </div>
+          )}
+          {tab === 'history' && (
+            <div data-tour="term-history">
+            {History ? (
+              <History onSymbol={pickSymbol} />
+            ) : (
+              <SessionTrades
+                trades={trades}
+                scale={scale}
+                labelFor={labelFor}
+                onEditTags={tags ? (trade) => setHistoryTagsFor(trade.id) : undefined}
+                decimalsOf={decimalsOf}
+                onSymbol={pickSymbol}
+              />
+            )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Окна позиции берут цену монеты своей сделки, а не графика. */}
       {levelsModalFor != null && (() => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { entryGridTable, gridLevelQtys, gridRiskPcts, levelShares, stopAfterBlocks } from './level-table';
+import { entryGridTable, gridLevelQtys, gridRiskPcts, levelShares, stopAfterBlocks, distributionWeights } from './level-table';
 
 describe('levelShares', () => {
   it('без закреплений — поровну', () => {
@@ -80,9 +80,38 @@ describe('entryGridTable', () => {
     expect(t.prices).toEqual([100, 95, 90]);
     expect(t.riskPcts.reduce((x, y) => x + y, 0)).toBeCloseTo(2, 12);
     expect(t.rows.reduce((x, r) => x + r.riskUsd, 0)).toBeCloseTo(200, 9);
-    expect(t.stopsAfter).toEqual([88, 0, 0]);
+    // Своя цель — у первой строки, у остальных — правило (полпути от стопа до последнего по исполнению уровня: 87,5).
+    expect(t.stopsAfter).toEqual([88, 87.5, 87.5]);
     expect(t.rows[0].stopAfter).toBe(88);
+    expect(t.rows[0].stopPinned).toBe(true);
+    expect(t.rows[1].stopPinned).toBe(false);
     expect(t.blocked).toBe(false);
+  });
+
+  it('галочка включена, целей никто не вводил — цифры в каждой строке, по правилу', () => {
+    const t = entryGridTable({
+      prices: [100, 98, 96], direction: 'long', stop: 90, riskPct: 1, balance: 1000, qtyPins: {}, stopTargets: {}, stopFollow: true,
+    });
+    // От стопа 90 до последнего по исполнению уровня 96 — полпути: 93. Ниже всех уровней, выше стопа: уровни остаются исполнимыми.
+    expect(t.rows.map((r) => r.stopAfter)).toEqual([93, 93, 93]);
+    expect(t.rows.every((r) => !r.stopPinned)).toBe(true);
+    expect(t.stopsAfter).toEqual([93, 93, 93]);
+    expect(t.blocked).toBe(false);
+  });
+
+  it('шорт: правило идёт вниз от стопа к последнему по исполнению уровню', () => {
+    const t = entryGridTable({
+      prices: [100, 102, 104], direction: 'short', stop: 110, riskPct: 1, balance: 1000, qtyPins: {}, stopTargets: {}, stopFollow: true,
+    });
+    expect(t.rows.map((r) => r.stopAfter)).toEqual([107, 107, 107]);
+    expect(t.blocked).toBe(false);
+  });
+
+  it('один уровень — тоже есть цифра: полпути до стопа', () => {
+    const t = entryGridTable({
+      prices: [100], direction: 'long', stop: 90, riskPct: 1, balance: 1000, qtyPins: {}, stopTargets: {}, stopFollow: true,
+    });
+    expect(t.rows[0].stopAfter).toBe(95);
   });
 
   it('без галочки цели стопа не уходят на сервер', () => {
@@ -91,5 +120,41 @@ describe('entryGridTable', () => {
     });
     expect(t.stopsAfter).toBeUndefined();
     expect(t.rows.every((r) => r.stopAfter == null)).toBe(true);
+  });
+});
+
+describe('распределение объёма по цене', () => {
+  it('ползунок в нуле — веса равны, объёмы поровну', () => {
+    expect(distributionWeights([1, 2, 3], 0)).toEqual([1, 1, 1]);
+    expect(levelShares(4, {}, distributionWeights([1, 2, 3, 4], 0)).shares).toEqual([0.25, 0.25, 0.25, 0.25]);
+  });
+
+  it('к верху — верхние уровни тяжелее, к низу — нижние', () => {
+    const up = levelShares(3, {}, distributionWeights([100, 110, 120], 80)).shares;
+    expect(up[2]).toBeGreaterThan(up[1]);
+    expect(up[1]).toBeGreaterThan(up[0]);
+    const down = levelShares(3, {}, distributionWeights([100, 110, 120], -80)).shares;
+    expect(down[0]).toBeGreaterThan(down[1]);
+    expect(down[1]).toBeGreaterThan(down[2]);
+  });
+
+  it('доли с весами в сумме дают 1, закрепление держит своё, остаток делится по весам', () => {
+    const { shares, pinned, over } = levelShares(3, { 0: 50 }, [1, 2, 3]);
+    expect(pinned).toEqual([true, false, false]);
+    expect(shares[0]).toBeCloseTo(0.5, 9);
+    expect(shares[2] / shares[1]).toBeCloseTo(1.5, 9);
+    expect(shares.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 9);
+    expect(over).toBe(false);
+  });
+
+  it('таблица «Сетки» учитывает распределение: объём каждого ордера и сумма риска не меняются', () => {
+    const base = { prices: [100, 110, 120], direction: 'long' as const, stop: 90, riskPct: 2, balance: 10_000, qtyPins: {}, stopTargets: {}, stopFollow: false };
+    const even = entryGridTable(base);
+    const up = entryGridTable({ ...base, tilt: 100 });
+    // Верхний уровень (120) — первый в исполнении у лонга: объём к верху больше, чем у нижнего.
+    expect(up.rows[0].qty).toBeGreaterThan(up.rows[2].qty);
+    expect(even.rows[0].qty).toBeCloseTo(even.rows[2].qty, 9);
+    const risk = (rows: typeof up.rows) => rows.reduce((a, r) => a + r.riskUsd, 0);
+    expect(risk(up.rows)).toBeCloseTo(risk(even.rows), 6);
   });
 });

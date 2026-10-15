@@ -126,6 +126,7 @@ export function useExchangeActions(): TerminalActions {
           prices: v.prices,
           riskPct: v.riskPct,
           riskPcts: v.riskPcts,
+          stopsAfter: v.stopsAfter,
           stopLoss: v.stopLoss,
           takeProfit: v.takeProfit,
           leverage: v.leverage,
@@ -143,6 +144,8 @@ export function useExchangeActions(): TerminalActions {
       ),
     ),
     finish: NOTHING,
+    // «Стоп после исполнения» у сетки входа ведёт worker: цели едут вместе с лимитами.
+    gridStopAfter: true,
     // Теги открытой позиции — те же, что на обзоре: синк перенесёт их на закрытую сделку.
     tags: useAction(async (v) => {
       const p = position(v.tradeId);

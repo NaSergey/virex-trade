@@ -33,19 +33,42 @@ export interface CloseGridQtys {
  * держат её, незакреплённые делят остаток поровну, последний из них забирает
  * остаток деления — сумма ровно равна позиции. Закреплены все — остаток
  * остаётся в позиции под стопом. Закрепления за последним уровнем (число
- * ордеров уменьшили) не действуют.
+ * ордеров уменьшили) не действуют. С `weights` (распределение объёма,
+ * `distributionWeights`) незакреплённые делят остаток пропорционально весам.
  */
-export function closeGridQtys(remaining: number, n: number, pins: Readonly<Record<number, number>>): CloseGridQtys {
+export function closeGridQtys(
+  remaining: number,
+  n: number,
+  pins: Readonly<Record<number, number>>,
+  weights?: readonly number[],
+): CloseGridQtys {
   const pinned = Array.from({ length: n }, (_, i) => pins[i] != null);
   const pinnedQty = (i: number) => (pins[i] / 100) * remaining;
   const pinnedSum = pinned.reduce((sum, on, i) => (on ? sum + pinnedQty(i) : sum), 0);
   const free = pinned.filter((on) => !on).length;
   const rest = remaining - pinnedSum;
-  const share = free > 0 && rest > 0 ? rest / free : 0;
-  const qtys = pinned.map((on, i) => (on ? pinnedQty(i) : share));
+  const freeWeight = weights ? pinned.reduce((sum, on, i) => (on ? sum : sum + weights[i]), 0) : free;
+  const shareOf = (i: number) => (free > 0 && rest > 0 && freeWeight > 0 ? (rest * (weights ? weights[i] : 1)) / freeWeight : 0);
+  const qtys = pinned.map((on, i) => (on ? pinnedQty(i) : shareOf(i)));
   const lastFree = pinned.lastIndexOf(false);
   if (lastFree >= 0 && rest > 0) qtys[lastFree] = remaining - qtys.reduce((sum, q, i) => (i === lastFree ? sum : sum + q), 0);
   return { qtys, pinned, over: rest < -QTY_EPS * Math.max(1, remaining) };
+}
+
+/**
+ * Веса уровней по цене: `tilt` — ползунок распределения объёма, −100…100. 0 —
+ * равномерно; больше 0 — к верху диапазона, меньше 0 — к низу. Экспонента: объём
+ * растёт или падает плавно от нижнего уровня к верхнему, без нулей. Один на
+ * «Сетку» и сетку фиксации.
+ */
+export function distributionWeights(prices: readonly number[], tilt: number): number[] {
+  const k = (tilt / 100) * 2.5;
+  const lo = Math.min(...prices);
+  const hi = Math.max(...prices);
+  return prices.map((p) => {
+    const u = hi > lo ? (p - lo) / (hi - lo) : 0.5;
+    return Math.exp(k * u);
+  });
 }
 
 export interface CloseGridRow {
@@ -115,9 +138,9 @@ export function checkCloseGridSide(direction: Direction, prices: number[], ancho
 }
 
 const MIN_ORDERS = 1;
-const MAX_ORDERS = 10;
+const MAX_ORDERS = 30;
 
-/** Число ордеров из поля панели: целое от 1 до 10, недописанное — один. */
+/** Число ордеров из поля панели: целое от 1 до 30, недописанное — один. */
 export function closeGridCount(count: string): number {
   return Math.max(MIN_ORDERS, Math.min(MAX_ORDERS, Math.round(Number(count) || MIN_ORDERS)));
 }
@@ -136,6 +159,8 @@ export interface CloseGridDraft {
   stopFollow: boolean;
   qtyPins: Record<number, number>;
   stopPins: Record<number, number>;
+  /** Распределение объёма по цене: −100…100, 0 — равномерно. */
+  tilt: number;
 }
 
 /**
@@ -159,6 +184,7 @@ export function initCloseGrid(
     stopFollow: trade.stopFollow || closeOrdersCount === 0,
     qtyPins: {},
     stopPins: {},
+    tilt: 0,
   };
 }
 
@@ -171,7 +197,8 @@ type GridTrade = { direction: Direction; entryPrice: number; stopLoss: number; q
 export function closeGridFromDraft(trade: GridTrade, draft: CloseGridDraft, scale: number) {
   const screenPrices = closeGridPrices(draft.first, draft.last, closeGridCount(draft.count));
   const prices = screenPrices.map((p) => fromScreen(p, scale));
-  const split = closeGridQtys(trade.qty - trade.closedQty, prices.length, draft.qtyPins);
+  const weights = draft.tilt ? distributionWeights(prices, draft.tilt) : undefined;
+  const split = closeGridQtys(trade.qty - trade.closedQty, prices.length, draft.qtyPins, weights);
   const targets = prices.map((_, i) => (draft.stopPins[i] != null ? fromScreen(draft.stopPins[i], scale) : null));
   const plan = closeGridPlan(trade, prices, split.qtys, draft.stopFollow, targets);
   return { screenPrices, prices, split, plan };

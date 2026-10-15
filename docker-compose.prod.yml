@@ -164,6 +164,10 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       DONATION_TRON_ADDRESS: ${DONATION_TRON_ADDRESS:-}
       TRONGRID_API_KEY: ${TRONGRID_API_KEY:-}
+      # Бэкап базы владельцу в Telegram раз в неделю (backend/src/backup).
+      # Здесь, а не в .env.prod: забыть нечем. Локально не стоит — иначе база
+      # разработчика уезжала бы в тот же чат.
+      DB_BACKUP_TELEGRAM: "1"
     # Ни `prisma db push` (это уже сделал `api`), ни сборки — просто сам
     # процесс. Роль ROLE=worker выше решает, что он не открывает HTTP-порт.
     command: sh -c "node dist/main"

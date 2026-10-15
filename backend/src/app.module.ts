@@ -24,6 +24,7 @@ import { ReferralsModule } from './referrals/referrals.module';
 import { BattlePassModule } from './battlepass/battlepass.module';
 import { TerminalModule } from './terminal/terminal.module';
 import { ProfileModule } from './profile/profile.module';
+import { BackupModule } from './backup/backup.module';
 import { GAME_MODULES } from './games-app.module';
 import { runsGames } from './role';
 
@@ -63,6 +64,7 @@ import { runsGames } from './role';
     BattlePassModule,
     TerminalModule,
     ProfileModule,
+    BackupModule,
   ],
   controllers: [AppController],
   providers: [AppService],

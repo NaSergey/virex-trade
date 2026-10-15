@@ -20,22 +20,14 @@ export type Facet = readonly [Pt, Pt, Pt, number];
  * линия грани тоньше пикселя, и «кристалл» читается только перепадом тона
  * между соседними треугольниками, а не обводкой.
  *
- * `crumple` — сила мелких граней «мятого» стекла (0…1): крупные грани должны
- * оставаться главными, и на эскизе мятая только ножка T, чаша P — гладкая.
- * `hatch` — направления тонкой штриховки в градусах: полосы шлифовки вдоль
- * перекладины T и волокна вдоль ножки P.
  */
 export const SHARDS: {
   id: string;
   outline: readonly Pt[];
   facets: readonly Facet[];
-  crumple: number;
-  hatch?: readonly number[];
 }[] = [
   {
     id: 't-bar',
-    crumple: 0.45,
-    hatch: [-4],
     outline: [[6, 6], [126, 6], [118, 24], [22, 24]],
     facets: [
       [[6, 6], [62, 6], [44, 14], 0.5],
@@ -52,7 +44,6 @@ export const SHARDS: {
   },
   {
     id: 't-stem',
-    crumple: 1,
     outline: [[84, 31], [112, 31], [75, 120], [40, 136]],
     facets: [
       [[84, 31], [112, 31], [92, 58], 0.45],
@@ -71,7 +62,6 @@ export const SHARDS: {
   },
   {
     id: 'p-bowl',
-    crumple: 0.55,
     // Перекладина (6…24) и шеврон: верхнее плечо x − y = 188 снаружи, 157
     // внутри; нижнее x + y = 268 снаружи, 237 внутри; левая кромка нижнего
     // плеча — тем же курсивом, что ножки.
@@ -94,8 +84,6 @@ export const SHARDS: {
   },
   {
     id: 'p-stem',
-    crumple: 0.35,
-    hatch: [-67, 22],
     // Параллельна ножке T, и нижний срез — того же наклона.
     outline: [[134, 62], [167, 54], [139.6, 119.3], [103, 136]],
     facets: [
@@ -131,68 +119,6 @@ export function inside([x, y]: Pt, poly: readonly Pt[]): boolean {
   return hit;
 }
 
-/** ГПСЧ с зерном (mulberry32): мелкие грани одни и те же на сервере и клиенте. */
-export function seeded(seed: number) {
-  let a = seed;
-  return () => {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-export const CRUMPLE_TONES = [-0.18, -0.11, -0.045, 0.045, 0.11, 0.18] as const;
-
-/**
- * «Мятое» стекло внутри крупных граней: сетка с дрожащими узлами, каждая
- * клетка — два треугольника со случайным тоном, умноженным на `crumple`
- * осколка. Треугольники одного тона собраны в один path — иначе знак в шапке
- * нёс бы сотни узлов DOM, — и посчитаны один раз при загрузке модуля.
- * Берутся только те, что задевают осколок; край по осколку режет clipPath.
- */
-export const CRUMPLE = (() => {
-  const rand = seeded(0x7e11);
-  const step = 8;
-  const cols = Math.ceil(W / step) + 1;
-  const rows = Math.ceil(H / step) + 1;
-  const grid: Pt[][] = [];
-  for (let r = 0; r < rows; r++) {
-    grid.push([]);
-    for (let c = 0; c < cols; c++) {
-      grid[r].push([
-        Math.round(c * step + (rand() - 0.5) * step * 0.8),
-        Math.round(r * step + (rand() - 0.5) * step * 0.8),
-      ]);
-    }
-  }
-  const mid = (p: Pt, q: Pt): Pt => [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
-  const shardOf = ([a, b, c]: readonly Pt[]) => {
-    const probes: Pt[] = [[(a[0] + b[0] + c[0]) / 3, (a[1] + b[1] + c[1]) / 3], a, b, c, mid(a, b), mid(b, c), mid(c, a)];
-    for (const p of probes) {
-      const shard = SHARDS.find((s) => inside(p, s.outline));
-      if (shard) return shard;
-    }
-    return null;
-  };
-  // Ключ — итоговый тон: сколько разных тонов, столько path.
-  const paths = new Map<number, string>();
-  for (let r = 0; r + 1 < rows; r++) {
-    for (let c = 0; c + 1 < cols; c++) {
-      const [a, b, cc, d] = [grid[r][c], grid[r][c + 1], grid[r + 1][c + 1], grid[r + 1][c]];
-      const tris = rand() < 0.5 ? [[a, b, cc], [a, cc, d]] : [[a, b, d], [b, cc, d]];
-      for (const tri of tris) {
-        const base = CRUMPLE_TONES[Math.floor(rand() * CRUMPLE_TONES.length)];
-        const shard = shardOf(tri);
-        if (!shard) continue;
-        const tone = Math.round(base * shard.crumple * 1000) / 1000;
-        paths.set(tone, `${paths.get(tone) ?? ''}M${tri[0]}L${tri[1]}L${tri[2]}Z`);
-      }
-    }
-  }
-  return [...paths].map(([tone, d]) => ({ tone, d }));
-})();
-
 /**
  * Кромки осколков по отдельности: яркость — от того, насколько кромка
  * смотрит на свет (сверху слева). Одна обводка на весь осколок светилась бы
@@ -219,8 +145,6 @@ export const GLINTS: readonly (readonly [number, number, number])[] = [
   [139.6, 119.3, 0.5],
   [112, 31, 0.35],
 ];
-
-export const HATCH_ANGLES = [...new Set(SHARDS.flatMap((s) => s.hatch ?? []))];
 
 /** Пять стопов отлива — имена из globals.css (`--tpm-1`…`--tpm-5`), у каждой темы свои. */
 export const STOPS = [0, 0.33, 0.52, 0.78, 1] as const;

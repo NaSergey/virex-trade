@@ -62,11 +62,14 @@ export interface TerminalSkeletonProps {
   live?: boolean;
   /**
    * Надпись на месте кнопок прокрутки у эфира («Эфир», «Bybit · настоящий счёт»).
-   * `null` — ещё неизвестно, чей это экран: на её месте серая полоса.
+   * `null` — ещё неизвестно, чей это экран: на её месте серая полоса; `false` —
+   * подписи нет (терминал на главной).
    */
-  badge?: string | null;
+  badge?: string | null | false;
   /** Есть ли кнопка «К списку» — у биржевого терминала её нет. */
   leave?: boolean;
+  /** Вкладки таблиц под графиком; у терминала на главной их нет. */
+  tables?: boolean;
 }
 
 /**
@@ -81,7 +84,7 @@ export interface TerminalSkeletonProps {
  *
  * Корень — `inert`: кнопки видны, но не нажимаются и не берут фокус.
  */
-export function TerminalSkeleton({ live = false, badge, leave = true }: TerminalSkeletonProps) {
+export function TerminalSkeleton({ live = false, badge, leave = true, tables = true }: TerminalSkeletonProps) {
   const t = useTranslations('backtest');
   const tAudio = useTranslations('audio');
 
@@ -128,44 +131,49 @@ export function TerminalSkeleton({ live = false, badge, leave = true }: Terminal
             </div>
           </div>
           <div className="terminal-controls">
-            <div className="replay-controls">
-              {live ? (
-                badge === null ? (
-                  <Skeleton as="span" inline width={160} height={12} flush />
+            {(!live || badge !== false || tables || leave) && (
+              <div className="replay-controls">
+                {live ? (
+                  badge === null ? (
+                    <Skeleton as="span" inline width={160} height={12} flush />
+                  ) : (
+                    <span className="muted">{badge ?? t('liveBadge')}</span>
+                  )
                 ) : (
-                  <span className="muted">{badge ?? t('liveBadge')}</span>
-                )
-              ) : (
-                <>
-                  <Button variant="solid" disabled>
-                    {t('step')} ▶
-                  </Button>
+                  <>
+                    <Button variant="solid" disabled>
+                      {t('step')} ▶
+                    </Button>
+                    <Seg
+                      options={[{ value: 0, label: t('pause') }, ...SPEEDS.map((s) => ({ value: s, label: `×${s}` }))]}
+                      value={0}
+                      onChange={noop}
+                      ariaLabel={t('speed')}
+                    />
+                  </>
+                )}
+                {leave && <Button tight>{t('backToList')}</Button>}
+                {tables && (
                   <Seg
-                    options={[{ value: 0, label: t('pause') }, ...SPEEDS.map((s) => ({ value: s, label: `×${s}` }))]}
-                    value={0}
+                    className="view-switch"
+                    options={[
+                      { value: 'open' as const, label: t('openPositionsTab') },
+                      { value: 'orders' as const, label: t('ordersTab') },
+                      { value: 'history' as const, label: t('historyTab') },
+                    ]}
+                    value="open"
                     onChange={noop}
-                    ariaLabel={t('speed')}
+                    ariaLabel={t('openPositionsTab')}
                   />
-                </>
-              )}
-              {leave && <Button tight>{t('backToList')}</Button>}
-              <Seg
-                className="view-switch"
-                options={[
-                  { value: 'open' as const, label: t('openPositionsTab') },
-                  { value: 'orders' as const, label: t('ordersTab') },
-                  { value: 'history' as const, label: t('historyTab') },
-                ]}
-                value="open"
-                onChange={noop}
-                ariaLabel={t('openPositionsTab')}
-              />
-            </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
         <div className="marg">
           {/* Та же разметка, что у OrderPanel на вкладке «Маркет», — без чисел. */}
+          <div className="panel-swap panel-swap-fill">
           <div className="order-panel">
             <div className="panel-top">
               <div className="lev">
@@ -223,14 +231,17 @@ export function TerminalSkeleton({ live = false, badge, leave = true }: Terminal
             >
               <SliderSlot />
             </Field>
-            <div className="size-preview">
-              <KeyValue label={t('sizeCoin')}>—</KeyValue>
-              <KeyValue label={t('notionalLabel')}>—</KeyValue>
+            <div className="order-foot">
+              <div className="size-preview">
+                <KeyValue label={t('sizeCoin')}>—</KeyValue>
+                <KeyValue label={t('notionalLabel')}>—</KeyValue>
+              </div>
+              <div className="order-actions">
+                <Button variant="long">{t('long')}</Button>
+                <Button variant="short">{t('short')}</Button>
+              </div>
             </div>
-            <div className="order-actions">
-              <Button variant="long">{t('long')}</Button>
-              <Button variant="short">{t('short')}</Button>
-            </div>
+          </div>
           </div>
         </div>
       </div>

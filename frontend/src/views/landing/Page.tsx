@@ -6,6 +6,7 @@ import type { AuthMode } from '@/features/auth';
 import { Wrap } from '@/shared/ui/Wrap';
 import './landing.css';
 import { useLenis } from './lib/useLenis';
+import { AboutScene } from './components/AboutScene';
 import { AuthParams } from './components/AuthParams';
 import { LandingHeader } from './components/LandingHeader';
 import { PlatformScene } from './components/PlatformScene';
@@ -22,12 +23,18 @@ import { TerminalScene } from './components/TerminalScene';
  * Продукт — платформа, а не дневник сделок: журнал и аналитика, терминал,
  * тренажёр и игры. Секции, по вкладке-якорю в шапке на каждую:
  *
- *   «Платформа»  — знак, собираемый скроллом, текст по краям;
- *   «Как это работает» — пять пунктов о том, что есть на платформе;
+ *   «Платформа»  — знак, собираемый скроллом;
+ *   «О проекте»  — что за платформа: лента рынка через четыре панели —
+ *                  торговать, разбирать, тренироваться, соревноваться;
  *   «Терминал»   — настоящий терминал продукта на демо-счёте гостя:
  *                  позиции открываются в браузере, наведение на любую часть
  *                  объясняет, что она делает;
+ *   «Что внутри» — пять разделов платформы и их настоящие экраны;
  *   «Регистрация» — форма; «Войти» в шапке ведёт к ней же в режиме входа.
+ *
+ * Переход на въезде ведёт сама сцена: дорога, экран встаёт из наклона, сход половин;
+ * у первого экрана и терминала переходов нет. Шапка у всех одна
+ * (`SceneHead`) и встаёт в одно место — сразу под меню.
  *
  * Адрес `/?auth=login|register&next=…&ref=…` — сюда ведут гейт `proxy.ts`,
  * `AuthGuard` и старые ссылки с `/login` — сразу ставит форму в нужный режим
@@ -67,8 +74,9 @@ export function LandingPage() {
       {/* `ls-dark` на всём листе: лендинг не подчиняется теме продукта. */}
       <main className="ls-dark" id="content" tabIndex={-1}>
         <PlatformScene />
-        <StepsScene />
+        <AboutScene />
         <TerminalScene />
+        <StepsScene />
         <RegisterScene mode={mode} onMode={setMode} next={next} refCode={refCode} />
       </main>
 

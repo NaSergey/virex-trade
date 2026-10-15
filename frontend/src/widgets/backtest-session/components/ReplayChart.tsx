@@ -173,6 +173,8 @@ export interface Level {
 
 /** Лимит на вход — висящий или черновик панели: плашка «Лимит цена | объём», как у позиции. */
 const isLimit = (kind: LevelKind) => kind === 'limitEntry' || kind === 'pendingEntry';
+/** Линии черновика сетки и бота — плашкой всегда: объём у них появляется со стопом, а вид линии от этого меняться не должен. */
+const isGridDraft = (kind: LevelKind) => kind === 'gridUpper' || kind === 'gridLower' || kind === 'gridStep';
 
 const LEVEL_COLOR: Record<LevelKind, string> = {
   entry: 'var(--color-fg)',
@@ -1796,7 +1798,7 @@ export const ReplayChart = memo(function ReplayChart({
                 fill="transparent"
                 onPointerDown={l.draggable && onDragLevel ? startDrag(l) : undefined}
               />
-              {l.qty != null || l.pnl != null || isLimit(l.kind) ? (
+              {l.qty != null || l.pnl != null || isLimit(l.kind) || isGridDraft(l.kind) ? (
                 (() => {
                   // Плашка на линии, как у бирж: результат | объём в монете | ⇅ | ✕.
                   // Вход — белая, стоп — красная, тейк — зелёная: цвет уровня. Цена слева

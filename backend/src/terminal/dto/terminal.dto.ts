@@ -18,8 +18,8 @@ import {
  */
 const SYMBOL = /^[A-Z0-9]{2,24}$/;
 
-/** Больше десяти ордеров одной сеткой панель и не ставит. */
-const MAX_GRID = 10;
+/** Больше тридцати ордеров одной сеткой панель и не ставит. */
+const MAX_GRID = 30;
 
 export class PlaceOrderDto {
   @Matches(SYMBOL)
@@ -54,6 +54,14 @@ export class PlaceOrderDto {
   @Min(0.0001, { each: true })
   @Max(100, { each: true })
   riskPcts?: number[];
+
+  // Цель стопа после исполнения каждого уровня сетки; 0 — стоп не двигается. По одной на цену лимита.
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_GRID)
+  @IsNumber({}, { each: true })
+  @Min(0, { each: true })
+  stopsAfter?: number[];
 
   // Не нужен только доливу позиции, у которой стоп уже стоит.
   @IsOptional()

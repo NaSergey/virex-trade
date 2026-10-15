@@ -117,6 +117,7 @@ model User {
   terminalStream TerminalStream?
   /// Планы стопа за тейками на бирже (`terminal_stop_follows`).
   terminalStopFollows TerminalStopFollow[]
+  terminalEntryFollows TerminalEntryFollow[]
 
   @@map("users")
 }
@@ -861,6 +862,19 @@ model LiquiditySnapshot {
   @@map("liquidity_snapshots")
 }
 
+// Бэкап базы, отправленный владельцу в Telegram (backend/src/backup). Последняя
+// строка — точка отсчёта недели: в памяти процесса её держать нельзя,
+// перезапуск worker слал бы бэкап заново.
+model DbBackup {
+  id     String   @id @default(uuid())
+  sentAt DateTime @default(now())
+  bytes  Int
+  parts  Int
+
+  @@index([sentAt])
+  @@map("db_backups")
+}
+
 // One row per active refresh token (supports multiple devices / sessions).
 // We never store the raw token — only its SHA-256 hash. On refresh the row is
 // rotated (deleted + recreated in one transaction) so a stolen token is
@@ -1321,4 +1335,28 @@ model TerminalStopFollow {
   @@unique([userId, symbol, direction])
   @@index([active, userId])
   @@map("terminal_stop_follows")
+}
+
+/// «Стоп после исполнения» у сетки входа на бирже: по строке на лимит сетки, у которого задана цель.
+/// Пишет `api` вместе с сеткой, ведёт `worker` по событиям потока (`EntryFollowService`).
+model TerminalEntryFollow {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol    String
+  /// long | short
+  direction String
+  orderId   String   @unique
+  price     Float
+  /// Стоп позиции после исполнения этого лимита; только подтягивается.
+  stopAfter Float
+  /// Цена исполнения: лимит исполнен, цель ждёт, пока встанет на бирже.
+  fillPrice Float?
+  /// false — исполнен и цель стоит, либо лимит снят или позиции уже нет.
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active, userId])
+  @@map("terminal_entry_follows")
 }

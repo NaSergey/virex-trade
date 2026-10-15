@@ -1,6 +1,7 @@
 import type { OrderTab } from '../components/OrderPanel';
 import type { Level } from '../components/ReplayChart';
 import { draftTakeFits, fromScreen, gridPrices, impliedDirection, levelImpact, previewGrid, previewSize } from './money';
+import { entryGridTable } from './level-table';
 
 /** Черновики панели ордера числами: то, что уже разобрано из её полей. */
 export interface DraftLevelsInput {
@@ -9,7 +10,18 @@ export interface DraftLevelsInput {
   /** «Маркет» — уже без уровней занятых сторон (`withoutLockedLevels`). */
   market: { stop: number; take: number | null; risk: number };
   limit: { entry: number | null; stop: number; take: number | null; risk: number };
-  scaled: { upper: number | null; lower: number | null; stop: number; take: number | null; count: number; risk: number };
+  scaled: {
+    upper: number | null;
+    lower: number | null;
+    stop: number;
+    take: number | null;
+    count: number;
+    risk: number;
+    /** Закрепления долей по номеру уровня — как в таблице панели. */
+    qtyPins: Record<number, number>;
+    /** Распределение объёма по цене (−100…100). */
+    tilt: number;
+  };
   /** Черновик грид-бота; null — бот работает или вкладки нет. */
   bot?: { upper: number | null; lower: number | null; stop: number; count: number } | null;
   /** Настоящая цена и она же в экранных единицах; null — цены ещё нет. */
@@ -114,18 +126,42 @@ export function draftLevels({ tab, market, limit, scaled, bot, livePrice, screen
   // бы двумя подписанными линиями поверх свечей у всякого, кто просто открыл
   // вкладку и ничего ещё не решил.
   if (tab === 'scaled' && livePrice != null) {
+    // Объём каждого ордера — из той же таблицы, что уйдёт на сервер (доли, закрепления,
+    // распределение). Ордер ближе всего к линии получает её объём.
+    const qtyAt = (screenPrice: number): number | undefined => {
+      if (scaled.upper == null || scaled.lower == null || !(scaled.stop > 0) || !(scaled.risk > 0) || screenPrice == null) return undefined;
+      const count = Math.min(10, Math.max(1, Math.round(scaled.count) || 1));
+      const real = gridPrices(Math.min(scaled.lower, scaled.upper), Math.max(scaled.lower, scaled.upper), count).map((p) => fromScreen(p, scale));
+      const table = entryGridTable({
+        prices: real,
+        direction: 'long',
+        stop: fromScreen(scaled.stop, scale),
+        riskPct: scaled.risk,
+        balance,
+        qtyPins: scaled.qtyPins,
+        stopTargets: {},
+        stopFollow: false,
+        tilt: scaled.tilt,
+      });
+      const target = fromScreen(screenPrice, scale);
+      let best: { d: number; qty: number } | null = null;
+      for (const r of table.rows) {
+        const d = Math.abs(r.price - target);
+        if (!best || d < best.d) best = { d, qty: r.qty };
+      }
+      return best?.qty;
+    };
     if (scaled.upper != null && scaled.upper > 0) {
-      list.push({ id: 'draft-grid-upper', kind: 'gridUpper', price: scaled.upper, draggable: true });
+      list.push({ id: 'draft-grid-upper', kind: 'gridUpper', price: scaled.upper, draggable: true, qty: qtyAt(scaled.upper) });
     }
     if (scaled.lower != null && scaled.lower > 0) {
-      list.push({ id: 'draft-grid-lower', kind: 'gridLower', price: scaled.lower, draggable: true });
+      list.push({ id: 'draft-grid-lower', kind: 'gridLower', price: scaled.lower, draggable: true, qty: qtyAt(scaled.lower) });
     }
-    // Ордера сетки между верхом и низом — те же цены, что уйдут на сервер
-    // (`gridPrices`), по одной линии без захвата: двигается диапазон, а не
-    // промежуточный ордер. Верх и низ уже нарисованы выше, поэтому срез по краям.
+    // Ордера между верхом и низом — те же цены, что уйдут на сервер (`gridPrices`), по одной
+    // линии без захвата: двигается диапазон, а не промежуточный ордер. Края уже нарисованы выше.
     if (scaled.upper != null && scaled.upper > 0 && scaled.lower != null && scaled.lower > 0 && scaled.count > 2) {
       const steps = gridPrices(Math.min(scaled.lower, scaled.upper), Math.max(scaled.lower, scaled.upper), scaled.count).slice(1, -1);
-      steps.forEach((price, i) => list.push({ id: `draft-grid-step-${i}`, kind: 'gridStep', price, draggable: false }));
+      steps.forEach((price, i) => list.push({ id: `draft-grid-step-${i}`, kind: 'gridStep', price, draggable: false, qty: qtyAt(price) }));
     }
     // Стоп и тейк сетки — на весь её результат, поэтому и считаются от
     // среднего входа при полном исполнении (previewGrid), а не от одного уровня.

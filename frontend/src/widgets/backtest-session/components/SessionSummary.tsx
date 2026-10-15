@@ -7,6 +7,7 @@ import { useLocaleControl } from '@/shared/i18n';
 import { Button } from '@/shared/ui/Button';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { formatPriceGrouped } from '@/shared/lib/utils/format';
+import { dateFormat } from '@/shared/lib/utils/intl';
 import { isLiveSession, useDecimalsOf, useSetBacktestTags } from '../api/hooks';
 import type { SessionDetail } from '../api/types';
 import { toScreen } from '../lib/money';
@@ -29,9 +30,9 @@ export function SessionSummary({ detail, onLeave }: { detail: SessionDetail; onL
   const decimalsOf = useDecimalsOf(isLiveSession(detail));
 
   const full = (ms: number) =>
-    new Date(ms).toLocaleString(intl, { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    dateFormat(intl, { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(ms);
   const short = (ms: number) =>
-    new Date(ms).toLocaleString(intl, { day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+    dateFormat(intl, { day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' }).format(ms);
 
   return (
     <>

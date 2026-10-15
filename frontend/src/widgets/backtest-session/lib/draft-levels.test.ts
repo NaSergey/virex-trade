@@ -5,7 +5,7 @@ const base: DraftLevelsInput = {
   tab: 'market',
   market: { stop: 0, take: null, risk: 1 },
   limit: { entry: null, stop: 0, take: null, risk: 1 },
-  scaled: { upper: null, lower: null, stop: 0, take: null, count: 3, risk: 1 },
+  scaled: { upper: null, lower: null, stop: 0, take: null, count: 3, risk: 1, qtyPins: {}, tilt: 0 },
   livePrice: 60_000,
   screenPrice: 60_000,
   balance: 10_000,
@@ -40,7 +40,7 @@ describe('draftLevels', () => {
     const drafts = {
       market: { stop: 59_500, take: null, risk: 1 },
       limit: { entry: 59_800, stop: 59_400, take: 60_500, risk: 1 },
-      scaled: { upper: 59_900, lower: 59_600, stop: 59_300, take: 61_000, count: 3, risk: 1 },
+      scaled: { upper: 59_900, lower: 59_600, stop: 59_300, take: 61_000, count: 3, risk: 1, qtyPins: {}, tilt: 0 },
     };
     expect(ids({ ...drafts, tab: 'market' })).toEqual(['draft-stop']);
     expect(ids({ ...drafts, tab: 'limit' })).toEqual(['draft-limit-entry', 'draft-limit-stop', 'draft-limit-take']);
@@ -87,5 +87,32 @@ describe('draftLevels', () => {
     const [stop] = draftLevels({ ...base, scale: 0.01, screenPrice: 600, market: { stop: 595, take: null, risk: 1 } });
     expect(stop.price).toBe(595);
     expect(stop.qty).toBeCloseTo(0.2, 10);
+  });
+
+  it('«Сетка»: у каждого ордера на линии — его объём; без стопа объём не посчитать — линия без него', () => {
+    const withStop = draftLevels({
+      ...base,
+      tab: 'scaled',
+      scaled: { upper: 59_900, lower: 59_600, stop: 59_300, take: null, count: 3, risk: 1, qtyPins: {}, tilt: 0 },
+    });
+    const orders = withStop.filter((l) => l.kind === 'gridUpper' || l.kind === 'gridLower' || l.kind === 'gridStep');
+    expect(orders).toHaveLength(3);
+    expect(orders.every((l) => l.qty != null && l.qty > 0)).toBe(true);
+    const noStop = draftLevels({
+      ...base,
+      tab: 'scaled',
+      scaled: { upper: 59_900, lower: 59_600, stop: 0, take: null, count: 3, risk: 1, qtyPins: {}, tilt: 0 },
+    });
+    expect(noStop.filter((l) => l.kind === 'gridStep' || l.kind === 'gridUpper').every((l) => l.qty == null)).toBe(true);
+  });
+
+  it('«Сетка»: распределение к верху — у верхнего ордера объём больше нижнего', () => {
+    const levels = draftLevels({
+      ...base,
+      tab: 'scaled',
+      scaled: { upper: 59_900, lower: 59_600, stop: 59_300, take: null, count: 3, risk: 1, qtyPins: {}, tilt: 100 },
+    });
+    const qty = (kind: string, price: number) => levels.find((l) => l.kind === kind && l.price === price)!.qty!;
+    expect(qty('gridUpper', 59_900)).toBeGreaterThan(qty('gridLower', 59_600));
   });
 });
