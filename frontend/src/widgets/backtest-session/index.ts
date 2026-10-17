@@ -13,7 +13,17 @@
 export { SessionScreen, Terminal, type TerminalProps } from './components/SessionScreen';
 export { SummaryCells } from './components/SummaryCells';
 export { TerminalSkeleton } from './components/TerminalSkeleton';
-export { useBacktestSessions, useBacktestStats, useCreateSession, useDeleteSession } from './api/hooks';
+export {
+  backtestSessionQuery,
+  backtestSessionsQuery,
+  liveSymbolsQuery,
+  useBacktestSessions,
+  useBacktestStats,
+  useCreateSession,
+  useDeleteSession,
+} from './api/hooks';
+export { readLiveSymbol } from './model/useLiveSymbol';
+export { prefetchLiveFeed } from './model/useLiveFeed';
 export {
   DEFAULT_SYMBOL,
   type BacktestCloseOrder,

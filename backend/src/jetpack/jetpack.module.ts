@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BattlePassCoreModule } from '../battlepass/battlepass-core.module';
 import { CoinsModule } from '../coins/coins.module';
 import { GamesModule } from '../games/games.module';
 import { JetpackController } from './jetpack.controller';
@@ -11,7 +12,7 @@ import { JetpackService } from './jetpack.service';
  * `2026-09-25-jetpack-crash-design.md`.
  */
 @Module({
-  imports: [CoinsModule, GamesModule],
+  imports: [CoinsModule, GamesModule, BattlePassCoreModule],
   controllers: [JetpackController],
   providers: [JetpackService],
 })

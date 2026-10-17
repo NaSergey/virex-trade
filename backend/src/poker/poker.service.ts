@@ -1,5 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { BattlePassService } from '../battlepass/battlepass.service';
+import { XP_SOURCES } from '../battlepass/xp-registry';
 import { gameTableNotFound } from '../games/game-errors';
 import { GamesGateway } from '../games/games.gateway';
 import { GamesService, TableEngine } from '../games/games.service';
@@ -47,6 +49,7 @@ export class PokerService implements TableEngine, OnModuleInit, OnModuleDestroy 
     private readonly prisma: PrismaService,
     private readonly games: GamesService,
     private readonly gateway: GamesGateway,
+    private readonly battlePass: BattlePassService,
   ) {}
 
   onModuleInit() {
@@ -140,7 +143,7 @@ export class PokerService implements TableEngine, OnModuleInit, OnModuleDestroy 
         if (e instanceof HoldemError) throw pokerBadAction();
         throw e;
       }
-      await this.commit(tableId, rt, next, userId, action.type);
+      await this.commit(tableId, rt, next, userId, action.type, true);
       return { success: true as const };
     });
   }
@@ -226,11 +229,16 @@ export class PokerService implements TableEngine, OnModuleInit, OnModuleDestroy 
   /**
    * Новое состояние раздачи — в БД и в память. Разница вкладов списывается со
    * стеков той же транзакцией, что пишет вклады; конец раздачи — выплаты туда же.
+   *
+   * `own` — ход сделал сам игрок, а не таймаут, «сброс на любую ставку» или
+   * уход из-за стола: за раздачу, где он ходил сам, — опыт, один раз (ключ —
+   * id раздачи).
    */
-  private async commit(tableId: string, rt: Runtime, next: HandState, userId: string, label: string) {
+  private async commit(tableId: string, rt: Runtime, next: HandState, userId: string, label: string, own = false) {
     const prev = rt.hand!;
     const handId = rt.handId!;
     await this.prisma.$transaction(async (tx) => {
+      if (own) await this.battlePass.award(tx, userId, 'game.table', handId, XP_SOURCES['game.table'].base);
       for (const p of next.players) {
         const before = prev.players.find((o) => o.userId === p.userId)!.committed;
         if (p.committed > before) {

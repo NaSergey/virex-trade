@@ -816,6 +816,18 @@ model OpenPositionSeen {
   rangePos4h    Float?
   rangePos1d    Float?
 
+  /// Снимок позиции с последнего тика синка — строками, как их отдаёт биржа
+  /// (`OpenPosition`). Его читает профиль игрока: чужой профиль не ходит к бирже
+  /// ключом владельца (спека 2026-10-16). Null до первого тика после правки.
+  size          String?
+  avgPrice      String?
+  markPrice     String?
+  positionValue String?
+  unrealisedPnl String?
+  leverage      String?
+  liqPrice      String?
+  snapshotAt    DateTime?
+
   @@unique([userId, symbol, direction])
   @@map("open_positions_seen")
 }
@@ -1268,8 +1280,9 @@ model BattlePassXpEvent {
   source    String
   /// Id того, за что начислено: турнира, сессии, сделки.
   refId     String
-  /// Фактически начисленное — может быть 0, если упёрлись в дневной потолок.
-  /// Строка нужна и в этом случае: она и есть отметка «событие разобрано».
+  /// Фактически начисленное — может быть меньше запрошенного у дневного потолка.
+  /// Потолок исчерпан — строки нет вовсе (частые источники копили бы нули).
+  /// 0 — у источника без опыта (разметка тегом): строка — отметка активности.
   xp        Int
   createdAt DateTime @default(now())
 

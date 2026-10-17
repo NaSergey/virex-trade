@@ -1,41 +1,12 @@
 'use client';
 
-import {
-  Club,
-  Crown,
-  Flag,
-  Flame,
-  Gauge,
-  Gem,
-  History,
-  Medal,
-  Rocket,
-  Spade,
-  Tag,
-  Trophy,
-  type LucideIcon,
-} from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Achievement, AchievementId } from '@/entities/profile';
 import { cn } from '@/shared/lib/utils/css';
 import { Tooltip } from '@/shared/ui/Tooltip';
+import { ACHIEVEMENT_ICONS, progressOf } from '../lib/achievements';
 import { Panel } from './Panel';
-
-const ICONS: Record<AchievementId, LucideIcon> = {
-  first_tournament: Flag,
-  first_win: Trophy,
-  champion: Crown,
-  streak_7: Flame,
-  level_10: Medal,
-  jetpack_x10: Rocket,
-  jetpack_100: Gauge,
-  poker_100: Spade,
-  blackjack_100: Club,
-  tagger_100: Tag,
-  backtest_10: History,
-  rich_10k: Gem,
-};
 
 /**
  * Заливка полученного значка — по смыслу достижения, из короткой шкалы, а не
@@ -58,10 +29,6 @@ const TONES: Record<AchievementId, string> = {
   rich_10k: 'gold',
 };
 
-/** Прогресс в подсказке. Множитель джетпака приходит в сотых — показываем иксами. */
-const progressOf = (a: Achievement) =>
-  a.id === 'jetpack_x10' ? `×${(a.value / 100).toFixed(2)} / ×${a.target / 100}` : `${a.value} / ${a.target}`;
-
 /**
  * Значки. Список и пороги — с сервера (`achievements.ts`), здесь только
  * значок и подписи. Полученный — плоский цветной круг, неполученный — серый,
@@ -76,7 +43,7 @@ export function Achievements({ list }: { list: Achievement[] }) {
     <Panel title={t('achievements')} count={`${earned}/${list.length}`} tone="gold" scroll>
       <ul className="pf-ach">
         {list.map((a) => {
-          const Icon = ICONS[a.id];
+          const Icon = ACHIEVEMENT_ICONS[a.id];
           const name = t(`ach.${a.id}.name`);
           const text = `${name}. ${t(`ach.${a.id}.desc`)}. ${a.earned ? t('achEarned') : progressOf(a)}`;
           return (

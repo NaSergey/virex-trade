@@ -1,5 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { BattlePassService } from '../battlepass/battlepass.service';
+import { XP_SOURCES } from '../battlepass/xp-registry';
 import { CoinsService } from '../coins/coins.service';
 import { gameNotSeated, gameTableNotFound } from '../games/game-errors';
 import { GamesGateway } from '../games/games.gateway';
@@ -59,6 +61,7 @@ export class BlackjackService implements TableEngine, OnModuleInit, OnModuleDest
     private readonly coins: CoinsService,
     private readonly games: GamesService,
     private readonly gateway: GamesGateway,
+    private readonly battlePass: BattlePassService,
   ) {}
 
   onModuleInit() {
@@ -324,7 +327,11 @@ export class BlackjackService implements TableEngine, OnModuleInit, OnModuleDest
     return true;
   }
 
-  /** Сдача: строка раунда с вкладами и списание ставок — одной транзакцией. */
+  /**
+   * Сдача: строка раунда с вкладами и списание ставок — одной транзакцией. Там
+   * же опыт за партию тем, кто поставил: ставку человек делает сам, автоставки
+   * у блэкджека нет. Ключ — id раунда, один раз на партию.
+   */
   private async deal(tableId: string, rt: Runtime, table: TableWithSeats) {
     this.clearTimer(rt);
     const entries = table.seats
@@ -348,7 +355,10 @@ export class BlackjackService implements TableEngine, OnModuleInit, OnModuleDest
     try {
       row = await this.prisma.$transaction(async (tx) => {
         const created = await tx.gameHand.create({ data: { tableId, contributions: wagered(round) } });
-        for (const e of entries) await this.debit(tx, tableId, e.userId, e.bet);
+        for (const e of entries) {
+          await this.debit(tx, tableId, e.userId, e.bet);
+          await this.battlePass.award(tx, e.userId, 'game.table', created.id, XP_SOURCES['game.table'].base);
+        }
         if (round.phase === 'done') await this.settle(tx, tableId, created.id, round);
         return created;
       });

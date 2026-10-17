@@ -14,10 +14,10 @@ import { AppChrome } from './AppChrome';
  * Пока сессия восстанавливается — только заливка: обвязка вошедшего, начав
  * рисоваться гостю, успела бы отправить запросы с ответом 401.
  */
-export function OpenShell({ initialTerminal, children }: { initialTerminal: boolean; children: ReactNode }) {
+export function OpenShell({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) return <GamesVeil />;
-  if (user) return <AppChrome initialTerminal={initialTerminal}>{children}</AppChrome>;
+  if (user) return <AppChrome>{children}</AppChrome>;
   return (
     <>
       <GamesVeil />

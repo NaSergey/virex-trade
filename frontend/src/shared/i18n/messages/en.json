@@ -38,7 +38,8 @@
     "sections": "Sections",
     "terminal": "Terminal",
     "journal": "Journal",
-    "journalSections": "Journal pages",    "overview": "Overview",
+    "journalSections": "Journal pages",
+    "overview": "Overview",
     "tags": "Tags",
     "analytics": "Analytics",
     "settings": "Settings",
@@ -66,9 +67,9 @@
     "submitRegister": "Sign up",
     "submitting": "Please wait…",
     "demoButton": "Try the demo",
-    "demoNote": "An account with a sample trade history — shared by everyone, and everything in it can be changed.",
     "switchToRegister": "No account? Sign up",
     "switchToLogin": "Already have an account? Log in",
+    "or": "or",
     "genericError": "Error"
   },
   "overview": {
@@ -377,11 +378,40 @@
     "rangeTfWindow1d": "Range of the last 60 daily candles (2 months)"
   },
   "settings": {
-    "privacyTitle": "Who sees my trades",
-    "privacyLede": "Your profile has a tab with your closed trades: symbol, side, leverage, prices, size and result in USDT. Tags — why you entered — stay yours alone.",
-    "privacyShowTrades": "Show my trades on my profile",
-    "privacyOnFoot": "Right now any Trade Play user with a link to your profile can see them. Guests without an account cannot open the profile at all.",
-    "privacyOffFoot": "Right now nobody sees trades on your profile. Game results and season level stay visible.",
+    "title": "Settings",
+    "tabProfile": "Profile",
+    "tabExchange": "Exchange",
+    "tabNotifications": "Notifications",
+    "demoLocked": "The demo account is shared — its picture, name, password and trade visibility stay as they are.",
+    "playerTitle": "Player",
+    "avatarChange": "Change",
+    "avatarUpload": "Upload picture",
+    "avatarRemove": "Remove",
+    "avatarBad": "Could not read the image — PNG, JPEG or WebP needed",
+    "nameTitle": "Name",
+    "nameShort": "Name must be 2 to 40 characters",
+    "save": "Save",
+    "saved": "Saved",
+    "passTitle": "Password",
+    "passChange": "Change password",
+    "passHint": "Other devices will be signed out",
+    "passShort": "New password must be at least 8 characters",
+    "passMismatch": "New password and repeat do not match",
+    "passSame": "New password matches the current one",
+    "passDone": "Password changed",
+    "done": "Done",
+    "saveFailed": "Could not save",
+    "passCurrent": "Current password",
+    "passNext": "New password",
+    "passRepeat": "New again",
+    "exchangesTitle": "Exchanges",
+    "exchangeActive": "active",
+    "exchangeConnected": "connected",
+    "keysTitle": "{label} keys",
+    "keyNotesTitle": "Rights and storage",
+    "notifQuietTitle": "Quiet hours",
+    "notifNeedTelegram": "Alerts show up here once a chat is linked.",
+    "privacyShowTrades": "Show my trades and positions on my profile",
     "privacyFailed": "Could not save the setting",
     "telegramTitle": "Telegram",
     "telegramDisabled": "The bot is not configured on the server.",
@@ -412,8 +442,6 @@
     "telegramTestSent": "Sent — check the chat.",
     "telegramUnlink": "Unlink",
     "exchangeLabel": "Exchange",
-    "exchangeConnectedTitle": "{label} — connected",
-    "exchangeActiveSuffix": " · active",
     "exchangeNotConnectedTitle": "{label} — not connected",
     "apiKeyLabel": "API key",
     "secretLabel": "Secret",
@@ -719,7 +747,10 @@
     "TOURNAMENT_NOT_TEAMS": "This is not a team tournament",
     "PROFILE_NOT_FOUND": "No such player",
     "AVATAR_TYPE": "Use a PNG, JPEG or WebP picture",
-    "AVATAR_TOO_LARGE": "Picture is larger than 512 KB",
+    "AVATAR_TOO_LARGE": "Picture is larger than 64 KB",
+    "PASSWORD_WRONG": "Current password is wrong",
+    "PASSWORD_SAME": "New password matches the current one",
+    "ACCOUNT_DEMO_LOCKED": "The demo account is shared and cannot be changed",
     "AVATAR_EMPTY": "The file did not arrive — try again"
   },
   "landing": {
@@ -743,13 +774,11 @@
     "about": {
       "kicker": "About",
       "title": "Trade Play roadmap",
-      "lede": "Everything a trader needs in one place: journal, terminal, practice and games under one account. What already works — and what we build next, from simple to hard.",
-      "now": "Now",
       "phases": {
-        "live": "Live",
-        "soon": "Soon",
-        "next": "Next",
-        "later": "Later"
+        "live": "Stage 1 · live",
+        "s2": "Stage 2",
+        "s3": "Stage 3",
+        "s4": "Stage 4"
       },
       "items": {
         "journal": {
@@ -781,10 +810,6 @@
           "title": "Grid bots",
           "desc": "An order grid that trades on its own"
         },
-        "exchanges": {
-          "title": "More exchanges",
-          "desc": "OKX, Bitget, Binance and more"
-        },
         "learning": {
           "title": "Learning",
           "desc": "How to build a system of your own setups"
@@ -794,7 +819,7 @@
           "desc": "The games lineup keeps growing"
         },
         "characters": {
-          "title": "Characters & skins",
+          "title": "Characters",
           "desc": "Your own hero in the profile and games with your characters"
         },
         "market": {
@@ -943,9 +968,10 @@
     },
     "navRegister": "Sign up",
     "platformTitle": "Trade Play — a platform for traders",
-    "registerTitle": "One account — the whole platform",
-    "registerBody": "Connect a Bybit key and your trades arrive on their own. Without an exchange you still get backtests, the simulator and games — you start with 1,000 coins.",
-    "registerNote": "Free. A read-only key is enough for the journal.",
+    "registerHeading": "Create your account",
+    "registerInvitedHeading": "You're invited",
+    "loginHeading": "Log in to Trade Play",
+    "registerInvite": "Invite · {code}",
     "footer": "Trade Play — a platform for traders: journal, terminal, simulator and games.",
     "step4Title": "Backtest & simulator",
     "step4Body": "Test a system without account money: replay history, a generated market or the live market. The terminal is the same as for real trades.",
@@ -1554,14 +1580,6 @@
       "weekdayTitle": "When BTC rises more often",
       "weekdayBody": "Pick a timeframe and a weekday — for every stretch of time you see how often the BTC candle closed up and how often down over the chosen history. This is the market's statistic, not yours."
     },
-    "settings": {
-      "keysTitle": "Exchange keys",
-      "keysBody": "A read-only key is enough for the journal: with it, even a leaked database means an exposed trade history, not a drained account. A Bybit key that can trade adds the “Terminal” section — orders to the exchange right from here. A key with any permissions connects, and the “Key permissions” row shows what it allows, as the exchange itself reports; withdrawal permission is never needed.",
-      "exchangeTitle": "Choosing an exchange",
-      "exchangeBody": "Several can be connected, but only one — the active one — is read and synced. An honest warning: live trades have so far only gone through Bybit; how the other adapters behave is unknown.",
-      "telegramTitle": "Telegram",
-      "telegramBody": "Link the bot and trade notifications arrive in your chat — you can tag a trade right from there. Which signals are sent is set up here as well."
-    },
     "backtest": {
       "introTitle": "Backtest",
       "introBody": "A random slice of BTC history: candles open one at a time, the future is hidden. You enter and exit yourself — the same decision as a real trade, without the real risk.",
@@ -1601,6 +1619,18 @@
         "title": "Trading",
         "description": "A real market and real skills. Trade against other players."
       }
+    },
+    "promo": {
+      "kicker": "Season {key}",
+      "kickerShort": "Season",
+      "title": "Every level pays coins",
+      "note": "XP comes from tournaments, backtest sessions and tagging trades. Every tenth level is a big reward; unclaimed rewards expire when the season ends.",
+      "action": "Season rewards",
+      "claim": "Claim +{coins}",
+      "endsIn": "Season ends in",
+      "days": "d",
+      "prizeLabel": "Coins this season",
+      "level": "Level {level} of {max}"
     },
     "coins": {
       "kicker": "Coins",
@@ -1708,7 +1738,7 @@
     "radarEmpty": "No games in the last 90 days",
     "days": "{days} d",
     "game": {
-      "tournament": "Tournaments",
+      "tournament": "Trading",
       "backtest": "Backtest",
       "jetpack": "Jetpack",
       "poker": "Poker",
@@ -1786,7 +1816,25 @@
     "coinEmpty": "No coin movement yet",
     "rewardReady": "ready",
     "feedExpand": "Expand",
-    "feedCollapse": "Collapse"
+    "feedCollapse": "Collapse",
+    "eyebrow": "Player · since {date}",
+    "noName": "No name",
+    "levelLabel": "Level",
+    "settingsOpen": "Profile settings",
+    "achCount": "{got} of {total}",
+    "xpInto": "{into} / {need} XP",
+    "seasonXp": "{xp} XP this season",
+    "seasonLine": "Season {key} until {date} · {days} d left",
+    "ratingPoints": "{n, plural, one {# point} other {# points}}",
+    "ratingGames": "{tournaments, plural, one {# tournament} other {# tournaments}} · {wins, plural, one {# win} other {# wins}}",
+    "ratingNone": "No finished tournament yet",
+    "coins30": "{delta} in 30 days",
+    "xpWeek": "XP in 7 days",
+    "xpBefore": "week before {xp}",
+    "tabPositions": "Open positions",
+    "posEmptyTitle": "No open positions",
+    "posEmptyBody": "Positions open on the exchange right now will appear here.",
+    "positionsFailed": "Could not load positions"
   },
   "cardTable": {
     "mineTitle": "My tables",
@@ -1938,7 +1986,9 @@
     "retry": "Retry",
     "positionGone": "Position not found — it may already be closed",
     "orderGone": "The order is gone — it was filled or cancelled",
-    "toSettings": "Open settings",
+    "connectKey": "Connect a key",
+    "useDemo": "Use a demo account",
+    "connectExchange": "Connect exchange",
     "noAccess": {
       "NO_EXCHANGE": {
         "title": "No exchange connected",

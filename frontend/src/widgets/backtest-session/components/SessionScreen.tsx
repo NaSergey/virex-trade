@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { Settings as SettingsIcon, Volume2, VolumeX } from 'lucide-react';
 import { TagsDialog } from '@/entities/tag';
@@ -89,11 +89,14 @@ export function SessionScreen({
   id,
   onLeave,
   live = false,
+  chartActions,
 }: {
   id: string;
   onLeave: () => void;
   /** Сессия заведомо эфирная — заглушка до её прихода рисуется в виде эфира. */
   live?: boolean;
+  /** Узел слева от кнопок графика — см. `TerminalProps.chartActions`. */
+  chartActions?: ReactNode;
 }) {
   const t = useTranslations('backtest');
   const { data, error } = useBacktestSession(id);
@@ -116,7 +119,7 @@ export function SessionScreen({
         <OutdatedSession detail={data} onLeave={onLeave} />
       </Wrap>
     );
-  return <ActiveSession detail={data} onLeave={onLeave} />;
+  return <ActiveSession detail={data} onLeave={onLeave} chartActions={chartActions} />;
 }
 
 /**
@@ -158,9 +161,17 @@ function OutdatedSession({ detail, onLeave }: { detail: SessionDetail; onLeave: 
 }
 
 /** Активная сессия бектеста или турнира: терминал с действиями нашего сервера. */
-function ActiveSession({ detail, onLeave }: { detail: SessionDetail; onLeave: () => void }) {
+function ActiveSession({
+  detail,
+  onLeave,
+  chartActions,
+}: {
+  detail: SessionDetail;
+  onLeave: () => void;
+  chartActions?: ReactNode;
+}) {
   const actions = useSessionActions(detail.session.id);
-  return <Terminal detail={detail} actions={actions} onLeave={onLeave} />;
+  return <Terminal detail={detail} actions={actions} onLeave={onLeave} chartActions={chartActions} />;
 }
 
 /**
@@ -210,6 +221,11 @@ export interface TerminalProps {
    * там, отнимая кадры у прокрутки. Снят — хвост забирается сразу.
    */
   paused?: boolean;
+  /**
+   * Своё действие страницы в строке над графиком, слева от его кнопок (звук,
+   * настройки). Терминал на демо-счёте ставит сюда «Подключить биржу».
+   */
+  chartActions?: ReactNode;
 }
 
 /**
@@ -231,6 +247,7 @@ export function Terminal({
   tags = true,
   tables = true,
   paused = false,
+  chartActions,
 }: TerminalProps) {
   const t = useTranslations('backtest');
   const { locale } = useLocaleControl();
@@ -1243,6 +1260,9 @@ export function Terminal({
                 <Seg options={tfOptions} value={replay.tf} onChange={replay.setTf} ariaLabel={t('timeframe')} />
               </div>
               <div className="flex items-center gap-1">
+                {/* Отступ — свой: кнопки графика стоят вплотную друг к другу, а
+                    действие страницы к ним не относится. */}
+                {chartActions && <div className="mr-3 flex items-center">{chartActions}</div>}
                 <Button
                   variant="bare"
                   tight

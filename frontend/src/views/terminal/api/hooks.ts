@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { queryOptions, useQuery } from '@tanstack/react-query';
 import { TERMINAL_KEY } from '@/entities/terminal';
 import { apiJson, qs } from '@/shared/api/http';
 import { fromApi, type ApiCandle, type LiveSource } from '@/widgets/backtest-session';
@@ -24,11 +24,22 @@ const BACKGROUND_POLL_MS = 10_000;
  * звук терминала, и нужен он как раз тому, кто смотрит в другую вкладку.
  * Вернулся на вкладку — перечитывается сразу (фокус окна), и опрос снова
  * идёт раз в три секунды.
+ *
+ * Терминал — главная страница и открывается без заглушки (владелец
+ * 2026-10-17): снимок держится в кэше до перезагрузки вкладки (`gcTime`), а
+ * вернувшийся с другой страницы видит его сразу и тут же получает свежий
+ * (`refetchOnMount`). Пока терминала на экране нет, опроса нет: у запроса без
+ * подписчика интервал стоит.
  */
+export const terminalStateQuery = queryOptions({
+  queryKey: STATE_KEY,
+  queryFn: () => apiJson<TerminalState>('/api/terminal/state'),
+  gcTime: Infinity,
+});
+
 export const useTerminalState = () =>
   useQuery({
-    queryKey: STATE_KEY,
-    queryFn: () => apiJson<TerminalState>('/api/terminal/state'),
+    ...terminalStateQuery,
     refetchInterval: () =>
       typeof document !== 'undefined' && document.visibilityState === 'hidden' ? BACKGROUND_POLL_MS : STATE_POLL_MS,
     refetchIntervalInBackground: true,
@@ -36,15 +47,20 @@ export const useTerminalState = () =>
     // минута: `true` здесь ничего бы не сделал, данные из фона «не устарели».
     // `always` — потому что вернувшийся не должен ждать до десяти секунд.
     refetchOnWindowFocus: 'always',
+    // То же при возврате на страницу: снимок моложе минуты иначе висел бы до
+    // первого тика опроса, хотя позиции могли закрыться.
+    refetchOnMount: 'always',
   });
 
 /** Монеты терминала. Порядок по обороту меняется медленно — перечитывать незачем. */
-export const useTerminalSymbols = () =>
-  useQuery({
-    queryKey: [...TERMINAL_KEY, 'symbols'],
-    queryFn: () => apiJson<{ symbols: TerminalSymbol[] }>('/api/terminal/symbols'),
-    staleTime: Infinity,
-  });
+export const terminalSymbolsQuery = queryOptions({
+  queryKey: [...TERMINAL_KEY, 'symbols'],
+  queryFn: () => apiJson<{ symbols: TerminalSymbol[] }>('/api/terminal/symbols'),
+  staleTime: Infinity,
+  gcTime: Infinity,
+});
+
+export const useTerminalSymbols = () => useQuery(terminalSymbolsQuery);
 
 /**
  * Рынок Bybit для ленты графика. Константа модуля: лента перезапрашивает свечи

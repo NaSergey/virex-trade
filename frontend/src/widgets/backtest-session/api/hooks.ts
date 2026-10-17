@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback } from 'react';
-import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { queryOptions, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { apiJson, qs } from '@/shared/api/http';
 import { candlesPath, fromApi, type ApiCandle, type Candle } from '../lib/candles';
 import type {
@@ -23,11 +23,18 @@ import type {
 
 const sessionKey = (id: string) => ['backtest', 'session', id] as const;
 
-export const useBacktestSessions = () =>
-  useQuery({
-    queryKey: ['backtest', 'sessions'],
-    queryFn: () => apiJson<{ sessions: SessionListItem[] }>('/api/backtest/sessions'),
-  });
+/**
+ * Список сессий. Из него демо-счёт терминала берёт свою эфирную сессию, а
+ * терминал — главная страница и обязан открываться без заглушки: список живёт
+ * в кэше до перезагрузки вкладки (`gcTime`), а не пять минут по умолчанию.
+ */
+export const backtestSessionsQuery = queryOptions({
+  queryKey: ['backtest', 'sessions'],
+  queryFn: () => apiJson<{ sessions: SessionListItem[] }>('/api/backtest/sessions'),
+  gcTime: Infinity,
+});
+
+export const useBacktestSessions = () => useQuery(backtestSessionsQuery);
 
 export const useBacktestStats = (source: StatsSource) =>
   useQuery({
@@ -42,12 +49,23 @@ export const useBacktestStats = (source: StatsSource) =>
  * стопе говорит звук терминала, и нужен он как раз тому, кто смотрит в другую
  * вкладку.
  */
-export const useBacktestSession = (id: string) =>
-  useQuery({
+export const backtestSessionQuery = (id: string) =>
+  queryOptions({
     queryKey: sessionKey(id),
     queryFn: () => apiJson<SessionDetail>(`/api/backtest/sessions/${id}`),
+    // Демо-счёт терминала — эфирная сессия: снимок держится до перезагрузки
+    // вкладки, и вернувшийся на терминал видит его сразу (см. `backtestSessionsQuery`).
+    gcTime: Infinity,
+  });
+
+export const useBacktestSession = (id: string) =>
+  useQuery({
+    ...backtestSessionQuery(id),
     refetchInterval: (q) => (q.state.data && isLiveSession(q.state.data) ? LIVE_POLL_MS : false),
     refetchIntervalInBackground: true,
+    // Эфир — перечитать сразу на монтировании: снимок из кэша уже показан, но
+    // позиции могли закрыться, пока человек был на другой странице.
+    refetchOnMount: (q) => (q.state.data && isLiveSession(q.state.data) ? 'always' : true),
   });
 
 /**
@@ -65,13 +83,14 @@ export const fetchLiveTail = (symbol: string) =>
   apiJson<{ serverTime: string; minutes: ApiCandle[] }>(`/api/market-data/live${qs({ symbol })}`);
 
 /** Монеты эфира. Список меняется только с выкладкой сервера — перечитывать незачем. */
-export const useLiveSymbols = (enabled = true) =>
-  useQuery({
-    queryKey: ['market', 'liveSymbols'],
-    queryFn: () => apiJson<{ symbols: LiveSymbol[] }>('/api/market-data/live/symbols'),
-    staleTime: Infinity,
-    enabled,
-  });
+export const liveSymbolsQuery = queryOptions({
+  queryKey: ['market', 'liveSymbols'],
+  queryFn: () => apiJson<{ symbols: LiveSymbol[] }>('/api/market-data/live/symbols'),
+  staleTime: Infinity,
+  gcTime: Infinity,
+});
+
+export const useLiveSymbols = (enabled = true) => useQuery({ ...liveSymbolsQuery, enabled });
 
 /**
  * Знаков цены у монеты эфира. Не эфир или список ещё не пришёл — undefined:

@@ -68,6 +68,8 @@ export function useDialogFade(onClose: () => void) {
 
 const DialogPortal = DialogPrimitive.Portal;
 const DialogClose = DialogPrimitive.Close;
+/** Название окна без шапки `.dh` (окно настроек: вместо шапки — строка вкладок). */
+const DialogTitle = DialogPrimitive.Title;
 
 const DialogOverlay = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Overlay>,
@@ -204,4 +206,5 @@ export {
   DialogFooter,
   DialogActions,
   DialogClose,
+  DialogTitle,
 };

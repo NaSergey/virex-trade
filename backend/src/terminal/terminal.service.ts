@@ -1,4 +1,6 @@
 import { BadRequestException, HttpException, Injectable, Logger } from '@nestjs/common';
+import { BattlePassService } from '../battlepass/battlepass.service';
+import { XP_SOURCES } from '../battlepass/xp-registry';
 import { BybitApiKeyService } from '../bybit/services/bybit-api-key.service';
 import { BybitCredentials } from '../bybit/services/bybit-auth.service';
 import { CredentialsService } from '../credentials/credentials.service';
@@ -132,6 +134,7 @@ export class TerminalService {
     private readonly streams: TerminalStreamStore,
     private readonly follows: StopFollowStore,
     private readonly entryFollows: EntryFollowStore,
+    private readonly battlePass: BattlePassService,
   ) {}
 
   /**
@@ -303,6 +306,12 @@ export class TerminalService {
 
     await this.recordEntryFollow(userId, dto, placed);
     this.logger.log(`user ${userId}: ${dto.kind} ${dto.direction} ${dto.symbol} × ${placed.length}`);
+    // Опыт — за открытие позиции: рыночный ордер, когда в эту сторону позиции
+    // не было. Добор в открытую — не открытие; лимит откроет её без человека.
+    // Ордер уже на бирже, поэтому сбой начисления ответ не меняет (`awardSafe`).
+    if (!limit && !open.some((p) => p.direction === dto.direction)) {
+      await this.battlePass.awardSafe(userId, 'trade.open', placed[0].orderId, XP_SOURCES['trade.open'].base);
+    }
     return { success: true, orders: placed };
   }
 

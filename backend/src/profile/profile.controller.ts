@@ -18,8 +18,9 @@ import type { Response } from 'express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AVATAR_MAX_BYTES } from './avatar';
+import { NameDto } from './dto/name.dto';
 import { PrivacyDto } from './dto/privacy.dto';
-import { ProfileService } from './profile.service';
+import { ProfileService, TRADES_PAGE_SIZE } from './profile.service';
 
 /** Файл загрузки — только то, что читается; своих типов multer в проекте нет. */
 type Upload = { buffer: Buffer } | undefined;
@@ -48,6 +49,12 @@ export class ProfileController {
   @Patch('privacy')
   setPrivacy(@CurrentUser('userId') userId: string, @Body() dto: PrivacyDto) {
     return this.profile.setPrivacy(userId, dto.showTrades);
+  }
+
+  /** Новое имя из настроек профиля. */
+  @Patch('name')
+  setName(@CurrentUser('userId') userId: string, @Body() dto: NameDto) {
+    return this.profile.setName(userId, dto.name);
   }
 
   // Предел multer — тот же, что проверяет сервис: файл больше него не
@@ -91,8 +98,17 @@ export class ProfileByIdController {
    * пустой читался бы как «не торгует».
    */
   @Get(':userId/trades')
-  trades(@Param('userId') userId: string, @Query('page') page?: string) {
-    return this.profile.trades(userId, Number(page) || 1);
+  trades(@Param('userId') userId: string, @Query('page') page?: string, @Query('pageSize') pageSize?: string) {
+    return this.profile.trades(userId, Number(page) || 1, Number(pageSize) || TRADES_PAGE_SIZE);
+  }
+
+  /**
+   * Его открытые позиции — снимок синка не старше пятнадцати минут, а не биржа.
+   * Скрыл показ — 403, как у сделок: выключатель один.
+   */
+  @Get(':userId/positions')
+  positions(@Param('userId') userId: string) {
+    return this.profile.positions(userId);
   }
 }
 

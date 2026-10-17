@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { CoinsService } from '../coins/coins.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -18,6 +18,8 @@ import { XP_SOURCES, type XpSource } from './xp-registry';
  */
 @Injectable()
 export class BattlePassService {
+  private readonly logger = new Logger(BattlePassService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly coins: CoinsService,
@@ -47,6 +49,11 @@ export class BattlePassService {
 
     const season = seasonKey(now);
     const granted = await this.withinDailyCap(tx, userId, source, xp, now);
+    // Потолок исчерпан — событие не пишется вовсе. Частые источники (позиция,
+    // раунд джетпака) упираются в потолок за минуты, и строка с нулём на каждое
+    // следующее событие копила бы таблицу без пользы: каждое из них случается
+    // один раз, и разбирать его повторно некому.
+    if (def.dailyCap != null && granted === 0) return;
 
     const written = await tx.battlePassXpEvent.createMany({
       data: [{ userId, season, source, refId, xp: granted }],
@@ -92,14 +99,28 @@ export class BattlePassService {
       data: refIds.map((refId) => ({ userId, season, source, refId, xp })),
       skipDuplicates: true,
     });
-    if (written.count === 0) return;
-
     const granted = written.count * xp;
+    if (granted === 0) return;
+
     await tx.battlePassProgress.upsert({
       where: { userId_season: { userId, season } },
       create: { userId, season, xp: granted },
       update: { xp: { increment: granted } },
     });
+  }
+
+  /**
+   * `award` своей транзакцией — для действий, у которых своей транзакции в
+   * базе нет: ордер на бирже, правка тегов. Сбой начисления только пишется в
+   * лог: действие уже случилось (ордер стоит на бирже), и ответить человеку
+   * отказом из-за опыта значило бы соврать о главном.
+   */
+  async awardSafe(userId: string, source: XpSource, refId: string, xp: number, now: Date = new Date()): Promise<void> {
+    try {
+      await this.prisma.$transaction((tx) => this.award(tx, userId, source, refId, xp, now));
+    } catch (e) {
+      this.logger.warn(`XP ${source} для ${userId} не начислен: ${(e as Error).message}`);
+    }
   }
 
   /** Сколько из запрошенного помещается в сегодняшний потолок источника. */

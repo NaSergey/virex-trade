@@ -25,12 +25,12 @@ const SEG = 1;
  *
  * Переход — свой: **дорога прокладывается**. Пока секция въезжает на экран,
  * дорога прорисовывается отрезок за отрезком: на станции этапа появляется
- * ромб с подписью, вехи выпадают под ней по очереди, на стыке запущенного и
- * планов — «Сейчас». Привязано к скроллу въезда: когда секция встала, карта
+ * ромб с подписью, вехи выпадают под ней по очереди. Бейджа «Сейчас» на стыке
+ * запущенного и планов нет — снят владельцем 2026-10-17. Привязано к скроллу въезда: когда секция встала, карта
  * собрана, лишнего скролла нет. Шапка поднимается построчно чуть раньше.
  *
  * Отрезок дороги — у каждого этапа свой, от его станции до следующей: так
- * стык «сплошная — пунктир» стоит ровно на станции «Скоро» и в строку, и в
+ * стык «сплошная — пунктир» стоит ровно на станции второго этапа и в строку, и в
  * столбик, без замеров. Направление выбирается на монтировании, а не
  * `gsap.matchMedia` (причина — `breakpoints.ts`).
  *
@@ -82,8 +82,6 @@ export function AboutScene() {
             { opacity: 1, y: 0, duration: 0.4, stagger: 0.12, ease: 'power2.out' },
             at + 0.15,
           );
-        const now = phase.querySelector('.ls-rm-now');
-        if (now) tl.fromTo(now, { opacity: 0, y: -6 }, { opacity: 1, y: 0, duration: 0.3, ease: 'power2.out' }, at);
       });
     },
     { scope: root },
@@ -93,22 +91,14 @@ export function AboutScene() {
     <section className="ls-about" id="about" ref={root} aria-labelledby="about-title">
       <div className="ls-about-in">
         <Wrap className="ls-about-wrap">
-          <SceneHead kicker={t('kicker')} title={t('title')} lede={t('lede')} titleId="about-title" />
+          <SceneHead kicker={t('kicker')} title={t('title')} titleId="about-title" />
 
           <ol className="ls-rm">
-            {ROADMAP.map(({ id, items }, k) => (
+            {ROADMAP.map(({ id, items }) => (
               <li key={id} className={cn('ls-rm-phase', id === 'live' ? 'done' : 'plan')}>
                 <span className="ls-rm-seg" aria-hidden />
                 <span className="ls-rm-node" aria-hidden />
-                {k === 1 && (
-                  <span className="ls-rm-now" aria-hidden>
-                    {t('now')}
-                  </span>
-                )}
-                <h3 className="ls-rm-label">
-                  {t(`phases.${id}`)}
-                  <span>{items.length}</span>
-                </h3>
+                <h3 className="ls-rm-label">{t(`phases.${id}`)}</h3>
                 <ul className="ls-rm-items">
                   {items.map((item) => (
                     <li key={item} className="ls-rm-item">

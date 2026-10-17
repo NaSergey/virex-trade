@@ -4,7 +4,9 @@ export {
   useAvatar,
   usePrivacy,
   useProfile,
+  useProfilePositions,
   useProfileTrades,
+  useSetName,
   useSetPrivacy,
 } from './api/hooks';
 export type {
@@ -14,6 +16,8 @@ export type {
   GameId,
   ProfileGame,
   ProfileOverview,
+  ProfilePosition,
+  ProfilePositions,
   ProfileRating,
   ProfileSeason,
   ProfileTrades,

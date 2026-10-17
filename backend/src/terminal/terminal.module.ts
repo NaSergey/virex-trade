@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BattlePassCoreModule } from '../battlepass/battlepass-core.module';
 import { BybitModule } from '../bybit/bybit.module';
 import { CredentialsModule } from '../credentials/credentials.module';
 import { BybitTerminalClient } from './bybit-terminal.client';
@@ -14,7 +15,7 @@ import { TerminalMarketService } from './terminal-market.service';
 import { TerminalService } from './terminal.service';
 
 @Module({
-  imports: [CredentialsModule, BybitModule],
+  imports: [CredentialsModule, BybitModule, BattlePassCoreModule],
   controllers: [TerminalController],
   providers: [
     BybitTerminalClient,

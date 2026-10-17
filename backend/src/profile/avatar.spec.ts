@@ -19,8 +19,8 @@ describe('sniffImage', () => {
     expect(sniffImage(Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WAVEfmt ')]))).toBeNull();
   });
 
-  it('предел размера — полмегабайта', () => {
-    expect(AVATAR_MAX_BYTES).toBe(512 * 1024);
+  it('предел размера — 64 КБ: страница шлёт квадрат 256×256 в WebP, это 10–30 КБ', () => {
+    expect(AVATAR_MAX_BYTES).toBe(64 * 1024);
   });
 });
 

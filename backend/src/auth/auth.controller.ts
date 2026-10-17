@@ -13,7 +13,10 @@ import { Request, Response } from 'express';
 import { AuthService, AuthResult } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { useSecureCookie } from './cookie-security';
+import { CurrentUser } from './decorators/current-user.decorator';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 const REFRESH_COOKIE = 'refresh_token';
 // '/', не '/auth': кука должна доехать и до страниц продукта — её на входе
@@ -83,6 +86,25 @@ export class AuthController {
     res.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
     res.clearCookie(REFRESH_COOKIE, { path: LEGACY_REFRESH_COOKIE_PATH });
     return { success: true };
+  }
+
+  /**
+   * Смена пароля из настроек профиля. Ответ — как у входа: новая пара токенов
+   * этому устройству (прочие сессии сняты), кука и пользователь в теле.
+   * Ограничение частоты — то же, что у входа: перебор текущего пароля здесь —
+   * тот же перебор пароля.
+   */
+  @Post('password')
+  @UseGuards(JwtAuthGuard)
+  @Throttle(CREDENTIAL_ATTEMPTS)
+  @HttpCode(HttpStatus.OK)
+  async changePassword(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: ChangePasswordDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.changePassword(userId, dto);
+    return this.respondWithTokens(res, result);
   }
 
   // Sets the refresh token as an HttpOnly cookie and returns the access token

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -10,6 +11,8 @@ import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { demoLocked, isDemoEmail } from './demo-account';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { resolveJwtAccessSecret } from './jwt-secret';
 import { isOwnerEmail } from '../admin/owner';
@@ -127,6 +130,39 @@ export class AuthService {
       });
     }
 
+    return this.issueTokens(user);
+  }
+
+  /**
+   * Смена пароля из настроек профиля (спека 2026-10-16).
+   *
+   * Неверный текущий пароль — 400, а не 401: на 401 клиент решает, что
+   * кончилась сессия, и выходит из аккаунта. Новый хэш и снятие всех
+   * refresh-токенов пользователя — одной транзакцией: другие устройства
+   * выходят (их access-токен доживает свои минуты), а это устройство получает
+   * новую пару уже после снятия, иначе транзакция сняла бы и её.
+   *
+   * Демо-аккаунт — 403: его пароль знает каждый посетитель витрины, и смена
+   * сломала бы «Посмотреть демо» всем.
+   */
+  async changePassword(userId: string, dto: ChangePasswordDto): Promise<AuthResult> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException({ message: 'Пользователь не найден', code: 'USER_NOT_FOUND' });
+    }
+    if (isDemoEmail(user.email)) throw demoLocked();
+    if (!(await bcrypt.compare(dto.current, user.password))) {
+      throw new BadRequestException({ message: 'Текущий пароль неверный', code: 'PASSWORD_WRONG' });
+    }
+    if (dto.next === dto.current) {
+      throw new BadRequestException({ message: 'Новый пароль совпадает с текущим', code: 'PASSWORD_SAME' });
+    }
+
+    const password = await bcrypt.hash(dto.next, 10);
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: userId }, data: { password } }),
+      this.prisma.refreshToken.deleteMany({ where: { userId } }),
+    ]);
     return this.issueTokens(user);
   }
 

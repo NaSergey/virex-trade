@@ -15,7 +15,7 @@ import { PositionsTable } from '@/widgets/positions-table';
 import { RangeScale } from './RangeScale';
 import { PositionTagsModal } from './PositionTagsModal';
 import { useRangeTf, useRangeTfOptions, type RangeTfPref } from '../model/useRangeTf';
-import { durationUnitLabels } from '@/shared/lib/utils/format';
+import { durationUnitLabels, formatPositionAge } from '@/shared/lib/utils/format';
 import { useLocaleControl } from '@/shared/i18n';
 
 interface TaggingTarget {
@@ -23,17 +23,6 @@ interface TaggingTarget {
   direction: 'long' | 'short';
   unrealisedPnl: number;
   tagIds: string[];
-}
-
-/** Возраст позиции по нашим часам (см. openedAt в usePositionTags). */
-function fmtAge(iso: string | null | undefined, units: { d: string; h: string; m: string }): string {
-  if (!iso) return '—';
-  const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
-  if (!Number.isFinite(min) || min < 0) return '—';
-  const d = Math.floor(min / 1440);
-  const h = Math.floor((min % 1440) / 60);
-  if (d > 0) return `${d} ${units.d} ${h} ${units.h}`;
-  return h > 0 ? `${h} ${units.h} ${String(min % 60).padStart(2, '0')} ${units.m}` : `${min} ${units.m}`;
 }
 
 /**
@@ -44,7 +33,7 @@ function fmtAge(iso: string | null | undefined, units: { d: string; h: string; m
 function AgeCell({ position }: { position: ExchangePosition }) {
   const { data } = usePositionTags(position.symbol, position.direction);
   const { locale } = useLocaleControl();
-  return <span className="muted">{fmtAge(data?.openedAt, durationUnitLabels(locale))}</span>;
+  return <span className="muted">{formatPositionAge(data?.openedAt, durationUnitLabels(locale))}</span>;
 }
 
 /** Порядок горизонтов на шкале — от короткого к длинному, как в тумблере. */

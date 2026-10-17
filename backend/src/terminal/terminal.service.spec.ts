@@ -105,6 +105,7 @@ function setup(s: Setup = {}) {
       if (s.entryFollowFails) throw new Error('db down');
     }),
   };
+  const battlePass = { awardSafe: jest.fn(async () => undefined) };
   const service = new TerminalService(
     credentials as any,
     bybit as any,
@@ -113,9 +114,10 @@ function setup(s: Setup = {}) {
     streams as any,
     follows as any,
     entryFollows as any,
+    battlePass as any,
   );
   const orders = () => posts.filter((p) => p.path === '/order/create').map((p) => p.body);
-  return { service, posts, orders, bybit, streams, follows, entryFollows };
+  return { service, posts, orders, bybit, streams, follows, entryFollows, battlePass };
 }
 
 const market = (extra: Record<string, unknown> = {}) => ({
@@ -214,6 +216,32 @@ describe('TerminalService', () => {
       await service.placeOrders('u1', market({ direction: 'short', stopLoss: 60_500 }));
 
       expect(orders()[0]).toMatchObject({ side: 'Sell', positionIdx: 2 });
+    });
+
+    describe('опыт за открытие позиции', () => {
+      it('рыночный ордер без позиции в эту сторону — опыт, по id ордера', async () => {
+        const { service, battlePass } = setup();
+
+        await service.placeOrders('u1', market());
+
+        expect(battlePass.awardSafe).toHaveBeenCalledWith('u1', 'trade.open', 'o-1', 10);
+      });
+
+      it('добор в открытую позицию — не открытие', async () => {
+        const { service, battlePass } = setup({ rows: [openRow('Buy', 0, { stopLoss: '59000' })] });
+
+        await service.placeOrders('u1', market());
+
+        expect(battlePass.awardSafe).not.toHaveBeenCalled();
+      });
+
+      it('лимит позицию не открывает — её откроет биржа без человека', async () => {
+        const { service, battlePass } = setup();
+
+        await service.placeOrders('u1', { symbol: 'BTCUSDT', direction: 'long', kind: 'limit', prices: [59_900], riskPct: 1, stopLoss: 59_500 });
+
+        expect(battlePass.awardSafe).not.toHaveBeenCalled();
+      });
     });
 
     it('refuses without a stop', async () => {

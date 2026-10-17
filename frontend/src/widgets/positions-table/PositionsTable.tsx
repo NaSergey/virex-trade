@@ -34,9 +34,12 @@ export function PositionsTable({
   flush,
   priceDecimals,
   onSymbol,
+  isLoading,
+  skeletonRows,
 }: {
   positions: ExchangePosition[];
-  title: string;
+  /** Заголовок над таблицей; без него (и без суммы) шапки нет вовсе — профиль. */
+  title?: string;
   /** Сумма нереализованного P&L в шапке; null — цена ещё не известна. */
   totalPnl: number | null;
   /** Что стоит в шапке слева от суммы: тумблер горизонта на обзоре. */
@@ -61,6 +64,12 @@ export function PositionsTable({
   priceDecimals?: (p: ExchangePosition) => number | undefined;
   /** Нажатие на символ монеты — открыть её на графике (терминал); не задано — символ просто текст. */
   onSymbol?: (symbol: string) => void;
+  /**
+   * Позиции ещё едут — заглушки строк той же таблицы (профиль игрока). На
+   * обзоре и в бектесте таблица рисуется уже с данными, и пропа там нет.
+   */
+  isLoading?: boolean;
+  skeletonRows?: number;
 }) {
   const t = useTranslations('positionsTable');
   const price = (p: ExchangePosition, v: string | undefined) => formatPriceGrouped(v, priceDecimals?.(p));
@@ -107,11 +116,19 @@ export function PositionsTable({
 
   const body = (
     <>
-      <SectionHead title={title}>
-        {headExtra}
-        {totalPnl != null && <Money value={totalPnl} unit="USDT" className="n" />}
-      </SectionHead>
-      <LedgerTable columns={columns} rows={positions} rowKey={(p) => `${p.symbol}-${p.direction}`} />
+      {title != null && (
+        <SectionHead title={title}>
+          {headExtra}
+          {totalPnl != null && <Money value={totalPnl} unit="USDT" className="n" />}
+        </SectionHead>
+      )}
+      <LedgerTable
+        columns={columns}
+        rows={positions}
+        rowKey={(p) => `${p.symbol}-${p.direction}`}
+        isLoading={isLoading}
+        skeletonRows={skeletonRows}
+      />
     </>
   );
 

@@ -18,7 +18,7 @@
  * второе, всегда отстающее знание о том, что сейчас на экране.
  */
 
-export type TourId = 'overview' | 'tags' | 'analytics' | 'market' | 'settings' | 'backtest';
+export type TourId = 'overview' | 'tags' | 'analytics' | 'market' | 'backtest';
 
 export interface TourStep {
   /**
@@ -107,15 +107,6 @@ export const TOURS: Tour[] = [
       { anchor: '[data-tour="market-macro"]', key: 'macro' },
       { anchor: '[data-tour="market-positioning"]', key: 'positioning' },
       { anchor: '[data-tour="market-weekday"]', key: 'weekday' },
-    ],
-  },
-  {
-    id: 'settings',
-    path: '/settings',
-    steps: [
-      { anchor: '[data-tour="set-form"]', key: 'keys' },
-      { anchor: '[data-tour="set-exchange"]', key: 'exchange' },
-      { anchor: '[data-tour="set-telegram"]', key: 'telegram' },
     ],
   },
   {

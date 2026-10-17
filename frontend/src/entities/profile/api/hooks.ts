@@ -1,8 +1,8 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiJson } from '@/shared/api/http';
-import type { ProfileOverview, ProfileTrades } from './types';
+import type { ProfileOverview, ProfilePositions, ProfileTrades } from './types';
 
 /**
  * Ключ строкой, а не импортом в чужие сущности: его сбрасывает и выдача
@@ -30,18 +30,39 @@ export const useProfile = (userId: string, enabled = true) =>
   });
 
 /**
- * Его настоящие сделки с биржи — вкладка «Биржа» на профиле.
+ * Его настоящие сделки с биржи — вкладка «Сделки на бирже» на профиле.
  *
- * `enabled` держит вызывающий: вкладка заказывает лист только когда открыта, и
- * профиль, у которого сделок нет, за ними не ходит вовсе. `retry: false` — у
- * скрытого показа ответ 403, и повторять его незачем.
+ * `pageSize` — сколько строк влезает в окно: профиль стоит в экран без
+ * прокрутки, и лист режется под него (сервер держит 1…20). `enabled` держит
+ * вызывающий: вкладка заказывает лист только когда открыта, и профиль, у
+ * которого сделок нет, за ними не ходит вовсе. `retry: false` — у скрытого
+ * показа ответ 403, и повторять его незачем.
  */
-export const useProfileTrades = (userId: string, page: number, enabled: boolean) =>
+export const useProfileTrades = (userId: string, page: number, pageSize: number, enabled: boolean) =>
   useQuery({
-    queryKey: [...profileKey, userId, 'trades', page],
-    queryFn: () => apiJson<ProfileTrades>(`/api/profile/${encodeURIComponent(userId)}/trades?page=${page}`),
+    queryKey: [...profileKey, userId, 'trades', pageSize, page],
+    queryFn: () =>
+      apiJson<ProfileTrades>(
+        `/api/profile/${encodeURIComponent(userId)}/trades?page=${page}&pageSize=${pageSize}`,
+      ),
     enabled,
     retry: false,
+    // Пока едет следующий лист, стоит прежний: иначе листалка на миг писала бы
+    // «0—0 из 0», а таблица мигала заглушкой.
+    placeholderData: keepPreviousData,
+  });
+
+/**
+ * Его открытые позиции — снимок синка, который обновляется раз в минуту,
+ * поэтому и опрос раз в минуту, и только пока вкладка открыта (`enabled`).
+ */
+export const useProfilePositions = (userId: string, enabled: boolean) =>
+  useQuery({
+    queryKey: [...profileKey, userId, 'positions'],
+    queryFn: () => apiJson<ProfilePositions>(`/api/profile/${encodeURIComponent(userId)}/positions`),
+    enabled,
+    retry: false,
+    refetchInterval: 60_000,
   });
 
 /**
@@ -72,6 +93,20 @@ export function useSetPrivacy() {
       qc.setQueryData(privacyKey, data);
       void qc.invalidateQueries({ queryKey: profileKey });
     },
+  });
+}
+
+/**
+ * Новое имя из настроек профиля. Профили перечитываются (имя стоит на карточке),
+ * а шапку обновляет вызывающий через `useAuth().setName` — сущность о сессии не
+ * знает.
+ */
+export function useSetName() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      apiJson<{ name: string }>('/api/profile/name', { method: 'PATCH', body: JSON.stringify({ name }) }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: profileKey }),
   });
 }
 

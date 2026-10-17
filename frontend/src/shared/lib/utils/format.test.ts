@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fmtPctSigned, formatMoney, formatPriceGrouped, formatTradeDate, moneyClass } from './format';
+import { fmtPctSigned, formatMoney, formatPositionAge, formatPriceGrouped, formatTradeDate, moneyClass } from './format';
 
 // Тонкий пробел (U+2009) — разрядный разделитель денег и цен.
 const T = ' ';
@@ -83,5 +83,21 @@ describe('formatTradeDate', () => {
       minute: '2-digit',
     });
     expect(formatTradeDate(iso, 'en-US')).toBe(expected);
+  });
+});
+
+describe('formatPositionAge', () => {
+  const units = { d: 'д', h: 'ч', m: 'м' };
+  const now = Date.parse('2026-10-16T12:00:00Z');
+
+  it('минуты, часы с минутами, дни с часами', () => {
+    expect(formatPositionAge('2026-10-16T11:48:00Z', units, now)).toBe('12 м');
+    expect(formatPositionAge('2026-10-16T08:55:00Z', units, now)).toBe('3 ч 05 м');
+    expect(formatPositionAge('2026-10-14T09:00:00Z', units, now)).toBe('2 д 3 ч');
+  });
+
+  it('нет времени или оно из будущего — прочерк', () => {
+    expect(formatPositionAge(null, units, now)).toBe('—');
+    expect(formatPositionAge('2026-10-16T12:30:00Z', units, now)).toBe('—');
   });
 });

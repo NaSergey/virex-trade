@@ -32,14 +32,15 @@ export function proxy(request: NextRequest) {
    * нет аккаунта. Отправлять его на вход значило бы требовать войти прежде,
    * чем человек узнал куда.
    *
-   * А вошедшему рассказывать не о чем — он идёт к своим сделкам. Развилка
+   * А вошедшему рассказывать не о чем — он идёт на главную продукта, в
+   * терминал (владелец 2026-10-17; до этого — обзор дневника). Развилка
    * стоит здесь, а не на самой странице: тогда лендинг остаётся статикой,
    * которую не надо рендерить, чтобы тут же выбросить.
    */
   if (request.nextUrl.pathname === '/') {
     if (!authed) return NextResponse.next();
     const url = request.nextUrl.clone();
-    url.pathname = '/overview';
+    url.pathname = '/terminal';
     url.search = '';
     return NextResponse.redirect(url);
   }

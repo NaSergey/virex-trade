@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { AggregateCacheService } from '../trades/aggregate-cache';
 import { AVATAR_MAX_BYTES } from './avatar';
-import { ProfileService, TRADES_PAGE_SIZE } from './profile.service';
+import { POSITION_FRESH_MS, ProfileService, TRADES_PAGE_SIZE } from './profile.service';
 
 const ID = '3f2c8a4e-1b7d-4c3a-9e2f-0a1b2c3d4e5f';
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
@@ -30,6 +30,7 @@ function fakePrisma(user: unknown) {
     battlePassProgress: { findMany: jest.fn().mockResolvedValue([{ season: '2026-Q4', xp: 250 }]) },
     jetpackBet: { aggregate: jest.fn().mockResolvedValue({ _max: { cashoutX100: null } }) },
     trade: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
+    openPositionSeen: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
     $queryRaw: jest.fn().mockResolvedValue([]),
     $transaction: jest.fn().mockResolvedValue([]),
   };
@@ -99,6 +100,23 @@ describe('ProfileService.overview', () => {
     const { service, prisma } = make({ ...PLAYER, showTrades: false });
     prisma.trade.findFirst.mockResolvedValue({ id: 'r1' });
     await expect(service.overview(ID, now)).resolves.toMatchObject({ hasExchangeTrades: false });
+  });
+
+  it('открытые позиции в свежем снимке и показ открыт — вкладке «Открытые позиции» есть на что встать', async () => {
+    const { service, prisma } = make({ ...PLAYER, showTrades: true });
+    prisma.openPositionSeen.findFirst.mockResolvedValue({ id: 'p1' });
+
+    await expect(service.overview(ID, now)).resolves.toMatchObject({ hasOpenPositions: true });
+    expect(prisma.openPositionSeen.findFirst).toHaveBeenCalledWith({
+      where: { userId: ID, size: { not: null }, snapshotAt: { gte: new Date(now.getTime() - POSITION_FRESH_MS) } },
+      select: { id: true },
+    });
+  });
+
+  it('скрытый показ — признака открытых позиций тоже нет', async () => {
+    const { service, prisma } = make({ ...PLAYER, showTrades: false });
+    prisma.openPositionSeen.findFirst.mockResolvedValue({ id: 'p1' });
+    await expect(service.overview(ID, now)).resolves.toMatchObject({ hasOpenPositions: false });
   });
 });
 
@@ -190,6 +208,86 @@ describe('ProfileService.trades', () => {
     expect((await service.trades(ID, 2)).trades).toHaveLength(3);
     expect(await service.trades(ID, 0)).toMatchObject({ page: 1 });
   });
+
+  it('размер листа задаёт смотрящий — 1…20, мусор — 20; у каждого размера свой лист в кэше', async () => {
+    const { service, prisma } = make({ showTrades: true });
+    const rows = Array.from({ length: 12 }, (_, i) =>
+      part({ id: `r${i}`, positionId: `BTCUSDT:long:${1_700_000_000_000 + i}` }),
+    );
+    prisma.trade.findMany.mockResolvedValue(rows);
+
+    const five = await service.trades(ID, 2, 5);
+    expect(five).toMatchObject({ page: 2, pageSize: 5, total: 12 });
+    expect(five.trades).toHaveLength(5);
+    expect((await service.trades(ID, 3, 5)).trades).toHaveLength(2);
+    expect(await service.trades(ID, 1, 0)).toMatchObject({ pageSize: TRADES_PAGE_SIZE });
+    expect(await service.trades(ID, 1, 500)).toMatchObject({ pageSize: TRADES_PAGE_SIZE });
+    expect(await service.trades(ID, 1, 2.5)).toMatchObject({ pageSize: TRADES_PAGE_SIZE });
+  });
+});
+
+describe('ProfileService.positions', () => {
+  const now = new Date('2026-10-16T10:00:00Z');
+  const row = (over: Record<string, unknown> = {}) => ({
+    symbol: 'BTCUSDT',
+    direction: 'long',
+    firstSeenAt: new Date('2026-10-16T08:00:00Z'),
+    size: '0.05',
+    avgPrice: '112430.5',
+    markPrice: '113000',
+    positionValue: '5650',
+    unrealisedPnl: '28.47',
+    leverage: '10',
+    liqPrice: null,
+    snapshotAt: new Date('2026-10-16T09:59:00Z'),
+    ...over,
+  });
+
+  it('не UUID и нет игрока — 404; скрыл показ — 403; снимок при этом не читается', async () => {
+    const missing = make(null);
+    await expect(missing.service.positions('admin', now)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(missing.service.positions(ID, now)).rejects.toBeInstanceOf(NotFoundException);
+    const hidden = make({ showTrades: false });
+    await expect(hidden.service.positions(ID, now)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(missing.prisma.openPositionSeen.findMany).not.toHaveBeenCalled();
+    expect(hidden.prisma.openPositionSeen.findMany).not.toHaveBeenCalled();
+  });
+
+  it('только свежий снимок, строки в форме позиции биржи, время снимка — самое свежее', async () => {
+    const { service, prisma } = make({ showTrades: true });
+    prisma.openPositionSeen.findMany.mockResolvedValue([
+      row(),
+      row({ symbol: 'ETHUSDT', direction: 'short', snapshotAt: new Date('2026-10-16T09:59:30Z') }),
+      row({ symbol: 'SOLUSDT', size: '0' }),
+    ]);
+
+    const out = await service.positions(ID, now);
+
+    expect(prisma.openPositionSeen.findMany.mock.calls[0][0].where).toEqual({
+      userId: ID,
+      size: { not: null },
+      snapshotAt: { gte: new Date(now.getTime() - POSITION_FRESH_MS) },
+    });
+    expect(out.asOf).toBe('2026-10-16T09:59:30.000Z');
+    expect(out.positions.map((p) => p.symbol)).toEqual(['BTCUSDT', 'ETHUSDT']);
+    expect(out.positions[0]).toEqual({
+      symbol: 'BTCUSDT',
+      direction: 'long',
+      size: '0.05',
+      avgPrice: '112430.5',
+      markPrice: '113000',
+      positionValue: '5650',
+      unrealisedPnl: '28.47',
+      leverage: '10',
+      liqPrice: undefined,
+      openedAt: '2026-10-16T08:00:00.000Z',
+    });
+  });
+
+  it('свежих позиций нет — пусто и без времени снимка', async () => {
+    const { service } = make({ showTrades: true });
+    await expect(service.positions(ID, now)).resolves.toEqual({ asOf: null, positions: [] });
+  });
 });
 
 describe('ProfileService.privacy', () => {
@@ -209,7 +307,7 @@ describe('ProfileService.privacy', () => {
 
 describe('ProfileService.setAvatar', () => {
   it('пустой файл, чужой тип и лишний размер — отказ без записи', async () => {
-    const { service, prisma } = make(null);
+    const { service, prisma } = make({ email: 'nika@example.com' });
     await expect(service.setAvatar(ID, undefined)).rejects.toBeInstanceOf(BadRequestException);
     await expect(service.setAvatar(ID, Buffer.from('<svg></svg>'))).rejects.toBeInstanceOf(BadRequestException);
     await expect(
@@ -219,7 +317,7 @@ describe('ProfileService.setAvatar', () => {
   });
 
   it('PNG пишется одной транзакцией и возвращает версионный адрес', async () => {
-    const { service, prisma } = make(null);
+    const { service, prisma } = make({ email: 'nika@example.com' });
     const out = await service.setAvatar(ID, PNG);
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(prisma.userAvatar.upsert).toHaveBeenCalledWith(
@@ -227,4 +325,38 @@ describe('ProfileService.setAvatar', () => {
     );
     expect(out.avatar).toMatch(new RegExp(`^/api/profile/${ID}/avatar\\?v=\\d+$`));
   });
+});
+
+describe('ProfileService.setPrivacy: демо-аккаунт', () => {
+  it('выключатель показа у демо заперт — 403 без записи', async () => {
+    const { service, prisma } = make({ email: 'demo@example.com' });
+    await expect(service.setPrivacy(ID, false)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('ProfileService.setName', () => {
+  it('сохраняет имя и отдаёт его', async () => {
+    const { service, prisma } = make({ email: 'nika@example.com' });
+    prisma.user.update.mockResolvedValue({ name: 'Ника' });
+
+    await expect(service.setName(ID, 'Ника')).resolves.toEqual({ name: 'Ника' });
+    expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: ID }, data: { name: 'Ника' }, select: { name: true } });
+  });
+
+  it('демо-аккаунт — 403 без записи: его имя видит каждый посетитель витрины', async () => {
+    const { service, prisma } = make({ email: 'demo@example.com' });
+    await expect(service.setName(ID, 'Хакер')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('ProfileService: картинка демо-аккаунта', () => {
+  it('ни поставить, ни снять — 403 без записи', async () => {
+    const { service, prisma } = make({ email: 'demo@example.com' });
+    await expect(service.setAvatar(ID, PNG)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.removeAvatar(ID)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
 });

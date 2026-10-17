@@ -1,5 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { BattlePassService } from '../battlepass/battlepass.service';
+import { XP_SOURCES } from '../battlepass/xp-registry';
 import { CoinsService } from '../coins/coins.service';
 import { GamesGateway } from '../games/games.gateway';
 import { PrismaService } from '../prisma/prisma.service';
@@ -57,6 +59,7 @@ export class JetpackService implements OnApplicationBootstrap, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly coins: CoinsService,
     private readonly gateway: GamesGateway,
+    private readonly battlePass: BattlePassService,
   ) {}
 
   /**
@@ -200,6 +203,8 @@ export class JetpackService implements OnApplicationBootstrap, OnModuleDestroy {
       try {
         row = await this.prisma.$transaction(async (tx) => {
           await this.coins.charge(tx, userId, amount, 'JETPACK_BET', roundId);
+          // Опыт за ставку — той же транзакцией: отказ ставки его не оставит.
+          await this.battlePass.award(tx, userId, 'game.jetpack', roundId, XP_SOURCES['game.jetpack'].base);
           return tx.jetpackBet.create({
             data: { roundId, userId, amount, autoX100: auto },
             select: { id: true, user: { select: { name: true } } },

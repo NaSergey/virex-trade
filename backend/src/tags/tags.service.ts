@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { TagType } from './dto/tags.dto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -124,7 +125,18 @@ export class TagsService {
     const tag = await this.prisma.tag.create({
       data: { userId, name: trimmed, color: await this.pickColor(userId), ...(type ? { type } : {}) },
     });
+    await this.setupXp(userId);
     return { success: true, tag };
+  }
+
+  /**
+   * Опыт за свои теги и связки (`journal.setup`): завести, переименовать,
+   * собрать связку. Каждая правка — своё событие, поэтому ключ случайный;
+   * частоту держит дневной потолок. Записанное уже записано — сбой опыта
+   * правку не отменяет (`awardSafe`).
+   */
+  private setupXp(userId: string) {
+    return this.battlePass.awardSafe(userId, 'journal.setup', randomUUID(), XP_SOURCES['journal.setup'].base);
   }
 
   /**
@@ -152,6 +164,7 @@ export class TagsService {
     if (Object.keys(data).length === 0) return { success: true, tag };
     const updated = await this.prisma.tag.update({ where: { id }, data });
     await this.dataVersion.bump(userId);
+    await this.setupXp(userId);
     return { success: true, tag: updated };
   }
 
@@ -191,6 +204,7 @@ export class TagsService {
       data: { userId, tagIds: sorted, key },
     });
     await this.dataVersion.bump(userId);
+    await this.setupXp(userId);
     return { success: true, combo };
   }
 
@@ -234,6 +248,8 @@ export class TagsService {
 
     const updated = await this.prisma.savedTagCombo.update({ where: { id }, data });
     await this.dataVersion.bump(userId);
+    // Опыт — за новый состав связки; закрепить или открепить карточку — не правка.
+    if (data.key !== undefined && data.key !== combo.key) await this.setupXp(userId);
     return { success: true, combo: updated };
   }
 

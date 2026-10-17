@@ -503,7 +503,9 @@ export class BacktestService {
       // XP только за свою сессию: турнирная кончается вместе с турниром и
       // оплачена источником game.tournament. Сюда такая сессия и не доходит —
       // `finish` отказывает ей выше, — но источник начисления должен быть
-      // назван в одном месте, а не выводиться из порядка проверок.
+      // назван в одном месте, а не выводиться из порядка проверок. Сейчас
+      // источник выключен (владелец 2026-10-17): опыт бектеста — за открытые
+      // в нём позиции (`trade.open`); включается одной строкой реестра.
       await this.battlePass.award(tx, userId, 'game.backtest', id, XP_SOURCES['game.backtest'].base);
       return { session };
     });
@@ -533,7 +535,8 @@ export class BacktestService {
       // Тогда исполнять нечего — пустой ответ, как у движка эфира (`systemEnter`).
       // Раньше браузерный путь открывал позицию и без ордера — и после стопа
       // бота в той же минутке открывал ручную позицию без продажи, уже за стопом.
-      return await this.openChecked(s, input, input.entryOrderId != null);
+      // Опыт — за вход человека по рынку, а не за ордер, который исполнила прокрутка.
+      return await this.openChecked(s, input, input.entryOrderId != null, input.entryOrderId == null ? userId : undefined);
     } catch (e) {
       if (e instanceof EntryOrderGone) return { trade: null };
       // Ордер на вход, исполненный прокруткой браузера, но неисполнимый в
@@ -563,8 +566,11 @@ export class BacktestService {
    * существовать, иначе откат. Человек мог отменить его, пока шёл тик, и
    * сделка по отменённому ордеру хуже пропущенной. Браузер в истории исполняет
    * уровни сам, и у его пути прежнее поведение.
+   *
+   * `xpFor` — кто открыл позицию сам: ему опыт за открытие (`trade.open`), той
+   * же транзакцией и только если позиция новая, а не долитая.
    */
-  protected async openChecked(s: SessionForEntry, input: OpenTradeInput, requireOrder = false) {
+  protected async openChecked(s: SessionForEntry, input: OpenTradeInput, requireOrder = false, xpFor?: string) {
     const sessionId = s.id;
     const symbol = input.symbol ?? DEFAULT_SYMBOL;
     if (input.entryTime.getTime() < s.startTime.getTime()) throw timeInvalid();
@@ -586,13 +592,14 @@ export class BacktestService {
       if (bumped === 0) throw sessionFinished();
       const order = await this.takeEntryOrder(tx, sessionId, input.entryOrderId, requireOrder);
       await this.assertLongFree(tx, sessionId, symbol, input.direction, order);
-      const { trade, filledQty } = await this.openInTx(
+      const { trade, filledQty, opened } = await this.openInTx(
         tx,
         sessionId,
         symbol,
         { ...input, botId: order?.botId ?? undefined },
         sizeStopOf(order),
       );
+      if (xpFor && opened) await this.battlePass.award(tx, xpFor, 'trade.open', trade.id, XP_SOURCES['trade.open'].base);
       if (order?.botId) await this.sellAfterBotBuy(tx, order.botId, trade.id, order.price, filledQty);
       if (order?.stopAfter) await this.tightenStop(tx, trade.id, order.stopAfter, input.entryPrice);
       return { trade: tradeView(order?.stopAfter ? (await tx.backtestTrade.findUnique({ where: { id: trade.id }, include: TRADE_INCLUDE }))! : trade) };
@@ -603,7 +610,8 @@ export class BacktestService {
    * Вход под уже взятым замком сессии: долив открытой позиции той же монеты и
    * стороны или новая позиция. Общий у человека, движка эфира и запуска бота.
    * Одна позиция на монету и сторону: лонг BTC рядом с лонгом ETH законен.
-   * Стоп и тейк входа при доборе не нужны — у позиции свои.
+   * Стоп и тейк входа при доборе не нужны — у позиции свои. `opened` — позиция
+   * новая, а не долитая.
    */
   protected async openInTx(
     tx: Prisma.TransactionClient,
@@ -611,9 +619,9 @@ export class BacktestService {
     symbol: string,
     input: OpenTradeInput & { botId?: string },
     sizeStop?: number,
-  ): Promise<{ trade: TradeWithRelations; filledQty: number }> {
+  ): Promise<{ trade: TradeWithRelations; filledQty: number; opened: boolean }> {
     const open = await tx.backtestTrade.findFirst({ where: { sessionId, symbol, exitTime: null, direction: input.direction } });
-    if (open) return this.addCore(tx, open, input, sizeStop);
+    if (open) return { ...(await this.addCore(tx, open, input, sizeStop)), opened: false };
     const balance = await this.balanceForEntry(tx, sessionId);
     const { riskUsdt, qty } = positionSize(balance, input.riskPct, input.entryPrice, input.stopLoss);
     const notional = qty * input.entryPrice;
@@ -642,7 +650,7 @@ export class BacktestService {
       },
       include: TRADE_INCLUDE,
     });
-    return { trade, filledQty: qty };
+    return { trade, filledQty: qty, opened: true };
   }
 
   /**

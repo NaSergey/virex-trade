@@ -16,36 +16,35 @@ import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useBattlePass } from '@/entities/battle-pass';
 import { CoinBalance } from '@/entities/coins';
-import { setClientTerminalHint, useTerminalAccess } from '@/entities/terminal';
-import { DEMO_EMAIL, useAuth } from '@/features/auth';
+import { useAuth } from '@/features/auth';
 import { DonateDialog } from '@/features/donation';
 import { useOnboarding } from '@/features/onboarding';
 import { ReferralDialog } from '@/features/referrals';
 import { Button } from '@/shared/ui/Button';
+import { ProfilePicture } from '@/shared/ui/ProfilePicture';
 import { LocaleSwitch } from '@/shared/ui/LocaleSwitch';
 import { ThemeToggle } from '@/shared/ui/ThemeToggle';
 import { TradePlayMark } from '@/shared/ui/TradePlayMark';
 import { useLocaleControl } from '@/shared/i18n';
 import { isGamesDarkRoute } from '@/shared/lib/utils/games-dark-route';
 import { JOURNAL_PAGES, isJournalPage, isJournalPath } from '@/shared/lib/utils/journal-route';
+import { openSettings } from '@/widgets/settings-dialog';
 
-type Tab = 'terminal' | 'journal' | 'market' | 'backtest' | 'games' | 'settings' | 'admin';
+type Tab = 'terminal' | 'journal' | 'market' | 'backtest' | 'games' | 'admin';
 
 type NavItem = { id: Tab; labelKey: Tab; href: string };
 
 /**
- * Биржевой терминал — первым, перед «Дневником», и только у того, чей ключ
- * умеет ставить ордера (решение владельца 2026-09-30). В общем списке его нет:
- * пункт, обещающий торговлю ключу «только чтение», вёл бы на страницу отказа.
- */
-const TERMINAL: NavItem = { id: 'terminal', labelKey: 'terminal', href: '/terminal' };
-
-/**
+ * Биржевой терминал — первым, перед «Дневником», и у всех (решение владельца
+ * 2026-10-16): без ключа с правом торговли страница предлагает подключить его
+ * или торговать на демо-счёте.
+ *
  * «Дневник» — один пункт на три страницы: обзор, теги, аналитика (решение
  * владельца 2026-10-14). Ведёт на обзор, а между страницами переключают
  * вкладки самого дневника (`widgets/journal-nav`).
  */
 const NAV: NavItem[] = [
+  { id: 'terminal', labelKey: 'terminal', href: '/terminal' },
   { id: 'journal', labelKey: 'journal', href: '/overview' },
   { id: 'market', labelKey: 'market', href: '/market' },
   { id: 'backtest', labelKey: 'backtest', href: '/backtest' },
@@ -81,16 +80,7 @@ const isActive = (pathname: string, id: Tab) =>
  * единственный источник этого знания, и передавать его сверху значило бы
  * завести второй, способный с ним разойтись.
  */
-export function TopNav({
-  initialTerminal = false,
-}: {
-  /**
-   * Был ли биржевой терминал доступен при последнем ответе — из куки, которую
-   * читает серверный layout. Только подсказка первого кадра: как только придёт
-   * ответ `useTerminalAccess`, решает он.
-   */
-  initialTerminal?: boolean;
-}) {
+export function TopNav() {
   const { user, logout } = useAuth();
   const { restart } = useOnboarding();
   const t = useTranslations('nav');
@@ -109,22 +99,6 @@ export function TopNav({
   const hasRewards = Boolean(
     battlePass.data && (battlePass.data.pendingCoins > 0 || !battlePass.data.daily.claimedToday),
   );
-  // Пока ответа нет, рейка стоит так, как стояла при прошлом ответе
-  // (`initialTerminal` — кука, прочитанная сервером): пункт есть уже в
-  // присланной разметке, а не появляется после запроса, сдвигая остальные.
-  const access = useTerminalAccess().data;
-  // Демо-аккаунту терминал показывается всегда: у него нет ключа биржи, и
-  // страница открывает тот же экран на симуляции (`DemoTerminal`).
-  const demo = user?.email === DEMO_EMAIL;
-  const hasTerminal = demo || (access ? access.available : initialTerminal);
-  // Сервер про демо не знает и отвечает «доступа нет», а запрос доступа
-  // переписывает этим ответом куку-подсказку первого кадра. Без перезаписи
-  // следующая загрузка демо рисовала рейку без пункта и вставляла его через
-  // долю секунды, сдвигая все разделы.
-  useEffect(() => {
-    if (demo && access) setClientTerminalHint(true);
-  }, [demo, access]);
-  const nav = hasTerminal ? [TERMINAL, ...NAV] : NAV;
   const [donateOpen, setDonateOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
@@ -214,7 +188,7 @@ export function TopNav({
   useLayoutEffect(() => {
     const place = (animated: boolean) => {
       const active = navRef.current?.querySelector<HTMLElement>('[aria-current="page"]');
-      // Страницы вне рейки (`/settings`, `/profile`, `/admin`) не дают
+      // Страницы вне рейки (`/profile`, `/admin`) не дают
       // активной ссылки — плашку тогда нужно спрятать, а не оставить от
       // прошлой страницы: иначе появление «Терминала» сдвигает рейку, а
       // плашка остаётся на координатах, снятых до сдвига, и повисает между
@@ -232,9 +206,7 @@ export function TopNav({
     document.fonts?.ready?.then(settle);
     window.addEventListener('resize', settle);
     return () => window.removeEventListener('resize', settle);
-    // `hasTerminal`: появившийся первым пункт сдвигает все остальные, и плашка
-    // обязана переехать вместе со своим.
-  }, [pathname, locale, hasTerminal]);
+  }, [pathname, locale]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -248,7 +220,8 @@ export function TopNav({
   return (
     <header className={`top${inGames ? ' top-game' : ''}`} ref={headerRef}>
       <div className="top-in">
-        <Link href="/overview" className="mark">
+        {/* Знак ведёт на главную продукта — терминал. */}
+        <Link href="/terminal" className="mark">
           <TradePlayMark width={46} height={28} />
         </Link>
 
@@ -273,7 +246,7 @@ export function TopNav({
               aria-hidden
             />
           )}
-          {nav.map((item) =>
+          {NAV.map((item) =>
             item.id === 'journal' ? (
               <Link
                 key={item.id}
@@ -316,14 +289,7 @@ export function TopNav({
             aria-expanded={menuOpen}
             onClick={() => setMenu((m) => (m === 'open' ? 'closing' : 'open'))}
           >
-            {/* Картинка профиля — не через next/image: адрес версионный и с
-                кэшем на год, оптимизатору пришлось бы ходить за ней на API. */}
-            {user?.avatar ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={user.avatar} alt="" />
-            ) : (
-              (user?.name || user?.email || '?').charAt(0).toUpperCase()
-            )}
+            <ProfilePicture src={user?.avatar} />
           </Button>
           {menu !== 'closed' && (
             <div
@@ -366,10 +332,18 @@ export function TopNav({
                 </Link>
                 {/* Настройки — сюда же, рядом с языком: оба пункта про учётную
                     запись и подключение к ней, а не про работу с журналом,
-                    которой посвящена рейка разделов выше. */}
-                <Link className="acct-item" href="/settings" onClick={closeMenu}>
+                    которой посвящена рейка разделов выше. Окно, а не адрес
+                    (владелец 2026-10-17): страницы настроек больше нет. */}
+                <Button
+                  variant="none"
+                  className="acct-item"
+                  onClick={() => {
+                    closeMenu();
+                    openSettings('profile');
+                  }}
+                >
                   {t('settings')}
-                </Link>
+                </Button>
                 {/* Обучение здесь, а не в Настройках: туры идут по всем пяти
                     разделам, и вернуть их надо уметь с того раздела, где
                     застрял, а не сходив за этим на страницу ключей. */}

@@ -348,6 +348,40 @@ describe('BacktestService — сделки', () => {
     );
   });
 
+  describe('опыт за открытие позиции', () => {
+    it('позиция, открытая человеком, — опыт той же транзакцией, по id сделки', async () => {
+      const { service, prisma, battlePass } = makeService();
+      prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+
+      await service.openTrade('u1', 's1', OPEN);
+
+      expect(battlePass.award).toHaveBeenCalledWith(prisma, 'u1', 'trade.open', 't1', 10);
+    });
+
+    it('долив открытой позиции — не открытие', async () => {
+      const { service, prisma, battlePass } = makeService();
+      prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+      prisma.backtestTrade.findFirst.mockResolvedValue(TRADE);
+      prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, tags: [], entries: [] });
+
+      await service.openTrade('u1', 's1', { ...OPEN, entryPrice: 110 });
+
+      expect(battlePass.award).not.toHaveBeenCalled();
+    });
+
+    it('ордер, исполненный прокруткой, — позиция открылась без человека', async () => {
+      const { service, prisma, battlePass } = makeService();
+      prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+      prisma.backtestEntryOrder.findFirst.mockResolvedValue({ id: 'eo1', botId: null, stopAfter: null, price: 100 });
+      prisma.backtestEntryOrder.deleteMany.mockResolvedValue({ count: 1 });
+
+      await service.openTrade('u1', 's1', { ...OPEN, entryOrderId: 'eo1' });
+
+      expect(prisma.backtestTrade.create).toHaveBeenCalled();
+      expect(battlePass.award).not.toHaveBeenCalled();
+    });
+  });
+
   it('маржа больше депозита — отказ, сделку не создаёт', async () => {
     const { service, prisma } = makeService();
     // SESSION.balance=10000, entry=100, stop=98 (dist=2). При leverage=1 margin = notional =

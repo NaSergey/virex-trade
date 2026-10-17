@@ -3,7 +3,7 @@
 import { Wrap } from '@/shared/ui/Wrap';
 import { GameCard } from './components/GameCard';
 import { CoinsInfo } from './components/CoinsInfo';
-import { GamesHero } from './components/GamesHero';
+import { GamesPromo } from './components/GamesPromo';
 import { GAMES } from './model/games';
 
 /**
@@ -13,7 +13,7 @@ import { GAMES } from './model/games';
  * стоит в шапке продукта, а не здесь: тратят монеты внутри игр, а видеть
  * остаток надо с любой страницы.
  *
- * Страница идёт сверху вниз: сцена (баннер со светом) → во что можно играть
+ * Страница идёт сверху вниз: рекламный баннер → во что можно играть
  * (карточки) → на что играют (монеты: откуда берутся и чего с ними нельзя).
  * Порядок держит человека, пришедшего из журнала сделок: он не искал игру,
  * ему её показывают — и говорят, что деньги счёта здесь ни при чём.
@@ -30,7 +30,7 @@ export function GamesPage() {
     <Wrap page className="games-page">
       {/* Баннер и карточки — ровно окно под шапкой (.gfirst). */}
       <div className="gfirst">
-        <GamesHero />
+        <GamesPromo />
         <div className="gcards">
           {GAMES.map((game) => (
             <GameCard key={game.id} game={game} />

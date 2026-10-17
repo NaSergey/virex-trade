@@ -171,7 +171,7 @@ main:focus {
 
 /* ── секции ────────────────────────────────────────────────────────
    Секции идут подряд; переход на въезде ведёт сама сцена: дорога
-   прокладывается, экран разделов встаёт из наклона, регистрация сходится. У первого
+   прокладывается, экран разделов встаёт из наклона, колонка входа поднимается. У первого
    экрана и терминала переходов нет — сняты владельцем. Ничего не
    замирает на полпути: прежняя лента, где секция липла низом к экрану, пока на
    неё наезжала следующая, оставляла её стоять со срезанным верхом (владелец
@@ -274,8 +274,7 @@ main:focus {
   background: var(--ink-2);
   border-color: var(--ink-2);
 }
-.ls-rm-label,
-.ls-rm-now {
+.ls-rm-label {
   font-family: var(--font-mono);
   font-size: var(--t-xs);
   font-weight: 400;
@@ -291,21 +290,6 @@ main:focus {
   padding: 0;
   border: 0;
   color: var(--ink-2);
-}
-.ls-rm-label span {
-  margin-left: var(--s2);
-  color: var(--ink-3);
-}
-/* «Сейчас» — выворот, как выбранное в системе: на стыке запущенного и планов. */
-.ls-rm-now {
-  position: absolute;
-  left: -16px;
-  top: -6px;
-  translate: -50% 0;
-  padding: 2px 8px;
-  font-size: 10px;
-  background: var(--ink);
-  color: var(--ground);
 }
 
 .ls-rm-items {
@@ -359,8 +343,7 @@ main:focus {
     transform: scale(0);
   }
   .ls-rm-label,
-  .ls-rm-item,
-  .ls-rm-now {
+  .ls-rm-item {
     opacity: 0;
   }
 }
@@ -393,12 +376,6 @@ main:focus {
   .ls-rm-label {
     left: 32px;
     top: 0;
-  }
-  .ls-rm-now {
-    left: auto;
-    right: 0;
-    top: -2px;
-    translate: none;
   }
 }
 @media (max-width: 720px) and (prefers-reduced-motion: no-preference) {
@@ -527,14 +504,18 @@ main:focus {
   border: 1px solid var(--hair-2);
   background: #000;
 }
-/* Смена: новый экран выезжает шторкой снизу поверх прежнего (`.was`) и
-   медленно наплывает, пока стоит. Остальные спрятаны и сброшены — следующий
-   въезд начнётся снизу заново. */
+/* Смена — вертикальная лента в такт списку: `--dir` у рамки (1 — вниз по
+   пунктам, -1 — вверх). Новый экран (`.on`) выезжает с края поверх прежнего
+   (`.was`), тот уходит на треть в обратную сторону и гаснет. Приближения
+   (наплыва) нет — снято владельцем 2026-10-17. Шаг — keyframes, а
+   не transition: старт берёт `--dir` на момент смены, а transition стартовал бы
+   с положения прошлого направления. Остальные спрятаны и без анимации — их
+   следующий въезд начнётся с края заново. До первой смены (`data-moved`) экран
+   стоит на месте, а не въезжает при загрузке. */
 .ls-shot {
   position: absolute;
   inset: 0;
   visibility: hidden;
-  clip-path: inset(100% 0 0 0);
 }
 .ls-shot img {
   object-fit: cover;
@@ -543,26 +524,28 @@ main:focus {
 .ls-shot.was {
   z-index: 1;
   visibility: visible;
-  clip-path: inset(0);
+  transform: translateY(calc(var(--dir) * -30%));
+  opacity: 0.25;
 }
 .ls-shot.on {
   z-index: 2;
   visibility: visible;
-  clip-path: inset(0);
-  transition: clip-path 0.9s cubic-bezier(0.7, 0, 0.2, 1);
 }
-.ls-shot.on img {
-  animation: ls-shot-in var(--tour-ms) cubic-bezier(0.16, 1, 0.3, 1) forwards;
+.ls-tour-frame[data-moved='true'] .ls-shot.on {
+  animation: ls-shot-slide-in 0.85s cubic-bezier(0.7, 0, 0.2, 1) backwards;
 }
-.ls-shot.was img {
-  transform: scale(1);
+.ls-tour-frame[data-moved='true'] .ls-shot.was {
+  animation: ls-shot-slide-out 0.85s cubic-bezier(0.7, 0, 0.2, 1) backwards;
 }
-@keyframes ls-shot-in {
+@keyframes ls-shot-slide-in {
   from {
-    transform: scale(1.12);
+    transform: translateY(calc(var(--dir) * 100%));
   }
-  to {
-    transform: scale(1);
+}
+@keyframes ls-shot-slide-out {
+  from {
+    transform: translateY(0);
+    opacity: 1;
   }
 }
 .ls-tour-note {
@@ -938,23 +921,43 @@ html {
 
 
 /* ── регистрация ───────────────────────────────────────────────── */
-/* Последний кадр ленты: не ниже экрана — иначе он не закрыл бы предыдущий.
-   Шапка — под меню, как у всех кадров, а не по центру экрана. */
+/* Последний кадр: не ниже экрана. Шапка — под меню, как у всех кадров;
+   колонка — по центру по ширине и прибита к верху: во входе поле «Имя»
+   сворачивается, и центрованная по высоте колонка съезжала бы целиком. */
 .ls-register {
   padding-bottom: var(--s6);
   min-height: 100svh;
 }
-.ls-register-wrap {
-  width: 100%;
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-  gap: var(--s6);
-  align-items: start;
+.ls-register-col {
+  width: min(400px, 100%);
+  margin: clamp(var(--s4), 6vh, 72px) auto 0;
+}
+.ls-register-mark {
+  display: block;
+  width: 112px;
+  height: auto;
+  margin: 0 auto var(--s4);
+}
+.ls-register-top {
+  text-align: center;
+}
+.ls-register-title {
+  margin: 0;
+  font-size: clamp(28px, 2.6vw, 40px);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+.ls-register-invite {
+  margin: var(--s2) 0 0;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .ls-register-form {
-  width: 100%;
-  max-width: 380px;
-  justify-self: end;
+  margin-top: var(--s5);
 }
 
 /* ── планшет ───────────────────────────────────────────────────── */
@@ -1027,13 +1030,11 @@ html {
   .ls-register {
     padding-bottom: var(--s5);
   }
-  .ls-register-wrap {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--s5);
+  .ls-register-mark {
+    width: 88px;
   }
   .ls-register-form {
-    justify-self: stretch;
-    max-width: none;
+    margin-top: var(--s4);
   }
 }
 
@@ -1042,13 +1043,16 @@ html {
 @media (prefers-reduced-motion: reduce) {
   .ls-tour-tab,
   .ls-tour-body,
-  .ls-tour-body p,
-  .ls-shot.on {
+  .ls-tour-body p {
     transition: none;
   }
-  .ls-shot.on img,
+  .ls-tour-frame[data-moved='true'] .ls-shot,
   .ls-tour-bar {
     animation: none;
+  }
+  .ls-shot.was {
+    opacity: 0;
+    transform: none;
   }
   .ls-tour-bar {
     transform: scaleX(1);

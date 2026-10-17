@@ -68,8 +68,12 @@ function service(db: ReturnType<typeof fakeDb>, data: { positionTags: any[]; tra
   return new TagsService(prisma as never, {} as never, battlePass);
 }
 
+/**
+ * Разметка сделки тегом опыта не даёт (владелец 2026-10-17), но событие
+ * пишется по-прежнему — с нулём: по нему профиль считает дни разметки.
+ */
 describe('TagsService.linkTagsToNewTrades', () => {
-  it('новая сделка под тегом открытой позиции получает XP', async () => {
+  it('новая сделка под тегом открытой позиции — событие разметки без опыта', async () => {
     const db = fakeDb();
     const svc = service(db, {
       positionTags: [{ symbol: 'BTCUSDT', direction: 'long', tagId: 'tag1', createdAt: NOW }],
@@ -79,12 +83,12 @@ describe('TagsService.linkTagsToNewTrades', () => {
     await svc.linkTagsToNewTrades('u1', NOW);
 
     expect(db.events).toEqual([
-      expect.objectContaining({ userId: 'u1', source: 'journal.tag', refId: 'trade1', xp: 15 }),
+      expect.objectContaining({ userId: 'u1', source: 'journal.tag', refId: 'trade1', xp: 0 }),
     ]);
-    expect(db.progress.get(db.key('u1'))?.xp).toBe(15);
+    expect(db.progress.has(db.key('u1'))).toBe(false);
   });
 
-  it('повторный прогон той же сделки не начисляет второй раз', async () => {
+  it('повторный прогон той же сделки второго события не пишет', async () => {
     const db = fakeDb();
     const svc = service(db, {
       positionTags: [{ symbol: 'BTCUSDT', direction: 'long', tagId: 'tag1', createdAt: NOW }],
@@ -95,10 +99,9 @@ describe('TagsService.linkTagsToNewTrades', () => {
     await svc.linkTagsToNewTrades('u1', NOW);
 
     expect(db.events).toHaveLength(1);
-    expect(db.progress.get(db.key('u1'))?.xp).toBe(15);
   });
 
-  it('несколько сделок под одним тегом дают XP за каждую', async () => {
+  it('несколько сделок под одним тегом — событие на каждую', async () => {
     const db = fakeDb();
     const svc = service(db, {
       positionTags: [{ symbol: 'BTCUSDT', direction: 'long', tagId: 'tag1', createdAt: NOW }],
@@ -111,7 +114,7 @@ describe('TagsService.linkTagsToNewTrades', () => {
     await svc.linkTagsToNewTrades('u1', NOW);
 
     expect(db.events).toHaveLength(2);
-    expect(db.progress.get(db.key('u1'))?.xp).toBe(30);
+    expect(db.progress.has(db.key('u1'))).toBe(false);
   });
 
   it('без тегов на открытых позициях XP не начисляется', async () => {

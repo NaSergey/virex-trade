@@ -114,6 +114,26 @@ export function durationUnitLabels(locale: 'ru' | 'en'): { d: string; h: string;
 }
 
 /**
+ * Сколько позиция открыта по нашим часам: «2 д 3 ч», «3 ч 05 м», «12 м».
+ * Время открытия знает не биржа (её `createdTime` не сбрасывается на новую
+ * позицию), а реестр синка. Нет времени или оно из будущего — «—». Одна на
+ * обзор и профиль игрока.
+ */
+export function formatPositionAge(
+  iso: string | null | undefined,
+  units: { d: string; h: string; m: string },
+  now = Date.now(),
+): string {
+  if (!iso) return '—';
+  const min = Math.floor((now - new Date(iso).getTime()) / 60_000);
+  if (!Number.isFinite(min) || min < 0) return '—';
+  const d = Math.floor(min / 1440);
+  const h = Math.floor((min % 1440) / 60);
+  if (d > 0) return `${d} ${units.d} ${h} ${units.h}`;
+  return h > 0 ? `${h} ${units.h} ${String(min % 60).padStart(2, '0')} ${units.m}` : `${min} ${units.m}`;
+}
+
+/**
  * Format an ISO date string as a short day/month, hour:minute string.
  * @param iso - ISO date string
  * @param locale - BCP-47 локаль для Intl (по умолчанию 'ru-RU')

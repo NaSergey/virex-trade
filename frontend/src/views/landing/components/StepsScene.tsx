@@ -37,8 +37,12 @@ const TOUR_MS = 7000;
  * Движение:
  *  - **Въезд** — экран поднимается из наклона в плоскость, пока секция
  *    въезжает (scrub): лежит «столом» и встаёт к зрителю.
- *  - **Смена** — новый экран выезжает шторкой снизу поверх прежнего и медленно
- *    наплывает, пока стоит (CSS: `.ls-shot.on`).
+ *  - **Смена** — экраны идут вертикальной лентой в такт списку слева: вниз по
+ *    пунктам — новый выезжает снизу, прежний уходит вверх и гаснет; вверх по
+ *    списку — наоборот (CSS: `.ls-shot`, направление — `--dir` у рамки).
+ *    Приближения экрана нет — снято владельцем 2026-10-17. Шторка `clip-path` снизу стояла и снята
+ *    владельцем 2026-10-17. Первый экран при загрузке не въезжает: анимация —
+ *    только после первой смены (`data-moved`).
  *  - **Сама** — под активным пунктом бежит полоса; дошла — выбор переходит
  *    дальше. Конец полосы и есть таймер (`onAnimationEnd`), второго счётчика
  *    времени нет. Полоса стоит, пока секция не на экране и пока курсор над
@@ -55,6 +59,8 @@ export function StepsScene() {
   const tour = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
   const [prev, setPrev] = useState<number | null>(null);
+  const [dir, setDir] = useState<1 | -1>(1);
+  const [moved, setMoved] = useState(false);
   const [auto, setAuto] = useState(true);
   const [inView, setInView] = useState(false);
   const [hover, setHover] = useState(false);
@@ -70,8 +76,12 @@ export function StepsScene() {
     return () => io.disconnect();
   }, []);
 
-  const show = (next: number) => {
+  // `forward` — переход автосменой, в том числе с последнего пункта на первый:
+  // лента идёт вниз и по кругу. Выбор рукой — по порядку пунктов.
+  const show = (next: number, forward = false) => {
     if (next === active) return;
+    setDir(forward || next > active ? 1 : -1);
+    setMoved(true);
     setPrev(active);
     setActive(next);
   };
@@ -147,7 +157,7 @@ export function StepsScene() {
                       <span
                         className="ls-tour-bar"
                         aria-hidden
-                        onAnimationEnd={() => show((i + 1) % STEPS.length)}
+                        onAnimationEnd={() => show((i + 1) % STEPS.length, true)}
                       />
                     )}
                   </li>
@@ -159,6 +169,8 @@ export function StepsScene() {
               <div
                 className="ls-tour-frame"
                 id="how-screen"
+                data-moved={moved}
+                style={{ '--dir': dir } as CSSProperties}
                 role="tabpanel"
                 aria-labelledby={`how-tab-${STEPS[active].n}`}
               >

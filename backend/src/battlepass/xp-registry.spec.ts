@@ -13,16 +13,21 @@ describe('tournamentXp', () => {
 });
 
 describe('XP_SOURCES', () => {
-  it('карточные столы заведены, но пока не начисляют', () => {
-    expect(XP_SOURCES['game.table'].enabled).toBe(false);
+  it('опыт — за действия человека: позиция, партия, ставка, свои теги', () => {
+    expect(XP_SOURCES['trade.open']).toMatchObject({ enabled: true, base: 10, dailyCap: 200 });
+    expect(XP_SOURCES['game.table']).toMatchObject({ enabled: true, base: 5, dailyCap: 150 });
+    expect(XP_SOURCES['game.jetpack']).toMatchObject({ enabled: true, base: 5, dailyCap: 100 });
+    expect(XP_SOURCES['journal.setup']).toMatchObject({ enabled: true, base: 10, dailyCap: 50 });
   });
 
-  it('у фармящихся источников есть дневной потолок', () => {
-    expect(XP_SOURCES['game.tournament'].dailyCap).toBe(1000);
-    expect(XP_SOURCES['game.backtest'].dailyCap).toBe(300);
+  it('у каждого источника с опытом есть дневной потолок', () => {
+    for (const def of Object.values(XP_SOURCES)) {
+      if (def.enabled && def.base > 0) expect(def.dailyCap).not.toBeNull();
+    }
   });
 
-  it('разметка тегом потолка не требует — её сторожит ключ по сделке', () => {
-    expect(XP_SOURCES['journal.tag'].dailyCap).toBeNull();
+  it('за сессию бектеста и разметку сделки опыта нет (владелец 2026-10-17)', () => {
+    expect(XP_SOURCES['game.backtest'].enabled).toBe(false);
+    expect(XP_SOURCES['journal.tag'].base).toBe(0);
   });
 });

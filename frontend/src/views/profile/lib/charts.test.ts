@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { byFrequency, linePoints, pathOf, radarPoint, trend, windowSums } from './charts';
+import { byFrequency, favourite, linePoints, pathOf, radarPoint, trend, windowSums } from './charts';
 
 describe('trend', () => {
   it('сравнивает последнее значение со значением N дней назад', () => {
@@ -50,5 +50,18 @@ describe('byFrequency', () => {
     const g = (id: string, days90: number, played: number) => ({ id, days90, played });
     const out = byFrequency([g('a', 3, 10), g('b', 9, 1), g('c', 3, 50), g('d', 0, 0)]);
     expect(out.map((x) => x.id)).toEqual(['b', 'c', 'a', 'd']);
+  });
+});
+
+describe('favourite', () => {
+  const g = (id: string, days90: number, played: number) => ({ id, days90, played });
+
+  it('чаще всего за 90 дней среди сыгранных, скрытые (бектест) не считаются', () => {
+    const games = [g('backtest', 50, 90), g('jetpack', 19, 412), g('tournament', 31, 23)];
+    expect(favourite(games, new Set(['backtest']))?.id).toBe('tournament');
+  });
+
+  it('ни во что не играл — любимой игры нет', () => {
+    expect(favourite([g('poker', 0, 0)], new Set())).toBeNull();
   });
 });

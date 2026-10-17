@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { getServerTerminalHint } from '@/entities/terminal/server-access';
 import { AuthGuard } from '@/features/auth';
 import { AppChrome } from '../(internal)/AppChrome';
 
@@ -24,17 +23,11 @@ import { AppChrome } from '../(internal)/AppChrome';
  * там, где кончаются записи, и кривая может выйти в край вьюпорта (см. .bleed).
  * Возврат наверх при переходе между разделами делает сам роутер.
  *
- * Серверный компонент — ради одной куки: пункт «Терминал» в рейке зависит от
- * права ключа, которое знает только запрос к API, и без подсказки он появлялся
- * бы после ответа, сдвигая всю рейку. Тот же приём «кука + серверный
- * компонент», что у темы и локали в корневом layout. Всё, что внутри, —
- * клиентские компоненты, как и раньше. Сама обвязка — `AppChrome`, общая с
- * макетом `(open)` (профиль по ссылке).
+ * Сама обвязка — `AppChrome`, общая с макетом `(open)` (профиль по ссылке).
  */
-export default async function AppLayout({ children }: { children: ReactNode }) {
-  const initialTerminal = await getServerTerminalHint();
+export default function AppLayout({ children }: { children: ReactNode }) {
   return (
-    <AppChrome initialTerminal={initialTerminal}>
+    <AppChrome>
       <AuthGuard>{children}</AuthGuard>
     </AppChrome>
   );

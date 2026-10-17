@@ -12,6 +12,7 @@ import { ExchangePositionsCacheService } from '../exchanges/exchange-positions-c
 import {
   ClosedTrade,
   ExchangeId,
+  OpenPosition,
   PositionsResult,
 } from '../exchanges/exchange.types';
 import { TagsService } from '../tags/tags.service';
@@ -44,6 +45,24 @@ export function stopLossOf(raw: string | undefined): number | null {
   const n = Number(raw);
   if (!Number.isFinite(n) || n <= 0) return null;
   return n;
+}
+
+/**
+ * Снимок открытой позиции для профиля игрока (спека 2026-10-16): поля биржи
+ * строками, как она их отдаёт, и время тика. Нет поля — null, а не «0»: у
+ * биржи, которая не сообщает цену ликвидации, её и нет.
+ */
+export function positionSnapshot(p: OpenPosition, at: Date) {
+  return {
+    size: p.size,
+    avgPrice: p.avgPrice ?? null,
+    markPrice: p.markPrice ?? null,
+    positionValue: p.positionValue ?? null,
+    unrealisedPnl: p.unrealisedPnl ?? null,
+    leverage: p.leverage ?? null,
+    liqPrice: p.liqPrice ?? null,
+    snapshotAt: at,
+  };
 }
 
 /**
@@ -351,6 +370,17 @@ export class TradeSyncService
     } catch (e) {
       this.logger.warn(`position tag prune failed: ${e}`);
     }
+    // Снимок открытых позиций для профиля игрока: чужой профиль читает его из
+    // базы, а не биржу ключом владельца. Свой try — сбой записи снимка не
+    // роняет тик и не выдаёт себя за сбой обрезки тегов. После
+    // trackOpenPositions: строку новой позиции заводит он.
+    if (open.success) {
+      try {
+        await this.storePositionSnapshots(userId, open.positions);
+      } catch (e) {
+        this.logger.warn(`position snapshot failed: ${e}`);
+      }
+    }
     // После fillEntryStamps: иначе карточка закрытия ушла бы без времени
     // в позиции.
     try {
@@ -424,6 +454,26 @@ export class TradeSyncService
     if (stale.length > 0) {
       await this.prisma.openPositionSeen.deleteMany({
         where: { id: { in: stale.map((s) => s.id) } },
+      });
+    }
+  }
+
+  /**
+   * Снимок каждой открытой позиции — на каждом тике, где позиции прочитаны:
+   * цена и P&L меняются каждую минуту. Строку заводит `trackOpenPositions`,
+   * здесь она только обновляется по ключу; нулевой размер — позиция уже
+   * закрылась, и её строка уйдёт вместе с ней.
+   */
+  private async storePositionSnapshots(
+    userId: string,
+    positions: OpenPosition[],
+  ): Promise<void> {
+    const at = new Date();
+    for (const p of positions) {
+      if (!(parseFloat(p.size) > 0)) continue;
+      await this.prisma.openPositionSeen.updateMany({
+        where: { userId, symbol: p.symbol, direction: p.direction },
+        data: positionSnapshot(p, at),
       });
     }
   }

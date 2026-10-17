@@ -7,17 +7,21 @@ import { useAuth } from '@/features/auth';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { GuestBar } from './components/GuestBar';
 import { GuestGate } from './components/GuestGate';
-import { PlayerResults } from './components/PlayerResults';
+import { Identity } from './components/Identity';
+import { ProfileSkeleton } from './components/ProfileSkeleton';
+import { ProfileTabs } from './components/ProfileTabs';
+import { SeasonLevel } from './components/SeasonLevel';
+import { StatCells } from './components/StatCells';
 import { Stripe } from './components/Stripe';
 
 /**
  * Профиль игрока — `/profile/<id>` (свой тоже: `/profile` уводит сюда).
  *
- * Профиль собирается заново по образцу владельца, по одному элементу
- * (2026-10-02): прежние блоки сняты, на экране наклонная полоса на всю
- * страницу и под ней — что человек делал. Иконки достижений (`Achievements`),
- * графики (`TrendChart`, `GameRadar`) и окно наград сезона
- * (`SeasonRewardsDialog`) оставлены компонентами — их вернёт следующий шаг.
+ * Карточка игрока в одно окно без прокрутки (спека 2026-10-16, вариант A
+ * владельца): слева кто это, уровень сезона, четыре клетки и вкладки — их
+ * содержимое забирает остаток высоты; справа белая наклонная полоса, место
+ * будущего персонажа. Окно уже 1100 или ниже 620 — колонка на всю ширину,
+ * полосы нет, страница листается.
  *
  * **Гостю профиля не видно** (решение владельца 2026-10-02): шапка со входом и
  * приглашение зарегистрироваться. Данные и так за `JwtAuthGuard` — здесь только
@@ -42,14 +46,20 @@ export function ProfilePage() {
   }
 
   return (
-    <>
-      <div className="pf-stage games-page">
-        <Stripe />
-      </div>
-      <div className="pf-page wrap">
+    <div className="pf-stage games-page">
+      <Stripe />
+      <div className="pf-card">
         <ErrorNote error={error} fallback={t('loadFailed')} />
-        {data && <PlayerResults profile={data} />}
+        {!data && !error && <ProfileSkeleton />}
+        {data && (
+          <>
+            <Identity profile={data} own={data.user.id === user.id} />
+            <SeasonLevel season={data.season} />
+            <StatCells profile={data} />
+            <ProfileTabs profile={data} />
+          </>
+        )}
       </div>
-    </>
+    </div>
   );
 }

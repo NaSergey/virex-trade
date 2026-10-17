@@ -13,13 +13,16 @@ export type AuthMode = 'login' | 'register';
 /** Путь внутри продукта: один слэш, дальше не слэш (иначе это чужой домен). */
 const NEXT_PATH = /^\/(?!\/)/;
 
+/** Главная продукта — терминал (владелец 2026-10-17; до этого — обзор дневника). */
+const HOME = '/terminal';
+
 /**
  * Куда вести после входа. Принимается только путь внутри продукта —
  * начинающийся с одного слэша: без проверки `?next=//evil.example` браузер
  * прочтёт как адрес чужого сайта и уведёт туда сразу после ввода пароля.
  */
 export function safeNext(raw: string | null | undefined): string {
-  return raw && NEXT_PATH.test(raw) ? raw : '/overview';
+  return raw && NEXT_PATH.test(raw) ? raw : HOME;
 }
 
 /**
@@ -32,12 +35,16 @@ export function safeNext(raw: string | null | undefined): string {
  *
  * Ни карточки, ни рамки: форма держится линейками полей — тем же языком,
  * что и весь продукт.
+ *
+ * Поле «Имя» во входе не снимается, а сворачивается (`.auth-collapse`):
+ * смена режима не перестраивает форму рывком. Свёрнутое поле выключено и
+ * `inert` — не валидируется, не отправляется, фокус в него не попадает.
  */
 export function AuthForm({
   initialMode = 'register',
   mode: controlled,
   onModeChange,
-  next = '/overview',
+  next = HOME,
   refCode,
 }: {
   initialMode?: AuthMode;
@@ -82,7 +89,7 @@ export function AuthForm({
 
   /*
    * Демо — обычный вход обычной учёткой, просто поля заполняет кнопка. Ведёт
-   * на «Обзор», а не на `next`: в демо своих данных нет — показывать надо
+   * на главную, а не на `next`: в демо своих данных нет — показывать надо
    * витрину с начала, а не её случайный раздел.
    */
   const onDemo = async () => {
@@ -90,7 +97,7 @@ export function AuthForm({
     setDemoing(true);
     try {
       await login(DEMO_EMAIL, DEMO_PASSWORD);
-      router.replace('/overview');
+      router.replace(HOME);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('genericError'));
       setDemoing(false);
@@ -102,20 +109,23 @@ export function AuthForm({
   return (
     <div className="auth-form">
       <form onSubmit={onSubmit}>
-        {mode === 'register' && (
-          <Field label={t('nameLabel')} htmlFor={`${uid}-name`}>
-            <Input
-              id={`${uid}-name`}
-              full
-              required
-              minLength={2}
-              maxLength={40}
-              autoComplete="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </Field>
-        )}
+        <div className="auth-collapse" data-open={mode === 'register'} inert={mode !== 'register'}>
+          <div>
+            <Field label={t('nameLabel')} htmlFor={`${uid}-name`}>
+              <Input
+                id={`${uid}-name`}
+                full
+                required
+                disabled={mode !== 'register'}
+                minLength={2}
+                maxLength={40}
+                autoComplete="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </Field>
+          </div>
+        </div>
 
         <Field label={t('emailLabel')} htmlFor={`${uid}-email`}>
           <Input
@@ -156,12 +166,12 @@ export function AuthForm({
       {/* Демо стоит сразу под входом, а не в конце: человеку, который ещё не
           решил заводить аккаунт, посмотреть продукт нужно раньше, чем
           выбирать между входом и регистрацией. */}
-      <Button variant="default" style={{ marginTop: 'var(--s3)', width: '100%' }} onClick={onDemo} disabled={busy}>
+      <p className="auth-or" aria-hidden>
+        {t('or')}
+      </p>
+      <Button variant="default" style={{ width: '100%' }} onClick={onDemo} disabled={busy}>
         {demoing ? t('submitting') : t('demoButton')}
       </Button>
-      <p className="muted" style={{ marginTop: 'var(--s2)', textAlign: 'center' }}>
-        {t('demoNote')}
-      </p>
 
       <Button
         variant="bare"

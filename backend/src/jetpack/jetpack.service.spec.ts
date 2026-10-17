@@ -80,8 +80,9 @@ function setup() {
     }),
   };
   const gateway = { roomSize: jest.fn(async () => 1), emitPersonal: jest.fn(async () => undefined) };
-  const svc = new JetpackService(db as never, coins as never, gateway as never);
-  return { svc, gateway, st: () => state };
+  const battlePass = { award: jest.fn(async () => undefined) };
+  const svc = new JetpackService(db as never, coins as never, gateway as never, battlePass as never);
+  return { svc, gateway, battlePass, st: () => state };
 }
 
 const code = (e: unknown) => ((e as { getResponse?: () => { code?: string } }).getResponse?.() ?? {}).code;
@@ -139,6 +140,13 @@ describe('JetpackService', () => {
     await svc.bet('a', 10, 2);
     await jest.advanceTimersByTimeAsync(BET_MS + msTo(200) + 50);
     expect(st().credits).toEqual([expect.objectContaining({ userId: 'a', amount: 20, kind: 'JETPACK_WIN' })]);
+  });
+
+  it('ставка даёт опыт за раунд — той же транзакцией, по id раунда', async () => {
+    const { svc, battlePass } = setup();
+    await svc.view('a');
+    await svc.bet('a', 10);
+    expect(battlePass.award).toHaveBeenCalledWith(expect.anything(), 'a', 'game.jetpack', expect.any(String), 5);
   });
 
   it('вывод после краша — поздно, ставка в полёте — не принимается, вторая ставка — отказ', async () => {

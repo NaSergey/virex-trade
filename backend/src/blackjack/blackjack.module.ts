@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BattlePassCoreModule } from '../battlepass/battlepass-core.module';
 import { CoinsModule } from '../coins/coins.module';
 import { GamesModule } from '../games/games.module';
 import { BlackjackController } from './blackjack.controller';
@@ -10,7 +11,7 @@ import { BlackjackService } from './blackjack.service';
  * покера; см. спеку `2026-09-24-blackjack-design.md`.
  */
 @Module({
-  imports: [CoinsModule, GamesModule],
+  imports: [CoinsModule, GamesModule, BattlePassCoreModule],
   controllers: [BlackjackController],
   providers: [BlackjackService],
 })

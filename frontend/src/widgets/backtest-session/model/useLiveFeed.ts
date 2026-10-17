@@ -13,7 +13,8 @@ import {
   type ApiCandle,
   type Candle,
 } from '../lib/candles';
-import { liveAnchor, mergeTagged, nextChange, ofSymbol, type TaggedMinutes } from '../lib/live';
+import { liveAnchor, mergeMinutes, mergeTagged, nextChange, ofSymbol, type TaggedMinutes } from '../lib/live';
+import { recallFeed, rememberClosed, rememberMinutes, rememberSkew, type ClosedMemo } from './feedMemory';
 import type { Replay } from './useReplay';
 
 /** Как часто забирать живой хвост. Столько же, сколько тик серверного движка. */
@@ -22,6 +23,8 @@ const TAIL_MS = 2000;
 const CLOSED_LIMIT = 300;
 /** Кусок истории на одну догрузку при пане. */
 const HISTORY_CHUNK = 500;
+/** Минуток за раз — с запасом на двое суток (2880). */
+const MINUTES_LIMIT = 5000;
 
 const NO_CANDLES: Candle[] = [];
 const NO_ANCHORS: readonly number[] = [];
@@ -53,11 +56,42 @@ export interface LiveFeedSession {
 }
 
 /** Закрытые свечи таймфрейма монеты и граница, до которой они загружены. */
-interface ClosedState {
+interface ClosedState extends ClosedMemo {
   symbol: string;
   tf: number;
-  rows: Candle[];
-  anchor: number;
+}
+
+/** Закрытые свечи таймфрейма до «сейчас» и граница, правее которой свечи собираются из минуток. */
+async function loadClosed(source: LiveSource, symbol: string, tf: number): Promise<ClosedMemo> {
+  const rows = await source.candles(tf, { to: Date.now(), limit: CLOSED_LIMIT }, symbol);
+  return { rows, anchor: liveAnchor(rows, tf, Date.now()) };
+}
+
+/**
+ * Минутки для сборки текущей свечи: с полуночи UTC вчерашнего дня и до сейчас —
+ * из них собирается недоформированная свеча даже дневного таймфрейма.
+ */
+const loadDay = (source: LiveSource, symbol: string) =>
+  source.candles(1, { from: Math.floor(Date.now() / DAY) * DAY - DAY, limit: MINUTES_LIMIT }, symbol);
+
+/**
+ * Прогрев ленты: свечи монеты — в память (`feedMemory`), и терминал, открытый
+ * следом, рисует график сразу. Загружается ровно то, что лента загрузила бы
+ * на монтировании: закрытые свечи таймфрейма по умолчанию, минутки суток и
+ * хвост. Монету, которую лента уже видела, прогрев не трогает: её память
+ * свежее того, что он принёс бы.
+ */
+export async function prefetchLiveFeed(symbol: string, source: LiveSource = SESSION_SOURCE): Promise<void> {
+  if (recallFeed(source, symbol, DEFAULT_TIMEFRAME)) return;
+  const [closed, day, tail] = await Promise.all([
+    loadClosed(source, symbol, DEFAULT_TIMEFRAME),
+    loadDay(source, symbol),
+    source.tail(symbol),
+  ]);
+  if (recallFeed(source, symbol, DEFAULT_TIMEFRAME)) return;
+  rememberSkew(source, Date.now() - Date.parse(tail.serverTime));
+  rememberClosed(source, symbol, DEFAULT_TIMEFRAME, closed);
+  rememberMinutes(source, symbol, mergeMinutes(day, tail.minutes.map(fromApi)));
 }
 
 /**
@@ -76,6 +110,12 @@ interface ClosedState {
  * Лента показывает одну монету (`symbol`). Состояние помечено монетой, к
  * которой относится (`ofSymbol`): после переключения график пуст, пока не
  * приедут свечи новой, — а не рисует прежнюю монету под новым названием.
+ *
+ * Монтируется лента с того, что уже знает о монете (`feedMemory`): с прошлого
+ * захода на терминал или с прогрева. Терминал — главная страница, и
+ * вернувшийся на него не должен видеть заглушку графика (владелец
+ * 2026-10-17): прежние свечи видны сразу, свежие ложатся поверх — хвост
+ * сразу, разрыв догружается, закрытые свечи и минутки суток перечитываются.
  */
 export function useLiveFeed(
   detail: LiveFeedSession,
@@ -93,14 +133,17 @@ export function useLiveFeed(
   const { session } = detail;
   const endTime = session.endTime ? Date.parse(session.endTime) : null;
 
+  const [memo] = useState(() => recallFeed(source, symbol, DEFAULT_TIMEFRAME));
   const [tf, setTf] = useState<number>(DEFAULT_TIMEFRAME);
-  const [closedState, setClosedState] = useState<ClosedState | null>(null);
-  const [minutesState, setMinutesState] = useState<TaggedMinutes>({ symbol, rows: [] });
-  const [now, setNow] = useState<number>(() => Date.now());
+  const [closedState, setClosedState] = useState<ClosedState | null>(() =>
+    memo?.closed ? { symbol, tf: DEFAULT_TIMEFRAME, rows: memo.closed.rows, anchor: memo.closed.anchor } : null,
+  );
+  const [minutesState, setMinutesState] = useState<TaggedMinutes>(() => ({ symbol, rows: memo?.minutes ?? [] }));
+  const [now, setNow] = useState<number>(() => Date.now() - (memo?.skew ?? 0));
   const [error, setError] = useState<unknown>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   /** Часы браузера минус часы сервера. Момент ведём по серверным. */
-  const skew = useRef(0);
+  const skew = useRef(memo?.skew ?? 0);
   const loading = useRef(false);
   /** Момент в состоянии — от него часы считают следующий порог. */
   const shown = useRef(now);
@@ -138,6 +181,7 @@ export function useLiveFeed(
         const { serverTime, minutes: tail } = await source.tail(symbol);
         if (!alive) return;
         skew.current = Date.now() - Date.parse(serverTime);
+        rememberSkew(source, skew.current);
         const fresh = tail.map(fromApi);
         setMinutesState((prev) => {
           const same = prev.symbol === symbol ? prev.rows : [];
@@ -158,7 +202,7 @@ export function useLiveFeed(
 
     const fillGap = async (from: number, to: number) => {
       try {
-        const gap = await source.candles(1, { from, to, limit: 5000 }, symbol);
+        const gap = await source.candles(1, { from, to, limit: MINUTES_LIMIT }, symbol);
         if (alive) setMinutesState((prev) => mergeTagged(prev, symbol, gap));
       } catch {
         // Не догрузилось — на графике останется дыра, следующий круг попробует снова.
@@ -200,9 +244,8 @@ export function useLiveFeed(
     let alive = true;
     void (async () => {
       try {
-        const rows = await source.candles(tf, { to: Date.now(), limit: CLOSED_LIMIT }, symbol);
+        const { rows, anchor } = await loadClosed(source, symbol, tf);
         if (!alive) return;
-        const anchor = liveAnchor(rows, tf, Date.now());
         startTransition(() => setClosedState({ symbol, tf, rows, anchor }));
       } catch (e) {
         if (alive) setError(e);
@@ -213,18 +256,15 @@ export function useLiveFeed(
     };
   }, [enabled, session.id, tf, symbol, source]);
 
-  // Минутки для сборки текущей свечи: с полуночи UTC вчерашнего дня и до
-  // сейчас — из них собирается недоформированная свеча даже дневного
-  // таймфрейма. Один раз на монету; дальше их продлевает хвост. Переходом, как
-  // и история: слияние — функцией от прежнего, и срочный хвост, пришедший
-  // посреди, не теряется.
+  // Минутки суток (`loadDay`). Один раз на монету; дальше их продлевает хвост.
+  // Переходом, как и история: слияние — функцией от прежнего, и срочный хвост,
+  // пришедший посреди, не теряется.
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
     void (async () => {
-      const from = Math.floor(Date.now() / DAY) * DAY - DAY;
       try {
-        const rows = await source.candles(1, { from, limit: 5000 }, symbol);
+        const rows = await loadDay(source, symbol);
         if (alive) startTransition(() => setMinutesState((prev) => mergeTagged(prev, symbol, rows)));
       } catch (e) {
         if (alive) setError(e);
@@ -234,6 +274,16 @@ export function useLiveFeed(
       alive = false;
     };
   }, [enabled, session.id, symbol, source]);
+
+  // Всё, что лента узнала, — в память: следующий заход на терминал начнётся с
+  // этого, а не с заглушки. Догруженная пролистыванием история — тоже.
+  useEffect(() => {
+    if (enabled && closedState)
+      rememberClosed(source, closedState.symbol, closedState.tf, { rows: closedState.rows, anchor: closedState.anchor });
+  }, [enabled, source, closedState]);
+  useEffect(() => {
+    if (enabled && minutesState.rows.length > 0) rememberMinutes(source, minutesState.symbol, minutesState.rows);
+  }, [enabled, source, minutesState]);
 
   const loadMoreHistory = useCallback(async () => {
     if (historyLoading || closed.length === 0) return;

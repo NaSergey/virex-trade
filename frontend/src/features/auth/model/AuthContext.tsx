@@ -9,9 +9,8 @@ import {
   type ReactNode,
 } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { setClientTerminalHint } from '@/entities/terminal';
 import { API_BASE_URL } from '@/shared/config/api';
-import { refreshSession, resolveApiError, setUnauthenticatedHandler } from '@/shared/api/http';
+import { apiJson, refreshSession, resolveApiError, setUnauthenticatedHandler } from '@/shared/api/http';
 import { tokenStore } from '@/shared/lib/tokenStore';
 
 export interface User {
@@ -46,6 +45,14 @@ interface AuthContextValue {
    * вернул сам ответ загрузки.
    */
   setAvatar: (avatar: string | null) => void;
+  /** Новое имя — сразу в шапку: адрес сессии не меняется, перечитывать нечего. */
+  setName: (name: string) => void;
+  /**
+   * Смена пароля из настроек профиля. Сервер снимает все сессии и выдаёт этому
+   * устройству новую пару — она ложится сюда так же, как после входа.
+   * Неверный текущий пароль — ошибка с текстом, а не выход из аккаунта.
+   */
+  changePassword: (current: string, next: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name?: string, ref?: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -93,7 +100,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // logout значило бы закрыть одну дверь из двух — сюда попадают, когда
       // refresh-токен истёк или отозван, а вкладка осталась открытой.
       queryClient.clear();
-      setClientTerminalHint(false);
     });
     return () => setUnauthenticatedHandler(null);
   }, [queryClient]);
@@ -132,6 +138,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser((u) => (u ? { ...u, avatar } : u));
   }, []);
 
+  const setName = useCallback((name: string) => {
+    setUser((u) => (u ? { ...u, name } : u));
+  }, []);
+
+  const changePassword = useCallback(async (current: string, next: string) => {
+    // Через apiJson, а не голый fetch: запрос под токеном, и ошибка приходит
+    // переведённой по коду (PASSWORD_WRONG — 400, сессию не трогает).
+    const data = await apiJson<{ user: User; accessToken: string }>('/auth/password', {
+      method: 'POST',
+      body: JSON.stringify({ current, next }),
+    });
+    tokenStore.set(data.accessToken ?? null);
+    setUser(data.user ?? null);
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await fetch(`${API_BASE_URL}/auth/logout`, {
@@ -157,13 +178,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
      */
     await queryClient.cancelQueries();
     queryClient.clear();
-    // Подсказка «терминал доступен» — про ключ ушедшего пользователя: следующий
-    // вошедший в этом браузере иначе увидел бы чужой пункт в шапке до первого ответа.
-    setClientTerminalHint(false);
   }, [queryClient]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, setAvatar, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, setAvatar, setName, changePassword, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

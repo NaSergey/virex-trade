@@ -67,3 +67,11 @@ export function radarPoint(i: number, n: number, value: number, r: number, cx: n
 export function byFrequency<T extends { days90: number; played: number }>(games: T[]): T[] {
   return [...games].sort((a, b) => b.days90 - a.days90 || b.played - a.played);
 }
+
+/** Любимая игра — первая по частоте среди сыгранных, без скрытых (бектест). */
+export function favourite<T extends { id: string; days90: number; played: number }>(
+  games: T[],
+  hidden: ReadonlySet<string>,
+): T | null {
+  return byFrequency(games.filter((g) => g.played > 0 && !hidden.has(g.id)))[0] ?? null;
+}

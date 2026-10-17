@@ -13,6 +13,7 @@ import { DataVersionService } from '../prisma/data-version.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TournamentsService } from '../tournaments/tournaments.service';
 import { AggregateCacheService, cacheKey } from '../trades/aggregate-cache';
+import { demoLocked, isDemoEmail } from '../auth/demo-account';
 import { collapseToPositions } from '../trades/positions';
 import { achievementsOf } from './achievements';
 import { AVATAR_MAX_BYTES, avatarUrl, sniffImage } from './avatar';
@@ -30,8 +31,23 @@ import {
 /** Сколько строк журнала монет в ленте профиля. */
 export const FEED_LIMIT = 20;
 
-/** Сколько позиций на листе чужого журнала сделок. */
+/** Сколько позиций на листе чужого журнала сделок — и наибольший лист, который можно попросить. */
 export const TRADES_PAGE_SIZE = 20;
+
+/**
+ * Снимок открытой позиции старше этого не показывается: синк этого игрока не
+ * идёт (ключ снят, биржа отказывает), и позиция могла давно закрыться. Синк
+ * проходит всех раз в минуту, а пауза шлюза Bybit после бана IP — 11 минут:
+ * окно длиннее паузы, чтобы вкладка не пропадала посреди неё.
+ */
+export const POSITION_FRESH_MS = 15 * 60_000;
+
+/** Строки реестра открытых позиций со свежим снимком — общее условие признака и списка. */
+const freshPositions = (userId: string, now: Date) => ({
+  userId,
+  size: { not: null },
+  snapshotAt: { gte: new Date(now.getTime() - POSITION_FRESH_MS) },
+});
 
 /**
  * Поля чужой сделки — свой явный список, а не `select` журнала.
@@ -123,6 +139,7 @@ export class ProfileService {
       daily,
       rating,
       exchangeTrades,
+      openPosition,
     ] = await Promise.all([
         this.prisma.user.findUnique({
           where: { id: userId },
@@ -168,6 +185,9 @@ export class ProfileService {
         // по индексу все сделки человека ради числа, которое нигде не
         // показывается, — а первая строка берётся за постоянное время.
         this.prisma.trade.findFirst({ where: { userId }, select: { id: true } }),
+        // Признак вкладки «Открытые позиции» — так же первой строкой: число
+        // нигде не показывается.
+        this.prisma.openPositionSeen.findFirst({ where: freshPositions(userId, now), select: { id: true } }),
       ]);
     if (!user) throw notFound();
 
@@ -199,6 +219,8 @@ export class ProfileService {
        * сделок спрятано. Сам список отказывает отдельно.
        */
       hasExchangeTrades: user.showTrades && exchangeTrades !== null,
+      /** Есть ли открытые позиции в свежем снимке синка — вкладка «Открытые позиции». */
+      hasOpenPositions: user.showTrades && openPosition !== null,
       since: user.createdAt.toISOString(),
       games: gamesOf(actions, now),
       xpSeries: xpByDay(xp, now),
@@ -242,16 +264,20 @@ export class ProfileService {
    * каждый такой запрос. Запись протухает сама, когда синк поднимет версию
    * данных игрока, — отдельной инвалидации нет, как и у журнала.
    */
-  async trades(userId: string, page = 1) {
+  async trades(userId: string, page = 1, pageSize = TRADES_PAGE_SIZE) {
     if (!UUID.test(userId)) throw notFound();
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { showTrades: true } });
     if (!user) throw notFound();
     if (!user.showTrades) throw tradesHidden();
 
     const current = Math.max(1, Math.floor(page) || 1);
+    // Лист — столько строк, сколько влезает в окно смотрящего (профиль стоит в
+    // экран без прокрутки), но не больше прежнего: мусор и запредельное — 20.
+    const size =
+      Number.isInteger(pageSize) && pageSize >= 1 && pageSize <= TRADES_PAGE_SIZE ? pageSize : TRADES_PAGE_SIZE;
     // Своя область кэша, не `list`: набор полей здесь другой (без тегов и
     // контекста), и общий ключ отдал бы чужому профилю строку журнала.
-    const key = cacheKey('profile-trades', userId, await this.dataVersion.get(userId), { page: current });
+    const key = cacheKey('profile-trades', userId, await this.dataVersion.get(userId), { page: current, size });
     const hit = this.cache.get<ProfileTradesPage>(key);
     if (hit) return hit;
 
@@ -261,21 +287,75 @@ export class ProfileService {
       select: PUBLIC_TRADE_SELECT,
     });
     const positions = collapseToPositions(rows);
-    const from = (current - 1) * TRADES_PAGE_SIZE;
+    const from = (current - 1) * size;
 
     const out: ProfileTradesPage = {
       total: positions.length,
       page: current,
-      pageSize: TRADES_PAGE_SIZE,
+      pageSize: size,
       // positionId и tradeIds остаются на сервере: это ручки для разбора
       // позиции, а чужая строка не раскрывается.
-      trades: positions.slice(from, from + TRADES_PAGE_SIZE).map(({ positionId, tradeIds, ...trade }) => ({
+      trades: positions.slice(from, from + size).map(({ positionId, tradeIds, ...trade }) => ({
         ...trade,
         parts: tradeIds.length,
       })),
     };
     this.cache.set(key, out);
     return out;
+  }
+
+  /**
+   * Открытые позиции игрока — вкладка «Открытые позиции» его профиля.
+   *
+   * Снимок синка, а не биржа: журнал берёт позиции у биржи ключом владельца в
+   * момент запроса, но чужой профиль так делать не может — каждый просмотр
+   * любого профиля тратил бы общий бюджет шлюза Bybit. Синк и так читает
+   * позиции раз в минуту и пишет их в `open_positions_seen`; цена и P&L здесь
+   * отстают до минуты, и время снимка уходит наружу (`asOf`).
+   */
+  async positions(userId: string, now: Date = new Date()) {
+    if (!UUID.test(userId)) throw notFound();
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { showTrades: true } });
+    if (!user) throw notFound();
+    if (!user.showTrades) throw tradesHidden();
+
+    const rows = await this.prisma.openPositionSeen.findMany({
+      where: freshPositions(userId, now),
+      orderBy: { firstSeenAt: 'asc' },
+      select: {
+        symbol: true,
+        direction: true,
+        firstSeenAt: true,
+        size: true,
+        avgPrice: true,
+        markPrice: true,
+        positionValue: true,
+        unrealisedPnl: true,
+        leverage: true,
+        liqPrice: true,
+        snapshotAt: true,
+      },
+    });
+    const live = rows.filter((r) => parseFloat(r.size ?? '') > 0);
+    const asOf = live.reduce<Date | null>((m, r) => (r.snapshotAt && (!m || r.snapshotAt > m) ? r.snapshotAt : m), null);
+    // Пустое поле — `undefined`, а не null: форма та же, что у позиции биржи,
+    // где поле, которого биржа не сообщает, просто отсутствует.
+    const opt = (v: string | null) => v ?? undefined;
+    return {
+      asOf: asOf?.toISOString() ?? null,
+      positions: live.map((r) => ({
+        symbol: r.symbol,
+        direction: r.direction as 'long' | 'short',
+        size: r.size as string,
+        avgPrice: opt(r.avgPrice),
+        markPrice: opt(r.markPrice),
+        positionValue: opt(r.positionValue),
+        unrealisedPnl: opt(r.unrealisedPnl),
+        leverage: opt(r.leverage),
+        liqPrice: opt(r.liqPrice),
+        openedAt: r.firstSeenAt.toISOString(),
+      })),
+    };
   }
 
   /** Видят ли другие его сделки — состояние выключателя на странице настроек. */
@@ -286,6 +366,8 @@ export class ProfileService {
   }
 
   async setPrivacy(userId: string, showTrades: boolean) {
+    // Демо — витрина: посетитель не должен прятать её сделки от следующих.
+    await this.assertEditable(userId);
     const user = await this.prisma.user.update({
       where: { id: userId },
       data: { showTrades },
@@ -300,11 +382,14 @@ export class ProfileService {
    * закэшировал бы на год старую под новым адресом.
    */
   async setAvatar(userId: string, file: Buffer | undefined) {
+    // Первым: демо-аккаунт получает «аккаунт общий» при любом файле, а не
+    // разбор того, что именно в файле не так.
+    await this.assertEditable(userId);
     if (!file || file.length === 0) {
       throw new BadRequestException({ message: 'Файл не пришёл', code: 'AVATAR_EMPTY' });
     }
     if (file.length > AVATAR_MAX_BYTES) {
-      throw new PayloadTooLargeException({ message: 'Картинка больше 512 КБ', code: 'AVATAR_TOO_LARGE' });
+      throw new PayloadTooLargeException({ message: 'Картинка больше 64 КБ', code: 'AVATAR_TOO_LARGE' });
     }
     const mime = sniffImage(file);
     if (!mime) {
@@ -324,11 +409,28 @@ export class ProfileService {
   }
 
   async removeAvatar(userId: string) {
+    await this.assertEditable(userId);
     await this.prisma.$transaction([
       this.prisma.userAvatar.deleteMany({ where: { userId } }),
       this.prisma.user.update({ where: { id: userId }, data: { avatarAt: null } }),
     ]);
     return { avatar: null };
+  }
+
+  /**
+   * Новое имя из настроек профиля. Проверки — у `NameDto` (те же, что при
+   * регистрации); демо-аккаунт — 403: его имя видит каждый посетитель витрины.
+   */
+  async setName(userId: string, name: string) {
+    await this.assertEditable(userId);
+    return this.prisma.user.update({ where: { id: userId }, data: { name }, select: { name: true } });
+  }
+
+  /** Своё в профиле меняет кто угодно, кроме общего демо-аккаунта. */
+  private async assertEditable(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+    if (!user) throw notFound();
+    if (isDemoEmail(user.email)) throw demoLocked();
   }
 
   /** Байты картинки для отдачи; нет картинки или игрока — 404. */

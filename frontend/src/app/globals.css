@@ -871,10 +871,6 @@
     .terminal-chart { flex: 1; }
     .terminal-controls { flex: none; }
   }
-  /* Ширину строки внутри сетки держит сама колонка. Оставленный здесь
-     max-width лечил бы болезнь, которой нет, и оставлял дыру между концом
-     текста и линейкой между дорожками. */
-  .asym > .set { max-width: none; }
 
   /* ═══════════════ БЕКТЕСТ ═══════════════ */
   /* touch-action: none — иначе на телефоне перетаскивание стопа прокручивало бы страницу. */
@@ -2008,9 +2004,8 @@
      (width:auto = вся ширина родителя), что и .view-switch в терминале
      бектеста, только здесь родитель обычный блок, а не флекс, — деления без
      flex: 1 остаются по контенту, и рамка группы висит шире их с пустым
-     хвостом после последней кнопки. .set .seg (выбор биржи) специально ведёт
-     себя так же по умолчанию и растягивать его руками не нужно — трогаем
-     только контекст .field, а не .seg вообще. */
+     хвостом после последней кнопки. Трогаем только контекст .field, а не
+     .seg вообще. */
   .field .seg button {
     flex: 1;
     text-align: center;
@@ -2067,33 +2062,6 @@
     border: 0;
   }
 
-  /* Выбор биржи в настройках: семь делений не встают в ряд ни при каком
-     разрешении — немому ряду одних подписей нужно вдвое больше места, чем
-     колонке текста. Раньше перенос включался только на телефоне и на любом
-     более широком экране (даже 800–1000px) ряд молча уезжал за правый край
-     листа. Рамку при переносе несёт не контейнер, а сами деления: общая
-     рамка не умеет рисовать линию между рядами, а деление в начале второго
-     ряда давало бы у левого края двойную. Смежные линии кладутся друг на
-     друга сдвигом на пиксель — в обе стороны, сколько бы рядов ни
-     получилось, — а контейнер возвращает этот пиксель полем, чтобы ряд не
-     съехал относительно полей страницы.
-
-     Класс `wrap` — тот же приём для ряда, стоящего вне карточки: выбор биржи
-     переехал над колонками, и привязка правила к `.set` оставляла его на
-     узком экране обрезанным справа. */
-  .set .seg,
-  .seg.wrap {
-    flex-wrap: wrap;
-    border: 0;
-    padding: 0 0 1px 1px;
-  }
-  .set .seg button,
-  .seg.wrap button {
-    flex: 1 0 auto;
-    border: 1px solid var(--rule);
-    margin: 0 0 -1px -1px;
-    padding: 10px var(--s2);
-  }
 
   /* фильтр периода не заводит своей полосы — садится на первую строку страницы */
   .period {
@@ -2110,10 +2078,6 @@
     flex-wrap: wrap;
     padding: var(--s4) 0 var(--s3);
   }
-  /* Настройки без шапки страницы (заголовок и подпись сняты) всё равно не
-     должны прилипать первой строкой к липкой шапке сайта — тот же отступ,
-     что раньше давал `.pagehead`. */
-  .settings-top { padding-top: var(--s4); }
 
   input[type="date"],
   .in {
@@ -3384,7 +3348,7 @@
   }
   /* То самое исключение: скругления только внутри раздела и только у его
      собственных элементов. */
-  .games-page :is(.gcard, .gcard > img) {
+  .games-page :is(.gcard, .gcard > img, .gpromo) {
     border-radius: 12px !important;
   }
 
@@ -3412,141 +3376,155 @@
     min-height: calc(100dvh - var(--top-h) - 1px);
     padding: var(--s4) 0;
   }
-  /* Баннер — сцена над карточками, а не коробка: ни поля, ни рамки, ни
-     обрезки по краю. Свет софитов идёт сквозь него до карточек и уходит за
-     их кромку; коробка с фоном резала лучи о свой край (решение владельца
-     2026-10-01). Текста в нём нет — только свет; высота — то, что оставили
-     карточки, но не меньше, чем нужно лучу, чтобы было куда падать. */
-  .ghero {
-    /* Насколько лучи заходят за верхнюю кромку карточек. */
-    --ghero-spill: 72px;
+  /* Баннер — реклама сезона и наград над карточками (владелец 2026-10-17:
+     лучи софитов сняты). По образцу владельца — киберспортивный баннер:
+     слева заголовок, отсчёт и кнопка, справа ровная светлая наклонная полоса
+     (тот же приём и цвет, что .pf-stripe на профиле) с суммой сезона. Без
+     свечений, градиентов и теней. Высота — то, что оставили карточки. */
+  .gpromo {
     position: relative;
     flex: 1;
-    min-height: 120px;
+    min-height: 220px;
+    display: flex;
+    overflow: hidden;
+    background: var(--g-card);
   }
-
-  /* Софиты — колонки той же сетки, что у .gcards: ширина баннера и ряда
-     карточек одна (.gfirst). Лампы висят у самого верха экрана (над отступом
-     .gfirst), лучи кончаются за кромкой карточек — их хвост закрывают сами
-     карточки, а наружу выходит только размытый край. */
-  .ghero-rig {
+  .gpromo-band {
     position: absolute;
-    top: calc(var(--s4) * -1);
-    right: 0;
-    bottom: calc((var(--s3) + var(--ghero-spill)) * -1);
-    left: 0;
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: var(--s3);
-    pointer-events: none;
+    inset: 0;
+    background: #f2f0ea;
+    clip-path: polygon(66% 0, 100% 0, 100% 100%, 58% 100%);
   }
-  .ghero-beam {
+  .gpromo-in {
     position: relative;
-    transition: opacity 420ms ease;
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 28%;
+    align-items: center;
+    gap: var(--s5);
+    padding: var(--s4) var(--s5);
   }
-  .ghero-breathe,
-  .ghero-lit {
-    position: absolute;
-    inset: 0;
-    will-change: opacity;
+  .gpromo-txt {
+    max-width: 56ch;
   }
-  /* Дыхание — у каждого луча свой период и сдвиг: с общим ритмом рампа
-     мигала бы целиком. Кадр 0 % = кадр 100 %. */
-  .ghero-breathe {
-    opacity: 0.8;
-    animation: ghero-breathe var(--dur, 8s) ease-in-out var(--delay, 0s) infinite;
+  .gpromo-txt h2 {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    font-size: var(--t-xl);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    line-height: 1.1;
+    color: var(--g-ink);
   }
-  .ghero-beam:nth-child(1) { --dur: 8.2s; --delay: -1.4s; }
-  .ghero-beam:nth-child(2) { --dur: 9.6s; --delay: -5.2s; }
-  .ghero-beam:nth-child(3) { --dur: 7.4s; --delay: -3s; }
-  .ghero-beam:nth-child(4) { --dur: 10.8s; --delay: -7.6s; }
-  @keyframes ghero-breathe {
-    0%,
-    100% {
-      opacity: 0.6;
+  .gpromo-note {
+    margin: var(--s3) 0 var(--s4);
+    max-width: 52ch;
+    font-size: var(--t-s);
+    line-height: 1.55;
+    color: var(--g-ink-2);
+  }
+  .gpromo-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s4);
+  }
+  /* .btn.solid берёт цвет от --ink/--ground, которые переворачиваются с темой:
+     в светлой теме кнопка вышла бы тёмной на тёмном баннере. */
+  .gpromo-cta {
+    background: var(--g-ink);
+    color: var(--g-field);
+    border-color: var(--g-ink);
+  }
+  .gpromo-cta:hover,
+  .gpromo-cta:focus-visible {
+    background: #ffffff;
+    border-color: #ffffff;
+  }
+  .gpromo-clock {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-left: var(--s4);
+    border-left: 1px solid var(--g-line-2);
+  }
+  .gpromo-clock-l,
+  .gpromo-prize-l {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--g-ink-3);
+  }
+  .gpromo-clock-n {
+    font-family: var(--font-mono);
+    font-size: var(--t-l);
+    font-variant-numeric: tabular-nums;
+    color: var(--g-ink);
+  }
+  .gpromo-clock-n small {
+    margin-left: 1px;
+    font-size: var(--t-s);
+    color: var(--g-ink-2);
+  }
+  /* Правая колонка стоит на светлой полосе — краска тёмная. */
+  .gpromo-prize {
+    --coin-glow: transparent;
+    display: flex;
+    flex-direction: column;
+    gap: var(--s2);
+    color: #0a0a0a;
+  }
+  .gpromo-prize .gpromo-prize-l {
+    color: rgb(10 10 10 / 0.6);
+  }
+  .gpromo-prize-n {
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-mono);
+    font-size: clamp(40px, 4.6vw, 64px);
+    font-weight: 600;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .gpromo-prize-n .coin {
+    width: 0.62em;
+    height: auto;
+  }
+  .gpromo-bar {
+    height: 4px;
+    margin-top: var(--s2);
+    background: rgb(10 10 10 / 0.14);
+  }
+  .gpromo-bar > i {
+    display: block;
+    height: 100%;
+    background: #0a0a0a;
+  }
+  /* Узко: полоса не помещается наклоном — правая колонка встаёт под текст
+     светлым блоком во всю ширину. */
+  @media (max-width: 900px) {
+    .gpromo-band {
+      display: none;
     }
-    50% {
-      opacity: 1;
+    .gpromo-in {
+      grid-template-columns: minmax(0, 1fr);
+      padding: var(--s4);
     }
-  }
-  /* Конус: размытие на обёртке, форма — на её содержимом. clip-path
-     применяется после filter и на одном узле срезал бы размытые края. Внизу
-     конус чуть шире колонки — свет выходит за кромку карточки. */
-  .ghero-cone {
-    position: absolute;
-    inset: 0;
-    filter: blur(18px);
-  }
-  .ghero-cone::before {
-    content: '';
-    position: absolute;
-    inset: 0 -4%;
-    clip-path: polygon(42% 0, 58% 0, 100% 100%, 0 100%);
-    background: linear-gradient(
-      to bottom,
-      color-mix(in srgb, var(--beam) 32%, transparent),
-      color-mix(in srgb, var(--beam) 9%, transparent) 72%,
-      color-mix(in srgb, var(--beam) 6%, transparent)
-    );
-  }
-  /* Пятно — там, где луч ложится на карточку: эллипс по её верхней кромке,
-     нижнюю половину закрывает сама карточка. */
-  .ghero-pool {
-    position: absolute;
-    right: -6%;
-    bottom: calc(var(--ghero-spill) - 36px);
-    left: -6%;
-    height: 72px;
-    background: radial-gradient(closest-side, color-mix(in srgb, var(--beam) 38%, transparent), transparent);
-  }
-  .ghero-lamp {
-    position: absolute;
-    top: 0;
-    right: 41%;
-    left: 41%;
-    height: 2px;
-    background: color-mix(in srgb, var(--beam) 45%, #ffffff);
-  }
-  .ghero-lamp::after {
-    content: '';
-    position: absolute;
-    inset: -8px -24%;
-    background: var(--beam);
-    filter: blur(10px);
-    opacity: 0.55;
-  }
-  /* Подсветка под курсором — второй, яркий комплект луча поверх дыхания. */
-  .ghero-lit {
-    opacity: 0;
-    transition: opacity 360ms ease;
-  }
-  .ghero-lit .ghero-cone::before {
-    background: linear-gradient(
-      to bottom,
-      color-mix(in srgb, var(--beam) 55%, transparent),
-      color-mix(in srgb, var(--beam) 18%, transparent) 72%,
-      color-mix(in srgb, var(--beam) 12%, transparent)
-    );
-  }
-  .ghero-lit .ghero-pool {
-    background: radial-gradient(closest-side, color-mix(in srgb, var(--beam) 62%, transparent), transparent);
-  }
-  /* Карточка под курсором: её луч горит, остальные притухают. Порядок лучей
-     — порядок карточек (оба из GAMES), поэтому связь — по номеру. */
-  .gfirst:has(.gcard:is(:hover, :focus-visible)) .ghero-beam {
-    opacity: 0.35;
-  }
-  .gfirst:has(.gcard:nth-child(1):is(:hover, :focus-visible)) .ghero-beam:nth-child(1),
-  .gfirst:has(.gcard:nth-child(2):is(:hover, :focus-visible)) .ghero-beam:nth-child(2),
-  .gfirst:has(.gcard:nth-child(3):is(:hover, :focus-visible)) .ghero-beam:nth-child(3),
-  .gfirst:has(.gcard:nth-child(4):is(:hover, :focus-visible)) .ghero-beam:nth-child(4) {
-    opacity: 1;
-  }
-  .gfirst:has(.gcard:nth-child(1):is(:hover, :focus-visible)) .ghero-beam:nth-child(1) .ghero-lit,
-  .gfirst:has(.gcard:nth-child(2):is(:hover, :focus-visible)) .ghero-beam:nth-child(2) .ghero-lit,
-  .gfirst:has(.gcard:nth-child(3):is(:hover, :focus-visible)) .ghero-beam:nth-child(3) .ghero-lit,
-  .gfirst:has(.gcard:nth-child(4):is(:hover, :focus-visible)) .ghero-beam:nth-child(4) .ghero-lit {
-    opacity: 1;
+    .gpromo-clock {
+      padding-left: 0;
+      border-left: 0;
+    }
+    .gpromo-prize {
+      margin: 0 calc(var(--s4) * -1) calc(var(--s4) * -1);
+      padding: var(--s4);
+      background: #f2f0ea;
+    }
   }
 
   /* ── карточки игр ──────────────────────────────────────── */
@@ -3554,9 +3532,6 @@
      задана явно, а не auto-fit: на планшете авторазмещение давало три в ряд и
      одну сиротой во втором ряду. */
   .gcards {
-    /* Поверх баннера: хвосты софитов уходят за кромку карточек (.ghero-rig). */
-    position: relative;
-    z-index: 1;
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: var(--s3);
@@ -4474,8 +4449,8 @@
     padding-top: var(--s4);
     border-top: 1px solid var(--g-line);
   }
-  /* Лампа на линии — тот же знак, что софиты над карточками, только белая:
-     у монет нет своей игры, и краска одной из них была бы здесь чужой. */
+  /* Лампа на линии — белая: у монет нет своей игры, и краска одной из них
+     была бы здесь чужой. */
   .gcoins-lamp {
     position: absolute;
     top: -1px;
@@ -4551,24 +4526,10 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
       row-gap: var(--s5);
     }
-    /* Карточки встают 2×2 — софиты тоже в две колонки, над первым рядом. */
-    .ghero-rig {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    .ghero-beam:nth-child(n + 3) {
-      display: none;
-    }
   }
   @media (max-width: 767px) {
     .gcards {
       grid-template-columns: minmax(0, 1fr);
-    }
-    /* Телефон: одна колонка — один софит. */
-    .ghero-rig {
-      grid-template-columns: minmax(0, 1fr);
-    }
-    .ghero-beam:nth-child(n + 2) {
-      display: none;
     }
     .gcoins-grid {
       grid-template-columns: minmax(0, 1fr);
@@ -4838,15 +4799,6 @@
     border-right: 4px solid transparent;
     border-bottom: 7px solid var(--ink);
   }
-  /* ═══════════════ НАСТРОЙКИ ═══════════════ */
-  .set { max-width: 620px; }
-  /* Показ сделок (`PrivacyCard`) — второй блок правой дорожки, под Telegram:
-     отбивается линейкой, иначе два заголовка подряд читаются одной карточкой. */
-  .set-privacy {
-    margin-top: var(--s5);
-    padding-top: var(--s4);
-    border-top: 1px solid var(--hair);
-  }
   /* Справочная пара «подпись → значение»: единственная разметка на весь
      продукт — и в меню профиля, и в настройках, и в справках под графиками
      (.lookup собирает эти же пары в колонки). Подпись набирается общим .lbl,
@@ -4869,80 +4821,7 @@
     letter-spacing: 0.1em;
     color: var(--ink-2);
   }
-  .risk-zone {
-    border-top: 1px solid var(--loss);
-    padding-top: var(--s3);
-    margin-top: var(--s5);
-  }
 
-  /* ═══════════════ НАСТРОЙКА УВЕДОМЛЕНИЙ ═══════════════ */
-  /* Заголовок группы сигналов набирается общей подписью (.lbl), как «БИРЖА»
-     рядом: это та же роль — название блока полей, — и своего кегля ей не
-     нужно. Отбивка сверху крупнее, чем шаг между строками внутри группы, —
-     иначе три группы читаются одним списком из двенадцати пунктов. */
-  /* Счётчик стоит вплотную к подписи, а не у правого края колонки: разнесённые
-     по краям, они читаются как две отдельные надписи, и число оказывается
-     неизвестно о чём. */
-  .nt-cat {
-    margin: var(--s4) 0 var(--s2);
-    display: flex;
-    align-items: baseline;
-    gap: var(--s2);
-  }
-  .nt-cat:first-child { margin-top: var(--s3); }
-  .nt-cat b {
-    font-family: var(--font-mono);
-    font-size: 9px;
-    font-weight: 400;
-    color: var(--ink-3);
-    font-variant-numeric: tabular-nums;
-  }
-  /* Сигнал и его порог — одна строка: название слева, переключатель справа,
-     как «подпись → значение» в .kv. Порог отдельным блоком под строкой ломал
-     ритм — двенадцать пунктов превращались в лесенку из строк и плашек, где
-     не видно, где кончается один сигнал и начинается следующий. */
-  .nt-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--s3);
-    min-height: 30px;
-  }
-  /* Тумблер занимает всю свободную ширину, чтобы попасть по названию можно
-     было мимо самого чекбокса; порог прижат к правому краю. */
-  .nt-row .opt {
-    flex: 1;
-    min-width: 0;
-  }
-  /* Ряд делений — по содержимому. В карточке настроек деления растягиваются
-     (`.set .seg button` держит flex, чтобы ряд бирж заполнял ширину и
-     переносился рядами), но порог, растянутый на всю колонку, весит больше
-     самого сигнала, к которому относится. */
-  .set .nt-row .seg {
-    width: fit-content;
-    flex: none;
-  }
-  /* Мельче делений выбора биржи: у тех своя задача — заполнить ряд, — и их
-     `padding: 10px` перебивает `.seg-tight` по специфичности, из-за чего
-     строка с порогом становилась выше соседних и ломала ритм столбца. */
-  .set .nt-row .seg button {
-    padding: 3px var(--s2);
-    letter-spacing: 0.06em;
-  }
-  /* Общий выключатель тихих часов отбивается от списка сигналов линейкой:
-     он не тринадцатый сигнал, а правило поверх всех. */
-  .nt-quiet {
-    margin-top: var(--s4);
-    padding-top: var(--s3);
-    border-top: 1px solid var(--hair);
-  }
-  /* Проверка доставки и отвязка — служебные действия под настройкой, а не
-     часть её: отбиты сверху и стоят в ряд, а не встык друг к другу. */
-  .nt-acts {
-    display: flex;
-    gap: var(--s2);
-    margin-top: var(--s4);
-  }
   /* ═══════════════ ДОНАТЫ ═══════════════ */
   /* Живут внутри диалога (520px), поэтому ничего не тянется в ширину листа:
      QR и реквизиты идут столбиком — рядом колонка реквизитов рвала бы адрес
@@ -5283,6 +5162,34 @@
   .field .lbl {
     display: block;
     margin-bottom: var(--s1);
+  }
+
+  /* Форма входа (`AuthForm`): поле «Имя» во входе сворачивается по высоте,
+     а не снимается — смена режима не перестраивает форму рывком. */
+  .auth-collapse {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows 0.3s ease, opacity 0.2s ease;
+  }
+  .auth-collapse > div { min-height: 0; overflow: hidden; }
+  .auth-collapse[data-open='false'] { grid-template-rows: 0fr; opacity: 0; }
+  /* «или» между входом и демо — волосяная линейка с подписью посередине. */
+  .auth-or {
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+    margin: var(--s4) 0;
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .auth-or::before,
+  .auth-or::after {
+    content: '';
+    flex: 1;
+    border-top: 1px solid var(--hair);
   }
 
   /* ═══════════════ ОБУЧЕНИЕ ═══════════════ */
@@ -6366,25 +6273,251 @@
   color: var(--g-ink-3);
 }
 
-/* ── экран профиля: мазок ──
-   Ровная белая наклонная полоса на всю страницу под шапкой (`Stripe`):
-   без текстуры, теней и затемнений. */
+/* ── экран профиля: карточка игрока ──
+   Одно окно под шапкой без прокрутки (спека 2026-10-16): колонка карточки
+   слева, белая наклонная полоса справа — ровная, без текстуры, теней и
+   затемнений. Колонка — флекс сверху вниз, и содержимое вкладки (`.pf-pane`)
+   забирает остаток высоты; строк в нём столько, сколько влезает
+   (`ProfileTabs`). Условие карточки — `(min-width: 1100px)`, то же, что у
+   `ProfileTabs`; уже — колонка на всю ширину и страница листается (ниже). */
 .pf-stage {
   position: relative;
   /* Сцена уходит под шапку (как у джетпака): шапка полупрозрачная и
      размывает то, что под ней, поэтому белая полоса должна идти и под ней. */
   margin-top: calc(-1 * (var(--top-h) + 1px));
-  height: 100dvh;
+  /* Не меньше окна, а не ровно окно: блок вкладки не сжимается меньше трёх
+     строк (`--pf-pane-min`), и в низком окне страница чуть листается, а не
+     срезает таблицу. */
+  min-height: 100dvh;
   overflow: hidden;
 }
-.pfs-svg {
+/* Нижний край полосы — на 65 % ширины, верхний — на 80 %, справа уходит за
+   край. Колонка карточки кончается левее 65 % (`.pf-card`). */
+.pf-stripe {
   position: absolute;
   inset: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
+  background: #f2f0ea;
+  clip-path: polygon(80% 0, 104% 0, 89.5% 100%, 65% 100%);
 }
-.pfs-paint { fill: #f2f0ea; }
+.pf-card {
+  --pf-left: clamp(24px, 4.4vw, 64px);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(10px, 2vh, 28px);
+  width: min(866px, calc(65vw - var(--pf-left) - 16px));
+  min-height: 100dvh;
+  margin-left: var(--pf-left);
+  padding-top: calc(var(--top-h) + 1px + clamp(10px, 2.6vh, 40px));
+  padding-bottom: clamp(12px, 2.4vh, 32px);
+}
+.pf-card > * { flex: none; }
+
+/* Кто это: картинка, «в игре с», имя, значки. Размеры — от высоты окна:
+   ноутбук 1366×768 тоже обязан поместиться без прокрутки. */
+.pf-id { display: flex; gap: clamp(16px, 2vw, 28px); align-items: stretch; }
+.pf-ava {
+  flex: none;
+  align-self: flex-start;
+  width: clamp(72px, 13vh, 120px);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  background: var(--g-card);
+  font-family: var(--font-mono);
+  font-size: clamp(28px, 5vh, 48px);
+  color: var(--ink-2);
+}
+.pf-ava img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.pf-id-t { display: flex; flex-direction: column; min-width: 0; }
+.pf-name {
+  margin: 6px 0 0;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: clamp(40px, 8.5vh, 84px);
+  line-height: 0.95;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pf-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: auto 0 0;
+  padding: 8px 0 0;
+  list-style: none;
+}
+.pf-badge { display: inline-flex; color: var(--ink-3); opacity: 0.6; cursor: default; }
+.pf-badge.is-got { color: var(--ink); opacity: 1; }
+.pf-badge:focus-visible { outline: 1px solid var(--ink); outline-offset: 3px; }
+.pf-badges-n {
+  margin-left: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+/* Уровень сезона. */
+.pf-lvl { display: grid; grid-template-columns: auto 1fr; gap: 8px 28px; align-items: end; }
+.pf-lvl-n { font-family: var(--font-mono); font-size: clamp(32px, 5.6vh, 56px); line-height: 0.85; }
+.pf-lvl-n .lbl { display: block; margin-bottom: clamp(4px, 1.1vh, 10px); line-height: 1.2; }
+.pf-bar { display: block; height: 6px; background: var(--hair); }
+.pf-bar > i { display: block; height: 100%; background: var(--ink); }
+.pf-lvl-meta {
+  grid-column: 2;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s3);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.pf-lvl-meta > span { overflow: hidden; text-overflow: ellipsis; }
+.pf-lvl-meta b { font-weight: 400; color: var(--ink); }
+
+/* Четыре клетки между двумя линейками. */
+.pf-stats {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr 1.15fr 1.25fr;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+.pf-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: clamp(10px, 1.6vh, 14px) 18px clamp(10px, 1.4vh, 12px);
+  border-left: 1px solid var(--hair);
+}
+.pf-stat:first-child { padding-left: 0; border-left: 0; }
+.pf-stat:last-child { padding-right: 0; }
+.pf-stat-v {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: clamp(22px, 3.4vh, 30px);
+  line-height: 1;
+  white-space: nowrap;
+}
+.pf-stat-v .coin { height: 0.62em; align-self: center; }
+.pf-stat-v small { font-size: var(--t-xs); color: var(--ink-2); }
+.pf-stat-sub.is-wrap { white-space: normal; }
+.pf-stat-sub {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pf-spark { display: block; width: 100%; height: clamp(22px, 3.8vh, 34px); margin-top: auto; overflow: visible; }
+.pf-spark-base { stroke: var(--hair); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.pf-spark-area { fill: rgb(242 240 234 / 0.07); }
+.pf-spark-ln { fill: none; stroke: var(--ink); stroke-width: 1.25; vector-effect: non-scaling-stroke; }
+.pf-spark-dot { stroke: var(--ink); stroke-width: 5; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.pf-spark-b { fill: var(--ink-3); }
+.pf-spark-b.is-now { fill: var(--ink); }
+.pf-rec { display: flex; flex-direction: column; gap: 4px; margin: 2px 0 0; }
+.pf-rec > div { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.pf-rec dt { color: var(--ink-2); font-size: var(--t-s); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pf-rec dd { margin: 0; font-family: var(--font-mono); font-size: var(--t-s); white-space: nowrap; }
+
+/* Вкладки и их содержимое: остаток высоты, без прокрутки страницы. Ряд
+   вкладок на узком экране листается вбок сам, а не раздвигает страницу. */
+.pf-tabs { max-width: 100%; overflow-x: auto; }
+.pf-tabs .seg { flex: none; width: max-content; }
+.pf-card > .pf-pane { flex: 1 1 0; min-height: var(--pf-pane-min, 0); overflow: hidden; }
+/* Таблицы журнала держат свою мерку (760px), а колонка карточки на окне
+   1100–1250px уже: полоса прокрутки вбок съела бы последнюю строку листа. */
+.pf-pane .ledger { min-width: 0; }
+
+/* Плашки достижений: четыре колонки, а если три ряда не влезают — шесть
+   (`tileCols`). Полученная вывернута, как выбранный пункт `Seg`. */
+.pf-tiles {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pf-tile {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto 1fr;
+  gap: 4px 10px;
+  height: 76px;
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  color: var(--ink-3);
+  cursor: default;
+}
+.pf-tile > svg { grid-row: span 2; }
+.pf-tile-n { min-width: 0; color: var(--ink); font-size: var(--t-s); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pf-tile-p { align-self: end; display: flex; flex-direction: column; gap: 6px; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--ink-2); }
+.pf-tile-p .pf-bar { height: 3px; }
+.pf-tile-p .pf-bar > i { background: var(--ink-2); }
+.pf-tile.is-got { background: var(--ink); border-color: var(--ink); color: var(--ground); }
+.pf-tile.is-got .pf-tile-n,
+.pf-tile.is-got .pf-tile-p { color: var(--ground); }
+.pf-tile:focus-visible { outline: 1px solid var(--ink); outline-offset: 2px; }
+
+/* Шестерёнка настроек своего профиля — у правого края колонки, на уровне
+   имени (`ProfileSettings`). Та же кнопка, что у настроек графика терминала. */
+.pf-gear { flex: none; align-self: flex-start; margin-left: auto; color: var(--ink-2); }
+.pf-gear:hover { color: var(--ink); }
+
+/* Каркас карточки, пока едет ответ (`ProfileSkeleton`). */
+.pf-skel-id { justify-content: space-between; gap: 10px; flex: 1; }
+.pf-skel-rows { display: flex; flex-direction: column; gap: 12px; padding-top: 44px; }
+
+/* Низкое окно (ноутбук 1366×768 — это ~650px окна браузера): карточка
+   сжимает промежутки, поля и мини-графики, чтобы три строки вкладки влезли
+   без прокрутки. Выше 720px хватает и обычных мерок. */
+@media (min-width: 1100px) and (max-height: 720px) {
+  .pf-card {
+    gap: 9px;
+    padding-top: calc(var(--top-h) + 1px + 10px);
+    padding-bottom: 10px;
+  }
+  .pf-badges { padding-top: 4px; }
+  .pf-stat { gap: 3px; padding-block: 8px; }
+  .pf-spark { height: 18px; }
+}
+
+/* Узкое окно: колонка во всю ширину, полосы нет, страница листается, лист —
+   постоянный (`FALLBACK_ROWS`). */
+@media (max-width: 1099px) {
+  .pf-stage { min-height: 0; overflow: visible; }
+  .pf-stripe { display: none; }
+  .pf-card {
+    width: auto;
+    min-height: 0;
+    margin-inline: var(--pf-left);
+    padding-bottom: var(--s6);
+  }
+  .pf-card > .pf-pane { flex: none; min-height: 0; overflow: visible; }
+  .pf-stats { grid-template-columns: 1fr 1fr; }
+  .pf-stat:nth-child(3) { padding-left: 0; border-left: 0; }
+  .pf-stat:nth-child(n + 3) { border-top: 1px solid var(--hair); }
+  .pf-stat:nth-child(2) { padding-right: 0; }
+}
+@media (max-width: 700px) {
+  .pf-lvl { grid-template-columns: 1fr; }
+  .pf-lvl-meta { grid-column: 1; flex-direction: column; gap: 2px; white-space: normal; }
+  .pf-tiles { grid-template-columns: 1fr 1fr; }
+}
 
 /* Шапка гостя (`GuestBar`). */
 .pf-guest-gap { flex: 1; }
@@ -6411,11 +6544,6 @@
   gap: var(--s2);
   justify-content: center;
 }
-
-/* Что человек делал (`PlayerResults`) — под полосой, обычным листом страницы:
-   полоса стоит ровно в экран, а этот блок читают прокруткой. */
-.pf-page { padding-block: var(--s5) var(--s6); }
-.pf-results .seg { flex: none; }
 
 /* ── ОКНА НАГРАД ───────────────────────────────────────────────────────────
    ПЕРЕРАБОТАНО 2026-10-01 под монохром сайта: плоское тёмное поле без
@@ -8671,4 +8799,233 @@
     .jpg-target { font-size: 16px; }
     .jpg-side { order: 3; margin: 0 12px; }
   }
+}
+
+/* ═══════════════ ОКНО НАСТРОЕК (widgets/settings-dialog) ═══════════════
+   Одно окно на всё приложение, по образцу настроек Доты (владелец
+   2026-10-17): строка вкладок через «/» под шестерёнкой, разделы капсом с
+   линейкой, строки «подпись | значение» двумя плашками, три колонки.
+   Размер постоянный — смена вкладки не двигает края окна, длинная вкладка
+   листается внутри. Вне слоя: ширина и прокрутка `.dlg` лежат в
+   `components` и должны уступить. Плашки — альфой `--ink-rgb`, а не
+   `--band`: так они читаются в обеих темах. */
+.dlg.stg {
+  max-width: min(96vw, 1080px);
+  height: min(88dvh, 640px);
+  max-height: none;
+  overflow: hidden;
+  display: grid;
+  /* Колонка — не шире окна: без minmax(0, …) её распирала строка вкладок, и
+     на телефоне правый край окна уходил за экран. */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+.stg-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.stg-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: 0 var(--s4);
+  border-bottom: 1px solid var(--hair);
+  background: rgb(var(--ink-rgb) / 0.035);
+}
+.stg-gear { flex: none; color: var(--ink-2); }
+.stg-tabs {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.stg-tab {
+  padding: 15px 2px 14px;
+  border-bottom: 1px solid transparent;
+  font-family: var(--font-mono);
+  font-size: var(--t-s);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+.stg-tab:hover { color: var(--ink-2); }
+.stg-tab.is-on { color: var(--ink); border-bottom-color: var(--ink); }
+.stg-tab:focus-visible { outline: 1px solid var(--ink); outline-offset: -1px; }
+.stg-sep { font-family: var(--font-mono); font-size: var(--t-s); color: var(--ink-3); opacity: 0.6; }
+.stg-body { overflow-y: auto; padding: var(--s4); }
+.stg-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 32px;
+  row-gap: var(--s3);
+  align-items: start;
+}
+.stg-col { display: flex; flex-direction: column; gap: var(--s4); min-width: 0; }
+.stg-span2 { grid-column: span 2; }
+.stg-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--hair-2);
+  font-size: var(--t-s);
+  color: var(--ink-2);
+}
+.stg-sec { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.stg-h {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s2);
+  margin: 0 0 6px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--hair-2);
+  font-family: var(--font-mono);
+  font-size: var(--t-s);
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.stg-h b { font-size: 10px; font-weight: 400; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.stg-sec.is-risk .stg-h { color: var(--loss); border-bottom-color: var(--loss); }
+/* Строка: подпись слева, значение справа, обе — плашками встык с волосом
+   между ними, как клавиши в настройках Доты. */
+.stg-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 3px;
+  min-height: 30px;
+}
+/* Флажок справа занимает клетку под себя, подпись — остальное. */
+.stg-row.is-flag { grid-template-columns: minmax(0, 1fr) 44px; }
+.stg-k,
+.stg-v { display: flex; align-items: center; min-width: 0; }
+.stg-k {
+  padding: 6px 10px;
+  background: rgb(var(--ink-rgb) / 0.05);
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--ink-2);
+}
+.stg-v {
+  justify-content: center;
+  padding: 0 8px;
+  background: rgb(var(--ink-rgb) / 0.09);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  text-align: center;
+  color: var(--ink);
+}
+.stg-v:focus-within { outline: 1px solid var(--ink); outline-offset: -1px; }
+.stg-v .in { padding: 6px 0; border-bottom: 0; text-align: left; }
+.stg-v select.in { cursor: pointer; }
+.stg-k .opt-n { font-size: 12px; }
+.stg-k.opt { gap: 8px; cursor: pointer; }
+.stg-check { width: 14px; height: 14px; margin: 0; accent-color: var(--ink); cursor: pointer; }
+/* Строка списка бирж — кнопка: выбранная ярче, подпись цветом текста. */
+.stg-pick { width: 100%; padding: 0; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; }
+.stg-pick:hover .stg-k { color: var(--ink); }
+.stg-pick.is-on .stg-k,
+.stg-pick.is-on .stg-v { background: rgb(var(--ink-rgb) / 0.16); color: var(--ink); }
+.stg-pick:focus-visible { outline: 1px solid var(--ink); outline-offset: 1px; }
+.stg-hint { margin: 2px 0 0; font-size: 12px; line-height: 1.4; color: var(--ink-3); }
+.stg-hint.neg { color: var(--loss); }
+.stg-form { display: flex; flex-direction: column; gap: 4px; }
+.stg-wide { width: 100%; margin-top: 6px; }
+.stg-btns { display: flex; gap: 4px; margin-top: 6px; }
+.stg-btns .btn { flex: 1; }
+.stg-link { font-size: var(--t-s); color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+/* Блок игрока: картинка слева, строки справа. Подпись строки здесь уже
+   поля: справа от картинки места меньше, чем у колонки целиком. */
+.stg-me {
+  display: grid;
+  grid-template-columns: 136px minmax(0, 1fr);
+  gap: var(--s3);
+  align-items: start;
+}
+.stg-me-ava { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.stg-me-rows { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.stg-me .stg-row:not(.is-flag) { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
+/* Картинка — сама кнопка загрузки (владелец 2026-10-17): полоса «Сменить»
+   внизу видна всегда, под курсором она и рамка становятся цветом текста. */
+.stg-ava {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: rgb(var(--ink-rgb) / 0.09);
+  cursor: pointer;
+}
+.stg-ava img { width: 100%; height: 100%; object-fit: cover; }
+.stg-ava-cue {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 6px 0;
+  /* Полоса видна, но полупрозрачная (владелец 2026-10-17): картинка
+     просвечивает сквозь неё. Светлая, а не чёрная: низ заглушки чёрный, и
+     тёмная полоса на нём пропадала. Под курсором — чуть плотнее. */
+  background: rgb(242 240 234 / 0.16);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  text-align: center;
+  color: #f2f0ea;
+  transition: background-color 120ms ease;
+}
+.stg-ava:not(:disabled):is(:hover, :focus-visible) { outline: 1px solid var(--ink); outline-offset: -1px; }
+.stg-ava:not(:disabled):is(:hover, :focus-visible) .stg-ava-cue { background: rgb(242 240 234 / 0.28); }
+.stg-ava:disabled { cursor: default; }
+.stg-ava:disabled .stg-ava-cue { display: none; }
+.stg-ava[aria-busy="true"] img { opacity: 0.5; }
+.stg-ava-rm { align-self: center; font-size: 12px; }
+/* Сохранение в самом поле: короткая кнопка справа от ввода. */
+.stg-v .in { flex: 1; min-width: 0; }
+.stg-inline {
+  flex: none;
+  margin-left: 8px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink);
+  cursor: pointer;
+}
+.stg-inline:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 3px; }
+.stg-inline:disabled { color: var(--ink-3); cursor: default; }
+.stg-inline.is-done { color: var(--ink-3); cursor: default; }
+.stg-foot {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--s2);
+  padding: 10px var(--s4);
+  border-top: 1px solid var(--hair);
+}
+/* Уже 900px — одна колонка; вкладки листаются вбок, окно почти во весь экран. */
+@media (max-width: 900px) {
+  .dlg.stg { max-width: calc(100vw - 16px); height: min(94dvh, 100%); }
+  .stg-bar { padding: 0 var(--s3); }
+  .stg-body { padding: var(--s3); }
+  .stg-grid { grid-template-columns: minmax(0, 1fr); }
+  .stg-span2 { grid-column: auto; }
+  .stg-me { grid-template-columns: 96px minmax(0, 1fr); }
 }

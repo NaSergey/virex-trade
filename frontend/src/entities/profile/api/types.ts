@@ -78,6 +78,11 @@ export interface ProfileOverview {
    * «закрыл показ», и выключатель не сообщает, сколько сделок спрятано.
    */
   hasExchangeTrades: boolean;
+  /**
+   * Есть ли открытые позиции в свежем снимке синка — вкладка «Открытые
+   * позиции». Признак, а не число, и при закрытом показе — `false`.
+   */
+  hasOpenPositions: boolean;
   /** Рекорды — без потолка цели значков. */
   records: {
     /** Лучший вывод в джетпаке, множитель в сотых; 0 — выводов не было. */
@@ -110,4 +115,32 @@ export interface ProfileTrades {
   page: number;
   pageSize: number;
   trades: Trade[];
+}
+
+/**
+ * Открытая позиция на профиле (`GET /api/profile/<id>/positions`) — та же
+ * форма, что у позиции биржи в журнале (её рисует тот же `PositionsTable`),
+ * плюс время открытия по нашим часам. `ExchangePosition` сущность не
+ * импортирует — сущности друг друга не знают, совпадение здесь по форме.
+ *
+ * Это снимок синка (раз в минуту), а не биржа: чужой профиль не ходит к бирже
+ * ключом владельца. Числа — строками, как их отдаёт биржа.
+ */
+export interface ProfilePosition {
+  symbol: string;
+  direction: 'long' | 'short';
+  size: string;
+  avgPrice?: string;
+  markPrice?: string;
+  positionValue?: string;
+  unrealisedPnl?: string;
+  leverage?: string;
+  liqPrice?: string;
+  openedAt: string;
+}
+
+/** Снимок открытых позиций: `asOf` — когда он снят (null — свежих позиций нет). */
+export interface ProfilePositions {
+  asOf: string | null;
+  positions: ProfilePosition[];
 }

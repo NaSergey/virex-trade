@@ -1,16 +1,15 @@
 'use client';
 
-import { Suspense, useCallback, useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { AuthMode } from '@/features/auth';
 import { Wrap } from '@/shared/ui/Wrap';
 import './landing.css';
 import { useLenis } from './lib/useLenis';
 import { AboutScene } from './components/AboutScene';
-import { AuthParams } from './components/AuthParams';
 import { LandingHeader } from './components/LandingHeader';
 import { PlatformScene } from './components/PlatformScene';
-import { RegisterScene } from './components/RegisterScene';
+import { RegisterScene, RegisterSceneHold } from './components/RegisterScene';
 import { SceneBackground } from './components/SceneBackground';
 import { ScrollProgress } from './components/ScrollProgress';
 import { StepsScene } from './components/StepsScene';
@@ -32,13 +31,15 @@ import { TerminalScene } from './components/TerminalScene';
  *   «Что внутри» — пять разделов платформы и их настоящие экраны;
  *   «Регистрация» — форма; «Войти» в шапке ведёт к ней же в режиме входа.
  *
- * Переход на въезде ведёт сама сцена: дорога, экран встаёт из наклона, сход половин;
- * у первого экрана и терминала переходов нет. Шапка у всех одна
- * (`SceneHead`) и встаёт в одно место — сразу под меню.
+ * Переход на въезде ведёт сама сцена: дорога, экран встаёт из наклона,
+ * колонка входа поднимается; у первого экрана и терминала переходов нет.
+ * Шапка у всех одна (`SceneHead`) и встаёт в одно место — сразу под меню.
  *
  * Адрес `/?auth=login|register&next=…&ref=…` — сюда ведут гейт `proxy.ts`,
  * `AuthGuard` и старые ссылки с `/login` — сразу ставит форму в нужный режим
- * и прокручивает к ней.
+ * и прокручивает к ней. Адрес читает сама секция (`RegisterScene`), страница
+ * держит только выбор, сделанный здесь: «Войти» в шапке и переключатель
+ * формы (`mode`, пока ничего не нажато, — `null`, и решает адрес).
  *
  * Страница живёт вне группы `(app)`: рейки разделов и защиты сессии у неё нет
  * — вошедшего сюда не пускает `proxy.ts`, он уходит к своим сделкам.
@@ -47,26 +48,13 @@ export function LandingPage() {
   const t = useTranslations('landing');
   useLenis();
 
-  const [mode, setMode] = useState<AuthMode>('register');
-  const [next, setNext] = useState('/overview');
-  const [refCode, setRefCode] = useState<string | undefined>(undefined);
-
-  const onIntent = useCallback((intent: { mode: AuthMode | null; next: string; refCode?: string }) => {
-    setNext(intent.next);
-    setRefCode(intent.refCode);
-    if (!intent.mode) return;
-    setMode(intent.mode);
-    document.getElementById('register')?.scrollIntoView();
-  }, []);
+  const [mode, setMode] = useState<AuthMode | null>(null);
 
   return (
     <>
       <a href="#content" className="ls-skip">
         {t('skipToContent')}
       </a>
-      <Suspense fallback={null}>
-        <AuthParams onIntent={onIntent} />
-      </Suspense>
       <ScrollProgress />
       <LandingHeader onAuth={setMode} />
       <SceneBackground />
@@ -77,7 +65,9 @@ export function LandingPage() {
         <AboutScene />
         <TerminalScene />
         <StepsScene />
-        <RegisterScene mode={mode} onMode={setMode} next={next} refCode={refCode} />
+        <Suspense fallback={<RegisterSceneHold />}>
+          <RegisterScene mode={mode} onMode={setMode} />
+        </Suspense>
       </main>
 
       <footer className="lp-foot ls-dark">

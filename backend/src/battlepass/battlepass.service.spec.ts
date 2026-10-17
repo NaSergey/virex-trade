@@ -73,48 +73,86 @@ const service = (prisma: unknown = {}) => new BattlePassService(prisma as never,
 describe('BattlePassService.award', () => {
   it('пишет событие и двигает прогресс сезона', async () => {
     const db = fakeDb();
-    await service().award(db.tx as never, 'u1', 'game.backtest', 's1', 50, NOW);
+    await service().award(db.tx as never, 'u1', 'trade.open', 't1', 10, NOW);
 
     expect(db.events).toHaveLength(1);
-    expect(db.events[0]).toMatchObject({ userId: 'u1', season: SEASON, source: 'game.backtest', xp: 50 });
-    expect(db.progress.get(db.key('u1', SEASON))?.xp).toBe(50);
+    expect(db.events[0]).toMatchObject({ userId: 'u1', season: SEASON, source: 'trade.open', xp: 10 });
+    expect(db.progress.get(db.key('u1', SEASON))?.xp).toBe(10);
   });
 
   it('повтор того же события не начисляет второй раз и не бросает', async () => {
     const db = fakeDb();
-    await service().award(db.tx as never, 'u1', 'game.backtest', 's1', 50, NOW);
-    await expect(service().award(db.tx as never, 'u1', 'game.backtest', 's1', 50, NOW)).resolves.toBeUndefined();
+    await service().award(db.tx as never, 'u1', 'game.table', 'hand1', 5, NOW);
+    await expect(service().award(db.tx as never, 'u1', 'game.table', 'hand1', 5, NOW)).resolves.toBeUndefined();
 
     expect(db.events).toHaveLength(1);
-    expect(db.progress.get(db.key('u1', SEASON))?.xp).toBe(50);
+    expect(db.progress.get(db.key('u1', SEASON))?.xp).toBe(5);
   });
 
-  it('дневной потолок режет начисление и оставляет отметку с нулём', async () => {
+  it('дневной потолок режет последнее начисление до остатка', async () => {
     const db = fakeDb();
-    const cap = XP_SOURCES['game.backtest'].dailyCap!;
-    // Шесть сессий по 50 — это 300, весь дневной потолок.
-    for (let i = 0; i < cap / 50; i++) {
-      await service().award(db.tx as never, 'u1', 'game.backtest', `s${i}`, 50, NOW);
-    }
-    await service().award(db.tx as never, 'u1', 'game.backtest', 'over', 50, NOW);
+    const cap = XP_SOURCES['trade.open'].dailyCap!;
+    for (let i = 0; i < cap / 10 - 1; i++) await service().award(db.tx as never, 'u1', 'trade.open', `t${i}`, 10, NOW);
+    await service().award(db.tx as never, 'u1', 'trade.open', 'last', 25, NOW);
 
     expect(db.progress.get(db.key('u1', SEASON))?.xp).toBe(cap);
-    expect(db.events[db.events.length - 1]).toMatchObject({ refId: 'over', xp: 0 });
+    expect(db.events[db.events.length - 1]).toMatchObject({ refId: 'last', xp: 10 });
+  });
+
+  /**
+   * Частые источники — открытие позиции, раунд джетпака — упираются в потолок
+   * за минуты, и строка с нулём на каждое следующее событие копила бы таблицу
+   * без всякой пользы: опыта за них уже не будет до завтра.
+   */
+  it('сверх потолка событий больше не пишет', async () => {
+    const db = fakeDb();
+    const cap = XP_SOURCES['game.jetpack'].dailyCap!;
+    for (let i = 0; i < cap / 5; i++) await service().award(db.tx as never, 'u1', 'game.jetpack', `r${i}`, 5, NOW);
+    const written = db.events.length;
+    await service().award(db.tx as never, 'u1', 'game.jetpack', 'over', 5, NOW);
+
+    expect(db.events).toHaveLength(written);
+    expect(db.progress.get(db.key('u1', SEASON))?.xp).toBe(cap);
   });
 
   it('потолок одного источника не отнимает XP у другого', async () => {
     const db = fakeDb();
-    for (let i = 0; i < 6; i++) await service().award(db.tx as never, 'u1', 'game.backtest', `s${i}`, 50, NOW);
-    await service().award(db.tx as never, 'u1', 'journal.tag', 't1', 15, NOW);
+    for (let i = 0; i < 20; i++) await service().award(db.tx as never, 'u1', 'trade.open', `t${i}`, 10, NOW);
+    await service().award(db.tx as never, 'u1', 'game.table', 'h1', 5, NOW);
 
-    expect(db.progress.get(db.key('u1', SEASON))?.xp).toBe(315);
+    expect(db.progress.get(db.key('u1', SEASON))?.xp).toBe(205);
   });
 
   it('выключенный источник не начисляет и не оставляет следов', async () => {
     const db = fakeDb();
-    await service().award(db.tx as never, 'u1', 'game.table', 'seat1', 100, NOW);
+    await service().award(db.tx as never, 'u1', 'game.backtest', 's1', 50, NOW);
 
     expect(db.events).toHaveLength(0);
+  });
+
+  /** Разметка тегом опыта не даёт, но её событие — отметка активности для профиля. */
+  it('ноль опыта без потолка — событие пишется, прогресс не трогается', async () => {
+    const db = fakeDb();
+    await service().award(db.tx as never, 'u1', 'journal.tag', 't1', 0, NOW);
+
+    expect(db.events).toHaveLength(1);
+    expect(db.progress.has(db.key('u1', SEASON))).toBe(false);
+  });
+});
+
+describe('BattlePassService.awardSafe', () => {
+  it('начисляет своей транзакцией', async () => {
+    const db = fakeDb();
+    const prisma = { $transaction: jest.fn(async (fn: (tx: unknown) => unknown) => fn(db.tx)) };
+    await service(prisma).awardSafe('u1', 'trade.open', 'o1', 10, NOW);
+
+    expect(db.progress.get(db.key('u1', SEASON))?.xp).toBe(10);
+  });
+
+  /** Ордер уже на бирже: сбой начисления не должен превратиться в ответ «ордер не принят». */
+  it('сбой базы не бросает', async () => {
+    const prisma = { $transaction: jest.fn(async () => Promise.reject(new Error('db down'))) };
+    await expect(service(prisma).awardSafe('u1', 'trade.open', 'o1', 10, NOW)).resolves.toBeUndefined();
   });
 });
 
@@ -146,16 +184,22 @@ describe('BattlePassService.awardMany', () => {
 
   it('выключенный источник не начисляет', async () => {
     const db = fakeDb();
-    await service().awardMany(db.tx as never, 'u1', 'game.table', ['seat1'], 100, NOW);
+    await service().awardMany(db.tx as never, 'u1', 'game.backtest', ['s1'], 50, NOW);
 
     expect(db.events).toHaveLength(0);
   });
 
   it('источник с дневным потолком не поддерживается — обходить его пачкой нельзя', async () => {
     const db = fakeDb();
-    await expect(
-      service().awardMany(db.tx as never, 'u1', 'game.backtest', ['s1'], 50, NOW),
-    ).rejects.toThrow();
+    await expect(service().awardMany(db.tx as never, 'u1', 'trade.open', ['t1'], 10, NOW)).rejects.toThrow();
+  });
+
+  it('ноль опыта — события пишутся, прогресс не трогается', async () => {
+    const db = fakeDb();
+    await service().awardMany(db.tx as never, 'u1', 'journal.tag', ['t1', 't2'], 0, NOW);
+
+    expect(db.events).toHaveLength(2);
+    expect(db.progress.has(db.key('u1', SEASON))).toBe(false);
   });
 });
 
