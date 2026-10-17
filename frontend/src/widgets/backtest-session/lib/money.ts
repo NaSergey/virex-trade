@@ -453,3 +453,14 @@ export function levelImpact(direction: Direction, refPrice: number, levelPrice: 
   const usdt = unrealizedPnl(direction, refPrice, levelPrice, qty);
   return { pct, usdt };
 }
+
+/**
+ * Подпись уровня на графике: ход цены от точки отсчёта до уровня на объём, БЕЗ
+ * комиссии. Риск панели — тоже чистый ход до стопа (`previewSize`), и подпись
+ * стопа с комиссией показывала бы на ~6 % больше выбранного риска — читалось
+ * как «стоп не тот» (владелец 2026-10-17). Комиссию по-прежнему считают итог
+ * сделки на сервере, «Сейчас» и окна закрытия (`levelImpact`).
+ */
+export function levelMove(direction: Direction, refPrice: number, levelPrice: number, qty: number): number {
+  return (direction === 'long' ? levelPrice - refPrice : refPrice - levelPrice) * qty;
+}

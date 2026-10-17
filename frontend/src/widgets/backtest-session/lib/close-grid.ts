@@ -1,6 +1,6 @@
 import type { Direction } from '../api/types';
 import type { Level } from '../components/ReplayChart';
-import { fromScreen, gridPrices, toScreen, unrealizedPnl } from './money';
+import { fromScreen, gridPrices, levelMove, toScreen, unrealizedPnl } from './money';
 
 /**
  * Сетка фиксации позиции — лимиты закрытия на ценах от первого тейка до
@@ -228,7 +228,7 @@ export function closeGridLevels(trade: GridTrade, draft: CloseGridDraft, scale: 
       price,
       draggable: i === 0 || i === lastIndex,
       qty,
-      impactAt: (p: number) => unrealizedPnl(trade.direction, trade.entryPrice, fromScreen(p, scale), qty),
+      impactAt: (p: number) => levelMove(trade.direction, trade.entryPrice, fromScreen(p, scale), qty),
     };
   });
 }

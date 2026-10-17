@@ -13,6 +13,7 @@ import {
   impliedDirection,
   levelDirection,
   levelImpact,
+  levelMove,
   levelSliderRange,
   liquidationPrice,
   openPnl,
@@ -408,6 +409,14 @@ describe('levelImpact', () => {
     const { pct, usdt } = levelImpact('long', 100, 105, 50);
     expect(pct).toBeCloseTo(5, 6);
     expect(usdt).toBeGreaterThan(0);
+  });
+});
+
+describe('levelMove', () => {
+  it('только ход цены на объём, без комиссии: стоп лонга и шорта — ровно риск', () => {
+    expect(levelMove('long', 100, 98, 50)).toBeCloseTo(-100, 10);
+    expect(levelMove('short', 100, 102, 50)).toBeCloseTo(-100, 10);
+    expect(levelMove('long', 100, 105, 50)).toBeCloseTo(250, 10);
   });
 });
 

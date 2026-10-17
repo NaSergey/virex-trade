@@ -1,6 +1,6 @@
 import type { OrderTab } from '../components/OrderPanel';
 import type { Level } from '../components/ReplayChart';
-import { draftTakeFits, fromScreen, gridPrices, impliedDirection, levelImpact, previewGrid, previewSize } from './money';
+import { draftTakeFits, fromScreen, gridPrices, impliedDirection, levelMove, previewGrid, previewSize } from './money';
 import { entryGridTable } from './level-table';
 
 /** Черновики панели ордера числами: то, что уже разобрано из её полей. */
@@ -60,7 +60,7 @@ export function draftLevels({ tab, market, limit, scaled, bot, livePrice, screen
       impactAt: (p) => {
         const dir = p < screenPrice ? 'long' : 'short';
         const qty = previewSize(balance, market.risk, livePrice, fromScreen(p, scale), leverage, dir)?.qty;
-        return qty != null ? levelImpact(dir, livePrice, fromScreen(p, scale), qty).usdt : null;
+        return qty != null ? levelMove(dir, livePrice, fromScreen(p, scale), qty) : null;
       },
     });
   }
@@ -86,7 +86,7 @@ export function draftLevels({ tab, market, limit, scaled, bot, livePrice, screen
       qty: qty ?? undefined,
       impactAt: (p) => {
         const dir = impliedDirection(null, stop, p, screenPrice);
-        return dir != null && qty != null ? levelImpact(dir, livePrice, fromScreen(p, scale), qty).usdt : null;
+        return dir != null && qty != null ? levelMove(dir, livePrice, fromScreen(p, scale), qty) : null;
       },
     });
   }
@@ -108,7 +108,7 @@ export function draftLevels({ tab, market, limit, scaled, bot, livePrice, screen
       const levelReal = fromScreen(p, scale);
       const dir = levelReal < entryReal ? 'long' : 'short';
       const qty = previewSize(balance, limit.risk, entryReal, levelReal, leverage, dir)?.qty;
-      return qty != null ? levelImpact(dir, entryReal, levelReal, qty).usdt : null;
+      return qty != null ? levelMove(dir, entryReal, levelReal, qty) : null;
     };
     if (limit.stop > 0) list.push({ id: 'draft-limit-stop', kind: 'stop', price: limit.stop, draggable: true, qty: limitQty, impactAt });
     // Якорь тейка — цена входа, а пока её не задали, текущая цена: тот же приём,
@@ -174,7 +174,7 @@ export function draftLevels({ tab, market, limit, scaled, bot, livePrice, screen
       const levelReal = fromScreen(p, scale);
       const dir = levelReal < Math.min(...pricesReal) ? 'long' : 'short';
       const grid = previewGrid(balance, scaled.risk, pricesReal, levelReal, leverage, dir);
-      return grid ? levelImpact(dir, grid.avgEntry, levelReal, grid.qty).usdt : null;
+      return grid ? levelMove(dir, grid.avgEntry, levelReal, grid.qty) : null;
     };
     if (scaled.stop > 0) list.push({ id: 'draft-grid-stop', kind: 'stop', price: scaled.stop, draggable: true, impactAt });
     if (scaled.take != null && scaled.take > 0) {

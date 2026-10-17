@@ -26,9 +26,10 @@ describe('draftLevels', () => {
     // 1 % от 10 000 = 100 USDT; до стопа 500 → 0.2 монеты.
     expect(levels[0].qty).toBeCloseTo(0.2, 10);
     expect(levels[0].draggable).toBe(true);
-    // Тейк в 1000 выше при 0.2 монеты — плюс двести без комиссий.
-    expect(levels[1].impactAt!(61_000)).toBeGreaterThan(180);
-    expect(levels[1].impactAt!(61_000)).toBeLessThan(200);
+    // Подписи у линий — без комиссии: стоп — ровно риск панели, тейк в 1000 выше
+    // при 0.2 монеты — ровно плюс двести.
+    expect(levels[0].impactAt!(59_500)).toBeCloseTo(-100, 6);
+    expect(levels[1].impactAt!(61_000)).toBeCloseTo(200, 6);
   });
 
   it('тейк не по ту сторону от стопа не рисуется', () => {

@@ -180,7 +180,8 @@ describe('closeGridLevels', () => {
   it('объём — части остатка, результат — от входа позиции', () => {
     const levels = closeGridLevels(trade, draft, 2);
     expect(levels.reduce((s, l) => s + (l.qty ?? 0), 0)).toBeCloseTo(0.9, 10);
-    expect(levels[0].impactAt?.(210)).toBeCloseTo(unrealizedPnl('long', 100, 105, 0.3), 10);
+    // Подпись у линии — без комиссии: (105 − 100) × 0.3.
+    expect(levels[0].impactAt?.(210)).toBeCloseTo(1.5, 10);
   });
 
   it('один ордер — одна линия, и она тянется', () => {

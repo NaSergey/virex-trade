@@ -40,7 +40,7 @@ import {
   fromScreen,
   gridPrices,
   levelDirection,
-  levelImpact,
+  levelMove,
   liquidationPrice,
   openPnl,
   previewSize,
@@ -627,7 +627,7 @@ export function Terminal({
     // две, у каждой свои уровни.
     for (const trade of chartTrades) {
       const remaining = trade.qty - trade.closedQty;
-      const impactAt = (qty: number) => (p: number) => levelImpact(trade.direction, trade.entryPrice, fromScreen(p, scale), qty).usdt;
+      const impactAt = (qty: number) => (p: number) => levelMove(trade.direction, trade.entryPrice, fromScreen(p, scale), qty);
       const pending = pendingLevel?.tradeId === trade.id ? pendingLevel : null;
       list.push({
         id: `entry-${trade.id}`,
