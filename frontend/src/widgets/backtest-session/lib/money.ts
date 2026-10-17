@@ -31,37 +31,6 @@ export function gridPrices(lower: number, upper: number, count: number): number[
   return Array.from({ length: n }, (_, i) => lower + step * i);
 }
 
-/**
- * Предпросмотр сетки целиком, если исполнятся все уровни: риск общий,
- * поровну по уровням (`positionSize`/`previewSize` — та же формула, что на
- * каждом уровне отдельно посчитает сервер через openTrade/addToTrade).
- */
-export function previewGrid(
-  balance: number,
-  riskPctTotal: number,
-  prices: number[],
-  stop: number,
-  leverage: number,
-  direction: Direction,
-) {
-  if (prices.length === 0) return null;
-  const riskPerLevel = riskPctTotal / prices.length;
-  let qty = 0;
-  let notional = 0;
-  let riskUsdt = 0;
-  for (const price of prices) {
-    const one = previewSize(balance, riskPerLevel, price, stop, leverage, direction);
-    if (!one) return null;
-    qty += one.qty;
-    notional += one.notional;
-    riskUsdt += one.riskUsdt;
-  }
-  // Средний вход — по объёму, а не простое среднее цен: доли риска равны, а
-  // размер каждого уровня свой (он же риск / расстояние до стопа), и дальние
-  // от стопа уровни весят в позиции меньше.
-  return { qty, notional, riskUsdt, margin: notional / leverage, avgEntry: notional / qty };
-}
-
 /** Ликвидация — упрощённо, без поддерживающей маржи и комиссий: long ниже входа, short выше, на 1/leverage. */
 export function liquidationPrice(direction: Direction, entry: number, leverage: number): number {
   return direction === 'long' ? entry * (1 - 1 / leverage) : entry * (1 + 1 / leverage);
@@ -416,28 +385,6 @@ export function applyEntryChange(
   };
 
   return { entry: nextEntry, stop: moveLevel('stop', prev.stop), take: moveLevel('take', prev.take) };
-}
-
-/**
- * Прибыль сетки, если все уровни исполнятся и цена дойдёт до тейка: сумма по
- * уровням, размер каждого — как в `previewGrid` (риск поровну).
- */
-export function gridTakeProfit(
-  balance: number,
-  riskPctTotal: number,
-  prices: number[],
-  stop: number,
-  take: number,
-  direction: Direction,
-): number | null {
-  if (prices.length === 0) return null;
-  let total = 0;
-  for (const price of prices) {
-    const one = previewSize(balance, riskPctTotal / prices.length, price, stop, 1, direction);
-    if (!one) return null;
-    total += levelImpact(direction, price, take, one.qty).usdt;
-  }
-  return total;
 }
 
 /**

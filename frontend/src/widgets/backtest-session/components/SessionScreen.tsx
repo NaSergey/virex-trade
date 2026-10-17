@@ -27,7 +27,7 @@ import { terminalIntl, timeLabelFormats } from '../lib/time-labels';
 import { CLOSE_GRID_FIRST_ID, CLOSE_GRID_LAST_ID, closeGridLevels, initCloseGrid, type CloseGridDraft } from '../lib/close-grid';
 import { draftLevels } from '../lib/draft-levels';
 import { atrOf, findRanges, toChartRanges, type ChartRange } from '../lib/ranges';
-import { entryGridTable } from '../lib/level-table';
+import { entryGridTable, gridOrderCount } from '../lib/level-table';
 import { BOT_ENABLED, BOT_MAX_LEVELS } from '../lib/bot-grid';
 import { isPartialExit } from '../lib/fills';
 import {
@@ -549,7 +549,7 @@ export function Terminal({
   const sTakeN = scaledDraft.take.trim() ? Number(scaledDraft.take) : null;
   const sUpperN = scaledDraft.upper.trim() ? Number(scaledDraft.upper) : null;
   const sLowerN = scaledDraft.lower.trim() ? Number(scaledDraft.lower) : null;
-  const sCountN = Math.min(10, Math.max(1, Math.round(Number(scaledDraft.count) || 1)));
+  const sCountN = gridOrderCount(scaledDraft.count);
 
   const screenCandles = useMemo(() => replay.candles.map((c) => scaleCandle(c, scale)), [replay.candles, scale]);
   const chartRanges = useMemo<ChartRange[]>(() => {

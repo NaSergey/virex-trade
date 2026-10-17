@@ -11,7 +11,7 @@ import { Seg } from '@/shared/ui/Seg';
 import { Slider } from '@/shared/ui/Slider';
 import { cn } from '@/shared/lib/utils/css';
 import { fmtPctSigned, formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
-import { entryGridTable, type EntryGridRow } from '../lib/level-table';
+import { entryGridTable, gridAvgEntry, gridOrderCount, type EntryGridRow } from '../lib/level-table';
 import { EditCell, SplitHeader, withPin } from './EditCell';
 import type { Direction } from '../api/types';
 import {
@@ -100,9 +100,6 @@ export interface ScaledDraft {
 /** Какой тикет открыт. Живёт у родителя: переключение чистит уровни
  * остальных вкладок, чтобы их линии не оставались на графике. */
 export type OrderTab = 'market' | 'limit' | 'scaled' | 'bot';
-
-const MIN_GRID_ORDERS = 1;
-const MAX_GRID_ORDERS = 30;
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const MIN_LEVERAGE = 1;
@@ -359,7 +356,7 @@ export function OrderPanel({
   const sRisk = Number(scaledDraft.risk);
   const sStop = Number(scaledDraft.stop);
   const sTake = scaledDraft.take.trim() ? Number(scaledDraft.take) : null;
-  const sCount = clamp(Math.round(Number(scaledDraft.count) || MIN_GRID_ORDERS), MIN_GRID_ORDERS, MAX_GRID_ORDERS);
+  const sCount = gridOrderCount(scaledDraft.count);
   const sUpper = scaledDraft.upper.trim() ? Number(scaledDraft.upper) : null;
   const sLower = scaledDraft.lower.trim() ? Number(scaledDraft.lower) : null;
   const sDirection = screenPrice != null ? impliedDirection(null, sLower ?? sUpper ?? 0, sUpper, screenPrice) : null;
@@ -381,12 +378,24 @@ export function OrderPanel({
     sRange && sUpperVal != null && screenPrice != null ? curvedSliderPos(sUpperVal, sRange.min, sRange.max, screenPrice) : null;
   const sLowerPos =
     sRange && sLowerVal != null && screenPrice != null ? curvedSliderPos(sLowerVal, sRange.min, sRange.max, screenPrice) : null;
-  // Средняя точка входа сетки — если исполнятся оба уровня, это и есть цена,
+  // Реальные цены уровней — для предпросмотра; те же самые пойдут на сервер
+  // при отправке (см. onOpenScaled в SessionScreen).
+  const sPrices =
+    price != null && sUpperVal != null && sLowerVal != null
+      ? gridPrices(Math.min(sLowerVal, sUpperVal), Math.max(sLowerVal, sUpperVal), sCount).map((p) => fromScreen(p, scale))
+      : [];
+  // Средняя точка входа сетки — если исполнятся все уровни, это и есть цена,
   // от которой отсчитывается риск: тот же приём, что у screenPrice в Market,
-  // только сама точка не рыночная, а середина верх/низ входа. Общий якорь на
-  // стоп и тейк, не свой у каждого: levelSliderRange сама разводит их по
-  // разные стороны от него (см. belowSide там же).
-  const sAvgEntry = sUpperVal != null && sLowerVal != null ? (sUpperVal + sLowerVal) / 2 : null;
+  // только сама точка не рыночная. Средняя — по объёму уровней (`gridAvgEntry`),
+  // её двигают распределение и закрепления; середина верх/низ — только пока
+  // сторона сетки не ясна. Общий якорь на стоп и тейк, не свой у каждого:
+  // levelSliderRange сама разводит их по разные стороны от него (см. belowSide там же).
+  const sAvgReal =
+    sPrices.length > 0 && sDirection
+      ? gridAvgEntry({ prices: sPrices, direction: sDirection, qtyPins: scaledDraft.qtyPins, tilt: scaledDraft.tilt })
+      : null;
+  const sAvgEntry =
+    sAvgReal != null ? toScreen(sAvgReal, scale) : sUpperVal != null && sLowerVal != null ? (sUpperVal + sLowerVal) / 2 : null;
   const sStopAnchor = sAvgEntry ?? screenPrice;
   const sTakeAnchor = sAvgEntry ?? screenPrice;
   const sStopRange = sStopAnchor != null ? levelSliderRange('stop', sStopAnchor, sDirection) : null;
@@ -409,12 +418,6 @@ export function OrderPanel({
   const sTakeSliderMax = sTakeRange && sTakeAnchor != null && sTakeRange.max === sTakeAnchor ? 0 : 100;
   const sTakePct = sTakeAnchor ? (((sTakeSet ? sTake : sTakeAnchor) - sTakeAnchor) / sTakeAnchor) * 100 : null;
   const sTakeFits = !sTakeSet || sTakeAnchor == null || draftTakeFits(sStop, sTake, sTakeAnchor);
-  // Реальные цены уровней — только для предпросмотра; те же самые пойдут на
-  // сервер при отправке (см. onOpenScaled в SessionScreen).
-  const sPrices =
-    price != null && sUpperVal != null && sLowerVal != null
-      ? gridPrices(Math.min(sLowerVal, sUpperVal), Math.max(sLowerVal, sUpperVal), sCount).map((p) => fromScreen(p, scale))
-      : [];
   // Таблица уровней: объёмы по долям (закреплённые руками держат своё) и цели
   // стопа после исполнения; итог панели считается по ней — то, что уйдёт на сервер.
   const sTable =

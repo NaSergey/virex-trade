@@ -107,6 +107,68 @@ describe('draftLevels', () => {
     expect(noStop.filter((l) => l.kind === 'gridStep' || l.kind === 'gridUpper').every((l) => l.qty == null)).toBe(true);
   });
 
+  it('«Лимит»: тейк подписан прибылью от входа на объём по стопу, стоп — риском', () => {
+    const levels = draftLevels({ ...base, tab: 'limit', limit: { entry: 59_800, stop: 59_400, take: 60_600, risk: 1 } });
+    const at = (id: string) => levels.find((l) => l.id === id)!;
+    // 0.25 монеты (до стопа 400): тейк в 800 выше входа — плюс двести, стоп — минус сто.
+    expect(at('draft-limit-take').impactAt!(60_600)).toBeCloseTo(200, 6);
+    expect(at('draft-limit-stop').impactAt!(59_400)).toBeCloseTo(-100, 6);
+    // Тейк тянут — объём остаётся от стопа.
+    expect(at('draft-limit-take').impactAt!(61_000)).toBeCloseTo(300, 6);
+  });
+
+  it('«Сетка»: тейк подписан прибылью всей сетки по её таблице, распределение её меняет', () => {
+    const grid = (tilt: number) =>
+      draftLevels({
+        ...base,
+        tab: 'scaled',
+        scaled: { upper: 59_900, lower: 59_600, stop: 59_300, take: 61_000, count: 3, risk: 1, qtyPins: {}, tilt },
+      });
+    const take = (tilt: number) => grid(tilt).find((l) => l.id === 'draft-grid-take')!.impactAt!(61_000)!;
+    const stop = (tilt: number) => grid(tilt).find((l) => l.id === 'draft-grid-stop')!.impactAt!(59_300)!;
+    // Ровно: риск 100 поровну по объёму, уровни 59 900/59 750/59 600 до стопа 600/450/300.
+    const q = 100 / (600 + 450 + 300);
+    expect(take(0)).toBeCloseTo(q * (1100 + 1250 + 1400), 6);
+    expect(stop(0)).toBeCloseTo(-100, 6);
+    // К верху объём выше — средняя дальше от тейка, прибыль меньше; стоп — тот же риск.
+    expect(take(100)).toBeLessThan(take(0));
+    expect(take(-100)).toBeGreaterThan(take(0));
+    expect(stop(100)).toBeCloseTo(-100, 6);
+  });
+
+  it('«Сетка» шорт: тейк ниже уровней — прибыль, стоп выше — риск', () => {
+    const levels = draftLevels({
+      ...base,
+      tab: 'scaled',
+      scaled: { upper: 60_400, lower: 60_100, stop: 60_700, take: 59_000, count: 2, risk: 1, qtyPins: {}, tilt: 0 },
+    });
+    const at = (id: string) => levels.find((l) => l.id === id)!;
+    expect(at('draft-grid-take').impactAt!(59_000)!).toBeGreaterThan(0);
+    expect(at('draft-grid-stop').impactAt!(60_700)).toBeCloseTo(-100, 6);
+  });
+
+  it('«Сетка»: сторона — от положения ордеров к цене, стоп внутри сетки знаки не переворачивает', () => {
+    // Лонг-сетка ниже цены 60 000; стоп заехал между ордерами 59 000/59 450/59 900.
+    const levels = draftLevels({
+      ...base,
+      tab: 'scaled',
+      scaled: { upper: 59_900, lower: 59_000, stop: 59_500, take: 61_000, count: 3, risk: 1, qtyPins: {}, tilt: 0 },
+    });
+    expect(levels.find((l) => l.id === 'draft-grid-take')!.impactAt!(61_000)!).toBeGreaterThan(0);
+  });
+
+  it('«Сетка»: больше десяти ордеров — на графике все, до тридцати', () => {
+    const steps = (count: number) =>
+      draftLevels({
+        ...base,
+        tab: 'scaled',
+        scaled: { upper: 59_900, lower: 59_000, stop: 58_500, take: null, count, risk: 1, qtyPins: {}, tilt: 0 },
+      }).filter((l) => l.kind === 'gridStep');
+    expect(steps(20)).toHaveLength(18);
+    expect(steps(50)).toHaveLength(28);
+    expect(steps(20).every((l) => l.qty != null && l.qty > 0)).toBe(true);
+  });
+
   it('«Сетка»: распределение к верху — у верхнего ордера объём больше нижнего', () => {
     const levels = draftLevels({
       ...base,

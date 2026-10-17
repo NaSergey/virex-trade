@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { entryGridTable, gridLevelQtys, gridRiskPcts, levelShares, stopAfterBlocks, distributionWeights } from './level-table';
+import { entryGridTable, gridAvgEntry, gridLevelQtys, gridOrderCount, gridRiskPcts, levelShares, stopAfterBlocks, distributionWeights } from './level-table';
 
 describe('levelShares', () => {
   it('без закреплений — поровну', () => {
@@ -156,5 +156,30 @@ describe('распределение объёма по цене', () => {
     expect(even.rows[0].qty).toBeCloseTo(even.rows[2].qty, 9);
     const risk = (rows: typeof up.rows) => rows.reduce((a, r) => a + r.riskUsd, 0);
     expect(risk(up.rows)).toBeCloseTo(risk(even.rows), 6);
+  });
+
+  it('число ордеров сетки — от одного до тридцати, как у DTO', () => {
+    expect(gridOrderCount('20')).toBe(20);
+    expect(gridOrderCount(50)).toBe(30);
+    expect(gridOrderCount('')).toBe(1);
+    expect(gridOrderCount('abc')).toBe(1);
+    expect(gridOrderCount(2.6)).toBe(3);
+  });
+
+  it('средняя цена входа идёт за распределением и закреплениями, а не стоит на середине диапазона', () => {
+    const base = { prices: [100, 110, 120], direction: 'long' as const, qtyPins: {} };
+    expect(gridAvgEntry(base)).toBeCloseTo(110, 9);
+    expect(gridAvgEntry({ ...base, tilt: 100 })!).toBeGreaterThan(110);
+    expect(gridAvgEntry({ ...base, tilt: -100 })!).toBeLessThan(110);
+    // Закрепления — по строке исполнения: у лонга первая строка — верхний уровень.
+    expect(gridAvgEntry({ ...base, qtyPins: { 0: 80 } })).toBeCloseTo(120 * 0.8 + 110 * 0.1 + 100 * 0.1, 9);
+  });
+
+  it('средняя цена входа — та же, что у таблицы: Σ объём × цена / Σ объём', () => {
+    const args = { prices: [100, 110, 120], direction: 'long' as const, qtyPins: { 1: 20 }, tilt: -60 };
+    const t = entryGridTable({ ...args, stop: 90, riskPct: 2, balance: 10_000, stopTargets: {}, stopFollow: false });
+    const qty = t.rows.reduce((a, r) => a + r.qty, 0);
+    const notional = t.rows.reduce((a, r) => a + r.qty * r.price, 0);
+    expect(gridAvgEntry(args)).toBeCloseTo(notional / qty, 9);
   });
 });

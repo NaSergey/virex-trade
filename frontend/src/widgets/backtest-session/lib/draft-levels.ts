@@ -1,7 +1,8 @@
 import type { OrderTab } from '../components/OrderPanel';
 import type { Level } from '../components/ReplayChart';
-import { draftTakeFits, fromScreen, gridPrices, impliedDirection, levelMove, previewGrid, previewSize } from './money';
-import { entryGridTable } from './level-table';
+import type { Direction } from './fills';
+import { draftTakeFits, fromScreen, gridPrices, impliedDirection, levelMove, previewSize } from './money';
+import { entryGridTable, gridOrderCount } from './level-table';
 
 /** Черновики панели ордера числами: то, что уже разобрано из её полей. */
 export interface DraftLevelsInput {
@@ -117,7 +118,13 @@ export function draftLevels({ tab, market, limit, scaled, bot, livePrice, screen
     // выше уже не требует входа для показа.
     const lAnchor = limit.entry != null && limit.entry > 0 ? limit.entry : screenPrice;
     if (limit.take != null && limit.take > 0 && draftTakeFits(limit.stop, limit.take, lAnchor)) {
-      list.push({ id: 'draft-limit-take', kind: 'take', price: limit.take, draggable: true, qty: limitQty, impactAt });
+      // Объём тейка — от стопа ордера, а не от самого тейка (как у «Маркета»): с общим
+      // `impactAt` тейк считался стопом и подписывался минус риском (найдено 2026-10-17).
+      const takeAt = (p: number) => {
+        const dir = impliedDirection(null, limit.stop, p, lAnchor);
+        return dir != null && entryReal != null && limitQty != null ? levelMove(dir, entryReal, fromScreen(p, scale), limitQty) : null;
+      };
+      list.push({ id: 'draft-limit-take', kind: 'take', price: limit.take, draggable: true, qty: limitQty, impactAt: takeAt });
     }
   }
   // Черновик сетки на вход (Scaled) — до отправки просто верх/низ диапазона,
@@ -126,16 +133,24 @@ export function draftLevels({ tab, market, limit, scaled, bot, livePrice, screen
   // бы двумя подписанными линиями поверх свечей у всякого, кто просто открыл
   // вкладку и ничего ещё не решил.
   if (tab === 'scaled' && livePrice != null) {
-    // Объём каждого ордера — из той же таблицы, что уйдёт на сервер (доли, закрепления,
-    // распределение). Ордер ближе всего к линии получает её объём.
-    const qtyAt = (screenPrice: number): number | undefined => {
-      if (scaled.upper == null || scaled.lower == null || !(scaled.stop > 0) || !(scaled.risk > 0) || screenPrice == null) return undefined;
-      const count = Math.min(10, Math.max(1, Math.round(scaled.count) || 1));
-      const real = gridPrices(Math.min(scaled.lower, scaled.upper), Math.max(scaled.lower, scaled.upper), count).map((p) => fromScreen(p, scale));
-      const table = entryGridTable({
-        prices: real,
-        direction: 'long',
-        stop: fromScreen(scaled.stop, scale),
+    const count = gridOrderCount(scaled.count);
+    // Цены ордеров — те же, что уйдут на сервер (`gridPrices`), в настоящих единицах.
+    const pricesReal =
+      scaled.upper != null && scaled.lower != null
+        ? gridPrices(Math.min(scaled.lower, scaled.upper), Math.max(scaled.lower, scaled.upper), count).map((p) => fromScreen(p, scale))
+        : [];
+    // Сторона — как у панели (`sDirection`): ордера ниже цены — лонг. По стопу её не
+    // выбрать: стоп, заехавший внутрь сетки, перевернул бы знаки подписей. Без цены — по стопу.
+    const side = screenPrice != null ? impliedDirection(null, scaled.lower ?? scaled.upper ?? 0, scaled.upper, screenPrice) : null;
+    // Таблица сетки при данном стопе — та же, что у панели и отправки (доли, закрепления
+    // по строкам исполнения, распределение). Объём считается от стопа: без него таблицы нет.
+    const tableAt = (stopReal: number) => {
+      if (pricesReal.length === 0 || !(stopReal > 0) || !(scaled.risk > 0)) return null;
+      const direction: Direction = side ?? (stopReal < Math.min(...pricesReal) ? 'long' : 'short');
+      const { rows } = entryGridTable({
+        prices: pricesReal,
+        direction,
+        stop: stopReal,
         riskPct: scaled.risk,
         balance,
         qtyPins: scaled.qtyPins,
@@ -143,6 +158,12 @@ export function draftLevels({ tab, market, limit, scaled, bot, livePrice, screen
         stopFollow: false,
         tilt: scaled.tilt,
       });
+      return { direction, rows };
+    };
+    const table = tableAt(scaled.stop > 0 ? fromScreen(scaled.stop, scale) : 0);
+    // Объём каждого ордера — из таблицы. Ордер ближе всего к линии получает её объём.
+    const qtyAt = (screenPrice: number): number | undefined => {
+      if (!table) return undefined;
       const target = fromScreen(screenPrice, scale);
       let best: { d: number; qty: number } | null = null;
       for (const r of table.rows) {
@@ -159,26 +180,28 @@ export function draftLevels({ tab, market, limit, scaled, bot, livePrice, screen
     }
     // Ордера между верхом и низом — те же цены, что уйдут на сервер (`gridPrices`), по одной
     // линии без захвата: двигается диапазон, а не промежуточный ордер. Края уже нарисованы выше.
-    if (scaled.upper != null && scaled.upper > 0 && scaled.lower != null && scaled.lower > 0 && scaled.count > 2) {
-      const steps = gridPrices(Math.min(scaled.lower, scaled.upper), Math.max(scaled.lower, scaled.upper), scaled.count).slice(1, -1);
+    if (scaled.upper != null && scaled.upper > 0 && scaled.lower != null && scaled.lower > 0 && count > 2) {
+      const steps = gridPrices(Math.min(scaled.lower, scaled.upper), Math.max(scaled.lower, scaled.upper), count).slice(1, -1);
       steps.forEach((price, i) => list.push({ id: `draft-grid-step-${i}`, kind: 'gridStep', price, draggable: false, qty: qtyAt(price) }));
     }
-    // Стоп и тейк сетки — на весь её результат, поэтому и считаются от
-    // среднего входа при полном исполнении (previewGrid), а не от одного уровня.
-    const pricesReal =
-      scaled.upper != null && scaled.lower != null
-        ? gridPrices(Math.min(scaled.lower, scaled.upper), Math.max(scaled.lower, scaled.upper), scaled.count).map((p) => fromScreen(p, scale))
-        : [];
-    const impactAt = (p: number) => {
-      if (pricesReal.length === 0) return null;
-      const levelReal = fromScreen(p, scale);
-      const dir = levelReal < Math.min(...pricesReal) ? 'long' : 'short';
-      const grid = previewGrid(balance, scaled.risk, pricesReal, levelReal, leverage, dir);
-      return grid ? levelMove(dir, grid.avgEntry, levelReal, grid.qty) : null;
-    };
-    if (scaled.stop > 0) list.push({ id: 'draft-grid-stop', kind: 'stop', price: scaled.stop, draggable: true, impactAt });
+    // Стоп и тейк сетки — на весь её результат при полном исполнении: ход цены до
+    // уровня по каждому ордеру таблицы, без комиссии (`levelMove`). У стопа объём
+    // считается от цены под курсором — его и тянут, подпись — ровно риск панели; у
+    // тейка — от стопа сетки. Тейк здесь стоял с объёмом «от самого тейка», будто он
+    // стоп, и подписывался минус риском при любом распределении (найдено 2026-10-17).
+    const moveAt = (t: ReturnType<typeof tableAt>, levelReal: number) =>
+      t ? t.rows.reduce((sum, r) => sum + levelMove(t.direction, r.price, levelReal, r.qty), 0) : null;
+    if (scaled.stop > 0) {
+      list.push({
+        id: 'draft-grid-stop',
+        kind: 'stop',
+        price: scaled.stop,
+        draggable: true,
+        impactAt: (p) => moveAt(tableAt(fromScreen(p, scale)), fromScreen(p, scale)),
+      });
+    }
     if (scaled.take != null && scaled.take > 0) {
-      list.push({ id: 'draft-grid-take', kind: 'take', price: scaled.take, draggable: true, impactAt });
+      list.push({ id: 'draft-grid-take', kind: 'take', price: scaled.take, draggable: true, impactAt: (p) => moveAt(table, fromScreen(p, scale)) });
     }
   }
 

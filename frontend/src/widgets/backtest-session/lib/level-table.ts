@@ -3,6 +3,17 @@ import { closeGridQtys, distributionWeights } from './close-grid';
 
 export { distributionWeights };
 
+/** Предел ордеров «Сетки» — тот же, что у DTO бектеста и терминала (`MAX_GRID`). */
+export const MAX_GRID_ORDERS = 30;
+
+/**
+ * Число ордеров «Сетки» из поля панели — одно правило на таблицу панели, линии
+ * графика и отправку. Предел подняли до 30 в панели и DTO, а экран сессии и
+ * линии графика своим `Math.min(10, …)` слали и рисовали десять, хотя таблица
+ * показывала двадцать (найдено 2026-10-17).
+ */
+export const gridOrderCount = (raw: string | number) => Math.min(MAX_GRID_ORDERS, Math.max(1, Math.round(Number(raw) || 1)));
+
 /**
  * Таблица уровней «Сетки» и бота (спека
  * `2026-10-09-grid-tables-and-bot-everywhere-design.md`): объём уровня — доля
@@ -76,6 +87,32 @@ export function autoStopAfter(prices: readonly number[], stop: number): number {
   return stop + (last - stop) / 2;
 }
 
+/** Цены сетки в порядке исполнения: лонг — сверху вниз, шорт — снизу вверх. Закрепления — по этим строкам. */
+const executionOrder = (prices: readonly number[], direction: Direction) =>
+  [...prices].sort((x, y) => (direction === 'long' ? y - x : x - y));
+
+/** Доли объёма уровней в порядке исполнения — с распределением и закреплениями. */
+const orderedShares = (order: readonly number[], qtyPins: Readonly<Record<number, number>>, tilt?: number) =>
+  levelShares(order.length, qtyPins, tilt ? distributionWeights(order, tilt) : undefined);
+
+/**
+ * Средняя цена входа сетки, если исполнятся все уровни, — по объёму. Доли
+ * уровней — это доли объёма (`gridLevelQtys`: объём уровня = доля × общий), и
+ * от стопа средняя не зависит. Середина диапазона здесь стояла и снята: она не
+ * двигалась ни распределением, ни закреплениями (жалоба владельца 2026-10-17).
+ */
+export function gridAvgEntry(a: {
+  prices: readonly number[];
+  direction: Direction;
+  qtyPins: Readonly<Record<number, number>>;
+  tilt?: number;
+}): number | null {
+  const order = executionOrder(a.prices, a.direction);
+  const { shares } = orderedShares(order, a.qtyPins, a.tilt);
+  const total = shares.reduce((s, q) => s + q, 0);
+  return total > 0 ? order.reduce((s, p, i) => s + shares[i] * p, 0) / total : null;
+}
+
 export interface EntryGridRow {
   price: number;
   share: number;
@@ -108,9 +145,8 @@ export function entryGridTable(a: {
   /** Распределение объёма по цене (−100…100, 0 — равномерно). */
   tilt?: number;
 }) {
-  const order = [...a.prices].sort((x, y) => (a.direction === 'long' ? y - x : x - y));
-  const weights = a.tilt ? distributionWeights(order, a.tilt) : undefined;
-  const { shares, pinned, over } = levelShares(order.length, a.qtyPins, weights);
+  const order = executionOrder(a.prices, a.direction);
+  const { shares, pinned, over } = orderedShares(order, a.qtyPins, a.tilt);
   const qtys = gridLevelQtys(order, a.stop, (a.balance * a.riskPct) / 100, shares);
   const riskPcts = gridRiskPcts(order, a.stop, a.riskPct, shares);
   const auto = autoStopAfter(order, a.stop);
