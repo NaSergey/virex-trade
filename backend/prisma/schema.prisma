@@ -1455,6 +1455,11 @@ model HlWallet {
   /// Звёздочка владельца: кошельку доверяют, он открывает сделки не просто так.
   /// Только у сохранённых; «Убрать» её снимает.
   starredAt     DateTime?
+  /// Поведение по `userFills`: медиана времени в сделке (мс) и исполнений в сутки.
+  /// Считается раз в сутки; пусто — ещё не смотрели или мало сделок.
+  medianHoldMs  Float?
+  fillsPerDay   Float?
+  behaviorAt    DateTime?
 
   @@index([candidate, qualified])
   @@index([analyzedAt])

@@ -2175,7 +2175,7 @@
     "title": "Hyperliquid wallets",
     "lede": "Wallets that trade consistently in profit. The bot refreshes them around the clock.",
     "status": "{qualified} selected · {analyzed} of {candidates} candidates checked · leaderboard {at}",
-    "rules": "Selected: balance from $10,000, in profit over 30 days, 90 days and all time; at least 8 weeks of trading, 60% of weeks in profit, best week at most 35% of the half-year profit, drawdown at most 40% of balance; traded within 7 days or holds a position. PnL is perps only, without spot revaluation.",
+    "rules": "Selected: balance from $10,000, in profit over 30 days, 90 days and all time; at least 8 weeks of trading, 60% of weeks in profit, best week at most 35% of the half-year profit, drawdown at most 40% of balance; traded within 7 days or holds a position; not a bot — median trade longer than an hour and under 250 fills a day. PnL is perps only, without spot revaluation.",
     "empty": "The bot has not found any wallets yet — the first pass takes about two hours.",
     "loadFailed": "Failed to load wallets",
     "profile": "profile",
@@ -2210,7 +2210,8 @@
       "pnlMonth": "loss over 30 days",
       "weeksUp": "weeks in profit {share}",
       "oneSpike": "profit from one spike ({share})",
-      "drawdown": "drawdown {share}"
+      "drawdown": "drawdown {share}",
+      "bot": "bot: trades last minutes"
     },
     "positions": "Open positions",
     "asOf": "as of {at}",

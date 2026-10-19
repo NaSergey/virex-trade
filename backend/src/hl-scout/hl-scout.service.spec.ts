@@ -177,4 +177,69 @@ describe('HlScoutService — разбор', () => {
       expect(prisma.hlWallet.updateMany).not.toHaveBeenCalled();
     },
   );
+  describe('фильтр ботов', () => {
+    // Кривая, проходящая отбор: 30 недель стабильного роста.
+    const goodPortfolio = () => {
+      const week = 7 * 86_400_000;
+      const pts = Array.from({ length: 30 }, (_, i) => [
+        NOW - (29 - i) * week,
+        String(10_000 + i * 500),
+      ]);
+      const win = (name: string) => [
+        name,
+        { accountValueHistory: pts, pnlHistory: pts.map(([t], i) => [t, String(i * 500)]), vlm: '1' },
+      ];
+      return ['perpWeek', 'perpMonth', 'perpAllTime', 'week', 'month', 'allTime'].map(win);
+    };
+    const botFills = () =>
+      Array.from({ length: 80 }, (_, i) => ({
+        coin: 'ETH', px: '100', sz: '1', side: i % 2 ? 'A' : 'B',
+        time: NOW - (80 - i) * 120_000, dir: '', startPosition: i % 2 ? '1' : '0',
+        closedPnl: '0', fee: '0', crossed: true,
+      }));
+    const state = { assetPositions: [] };
+
+    it('кривая прошла, но торгует по минуте — отказ «бот», метрики записаны', async () => {
+      const prisma = makePrisma({
+        findFirst: jest.fn().mockResolvedValue({ address: '0xa', behaviorAt: null }),
+      });
+      (gate.hlInfo as jest.Mock)
+        .mockResolvedValueOnce(goodPortfolio())
+        .mockResolvedValueOnce(state)
+        .mockResolvedValueOnce(botFills());
+      await new HlScoutService(prisma as never).analyzeNext(clock);
+      const { data } = prisma.hlWallet.updateMany.mock.calls[0][0];
+      expect(data).toMatchObject({ qualified: false, rejectReason: 'bot' });
+      expect(data.medianHoldMs).toBe(120_000);
+      expect(data.behaviorAt).toEqual(new Date(NOW));
+    });
+
+    it('проверка свежая (меньше суток) — исполнения заново не качаются, вердикт по сохранённому', async () => {
+      const prisma = makePrisma({
+        findFirst: jest.fn().mockResolvedValue({
+          address: '0xa',
+          behaviorAt: new Date(NOW - 3600_000),
+          medianHoldMs: 60_000,
+          fillsPerDay: 10,
+        }),
+      });
+      (gate.hlInfo as jest.Mock)
+        .mockResolvedValueOnce(goodPortfolio())
+        .mockResolvedValueOnce(state);
+      await new HlScoutService(prisma as never).analyzeNext(clock);
+      expect(gate.hlInfo).toHaveBeenCalledTimes(2);
+      const { data } = prisma.hlWallet.updateMany.mock.calls[0][0];
+      expect(data).toMatchObject({ rejectReason: 'bot' });
+      expect(data).not.toHaveProperty('behaviorAt');
+    });
+
+    it('кривая не прошла — исполнения не запрашиваются вовсе', async () => {
+      const prisma = makePrisma({
+        findFirst: jest.fn().mockResolvedValue({ address: '0xa', behaviorAt: null }),
+      });
+      (gate.hlInfo as jest.Mock).mockResolvedValueOnce([]).mockResolvedValueOnce(state);
+      await new HlScoutService(prisma as never).analyzeNext(clock);
+      expect(gate.hlInfo).toHaveBeenCalledTimes(2);
+    });
+  });
 });

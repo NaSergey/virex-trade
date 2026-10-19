@@ -27,7 +27,8 @@ export type RejectReason =
   | 'pnlMonth'
   | 'weeksUp'
   | 'oneSpike'
-  | 'drawdown';
+  | 'drawdown'
+  | 'bot';
 
 export interface WalletStats {
   accountValue: number;

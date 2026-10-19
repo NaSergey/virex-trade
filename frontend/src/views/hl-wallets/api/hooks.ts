@@ -19,7 +19,8 @@ export type RejectReason =
   | 'pnlMonth'
   | 'weeksUp'
   | 'oneSpike'
-  | 'drawdown';
+  | 'drawdown'
+  | 'bot';
 
 /** Числа — `null`, пока бот кошелёк не разобрал. */
 export interface HlWalletRow {

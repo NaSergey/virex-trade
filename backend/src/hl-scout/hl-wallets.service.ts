@@ -249,7 +249,7 @@ export class HlWalletsService {
     return this.cached(raw, 'trades', now, async (address) => {
       const res = await hlInfo<RawFill[]>(
         { type: 'userFills', user: address, aggregateByTime: true },
-        WEIGHT.default,
+        WEIGHT.userFills,
       );
       return { asOf: new Date(now).toISOString(), ...tradesOf(res) };
     });

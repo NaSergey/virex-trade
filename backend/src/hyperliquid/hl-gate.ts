@@ -21,6 +21,8 @@ export const WEIGHT = {
   clearinghouseState: 2,
   portfolio: 20,
   default: 20,
+  /** 20 + 1 за каждые 20 строк ответа; до 2000 строк — до 120. */
+  userFills: 120,
 } as const;
 
 /**

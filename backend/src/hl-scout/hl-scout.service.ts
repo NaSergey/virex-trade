@@ -14,12 +14,20 @@ import {
   WEIGHT,
 } from '../hyperliquid/hl-gate';
 import { pickCandidates, volumesOf, type Candidate } from './candidates';
-import { analyzePortfolio } from './stability';
-import { DISCOVER_EVERY_MS, REANALYZE_MS } from './criteria';
-import type { ClearinghouseState, LeaderboardRow, Portfolio } from './hl-types';
+import { analyzePortfolio, type RejectReason } from './stability';
+import { behaviorOf, isBot } from './behavior';
+import { BEHAVIOR_TTL_MS, DISCOVER_EVERY_MS, REANALYZE_MS } from './criteria';
+import type {
+  ClearinghouseState,
+  LeaderboardRow,
+  Portfolio,
+  RawFill,
+} from './hl-types';
 
 /** Как часто проверять, не пора ли отбор: сам отбор — раз в 6 часов. */
 const CHECK_EVERY_MS = 10 * 60_000;
+/** Прошедший по кривой, но без проверки на бота, ждёт её первым — не чаще раза в 10 минут, чтобы сбой не зациклил очередь. */
+const BEHAVIOR_RETRY_MS = 10 * 60_000;
 /** Разбирать некого — сон до следующей проверки очереди. */
 const IDLE_MS = 60_000;
 /** Лидерборд короче — сбой источника, а не рынок: стирать по нему отбор нельзя. */
@@ -186,23 +194,45 @@ export class HlScoutService implements OnApplicationBootstrap, OnModuleDestroy {
    * (кривая и `analyzedAt`), — шлюз может продержать запрос до двух минут.
    */
   async analyzeNext(clock: () => number = Date.now): Promise<boolean> {
-    const wallet = await this.prisma.hlWallet.findFirst({
-      where: {
-        // Удалённый владельцем кошелёк запросов не тратит.
-        hiddenAt: null,
-        OR: [{ candidate: true }, { savedAt: { not: null } }],
-        AND: [
-          {
-            OR: [
-              { analyzedAt: null },
-              { analyzedAt: { lt: new Date(clock() - REANALYZE_MS) } },
-            ],
-          },
-        ],
-      },
-      orderBy: { analyzedAt: { sort: 'asc', nulls: 'first' } },
-      select: { address: true },
-    });
+    const select = {
+      address: true,
+      behaviorAt: true,
+      medianHoldMs: true,
+      fillsPerDay: true,
+    };
+    const inWork = {
+      // Удалённый владельцем кошелёк запросов не тратит.
+      hiddenAt: null,
+      OR: [{ candidate: true }, { savedAt: { not: null } }],
+    };
+    // Сначала те, кто в таблице, но на бота ещё не проверен (после выкатки
+    // фильтра таблица чистится за один проход, а не за два часа).
+    const wallet =
+      (await this.prisma.hlWallet.findFirst({
+        where: {
+          ...inWork,
+          qualified: true,
+          behaviorAt: null,
+          analyzedAt: { lt: new Date(clock() - BEHAVIOR_RETRY_MS) },
+        },
+        orderBy: { analyzedAt: 'asc' },
+        select,
+      })) ??
+      (await this.prisma.hlWallet.findFirst({
+        where: {
+          ...inWork,
+          AND: [
+            {
+              OR: [
+                { analyzedAt: null },
+                { analyzedAt: { lt: new Date(clock() - REANALYZE_MS) } },
+              ],
+            },
+          ],
+        },
+        orderBy: { analyzedAt: { sort: 'asc', nulls: 'first' } },
+        select,
+      }));
     if (!wallet) return false;
     const { address } = wallet;
     try {
@@ -217,13 +247,42 @@ export class HlScoutService implements OnApplicationBootstrap, OnModuleDestroy {
         ),
       ]);
       const now = clock();
-      const { stats, reason } = analyzePortfolio(pf, now);
+      const verdict = analyzePortfolio(pf, now);
+      const { stats } = verdict;
+      let reason: RejectReason | null = verdict.reason;
+      // Бот проверяется последним: исполнения тяжёлые, а прошедших по кривой —
+      // сотни из тысяч. Поведение меняется медленно — смотрим раз в сутки.
+      let behavior: {
+        medianHoldMs: number | null;
+        fillsPerDay: number | null;
+        behaviorAt: Date;
+      } | null = null;
+      if (reason == null) {
+        const fresh =
+          wallet.behaviorAt != null &&
+          now - wallet.behaviorAt.getTime() < BEHAVIOR_TTL_MS;
+        let metrics = {
+          medianHoldMs: wallet.medianHoldMs ?? null,
+          fillsPerDay: wallet.fillsPerDay ?? null,
+        };
+        if (!fresh) {
+          const fills = await hlInfo<RawFill[]>(
+            { type: 'userFills', user: address, aggregateByTime: true },
+            WEIGHT.userFills,
+          );
+          const b = behaviorOf(fills);
+          metrics = { medianHoldMs: b.medianHoldMs, fillsPerDay: b.fillsPerDay };
+          behavior = { ...metrics, behaviorAt: new Date(now) };
+        }
+        if (isBot(metrics)) reason = 'bot';
+      }
       // updateMany, а не update: отбор мог удалить строку, пока шёл запрос.
       await this.prisma.hlWallet.updateMany({
         where: { address },
         data: {
           ...stats,
           analyzedAt: new Date(now),
+          ...(behavior ?? {}),
           qualified: reason == null,
           rejectReason: reason,
           openPositions: (state?.assetPositions ?? []).filter(
