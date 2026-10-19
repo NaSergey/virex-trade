@@ -42,6 +42,15 @@ describe('groupByCoin', () => {
     expect(out.map((g) => g.coin)).toEqual(['BBB', 'AAA']);
   });
 
+  it('объёмы в монетах и текущая цена', () => {
+    const [g] = groupByCoin([
+      { ...pos('a', 'BTC', 'long', 300), size: 3, markPx: 100 },
+      { ...pos('b', 'BTC', 'short', 100), size: 1, markPx: 100 },
+      { ...pos('c', 'BTC', 'long', 100), size: 1, markPx: null },
+    ]);
+    expect(g).toMatchObject({ longSize: 4, shortSize: 1, netSize: 3, price: 100 });
+  });
+
   it('minWallets настраивается', () => {
     expect(groupByCoin([pos('a', 'BTC', 'long', 1)], 1)).toHaveLength(1);
   });

@@ -6,6 +6,17 @@ export const shortAddress = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 /** Доля → «12 %»: здесь проценты — свойства кривой, а не деньги, поэтому без знака. */
 export const pct = (v: number | null | undefined) => (v == null ? '—' : `${Math.round(v * 100)} %`);
 
+/** Количество монет: крупное — компактно, мелкое — с достаточными знаками («12.5K», «3.42», «0.0153»). */
+export function qty(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return '—';
+  const a = Math.abs(v);
+  if (a >= 1e6) return `${+(v / 1e6).toFixed(2)}M`;
+  if (a >= 1e4) return `${+(v / 1e3).toFixed(1)}K`;
+  if (a >= 100) return String(Math.round(v));
+  if (a >= 1) return String(+v.toFixed(2));
+  return String(+v.toPrecision(3));
+}
+
 /** Баланс и оборот — компактно: в таблице на дюжину колонок полные разряды не помещаются. */
 export function usd(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return '—';

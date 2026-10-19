@@ -8,10 +8,16 @@ export interface CoinGroup {
   shorts: number;
   /** Все в одну сторону — она; иначе разнонаправленно. */
   direction: 'long' | 'short' | 'mixed';
+  /** Текущая цена монеты — из позиций (стоимость позиции на размер). */
+  price: number | null;
   longNotional: number;
   shortNotional: number;
   /** Лонг минус шорт в долларах: плюс — кошельки в сумме в лонге. */
   netNotional: number;
+  /** Те же объёмы в монетах: на них смотрят, а не на доллары. */
+  longSize: number;
+  shortSize: number;
+  netSize: number;
   unrealizedPnl: number;
   positions: HlPosition[];
 }
@@ -35,8 +41,14 @@ export function groupByCoin(positions: HlPosition[], minWallets = 2): CoinGroup[
     const sum = (xs: HlPosition[], f: (p: HlPosition) => number) => xs.reduce((s, p) => s + f(p), 0);
     const longNotional = sum(longs, (p) => p.notional);
     const shortNotional = sum(shorts, (p) => p.notional);
+    const longSize = sum(longs, (p) => p.size);
+    const shortSize = sum(shorts, (p) => p.size);
     groups.push({
       coin,
+      price: list.find((p) => p.markPx != null)?.markPx ?? null,
+      longSize,
+      shortSize,
+      netSize: longSize - shortSize,
       wallets,
       longs: longs.length,
       shorts: shorts.length,
