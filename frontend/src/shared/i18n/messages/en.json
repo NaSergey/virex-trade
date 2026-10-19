@@ -762,7 +762,8 @@
     "HL_BAD_ADDRESS": "This is not a wallet address.",
     "HL_BUSY": "Too many requests to Hyperliquid — try again in a minute.",
     "HL_PAUSED": "Hyperliquid has temporarily limited requests from the server — try again in a minute.",
-    "HL_FAILED": "Hyperliquid did not respond — try again later."
+    "HL_FAILED": "Hyperliquid did not respond — try again later.",
+    "HL_WALLET_SAVED": "Remove the wallet from saved first."
   },
   "landing": {
     "skipToContent": "Skip to content",
@@ -2191,7 +2192,6 @@
     "colWeeksUp": "Weeks in profit",
     "colBestWeek": "Best week",
     "colDrawdown": "Drawdown",
-    "colVolume": "Volume 7d, $",
     "colStatus": "Selection",
     "savedTitle": "Saved wallets",
     "savedLede": "Wallets you are working with. Expand a row to add a note.",
@@ -2228,6 +2228,26 @@
     "long": "Long",
     "short": "Short",
     "unsaveTitle": "Remove from saved — the note is kept",
-    "noteFailed": "Failed to save the note"
+    "noteFailed": "Failed to save the note",
+    "hide": "Delete",
+    "hideTitle": "Delete from the table for good — the bot will not bring it back",
+    "hideSavedTitle": "Remove the wallet from saved first",
+    "emptyFiltered": "Nothing matches the filters.",
+    "filtersAria": "Wallet filters",
+    "viewAria": "Viewed",
+    "viewAll": "All",
+    "viewNew": "New",
+    "viewViewed": "Viewed",
+    "shownOf": "Showing {shown} of {total}",
+    "resetFilters": "Reset",
+    "fBalanceMin": "Balance from, $",
+    "fPnlWeekMin": "PnL 7d from, $",
+    "fPnlMonthMin": "PnL 30d from, $",
+    "fPnl90Min": "PnL 90d from, $",
+    "fPnlAllMin": "PnL all time from, $",
+    "fRoiMin": "ROI 30d from",
+    "fUpShareMin": "Weeks in profit from",
+    "fBestWeekMax": "Best week up to",
+    "fDrawdownMax": "Drawdown up to"
   }
 }

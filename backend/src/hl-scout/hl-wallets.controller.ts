@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  Post,
   Put,
   UseGuards,
 } from '@nestjs/common';
@@ -26,6 +27,18 @@ export class HlWalletsController {
   @Get('wallets')
   list() {
     return this.wallets.list();
+  }
+
+  /** POST /api/admin/hl/wallets/<адрес>/viewed — профиль открыт, строка гаснет. */
+  @Post('wallets/:address/viewed')
+  viewed(@Param('address') address: string) {
+    return this.wallets.markViewed(address);
+  }
+
+  /** DELETE /api/admin/hl/wallets/<адрес> — убрать из таблицы насовсем. */
+  @Delete('wallets/:address')
+  hide(@Param('address') address: string) {
+    return this.wallets.hide(address);
   }
 
   /** GET /api/admin/hl/saved — сохранённые, и выпавшие из отбора тоже. */

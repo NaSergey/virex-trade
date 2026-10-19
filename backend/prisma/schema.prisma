@@ -1447,6 +1447,11 @@ model HlWallet {
   maxDrawdown   Float?
   savedAt       DateTime?
   note          String?
+  /// Владелец открыл профиль кошелька — строка таблицы гаснет, их сотни.
+  viewedAt      DateTime?
+  /// Владелец удалил кошелёк из таблицы: строка остаётся меткой, чтобы отбор
+  /// не вернул его снова, а разбор не тратил на него запросы.
+  hiddenAt      DateTime?
 
   @@index([candidate, qualified])
   @@index([analyzedAt])

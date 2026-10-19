@@ -10,9 +10,11 @@ import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import { Pagination } from '@/shared/ui/Pagination';
 import { dateFormat } from '@/shared/lib/utils/intl';
-import { useHlWallets, useSaveWallet, type HlWalletRow } from './api/hooks';
+import { useHideWallet, useHlWallets, useSaveWallet, type HlWalletRow } from './api/hooks';
+import { applyFilters, EMPTY_FILTERS, type WalletFilters as Filters } from './model/filter';
 import { sortRows } from './model/sort';
 import { walletColumns } from './components/walletColumns';
+import { WalletFilters } from './components/WalletFilters';
 
 const PAGE = 50;
 
@@ -31,6 +33,8 @@ export function HlWalletsPage() {
   const { user, loading: authLoading } = useAuth();
   const { data, isLoading, error } = useHlWallets(!!user?.isAdmin);
   const { save, unsave } = useSaveWallet();
+  const hide = useHideWallet();
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [sort, setSort] = useState<{ key: keyof HlWalletRow; dir: 1 | -1 }>({ key: 'pnlMonth', dir: -1 });
   const [page, setPage] = useState(1);
 
@@ -39,10 +43,11 @@ export function HlWalletsPage() {
     (save.isPending && save.variables?.address === address) ||
     (unsave.isPending && unsave.variables === address);
 
+  // Кнопки — справа, после чисел: слева стоит адрес, и глаз идёт по нему к цифрам.
   const saveCol: LedgerColumn<HlWalletRow> = {
     key: 'save',
     noSkeleton: true,
-    width: 120,
+    width: 110,
     render: (r) =>
       r.savedAt ? (
         <Button
@@ -61,7 +66,28 @@ export function HlWalletsPage() {
       ),
   };
 
-  const rows = sortRows(data?.rows ?? [], sort.key, sort.dir);
+  // Удалить — насовсем: бот этот кошелёк не вернёт. Сохранённый не удаляется —
+  // у него заметка; сперва «Убрать». Подтверждения нет: убирают десятки подряд.
+  const hideCol: LedgerColumn<HlWalletRow> = {
+    key: 'hide',
+    noSkeleton: true,
+    width: 90,
+    render: (r) => (
+      <Button
+        variant="bare"
+        tight
+        title={r.savedAt ? t('hideSavedTitle') : t('hideTitle')}
+        onClick={() => hide.mutate(r.address)}
+        disabled={!!r.savedAt || (hide.isPending && hide.variables === r.address)}
+      >
+        {t('hide')}
+      </Button>
+    ),
+  };
+
+  const all = data?.rows ?? [];
+  const filtered = applyFilters(all, filters);
+  const rows = sortRows(filtered, sort.key, sort.dir);
   const status = data?.status;
   const at = status?.discoveredAt
     ? dateFormat(locale, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(status.discoveredAt))
@@ -82,9 +108,19 @@ export function HlWalletsPage() {
             : t('lede')
         }
       />
-      <ErrorNote error={error ?? save.error ?? unsave.error} fallback={t('loadFailed')} />
+      <WalletFilters
+        value={filters}
+        onChange={(next) => {
+          setPage(1);
+          setFilters(next);
+        }}
+        shown={filtered.length}
+        total={all.length}
+      />
+      <ErrorNote error={error ?? save.error ?? unsave.error ?? hide.error} fallback={t('loadFailed')} />
       <LedgerTable
-        columns={walletColumns(t, [saveCol])}
+        columns={walletColumns(t, [], [saveCol, hideCol])}
+        rowClassName={(r) => (r.viewedAt ? 'seen' : undefined)}
         rows={rows.slice((page - 1) * PAGE, page * PAGE)}
         rowKey={(r) => r.address}
         minWidth={1280}
@@ -92,7 +128,7 @@ export function HlWalletsPage() {
         // без authLoading таблица на перезагрузке мигала бы «бот ничего не нашёл».
         isLoading={authLoading || isLoading}
         skeletonRows={10}
-        empty={t('empty')}
+        empty={all.length ? t('emptyFiltered') : t('empty')}
         sort={{ key: String(sort.key), dir: sort.dir }}
         onSort={(key) => {
           setPage(1);

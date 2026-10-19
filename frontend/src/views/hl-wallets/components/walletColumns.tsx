@@ -48,7 +48,6 @@ export function walletColumns(
     num('weeksUp', t('colWeeksUp'), (r) => (r.weeksUp == null ? '—' : `${r.weeksUp} / ${r.weeksMoving}`)),
     num('bestWeekShare', t('colBestWeek'), (r) => pct(r.bestWeekShare)),
     num('maxDrawdown', t('colDrawdown'), (r) => pct(r.maxDrawdown)),
-    num('volumeWeek', t('colVolume'), (r) => usd(r.volumeWeek)),
     ...extra,
   ];
 }

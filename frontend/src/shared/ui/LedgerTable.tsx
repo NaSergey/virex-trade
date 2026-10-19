@@ -120,6 +120,11 @@ interface LedgerTableProps<T> {
    * промахом, и человек жмёт второй раз.
    */
   busyKey?: string | null;
+  /**
+   * Свой класс строки по её данным — для пометки, которая не про клик:
+   * «просмотрена», «неактивна». Складывается с классами раскрытия и перехода.
+   */
+  rowClassName?: (row: T) => string | undefined;
 }
 
 /**
@@ -151,6 +156,7 @@ export function LedgerTable<T>({
   onRowClick,
   onRowHover,
   busyKey,
+  rowClassName,
 }: LedgerTableProps<T>) {
   const router = useRouter();
   const [openKey, setOpenKey] = useState<string | null>(null);
@@ -279,9 +285,14 @@ export function LedgerTable<T>({
                 <Fragment key={key}>
                   <tr
                     className={
-                      renderExpanded || activate
-                        ? `row${open ? ' open' : ''}${busyKey === key ? ' busy' : ''}`
-                        : undefined
+                      [
+                        renderExpanded || activate
+                          ? `row${open ? ' open' : ''}${busyKey === key ? ' busy' : ''}`
+                          : null,
+                        rowClassName?.(row),
+                      ]
+                        .filter(Boolean)
+                        .join(' ') || undefined
                     }
                     style={{ '--i': index } as React.CSSProperties}
                     tabIndex={activate ? 0 : undefined}

@@ -82,7 +82,7 @@ describe('HlScoutService — отбор', () => {
     });
     expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
     expect(prisma.hlWallet.deleteMany).toHaveBeenCalledWith({
-      where: { candidate: false, savedAt: null },
+      where: { candidate: false, savedAt: null, hiddenAt: null },
     });
   });
 

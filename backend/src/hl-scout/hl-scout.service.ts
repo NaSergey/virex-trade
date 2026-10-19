@@ -160,8 +160,10 @@ export class HlScoutService implements OnApplicationBootstrap, OnModuleDestroy {
         SELECT a, true, ${at}, v FROM unnest(${addrs}::text[], ${vols}::float8[]) AS x(a, v)
         ON CONFLICT ("address") DO UPDATE SET
           "candidate" = true, "seenAt" = EXCLUDED."seenAt", "volumeWeek" = EXCLUDED."volumeWeek"`,
+      // Удалённые владельцем остаются меткой: сотри мы строку — следующий отбор
+      // вернул бы кошелёк в таблицу.
       this.prisma.hlWallet.deleteMany({
-        where: { candidate: false, savedAt: null },
+        where: { candidate: false, savedAt: null, hiddenAt: null },
       }),
     ]);
     // Сохранённые, выпавшие из кандидатов, берут оборот из того же лидерборда:
@@ -186,6 +188,8 @@ export class HlScoutService implements OnApplicationBootstrap, OnModuleDestroy {
   async analyzeNext(clock: () => number = Date.now): Promise<boolean> {
     const wallet = await this.prisma.hlWallet.findFirst({
       where: {
+        // Удалённый владельцем кошелёк запросов не тратит.
+        hiddenAt: null,
         OR: [{ candidate: true }, { savedAt: { not: null } }],
         AND: [
           {

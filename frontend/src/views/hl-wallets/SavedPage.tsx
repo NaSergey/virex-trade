@@ -76,6 +76,7 @@ export function HlSavedPage() {
         columns={walletColumns(t, [], [status, remove])}
         rows={saved.data?.rows ?? []}
         rowKey={(r) => r.address}
+        rowClassName={(r) => (r.viewedAt ? 'seen' : undefined)}
         minWidth={1400}
         // Пока восстанавливается сессия, запрос ещё выключен — без authLoading
         // таблица на перезагрузке мигала бы «ничего не сохранено».

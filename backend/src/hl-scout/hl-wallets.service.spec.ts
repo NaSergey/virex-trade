@@ -135,3 +135,45 @@ describe('HlWalletsService — позиции', () => {
     });
   });
 });
+
+describe('HlWalletsService — просмотрен и удалён', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('просмотр ставит время только первый раз', async () => {
+    const prisma = makePrisma();
+    await new HlWalletsService(prisma as never).markViewed(ADDR);
+    const { where, data } = prisma.hlWallet.updateMany.mock.calls[0][0];
+    expect(where).toEqual({ address: ADDR, viewedAt: null });
+    expect(data.viewedAt).toBeInstanceOf(Date);
+  });
+
+  it('удаление ставит метку hiddenAt, строку не стирает', async () => {
+    const prisma = makePrisma({ address: ADDR, savedAt: null, hiddenAt: null });
+    await new HlWalletsService(prisma as never).hide(ADDR);
+    expect(
+      prisma.hlWallet.update.mock.calls[0][0].data.hiddenAt,
+    ).toBeInstanceOf(Date);
+  });
+
+  it('сохранённый не удаляется — у него заметка', async () => {
+    const prisma = makePrisma({ address: ADDR, savedAt: new Date(1) });
+    await expect(
+      new HlWalletsService(prisma as never).hide(ADDR),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.hlWallet.update).not.toHaveBeenCalled();
+  });
+
+  it('неизвестный кошелёк при удалении — 404', async () => {
+    await expect(
+      new HlWalletsService(makePrisma(null) as never).hide(ADDR),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('таблица не показывает удалённые', async () => {
+    const prisma = makePrisma();
+    await new HlWalletsService(prisma as never).list();
+    expect(prisma.hlWallet.findMany.mock.calls[0][0].where).toMatchObject({
+      hiddenAt: null,
+    });
+  });
+});

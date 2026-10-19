@@ -1809,6 +1809,11 @@
      промахом — на тачскрине курсора нет, а ждать всё равно приходится. */
   .ledger tbody tr.row.busy { cursor: progress; }
   .ledger tbody tr.row.busy > td { background: var(--band); }
+  /* Строка, которую уже смотрели (админка, кошельки): их сотни, и непросмотренные
+     должны выделяться сами. Гаснет вся строка, под курсором — почти возвращается,
+     чтобы её можно было прочитать. */
+  .ledger tbody tr.seen > td { opacity: 0.42; transition: opacity 0.12s; }
+  .ledger tbody tr.seen:hover > td { opacity: 0.85; }
   .ledger .sortable {
     cursor: pointer;
     user-select: none;

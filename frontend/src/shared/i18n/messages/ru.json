@@ -1524,7 +1524,8 @@
     "HL_BAD_ADDRESS": "Это не адрес кошелька.",
     "HL_BUSY": "Слишком много запросов к Hyperliquid — повторите через минуту.",
     "HL_PAUSED": "Hyperliquid временно ограничил запросы с сервера — повторите через минуту.",
-    "HL_FAILED": "Hyperliquid не ответил — повторите позже."
+    "HL_FAILED": "Hyperliquid не ответил — повторите позже.",
+    "HL_WALLET_SAVED": "Сначала уберите кошелёк из сохранённых."
   },
   "onboarding": {
     "askTitle": "Пройти обучение?",
@@ -2191,7 +2192,6 @@
     "colWeeksUp": "Недель в плюсе",
     "colBestWeek": "Лучшая неделя",
     "colDrawdown": "Просадка",
-    "colVolume": "Оборот 7д, $",
     "colStatus": "Отбор",
     "savedTitle": "Сохранённые кошельки",
     "savedLede": "Кошельки, взятые в работу. Строка раскрывается заметкой.",
@@ -2228,6 +2228,26 @@
     "long": "Лонг",
     "short": "Шорт",
     "unsaveTitle": "Убрать из сохранённых — заметка останется",
-    "noteFailed": "Не удалось сохранить заметку"
+    "noteFailed": "Не удалось сохранить заметку",
+    "hide": "Удалить",
+    "hideTitle": "Удалить из таблицы насовсем — бот его больше не вернёт",
+    "hideSavedTitle": "Сначала уберите кошелёк из сохранённых",
+    "emptyFiltered": "Под фильтры ничего не подходит.",
+    "filtersAria": "Фильтры кошельков",
+    "viewAria": "Просмотренные",
+    "viewAll": "Все",
+    "viewNew": "Новые",
+    "viewViewed": "Просмотренные",
+    "shownOf": "Показано {shown} из {total}",
+    "resetFilters": "Сбросить",
+    "fBalanceMin": "Баланс от, $",
+    "fPnlWeekMin": "PnL 7д от, $",
+    "fPnlMonthMin": "PnL 30д от, $",
+    "fPnl90Min": "PnL 90д от, $",
+    "fPnlAllMin": "PnL всё время от, $",
+    "fRoiMin": "ROI 30д от",
+    "fUpShareMin": "Недель в плюсе от",
+    "fBestWeekMax": "Лучшая неделя до",
+    "fDrawdownMax": "Просадка до"
   }
 }

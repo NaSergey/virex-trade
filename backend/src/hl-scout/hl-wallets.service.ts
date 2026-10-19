@@ -45,6 +45,7 @@ function rowOf(w: HlWallet) {
     alive: w.volumeWeek > 0 || (w.openPositions ?? 0) > 0,
     savedAt: w.savedAt,
     note: w.note,
+    viewedAt: w.viewedAt,
   };
 }
 
@@ -74,16 +75,18 @@ export class HlWalletsService {
   async list() {
     const [rows, last, candidates, analyzed] = await Promise.all([
       this.prisma.hlWallet.findMany({
-        where: { candidate: true, qualified: true, ...ALIVE },
+        where: { candidate: true, hiddenAt: null, qualified: true, ...ALIVE },
         orderBy: { pnlMonth: 'desc' },
       }),
       this.prisma.hlWallet.aggregate({
-        where: { candidate: true },
+        where: { candidate: true, hiddenAt: null },
         _max: { seenAt: true },
       }),
-      this.prisma.hlWallet.count({ where: { candidate: true } }),
       this.prisma.hlWallet.count({
-        where: { candidate: true, analyzedAt: { not: null } },
+        where: { candidate: true, hiddenAt: null },
+      }),
+      this.prisma.hlWallet.count({
+        where: { candidate: true, hiddenAt: null, analyzedAt: { not: null } },
       }),
     ]);
     return {
@@ -124,6 +127,40 @@ export class HlWalletsService {
     });
     this.cache = null;
     return rowOf(updated);
+  }
+
+  /** Владелец открыл профиль кошелька: строка таблицы гаснет. Первое открытие время не двигает. */
+  async markViewed(raw: string) {
+    await this.prisma.hlWallet.updateMany({
+      where: { address: addressOf(raw), viewedAt: null },
+      data: { viewedAt: new Date() },
+    });
+    return { ok: true };
+  }
+
+  /**
+   * Удалить кошелёк из таблицы насовсем: строка остаётся меткой `hiddenAt`,
+   * чтобы отбор не вернул его, а разбор не тратил на него запросы. Сохранённый
+   * не удаляется — у него заметка, и стереть её одним кликом по ошибке нельзя.
+   */
+  async hide(raw: string) {
+    const address = addressOf(raw);
+    const w = await this.prisma.hlWallet.findUnique({ where: { address } });
+    if (!w)
+      throw new NotFoundException({
+        message: 'Кошелька нет в отборе',
+        code: 'HL_WALLET_NOT_FOUND',
+      });
+    if (w.savedAt)
+      throw new BadRequestException({
+        message: 'Сначала уберите кошелёк из сохранённых',
+        code: 'HL_WALLET_SAVED',
+      });
+    await this.prisma.hlWallet.update({
+      where: { address },
+      data: { hiddenAt: w.hiddenAt ?? new Date() },
+    });
+    return { ok: true };
   }
 
   /**

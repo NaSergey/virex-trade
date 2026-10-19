@@ -43,6 +43,8 @@ export interface HlWalletRow {
   alive: boolean;
   savedAt: string | null;
   note: string | null;
+  /** Профиль открывали — строка таблицы гаснет. */
+  viewedAt: string | null;
 }
 
 export interface HlWalletsResponse {
@@ -98,6 +100,32 @@ export const useHlPositions = (enabled: boolean) =>
     // Позиции — то, ради чего кошелёк сохранён: перечитываются, пока страница открыта.
     refetchInterval: 30_000,
   });
+
+/**
+ * Профиль открыт: строка гаснет сразу (кэш правится до ответа — ссылка уводит
+ * в другую вкладку, ждать некогда), сервер запоминает метку для всех устройств.
+ */
+export function useViewWallet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (address: string) => apiJson<{ ok: true }>(`${BASE}/wallets/${address}/viewed`, { method: 'POST' }),
+    onMutate: (address) => {
+      const now = new Date().toISOString();
+      const mark = (r: HlWalletRow) => (r.address === address && !r.viewedAt ? { ...r, viewedAt: now } : r);
+      qc.setQueryData<HlWalletsResponse>(['hlWallets'], (d) => d && { ...d, rows: d.rows.map(mark) });
+      qc.setQueryData<{ rows: HlWalletRow[] }>(['hlSaved'], (d) => d && { ...d, rows: d.rows.map(mark) });
+    },
+  });
+}
+
+/** Удалить кошелёк из таблицы насовсем (метка на сервере, бот его больше не вернёт). */
+export function useHideWallet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (address: string) => apiJson<{ ok: true }>(`${BASE}/wallets/${address}`, { method: 'DELETE' }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['hlWallets'] }),
+  });
+}
 
 /** Сохранить, сменить заметку, убрать — и перечитать всё, где кошелёк виден. */
 export function useSaveWallet() {
