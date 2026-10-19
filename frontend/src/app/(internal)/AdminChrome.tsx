@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import { AuthGuard, useAuth } from '@/features/auth';
 import { Button } from '@/shared/ui/Button';
 import { EmptyState } from '@/shared/ui/EmptyState';
+import { LocaleSwitch } from '@/shared/ui/LocaleSwitch';
 import { Wrap } from '@/shared/ui/Wrap';
 import { adminPath } from '@/shared/lib/utils/admin-host';
 
@@ -46,6 +47,10 @@ export function AdminChrome({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <span className="adm-user muted">{user?.email}</span>
+        {/* Кука языка — без Domain, как и кука сессии: выбор основного сайта на
+            поддомен не доезжает, и без своего переключателя админка стояла бы
+            на языке по умолчанию (английском). */}
+        <LocaleSwitch className="seg-tight" />
         {user ? (
           <Button variant="bare" tight onClick={() => void logout()}>
             {t('logout')}

@@ -757,7 +757,12 @@
     "PASSWORD_WRONG": "Current password is wrong",
     "PASSWORD_SAME": "New password matches the current one",
     "ACCOUNT_DEMO_LOCKED": "The demo account is shared and cannot be changed",
-    "AVATAR_EMPTY": "The file did not arrive — try again"
+    "AVATAR_EMPTY": "The file did not arrive — try again",
+    "HL_WALLET_NOT_FOUND": "The wallet is no longer in the selection — it may have dropped out at the last refresh.",
+    "HL_BAD_ADDRESS": "This is not a wallet address.",
+    "HL_BUSY": "Too many requests to Hyperliquid — try again in a minute.",
+    "HL_PAUSED": "Hyperliquid has temporarily limited requests from the server — try again in a minute.",
+    "HL_FAILED": "Hyperliquid did not respond — try again later."
   },
   "landing": {
     "skipToContent": "Skip to content",

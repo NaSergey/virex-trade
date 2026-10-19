@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { AuthForm, safeNext, useAuth } from '@/features/auth';
 import { Wrap } from '@/shared/ui/Wrap';
 import { PageHead } from '@/shared/ui/PageHead';
+import { LocaleSwitch } from '@/shared/ui/LocaleSwitch';
 
 /**
  * Вход на поддомене админки. Кука сессии у поддомена своя (ставится без
@@ -27,7 +28,11 @@ export function AdminLoginPage() {
   return (
     <Wrap page>
       <div className="adm-login">
-        <PageHead title={t('loginTitle')} />
+        {/* Шапки админки здесь нет, а язык поддомена свой (кука без Domain) —
+            переключатель нужен уже на входе. */}
+        <PageHead title={t('loginTitle')}>
+          <LocaleSwitch className="seg-tight" />
+        </PageHead>
         <AuthForm initialMode="login" loginOnly next={next} />
       </div>
     </Wrap>
