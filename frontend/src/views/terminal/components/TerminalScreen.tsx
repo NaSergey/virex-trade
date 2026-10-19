@@ -1,15 +1,16 @@
 'use client';
 
-import { useCallback, useMemo } from 'react';
-import { useQueries, type UseQueryResult } from '@tanstack/react-query';
+import { startTransition, useCallback, useEffect, useMemo, useState } from 'react';
+import { useQueries, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { fetchPositionTags } from '@/entities/tag';
 import { useTrades } from '@/entities/trade';
 import { Button } from '@/shared/ui/Button';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { Wrap } from '@/shared/ui/Wrap';
+import { useTerminalAccess } from '@/entities/terminal';
 import { Terminal, TerminalSkeleton, type SessionDetail } from '@/widgets/backtest-session';
-import { EXCHANGE_SOURCE, useTerminalState, useTerminalSymbols } from '../api/hooks';
+import { EXCHANGE_SOURCE, terminalStateQuery, useTerminalState, useTerminalSymbols } from '../api/hooks';
 import { positionKey, type TerminalState, type TerminalSymbol } from '../api/types';
 import { toDetail, type ExchangeDetail, type PositionMeta } from '../lib/adapt';
 import { exchangeSounds } from '../lib/sounds';
@@ -42,22 +43,66 @@ const sounds = (was: SessionDetail, next: SessionDetail) =>
  * Биржевой терминал: загрузка счёта и тот же экран, что у бектеста и турнира.
  *
  * Заглушка — общая с ними: сетка экрана одна, и приход счёта ничего не сдвигает.
+ *
+ * Снимок счёта приходит в экран переходом (`startTransition`), а не прямо из
+ * `useQuery`: опрос раз в три секунды меняет P&L и депозит, а react-query отдаёт
+ * данные через `useSyncExternalStore`, и такое обновление React рисует одним
+ * куском. Каждый ответ перерисовывал весь терминал синхронно — 120–220 мс раз в
+ * три секунды в dev-сборке при ЦП ×2, и ползунки панели в это время стояли
+ * (жалоба владельца 2026-10-17). На запрос подписан отдельный узел без разметки
+ * (`StateFeed`). Действия (мутации) остаются срочными: защита от второго ордера
+ * держится на их `isPending`.
  */
 export function TerminalScreen() {
+  const badge = useAccountBadge();
+  const qc = useQueryClient();
+  // Начало — из кэша: вернувшийся на терминал видит снимок сразу, без заглушки.
+  const [data, setData] = useState(() => qc.getQueryData(terminalStateQuery.queryKey));
+  const [error, setError] = useState<Error | null>(() => qc.getQueryState(terminalStateQuery.queryKey)?.error ?? null);
+  const feed = useCallback((next: StateSnapshot) => {
+    startTransition(() => {
+      setData(next.data);
+      setError(next.error);
+    });
+  }, []);
+
+  return (
+    <>
+      <StateFeed onChange={feed} />
+      {data ? (
+        <ExchangeTerminal state={data} stale={error != null} />
+      ) : error ? (
+        <StateError error={error} />
+      ) : (
+        <TerminalSkeleton live badge={badge} leave={false} />
+      )}
+    </>
+  );
+}
+
+interface StateSnapshot {
+  data: TerminalState | undefined;
+  error: Error | null;
+}
+
+/** Опрос счёта — узел без разметки: его перерисовка на каждом ответе ничего не стоит. */
+function StateFeed({ onChange }: { onChange: (next: StateSnapshot) => void }) {
+  const { data, error } = useTerminalState();
+  useEffect(() => onChange({ data, error }), [data, error, onChange]);
+  return null;
+}
+
+function StateError({ error }: { error: Error }) {
   const tt = useTranslations('terminal');
-  const { data, error, refetch, isFetching } = useTerminalState();
-  if (!data) {
-    if (!error) return <TerminalSkeleton live badge={tt('realBadge')} leave={false} />;
-    return (
-      <Wrap page>
-        <ErrorNote error={error} fallback={tt('loadFailed')} />
-        <Button variant="solid" disabled={isFetching} onClick={() => void refetch()}>
-          {tt('retry')}
-        </Button>
-      </Wrap>
-    );
-  }
-  return <ExchangeTerminal state={data} stale={error != null} />;
+  const { refetch, isFetching } = useTerminalState();
+  return (
+    <Wrap page>
+      <ErrorNote error={error} fallback={tt('loadFailed')} />
+      <Button variant="solid" disabled={isFetching} onClick={() => void refetch()}>
+        {tt('retry')}
+      </Button>
+    </Wrap>
+  );
 }
 
 /**
@@ -73,8 +118,19 @@ export function TerminalScreen() {
  * - стоп за тейками и стоп после исполнения сетки входа ведёт worker (не экран);
  * - кнопки «К списку» нет — уходить некуда.
  */
+/**
+ * Подпись над графиком — какой это счёт. Демо-ключ Bybit (биржа `bybit-demo`)
+ * торгует тем же экраном, и «настоящий счёт» на нём был бы неправдой.
+ */
+function useAccountBadge(): string {
+  const tt = useTranslations('terminal');
+  const demo = useTerminalAccess().data?.exchange === 'bybit-demo';
+  return tt(demo ? 'demoBadge' : 'realBadge');
+}
+
 function ExchangeTerminal({ state, stale }: { state: TerminalState; stale: boolean }) {
   const tt = useTranslations('terminal');
+  const badge = useAccountBadge();
   const actions = useExchangeActions();
   const { data: symbolsData } = useTerminalSymbols();
 
@@ -116,8 +172,8 @@ function ExchangeTerminal({ state, stale }: { state: TerminalState; stale: boole
         symbols={symbolsData?.symbols ?? NO_SYMBOLS}
         decimalsOf={decimalsOf}
         priceOf={priceOf}
-        // Настоящий счёт — сказано словами: экран тот же, что у бектеста, и спутать их можно ровно один раз.
-        badge={tt('realBadge')}
+        // Какой это счёт (настоящий или демо Bybit) — сказано словами: экран тот же, что у бектеста, и спутать их можно ровно один раз.
+        badge={badge}
         soundsOf={sounds}
         history={ExchangeHistory}
       />

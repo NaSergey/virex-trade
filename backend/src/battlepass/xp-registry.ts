@@ -18,6 +18,7 @@ export type XpSource =
   | 'game.backtest'
   | 'game.table'
   | 'game.jetpack'
+  | 'game.race'
   | 'trade.open'
   | 'journal.setup'
   | 'journal.tag';
@@ -59,6 +60,9 @@ export const XP_SOURCES: Record<XpSource, XpSourceDef> = {
   'game.table': { title: 'Партия в покере или блэкджеке', enabled: true, base: 5, dailyCap: 150 },
   // Ставка на раунд — их одна на раунд и так.
   'game.jetpack': { title: 'Ставка в джетпаке', enabled: true, base: 5, dailyCap: 100 },
+  // Гонка — на старте, по id гонки: за вход в лобби опыта нет, вход и выход
+  // до старта иначе набивали бы его.
+  'game.race': { title: 'Гонка', enabled: true, base: 5, dailyCap: 100 },
   // Новая позиция по рынку, открытая человеком, в любом терминале: биржа,
   // демо-счёт, бектест, турнир. Добор в открытую — не открытие; сработавший
   // лимит открыл позицию без человека.

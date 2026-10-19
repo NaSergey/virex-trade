@@ -31,7 +31,9 @@ const WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
  */
 @Injectable()
 export class BybitAdapter implements ExchangeAdapter {
-  readonly id = 'bybit' as const;
+  readonly id: 'bybit' | 'bybit-demo' = 'bybit';
+  /** Демо-счёт: каждый запрос с ключом идёт на демо-адрес (`BybitDemoAdapter`). */
+  protected readonly demo: boolean = false;
 
   constructor(
     private readonly balance: BybitBalanceService,
@@ -40,10 +42,19 @@ export class BybitAdapter implements ExchangeAdapter {
     private readonly apiKeys: BybitApiKeyService,
   ) {}
 
+  /**
+   * Признак демо — от самого адаптера, а не только из сохранённых данных: при
+   * подключении ключ приходит сырым из формы, и без признака его проверка ушла
+   * бы на основной адрес, где демо-ключа нет.
+   */
+  private keys(creds: ExchangeCredentials): ExchangeCredentials {
+    return this.demo ? { ...creds, demo: true } : creds;
+  }
+
   async verifyCredentials(creds: ExchangeCredentials): Promise<VerifyResult> {
     // A balance read is the cheapest call that proves the key, the secret and
     // the account permissions all line up.
-    const res = await this.balance.getUSDTBalance(creds);
+    const res = await this.balance.getUSDTBalance(this.keys(creds));
     if (!res.success) return { success: false, error: res.error };
 
     return { success: true, permissions: await this.getKeyPermissions(creds) };
@@ -53,13 +64,13 @@ export class BybitAdapter implements ExchangeAdapter {
   // that reads fine but cannot be interrogated comes back without permissions
   // rather than as read-only.
   async getKeyPermissions(creds: ExchangeCredentials): Promise<KeyPermissions | undefined> {
-    const info = await this.apiKeys.getApiKeyInfo(creds);
+    const info = await this.apiKeys.getApiKeyInfo(this.keys(creds));
     if (!info.success) return undefined;
     return { canTrade: info.canTrade, canWithdraw: info.canWithdraw };
   }
 
   async getOpenPositions(creds: ExchangeCredentials): Promise<PositionsResult> {
-    const res = await this.positions.getOpenPositions(creds);
+    const res = await this.positions.getOpenPositions(this.keys(creds));
     if (!res.success) return { success: false, positions: [], error: res.error };
     return {
       success: true,
@@ -90,7 +101,7 @@ export class BybitAdapter implements ExchangeAdapter {
     for (const w of windowsOf(range)) {
       let cursor: string | undefined;
       do {
-        const page = await this.trades.fetchClosedPnlPage(creds, {
+        const page = await this.trades.fetchClosedPnlPage(this.keys(creds), {
           startTime: w.startMs,
           endTime: w.endMs,
           cursor,
@@ -122,7 +133,7 @@ export class BybitAdapter implements ExchangeAdapter {
     for (const w of windowsOf(range)) {
       let cursor: string | undefined;
       do {
-        const page = await this.trades.fetchExecutionsPage(creds, {
+        const page = await this.trades.fetchExecutionsPage(this.keys(creds), {
           startTime: w.startMs,
           endTime: w.endMs,
           cursor,
@@ -239,4 +250,15 @@ function num(v: unknown): number {
 /** Keep the exchange's own decimal string, collapsing '' and null to absent. */
 function str(v: unknown): string | undefined {
   return v != null && v !== '' ? String(v) : undefined;
+}
+
+/**
+ * Bybit на демо-счёте (Demo Trading): те же запросы и разбор, другой адрес —
+ * ключ демо-счёта существует только на демо-адресе (`BYBIT_DEMO_API`). Своя биржа в
+ * каталоге (`bybit-demo`), чтобы настоящий и демо-ключ жили рядом.
+ */
+@Injectable()
+export class BybitDemoAdapter extends BybitAdapter {
+  override readonly id = 'bybit-demo' as const;
+  protected override readonly demo = true;
 }

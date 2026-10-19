@@ -26,6 +26,16 @@ export const EXCHANGE_CATALOG: readonly ExchangeMeta[] = [
     permissionsHint: 'Права на чтение и торговлю (Contract Trade), без права на вывод средств.',
   },
   {
+    // Demo Trading Bybit: свой адрес и свои ключи, деньги ненастоящие
+    // (`bybitBase`, `BYBIT_DEMO_API`). Отдельная биржа, а не флажок у Bybit
+    // (владелец 2026-10-19): можно держать оба ключа и переключаться.
+    id: 'bybit-demo',
+    label: 'Bybit Demo',
+    needsPassphrase: false,
+    permissionsHint:
+      'Ключ демо-счёта: на Bybit переключитесь на Demo Trading и создайте ключ там (аватар → API). Права на чтение и торговлю (Contract Trade).',
+  },
+  {
     id: 'okx',
     label: 'OKX',
     needsPassphrase: true,
@@ -74,3 +84,10 @@ export const isExchangeId = (v: unknown): v is ExchangeId =>
 
 export const exchangeMeta = (id: ExchangeId): ExchangeMeta =>
   EXCHANGE_CATALOG.find((e) => e.id === id) as ExchangeMeta;
+
+/**
+ * Bybit — настоящий или демо-счёт: у обоих один торговый слой, терминал и
+ * шлюз лимита IP. Различаются только адресом запросов с ключом.
+ */
+export const isBybit = (id: ExchangeId | null | undefined): id is 'bybit' | 'bybit-demo' =>
+  id === 'bybit' || id === 'bybit-demo';

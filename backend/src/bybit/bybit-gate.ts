@@ -11,6 +11,18 @@ import { ROLE, type Role } from '../role';
 export const BYBIT_API = 'https://api.bybit.com/v5';
 
 /**
+ * Demo Trading Bybit — отдельный адрес, и ключ демо-счёта существует только
+ * там (https://bybit-exchange.github.io/docs/v5/demo). Публичные данные у демо
+ * те же, что у основного, поэтому сюда идут только запросы с ключом
+ * (`bybitBase`). Шлюз у адресов общий: считает ли Bybit лимит IP по двум хостам
+ * вместе, документация не говорит, и общий бюджет — строгая сторона.
+ */
+export const BYBIT_DEMO_API = 'https://api-demo.bybit.com/v5';
+
+/** Адрес для запроса с ключом: демо-ключу — демо-адрес. */
+export const bybitBase = (demo: boolean | undefined): string => (demo ? BYBIT_DEMO_API : BYBIT_API);
+
+/**
  * Лимит Bybit: 600 запросов за любые 5 секунд с одного IP, на весь трафик к
  * api.bybit.com — публичные свечи, приватные ключи пользователей, всё вместе.
  * Превышение — HTTP 403 «access too frequent» и не меньше 10 минут ожидания

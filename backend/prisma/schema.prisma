@@ -73,7 +73,7 @@ model User {
   openPositionsSeen  OpenPositionSeen[]
   savedTagCombos     SavedTagCombo[]
   dismissedTagCombos DismissedTagCombo[]
-  donations         Donation[]
+  donations          Donation[]
   backtestSessions   BacktestSession[]
   tournamentsCreated Tournament[]            @relation("TournamentCreator")
   tournamentEntries  TournamentParticipant[]
@@ -97,6 +97,7 @@ model User {
 
   /// Ставки джетпака (crash-игры).
   jetpackBets JetpackBet[]
+  raceEntries RaceEntry[]
 
   /// Картинка профиля: есть ли она и её версия (адрес картинки несёт её как
   /// `?v=`). Сами байты — в `UserAvatar`, а не здесь: Prisma читает все
@@ -114,9 +115,9 @@ model User {
   showTrades Boolean @default(true)
 
   /// Счёт терминала из приватного WebSocket Bybit (`terminal_streams`).
-  terminalStream TerminalStream?
+  terminalStream       TerminalStream?
   /// Планы стопа за тейками на бирже (`terminal_stop_follows`).
-  terminalStopFollows TerminalStopFollow[]
+  terminalStopFollows  TerminalStopFollow[]
   terminalEntryFollows TerminalEntryFollow[]
 
   @@map("users")
@@ -350,39 +351,39 @@ model TradeTag {
 /// вручную. Тренировочные сделки живут отдельно от журнала (Trade) — иначе
 /// диагностика живой торговли считала бы сделки, которых не было на бирже.
 model BacktestSession {
-  id           String      @id @default(uuid())
-  userId       String
-  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String      @id @default(uuid())
+  userId         String
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// Точка старта; выбирает сервер, чтобы её нельзя было «перебросить» из браузера.
-  startTime    DateTime
+  startTime      DateTime
   /// Текущий момент сессии: время закрытия последней показанной минутки. Только растёт.
-  cursorTime   DateTime
-  startBalance Float
+  cursorTime     DateTime
+  startBalance   Float
   /// Текущий депозит сессии: стартовый плюс PnL закрытых сделок.
-  balance      Float
-  hideDate     Boolean
-  hidePrice    Boolean
+  balance        Float
+  hideDate       Boolean
+  hidePrice      Boolean
   /// Коэффициент показа цен; 1, если цена не скрыта. В базе цены настоящие.
-  priceScale   Float
+  priceScale     Float
   /// Откуда свечи: 'real' — отрезок price_candles, 'synthetic' — рынок строит генератор (backtest/synthetic),
   /// 'live' — живой рынок в эфире: цену и время ставит сервер, уровни исполняет движок эфира.
-  dataSource   String      @default("real")
+  dataSource     String      @default("real")
   /// Эфир ('live'): до какого момента движок проверил уровни сессии. Не cursorTime:
   /// тот двигают вход и выход сделки, и чтение от него пропускало бы кусок у
   /// остальных позиций. У турнирной сессии курсор общий — Tournament.processedUntil.
   processedUntil DateTime?
   /// Зерно генератора; только у synthetic.
-  seed         Int?
+  seed           Int?
   /// Версия генератора (SYNTH_VERSION), которой построена сессия; только у synthetic.
-  synthVersion Int?
-  status       String      @default("active") // 'active' | 'finished'
-  createdAt    DateTime    @default(now())
-  finishedAt   DateTime?
+  synthVersion   Int?
+  status         String      @default("active") // 'active' | 'finished'
+  createdAt      DateTime    @default(now())
+  finishedAt     DateTime?
   /// Турнирная сессия: создаётся стартом турнира; в список и статистику бектеста не входит.
-  tournamentId String?
-  tournament   Tournament? @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  tournamentId   String?
+  tournament     Tournament? @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   /// Граница сессии: дальше неё ни свечей, ни сделок. Только у турнирных.
-  endTime      DateTime?
+  endTime        DateTime?
 
   trades      BacktestTrade[]
   entryOrders BacktestEntryOrder[]
@@ -570,17 +571,17 @@ model BacktestTradeExit {
 /// Висящий лимитный ордер на (частичное) закрытие. Живёт до срабатывания цены
 /// в реплее или ручной отмены; на одну сделку может висеть несколько сразу.
 model BacktestCloseOrder {
-  id        String        @id @default(uuid())
-  tradeId   String
-  trade     BacktestTrade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
-  price     Float
-  qty       Float
+  id          String        @id @default(uuid())
+  tradeId     String
+  trade       BacktestTrade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  price       Float
+  qty         Float
   /// Цель стопа, когда этот лимит исполнится (сетка фиксации); null — правило «вход, дальше предыдущий тейк».
-  stopAfter Float?
+  stopAfter   Float?
   /// Продажа грид-бота; исполнившись, возвращает покупку на `botBuyPrice`.
   botId       String?
   botBuyPrice Float?
-  createdAt DateTime      @default(now())
+  createdAt   DateTime      @default(now())
 
   @@index([tradeId])
   @@map("backtest_close_orders")
@@ -1246,6 +1247,48 @@ model JetpackBet {
   @@unique([roundId, userId])
   @@index([userId])
   @@map("jetpack_bets")
+}
+
+/// Гонка трёх машин (спека 2026-10-18-race-game-design.md). Лобби и гонка живут
+/// в памяти процесса игр; строка нужна возврату взносов гонки, прерванной
+/// перезапуском (`finishedAt: null` на старте процесса), и истории.
+model RaceRound {
+  id         String      @id @default(uuid())
+  createdAt  DateTime    @default(now())
+  stake      Int
+  /// Зерно расклада трассы — его же получает браузер.
+  seed       Int
+  startedAt  DateTime?
+  finishedAt DateTime?
+  voided     Boolean     @default(false)
+  entries    RaceEntry[]
+
+  @@index([finishedAt])
+  @@map("race_rounds")
+}
+
+/// Место в гонке. `userId` пуст у бота: бот играет за заведение, его взнос и
+/// выигрыш монетами не двигаются. Одно место — одна строка, один человек — одно
+/// место в гонке; держат это уникальные ключи, а не проверка в коде.
+model RaceEntry {
+  id       String    @id @default(uuid())
+  raceId   String
+  race     RaceRound @relation(fields: [raceId], references: [id], onDelete: Cascade)
+  userId   String?
+  user     User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  botName  String?
+  slot     Int
+  car      String
+  joinedAt DateTime  @default(now())
+  place    Int?
+  finishMs Int?
+  progress Float?
+  payout   Int?
+
+  @@unique([raceId, slot])
+  @@unique([raceId, userId])
+  @@index([userId])
+  @@map("race_entries")
 }
 
 /// Прогресс Battle Pass за один сезон. Уровень не хранится — он функция от xp

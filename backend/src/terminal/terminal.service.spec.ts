@@ -117,7 +117,7 @@ function setup(s: Setup = {}) {
     battlePass as any,
   );
   const orders = () => posts.filter((p) => p.path === '/order/create').map((p) => p.body);
-  return { service, posts, orders, bybit, streams, follows, entryFollows, battlePass };
+  return { service, posts, orders, bybit, streams, follows, entryFollows, battlePass, credentials };
 }
 
 const market = (extra: Record<string, unknown> = {}) => ({
@@ -821,6 +821,25 @@ describe('TerminalService', () => {
     });
   });
 
+  describe('Bybit Demo', () => {
+    it('trades with the key of the active Bybit — demo when demo is active', async () => {
+      const { service, credentials } = setup({ active: 'bybit-demo' });
+      await service.state('u1');
+      expect(credentials.require).toHaveBeenCalledWith('u1', 'bybit-demo');
+    });
+
+    // Снимок счёта в кэше на пару секунд: переключившись на демо, человек не
+    // должен увидеть под подписью «демо» счёт настоящего ключа.
+    it('does not serve the snapshot of the previous key after a switch', async () => {
+      const { service, bybit, credentials } = setup();
+      await service.state('u1');
+      expect(bybit.privateGet).toHaveBeenCalledTimes(3);
+      credentials.require.mockResolvedValue({ apiKey: 'demo-key', apiSecret: 's', demo: true } as never);
+      await service.state('u1');
+      expect(bybit.privateGet).toHaveBeenCalledTimes(6);
+    });
+  });
+
   describe('access', () => {
     it('opens the terminal to an active Bybit key that may place orders', async () => {
       expect(await setup().service.access('u1')).toEqual({ available: true, reason: null, exchange: 'bybit' });
@@ -836,6 +855,13 @@ describe('TerminalService', () => {
       const { service } = setup({ keyInfo: { success: false, canPlaceOrders: false } });
 
       expect(await service.access('u1')).toMatchObject({ available: false, reason: 'UNKNOWN' });
+    });
+
+    it('opens it to an active Bybit Demo key the same way, reading that key', async () => {
+      const { service, credentials } = setup({ active: 'bybit-demo' });
+
+      expect(await service.access('u1')).toEqual({ available: true, reason: null, exchange: 'bybit-demo' });
+      expect(credentials.get).toHaveBeenCalledWith('u1', 'bybit-demo');
     });
 
     it('keeps it closed for another exchange and for no exchange at all', async () => {

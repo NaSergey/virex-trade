@@ -6,6 +6,7 @@ import { cn } from '@/shared/lib/utils/css';
 import { BlackjackScene } from './BlackjackScene';
 import { JetpackScene } from './JetpackScene';
 import { PokerScene } from './PokerScene';
+import { RaceScene } from './RaceScene';
 import { TradingScene } from './TradingScene';
 import type { Game, GameScene } from '../model/games';
 
@@ -19,6 +20,7 @@ const SCENES: Record<GameScene, ComponentType> = {
   poker: PokerScene,
   blackjack: BlackjackScene,
   jetpack: JetpackScene,
+  race: RaceScene,
 };
 
 /**

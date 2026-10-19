@@ -32,6 +32,9 @@ const KINDS = new Set([
   'JETPACK_BET',
   'JETPACK_WIN',
   'JETPACK_REFUND',
+  'RACE_STAKE',
+  'RACE_WIN',
+  'RACE_REFUND',
 ]);
 
 /**

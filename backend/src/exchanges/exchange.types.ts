@@ -7,7 +7,7 @@
  * catalog entry, with no changes to the sync pipeline.
  */
 
-export type ExchangeId = 'bybit' | 'okx' | 'bitget' | 'kucoin' | 'gate' | 'binance' | 'mexc';
+export type ExchangeId = 'bybit' | 'bybit-demo' | 'okx' | 'bitget' | 'kucoin' | 'gate' | 'binance' | 'mexc';
 
 /** Per-user API credentials, decrypted just-in-time by CredentialsService. */
 export interface ExchangeCredentials {
@@ -15,6 +15,11 @@ export interface ExchangeCredentials {
   apiSecret: string;
   /** Third secret required by OKX/Bitget/KuCoin; absent for Bybit. */
   passphrase?: string;
+  /**
+   * Ключ демо-счёта (`bybit-demo`): подписанные запросы идут на демо-адрес
+   * биржи. Не хранится — выводится из биржи подключения.
+   */
+  demo?: boolean;
 }
 
 /**

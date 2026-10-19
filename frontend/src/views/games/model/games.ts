@@ -14,7 +14,7 @@
  * хранить его отдельным полем значит завести второй источник того же знания,
  * способный разойтись с первым.
  */
-export type GameId = 'blackjack' | 'poker' | 'jetpack' | 'trading';
+export type GameId = 'blackjack' | 'poker' | 'jetpack' | 'race' | 'trading';
 
 /**
  * Чипы под описанием — то, что игра обещает форматом: с кем играют и чем это
@@ -29,10 +29,10 @@ export type GameTag = '1v1' | 'pvp' | 'tournaments' | 'ratings' | 'fast' | 'mult
  * подложки у карточек нет: цветные подложки на каждую игру уже пробовали, и
  * витрина распадалась на четыре чужих друг другу куска.
  */
-export type GameAccent = 'green' | 'red' | 'purple';
+export type GameAccent = 'green' | 'red' | 'purple' | 'amber';
 
 /** Сцены, нарисованные кодом, — `views/games/components/<Name>Scene.tsx`. */
-export type GameScene = 'trading' | 'poker' | 'blackjack' | 'jetpack';
+export type GameScene = 'trading' | 'poker' | 'blackjack' | 'jetpack' | 'race';
 
 export type Game = {
   id: GameId;
@@ -84,6 +84,14 @@ export const GAMES: readonly Game[] = [
     accent: 'purple',
     tags: ['fast', 'multiplayer'],
     scene: 'jetpack',
+  },
+  {
+    id: 'race',
+    href: '/games/race',
+    available: true,
+    accent: 'amber',
+    tags: ['fast', 'multiplayer'],
+    scene: 'race',
   },
   {
     id: 'trading',

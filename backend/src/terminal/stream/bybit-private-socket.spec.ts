@@ -1,5 +1,5 @@
 import { createHmac } from 'crypto';
-import { BybitPrivateSocket, BYBIT_PRIVATE_WS, type SocketHandlers } from './bybit-private-socket';
+import { BybitPrivateSocket, BYBIT_PRIVATE_WS, BYBIT_PRIVATE_WS_DEMO, type SocketHandlers } from './bybit-private-socket';
 
 /** Сокет-заглушка: держит обработчики и отправленное. */
 class FakeSocket {
@@ -26,11 +26,11 @@ class FakeSocket {
 
 const NOW = 1_700_000_000_000;
 
-function setup() {
+function setup(demo?: boolean) {
   let fake!: FakeSocket;
   const handlers: jest.Mocked<SocketHandlers> = { onReady: jest.fn(), onTopic: jest.fn(), onClosed: jest.fn() };
   const socket = new BybitPrivateSocket(
-    { apiKey: 'key', apiSecret: 'secret' },
+    { apiKey: 'key', apiSecret: 'secret', demo },
     handlers,
     (url) => (fake = new FakeSocket(url)),
     () => Date.now(), // часы Jest: идут вместе с таймерами
@@ -61,6 +61,13 @@ describe('BybitPrivateSocket', () => {
 
     fake().reply({ op: 'subscribe', success: true });
     expect(handlers.onReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('ключ демо-счёта — демо-адрес потока', () => {
+    const { socket, fake } = setup(true);
+    expect(fake().url).toBe(BYBIT_PRIVATE_WS_DEMO);
+    expect(BYBIT_PRIVATE_WS_DEMO).toBe('wss://stream-demo.bybit.com/v5/private');
+    socket.close();
   });
 
   it('сообщения тем отдаёт дальше, служебные — нет', () => {

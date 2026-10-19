@@ -166,8 +166,22 @@ export function useLiveFeed(
 
   const cursor = Math.min(now, endTime ?? now);
 
+  // Последние минутки в рефе — разрыв перед хвостом ищется по ним, а не в
+  // функции обновления: переход React может пересчитать её не раз, и запрос
+  // догрузки ушёл бы дважды.
+  const minutesRef = useRef(minutesState);
+  useLayoutEffect(() => {
+    minutesRef.current = minutesState;
+  });
+
   // Живой хвост: раз в две секунды. Минутки сливаются по времени, свежая
   // версия последней замещает прежнюю (см. mergeMinutes).
+  //
+  // Приход хвоста — переход (`startTransition`), как и история: он
+  // перерисовывает весь терминал, и срочным обновлением это был кусок в
+  // 100–170 мс раз в две секунды (dev-сборка, ЦП ×2, замер 2026-10-17), во
+  // время которого ползунки панели и жесты на графике стояли. Переход React
+  // режет на части и уступает вводу.
   useEffect(() => {
     if (!enabled || paused) return;
     let alive = true;
@@ -183,15 +197,16 @@ export function useLiveFeed(
         skew.current = Date.now() - Date.parse(serverTime);
         rememberSkew(source, skew.current);
         const fresh = tail.map(fromApi);
-        setMinutesState((prev) => {
-          const same = prev.symbol === symbol ? prev.rows : [];
-          // Разрыв между загруженным и хвостом (вкладка спала) догружается
-          // отдельно: выдумывать пропущенные свечи нельзя.
-          const gapFrom = same.length ? loadedUntil(same) : null;
-          if (gapFrom != null && fresh.length && fresh[0].t > gapFrom) void fillGap(gapFrom, fresh[0].t);
-          return mergeTagged(prev, symbol, fresh);
+        // Разрыв между загруженным и хвостом (вкладка спала) догружается
+        // отдельно: выдумывать пропущенные свечи нельзя.
+        const prev = minutesRef.current;
+        const same = prev.symbol === symbol ? prev.rows : [];
+        const gapFrom = same.length ? loadedUntil(same) : null;
+        if (gapFrom != null && fresh.length && fresh[0].t > gapFrom) void fillGap(gapFrom, fresh[0].t);
+        startTransition(() => {
+          setMinutesState((p) => mergeTagged(p, symbol, fresh));
+          show(Date.now() - skew.current);
         });
-        show(Date.now() - skew.current);
         setError(null);
       } catch (e) {
         if (alive) setError(e);
@@ -222,13 +237,13 @@ export function useLiveFeed(
   // (`nextChange`): граница минуты, вход свежей позиции, конец сессии. Каждый
   // тик перерисовывал весь терминал — пропущенный кадр на слабом устройстве
   // четыре раза в секунду (замер 2026-10-14). Точное время для действий —
-  // `moment()`.
+  // `moment()`. Порог — переходом, по той же причине, что и хвост.
   useEffect(() => {
     if (!enabled || paused) return;
     const timer = setInterval(() => {
       const t = Date.now() - skew.current;
       const { anchors, endTime } = thresholds.current;
-      if (t > nextChange(shown.current, anchors, endTime)) show(t);
+      if (t > nextChange(shown.current, anchors, endTime)) startTransition(() => show(t));
     }, 250);
     return () => clearInterval(timer);
   }, [enabled, paused, show]);
@@ -237,8 +252,8 @@ export function useLiveFeed(
   // (`startTransition`), а не срочное обновление: он перерисовывает весь
   // терминал с новыми свечами, и одним куском это была самая длинная задача
   // экрана (~400 мс при ЦП ×4, замер 2026-10-13) — прокрутка и клики вставали.
-  // Переход React режет на части и прерывает ради срочного; хвост и часы
-  // остаются срочными.
+  // Переход React режет на части и прерывает ради срочного; хвост и часы —
+  // тоже переходы (см. выше).
   useEffect(() => {
     if (!enabled) return;
     let alive = true;

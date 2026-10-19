@@ -58,9 +58,23 @@ export const backtestSessionQuery = (id: string) =>
     gcTime: Infinity,
   });
 
+/**
+ * Курсор движка эфира (`session.processedUntil`) экрану не нужен, а меняется на
+ * каждом опросе — и опрос без единой перемены перерисовывал весь терминал
+ * раз в три секунды. Без него структурное сравнение react-query оставляет
+ * прежний объект, и экран не трогается, пока не изменилось видимое.
+ */
+const withoutEngineCursor = (d: SessionDetail): SessionDetail => {
+  if (!('processedUntil' in d.session)) return d;
+  const session: SessionDetail['session'] & { processedUntil?: unknown } = { ...d.session };
+  delete session.processedUntil;
+  return { ...d, session };
+};
+
 export const useBacktestSession = (id: string) =>
   useQuery({
     ...backtestSessionQuery(id),
+    select: withoutEngineCursor,
     refetchInterval: (q) => (q.state.data && isLiveSession(q.state.data) ? LIVE_POLL_MS : false),
     refetchIntervalInBackground: true,
     // Эфир — перечитать сразу на монтировании: снимок из кэша уже показан, но

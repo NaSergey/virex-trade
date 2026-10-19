@@ -472,6 +472,7 @@
     "checkingKeys": "Checking keys…",
     "connect": "Connect",
     "permissionsHintBybit": "Read and trade permissions (Contract Trade), no withdrawal permission.",
+    "permissionsHintBybitDemo": "A demo account key: on Bybit switch to Demo Trading and create the key there (avatar → API). Read and trade permissions (Contract Trade).",
     "permissionsHintOkx": "“Read” and “Trade” permissions, no “Withdraw”. You set the passphrase yourself when creating the key — it can't be recovered afterward.",
     "permissionsHintBitget": "“Read-only” and “Trade” permissions for futures, no withdrawal. You set the passphrase yourself when creating the key.",
     "permissionsHintKucoin": "A KuCoin Futures key with General and Futures Trading permissions, no withdrawal. You set the passphrase yourself when creating the key.",
@@ -738,6 +739,11 @@
     "JETPACK_NO_BET": "No active bet",
     "JETPACK_NOT_FLYING": "The rocket hasn't launched yet",
     "JETPACK_TOO_LATE": "Too late: the rocket has already crashed",
+    "RACE_BAD_STAKE": "There's no such stake",
+    "RACE_BAD_CAR": "There's no such car",
+    "RACE_ALREADY_IN": "You're already in a race",
+    "RACE_NOT_IN": "You're not in a race lobby",
+    "RACE_STARTED": "The race has started — you can't leave",
     "TOURNAMENT_CLOSED": "The tournament is already over",
     "TOURNAMENT_SCHEDULED": "This tournament starts at a set time — no need to mark ready",
     "TOURNAMENT_BAD_START": "Start time must be at least a minute and at most 30 days away",
@@ -1618,6 +1624,10 @@
       "trading": {
         "title": "Trading",
         "description": "A real market and real skills. Trade against other players."
+      },
+      "race": {
+        "title": "Racing",
+        "description": "Three on the track, mines and falling pylons. The first at the finish takes the pot."
       }
     },
     "promo": {
@@ -1772,7 +1782,10 @@
       "DAILY_REWARD": "Daily reward",
       "JETPACK_BET": "Jetpack bet",
       "JETPACK_WIN": "Jetpack cash-out",
-      "JETPACK_REFUND": "Jetpack bet refund"
+      "JETPACK_REFUND": "Jetpack bet refund",
+      "RACE_STAKE": "Race stake",
+      "RACE_WIN": "Race win",
+      "RACE_REFUND": "Race stake refund"
     },
     "games": "Games",
     "colGame": "Game",
@@ -1981,6 +1994,7 @@
     "pageTitle": "Terminal",
     "pageLede": "Trading on Bybit with your API key: orders go to the exchange and are filled there.",
     "realBadge": "Bybit · live account",
+    "demoBadge": "Bybit · demo account",
     "stale": "Couldn't refresh the account — the positions and orders on screen may be out of date.",
     "loadFailed": "Couldn't load the terminal",
     "retry": "Retry",
@@ -2014,6 +2028,96 @@
     "mute": "Mute",
     "unmute": "Unmute",
     "volume": "Volume"
+  },
+  "race": {
+    "loading": "Loading the race…",
+    "loadFailed": "Couldn't load the race",
+    "joinFailed": "Couldn't join the race",
+    "leaveFailed": "Couldn't leave the lobby",
+    "back": "Games",
+    "title": "Three on the track",
+    "lede": "Mines, falling pylons and strikes from the sky. Not everyone reaches the finish; the first one takes the pot.",
+    "carLabel": "Car",
+    "stakeLabel": "Stake, coins",
+    "find": "Find a race · {stake} coins",
+    "controls": "Steer with ← → or A D, brake with ↓ or Space. The throttle is always on.",
+    "sceneLabel": "Race track",
+    "you": "You",
+    "anon": "Player",
+    "stat": {
+      "speed": "Speed",
+      "grip": "Steering",
+      "armor": "Armor"
+    },
+    "cars": {
+      "arrow": {
+        "name": "Arrow",
+        "line": "The fastest. Out on the second hit."
+      },
+      "buggy": {
+        "name": "Buggy",
+        "line": "Gets out of the way quicker than anyone."
+      },
+      "tank": {
+        "name": "Armored",
+        "line": "Stiff steering, four hits, and a hit barely slows it down."
+      }
+    },
+    "lobby": {
+      "head": "Looking for rivals",
+      "waiting": "looking for a player…",
+      "bot": "bot",
+      "stake": "stake {stake}",
+      "pot": "Race pot",
+      "botsIn": "Bots take the empty seats in {sec} s.",
+      "leave": "Leave and get the stake back"
+    },
+    "hud": {
+      "place": "place",
+      "bank": "Pot",
+      "hp": "{car} · armor",
+      "speed": "Speed",
+      "kmh": "km/h",
+      "out": "You're out",
+      "watchNext": "The camera will switch to the leader.",
+      "watching": "Camera on {name}. The first at the finish takes the pot."
+    },
+    "feed": {
+      "mine": "mine −{dmg}",
+      "pylon": "pylon −{dmg}",
+      "strike": "sky strike −{dmg}",
+      "wreck": "wreck −{dmg}",
+      "out": "crashed, {cause}",
+      "finish": "finished",
+      "finishFirst": "finished first",
+      "slide": "oil, skidding"
+    },
+    "cause": {
+      "mine": "mine",
+      "pylon": "pylon",
+      "strike": "sky strike",
+      "wreck": "wreck"
+    },
+    "result": {
+      "won": "The pot is yours",
+      "over": "Race over",
+      "first": "First place",
+      "farthest": "Farthest",
+      "dnf": "You didn't finish",
+      "place": "Place {place}",
+      "dnfAt": "didn't finish · {pct}%",
+      "winYou": "+{pot} coins — first at the finish.",
+      "winYouFar": "+{pot} coins — nobody finished, the pot goes to the one who got farthest.",
+      "lost": "{name} takes the {pot}-coin pot. Your stake of {stake} is gone.",
+      "lostFar": "{name} takes the {pot}-coin pot: nobody finished, and they got farthest. Your stake of {stake} is gone.",
+      "again": "Race again",
+      "change": "Change car"
+    },
+    "touch": {
+      "left": "Left",
+      "right": "Right",
+      "brake": "Brake"
+    }
   },
   "jetpack": {
     "back": "Games",

@@ -175,6 +175,9 @@ export class CredentialsService {
         ...(row.passphraseEnc
           ? { passphrase: this.crypto.decrypt(row.passphraseEnc) }
           : {}),
+        // Демо-счёт — не колонка, а биржа подключения: терминал и поток счёта
+        // берут ключ отсюда, мимо адаптера, и адрес выбирают по этому признаку.
+        ...(exchange === 'bybit-demo' ? { demo: true } : {}),
       };
     } catch (e) {
       // A raw throw here surfaced as a bare 500 "Internal server error", which

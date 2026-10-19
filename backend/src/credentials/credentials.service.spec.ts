@@ -96,6 +96,19 @@ describe('CredentialsService', () => {
       });
     });
 
+    // Терминал и поток счёта берут ключ отсюда, мимо адаптера, — признак демо
+    // обязан ехать вместе с ключом, иначе запросы уйдут на основной адрес Bybit.
+    it('marks Bybit Demo credentials as demo, and only them', async () => {
+      const demo = serviceReading(KEY_A, [connectionRow(KEY_A, 'bybit-demo')]);
+      expect(await demo.get('u1', 'bybit-demo')).toEqual({
+        apiKey: 'ASSjQYU2q1zf6h28mZ',
+        apiSecret: 'super-secret',
+        demo: true,
+      });
+      const real = serviceReading(KEY_A, [connectionRow(KEY_A, 'bybit')]);
+      expect((await real.get('u1', 'bybit'))?.demo).toBeUndefined();
+    });
+
     // A raw throw reached the client as a bare 500 "Internal server error",
     // which named neither the cause nor the way out.
     it('explains an undecryptable connection instead of failing opaquely', async () => {

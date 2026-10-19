@@ -217,6 +217,14 @@ describe('TerminalStreamService', () => {
     expect(t.opened).toHaveLength(1); // соединение то же
   });
 
+  it('активный Bybit Demo — поток на его ключе и с признаком демо', async () => {
+    const t = setup({ active: 'bybit-demo', creds: { ...CREDS, demo: true } as typeof CREDS });
+    await t.service.tick();
+    expect(t.credentials.get).toHaveBeenCalledWith('u1', 'bybit-demo');
+    expect(t.opened).toHaveLength(1);
+    expect(t.opened[0].creds).toMatchObject({ demo: true });
+  });
+
   it('один сломанный пользователь не оставляет без соединения остальных', async () => {
     const t = setup({ wanted: ['u1', 'u2'] });
     t.credentials.activeExchange.mockImplementation(async (userId: string) => {

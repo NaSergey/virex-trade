@@ -7,6 +7,7 @@ import { GamesController } from './games/games.controller';
 import { GamesGateway } from './games/games.gateway';
 import { JetpackController } from './jetpack/jetpack.controller';
 import { PokerController } from './poker/poker.controller';
+import { RaceController } from './race/race.controller';
 
 /**
  * Корень процесса игр собирается отдельно от `AppModule`, и забытая в нём
@@ -23,6 +24,7 @@ describe('GamesAppModule', () => {
       PokerController,
       BlackjackController,
       JetpackController,
+      RaceController,
       GamesGateway,
       UsageTrackerService,
     ]) {

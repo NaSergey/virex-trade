@@ -8,6 +8,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CredentialsService } from '../credentials/credentials.service';
 import { ExchangeRegistry } from '../exchanges/exchange-registry.service';
+import { isBybit } from '../exchanges/exchange-catalog';
 import { ExchangePositionsCacheService } from '../exchanges/exchange-positions-cache.service';
 import {
   ClosedTrade,
@@ -172,7 +173,7 @@ export class TradeSyncService
     // Пауза шлюза Bybit (IP сервера получил 403): каждый запрос прогона был бы
     // отклонён без сети, а сам прогон засчитался бы человеку как неудачный.
     // Тик пропускается молча — синк вернётся сам, когда пауза кончится.
-    if (exchange === 'bybit' && bybitPaused()) return 0;
+    if (isBybit(exchange) && bybitPaused()) return 0;
     // Неудача, в которой виноват наш шлюз (пауза началась посреди прогона, нет
     // места в окне), — не неудача ключа: три таких подряд разослали бы всем
     // «проверь API-ключи», хотя ключи в порядке. Счётчик отказов общий на

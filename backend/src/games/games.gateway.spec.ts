@@ -20,9 +20,12 @@ function makeSocket(auth: Record<string, unknown> = {}) {
 describe('GamesGateway auth middleware', () => {
   function getMiddleware(jwt: { verifyAsync: jest.Mock }) {
     const gateway = new GamesGateway(jwt as never);
-    const fakeServer = { use: jest.fn() };
+    const fakeServer = { use: jest.fn(), on: jest.fn() };
     gateway.afterInit(fakeServer as never);
-    return fakeServer.use.mock.calls[0][0] as (socket: unknown, next: (err?: Error) => void) => Promise<void>;
+    return fakeServer.use.mock.calls[0][0] as (
+      socket: unknown,
+      next: (err?: Error) => void,
+    ) => Promise<void>;
   }
 
   it('без токена отказывает и не проверяет его', async () => {
@@ -50,7 +53,9 @@ describe('GamesGateway auth middleware', () => {
   });
 
   it('невалидный токен отказывает', async () => {
-    const jwt = { verifyAsync: jest.fn().mockRejectedValue(new Error('bad token')) };
+    const jwt = {
+      verifyAsync: jest.fn().mockRejectedValue(new Error('bad token')),
+    };
     const middleware = getMiddleware(jwt);
     const socket = makeSocket({ token: 'bad' });
     const next = jest.fn();
@@ -61,7 +66,11 @@ describe('GamesGateway auth middleware', () => {
   });
 
   it('валидный токен кладёт userId в data и пропускает без ошибки', async () => {
-    const jwt = { verifyAsync: jest.fn().mockResolvedValue({ sub: 'u1', email: 'u1@example.com' }) };
+    const jwt = {
+      verifyAsync: jest
+        .fn()
+        .mockResolvedValue({ sub: 'u1', email: 'u1@example.com' }),
+    };
     const middleware = getMiddleware(jwt);
     const socket = makeSocket({ token: 'good' });
     const next = jest.fn();
@@ -134,5 +143,67 @@ describe('GamesGateway.broadcastTableState', () => {
 
     expect(to).toHaveBeenCalledWith('gt1');
     expect(emit).toHaveBeenCalledWith('table_state', { table: { id: 'gt1' } });
+  });
+});
+
+describe('GamesGateway.listen', () => {
+  it('отдаёт событие сокета обработчику вместе с userId из рукопожатия', () => {
+    const gateway = new GamesGateway({ verifyAsync: jest.fn() } as never);
+    const fakeServer = { use: jest.fn(), on: jest.fn() };
+    gateway.afterInit(fakeServer as never);
+    const handler = jest.fn();
+    gateway.listen('race_input', handler);
+
+    const onConnection = fakeServer.on.mock.calls.find(
+      ([e]) => e === 'connection',
+    )![1] as (s: unknown) => void;
+    const listeners = new Map<string, (p: unknown) => void>();
+    const socket = {
+      data: { userId: 'u1' },
+      on: (e: string, fn: (p: unknown) => void) => listeners.set(e, fn),
+    };
+    onConnection(socket);
+    listeners.get('race_input')!({ t: 1 });
+    expect(handler).toHaveBeenCalledWith('u1', { t: 1 });
+  });
+
+  it('сокет без userId обработчика не достигает', () => {
+    const gateway = new GamesGateway({ verifyAsync: jest.fn() } as never);
+    const fakeServer = { use: jest.fn(), on: jest.fn() };
+    gateway.afterInit(fakeServer as never);
+    const handler = jest.fn();
+    gateway.listen('race_input', handler);
+    const onConnection = fakeServer.on.mock.calls[0][1] as (s: unknown) => void;
+    const listeners = new Map<string, (p: unknown) => void>();
+    onConnection({
+      data: {},
+      on: (e: string, fn: (p: unknown) => void) => listeners.set(e, fn),
+    });
+    listeners.get('race_input')?.({ t: 1 });
+    expect(handler).not.toHaveBeenCalled();
+  });
+});
+
+describe('GamesGateway.listen — сбой обработчика', () => {
+  it('исключение обработчика не выходит наружу', () => {
+    const gateway = new GamesGateway({ verifyAsync: jest.fn() } as never);
+    const fakeServer = { use: jest.fn(), on: jest.fn() };
+    gateway.afterInit(fakeServer as never);
+    jest
+      .spyOn(
+        (gateway as unknown as { logger: { error: () => void } }).logger,
+        'error',
+      )
+      .mockImplementation(() => undefined);
+    gateway.listen('race_input', () => {
+      throw new Error('boom');
+    });
+    const onConnection = fakeServer.on.mock.calls[0][1] as (s: unknown) => void;
+    const listeners = new Map<string, (p: unknown) => void>();
+    onConnection({
+      data: { userId: 'u1' },
+      on: (e: string, fn: (p: unknown) => void) => listeners.set(e, fn),
+    });
+    expect(() => listeners.get('race_input')!({ t: 1 })).not.toThrow();
   });
 });

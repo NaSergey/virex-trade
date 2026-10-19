@@ -10,13 +10,14 @@ import { GamesModule } from './games/games.module';
 import { JetpackModule } from './jetpack/jetpack.module';
 import { PokerModule } from './poker/poker.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { RaceModule } from './race/race.module';
 
 /**
  * Игры с состоянием в памяти процесса: столы покера и блэкджека, раунд
- * джетпака, их общий сокет и возврат прерванного на старте. Входят только в
+ * джетпака, гонки, их общий сокет и возврат прерванного на старте. Входят только в
  * граф роли игр (`runsGames`): здесь и в `AppModule` при `ROLE=all`.
  */
-export const GAME_MODULES = [GamesModule, PokerModule, BlackjackModule, JetpackModule];
+export const GAME_MODULES = [GamesModule, PokerModule, BlackjackModule, JetpackModule, RaceModule];
 
 /**
  * Корень процесса `ROLE=games` (спека `2026-10-02-games-role-design.md`).

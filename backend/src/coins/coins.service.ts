@@ -21,7 +21,10 @@ export type CoinTxKind =
   | 'DAILY_REWARD'
   | 'JETPACK_BET'
   | 'JETPACK_WIN'
-  | 'JETPACK_REFUND';
+  | 'JETPACK_REFUND'
+  | 'RACE_STAKE'
+  | 'RACE_WIN'
+  | 'RACE_REFUND';
 
 /**
  * Монеты: баланс пользователя и журнал движений.

@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy, Optional } from '@nestjs/common';
 import type { BybitCredentials } from '../../bybit/services/bybit-auth.service';
 import { CredentialsService } from '../../credentials/credentials.service';
+import { isBybit } from '../../exchanges/exchange-catalog';
 import { runsBackgroundJobs } from '../../role';
 import { readAccount } from '../account-snapshot';
 import { BybitTerminalClient } from '../bybit-terminal.client';
@@ -208,9 +209,10 @@ export class TerminalStreamService implements OnApplicationBootstrap, OnModuleDe
   }
 
   private async credsOf(userId: string): Promise<BybitCredentials | null> {
-    if ((await this.credentials.activeExchange(userId)) !== 'bybit') return null;
-    const creds = await this.credentials.get(userId, 'bybit');
-    return creds ? { apiKey: creds.apiKey, apiSecret: creds.apiSecret } : null;
+    const exchange = await this.credentials.activeExchange(userId);
+    if (!isBybit(exchange)) return null;
+    const creds = await this.credentials.get(userId, exchange);
+    return creds ? { apiKey: creds.apiKey, apiSecret: creds.apiSecret, demo: creds.demo } : null;
   }
 
   private connect(s: Stream): void {

@@ -4,6 +4,7 @@ import { XP_SOURCES } from '../battlepass/xp-registry';
 import { BybitApiKeyService } from '../bybit/services/bybit-api-key.service';
 import { BybitCredentials } from '../bybit/services/bybit-auth.service';
 import { CredentialsService } from '../credentials/credentials.service';
+import { isBybit } from '../exchanges/exchange-catalog';
 import { readAccount } from './account-snapshot';
 import { stopOnRightSide } from '../backtest/backtest-math';
 import { BybitTerminalClient } from './bybit-terminal.client';
@@ -145,8 +146,8 @@ export class TerminalService {
   async access(userId: string): Promise<TerminalAccess> {
     const exchange = await this.credentials.activeExchange(userId);
     if (!exchange) return { available: false, reason: 'NO_EXCHANGE', exchange: null };
-    if (exchange !== 'bybit') return { available: false, reason: 'NOT_BYBIT', exchange };
-    const creds = await this.credentials.get(userId, 'bybit');
+    if (!isBybit(exchange)) return { available: false, reason: 'NOT_BYBIT', exchange };
+    const creds = await this.credentials.get(userId, exchange);
     if (!creds) return { available: false, reason: 'NO_EXCHANGE', exchange: null };
     const info = await this.apiKeys.getApiKeyInfo(creds);
     if (!info.success) return { available: false, reason: 'UNKNOWN', exchange };
@@ -178,7 +179,12 @@ export class TerminalService {
       return null;
     });
     const base =
-      streamed ?? (await this.states.get(userId, this.bybit.writeVersion(creds.apiKey), () => this.readState(creds)));
+      streamed ??
+      // Ключ в кэше вместе с пользователем: после переключения настоящий ↔ демо
+      // нельзя показать снимок другого счёта, даже на пару секунд.
+      (await this.states.get(`${userId}:${keyHash(creds.apiKey)}`, this.bybit.writeVersion(creds.apiKey), () =>
+        this.readState(creds),
+      ));
     return this.withFollow(userId, base);
   }
 
@@ -514,8 +520,10 @@ export class TerminalService {
     }
   }
 
-  private creds(userId: string): Promise<BybitCredentials> {
-    return this.credentials.require(userId, 'bybit');
+  /** Ключ активного Bybit — настоящего или демо: терминал торгует тем, с чем человек работает. */
+  private async creds(userId: string): Promise<BybitCredentials> {
+    const active = await this.credentials.activeExchange(userId);
+    return this.credentials.require(userId, isBybit(active) ? active : 'bybit');
   }
 
   /**

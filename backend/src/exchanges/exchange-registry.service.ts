@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { BybitAdapter } from './adapters/bybit.adapter';
+import { BybitAdapter, BybitDemoAdapter } from './adapters/bybit.adapter';
 import { OkxAdapter } from './adapters/okx.adapter';
 import { BitgetAdapter } from './adapters/bitget.adapter';
 import { KucoinAdapter } from './adapters/kucoin.adapter';
@@ -20,6 +20,7 @@ export class ExchangeRegistry {
 
   constructor(
     bybit: BybitAdapter,
+    bybitDemo: BybitDemoAdapter,
     okx: OkxAdapter,
     bitget: BitgetAdapter,
     kucoin: KucoinAdapter,
@@ -29,6 +30,7 @@ export class ExchangeRegistry {
   ) {
     this.adapters = new Map<ExchangeId, ExchangeAdapter>([
       [bybit.id, bybit],
+      [bybitDemo.id, bybitDemo],
       [okx.id, okx],
       [bitget.id, bitget],
       [kucoin.id, kucoin],

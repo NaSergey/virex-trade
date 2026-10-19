@@ -28,7 +28,7 @@ export class BybitPositionService extends BybitAuthService {
       const signatureString = timestamp + creds.apiKey + recvWindow + queryString;
       const signature = this.createSignature(signatureString, creds.apiSecret);
 
-      const response = await bybitFetch(`${this.baseUrl}/position/list?${queryString}`, {
+      const response = await bybitFetch(`${this.baseFor(creds)}/position/list?${queryString}`, {
         method: 'GET',
         headers: this.buildAuthHeaders(creds.apiKey, timestamp, signature, recvWindow),
       });

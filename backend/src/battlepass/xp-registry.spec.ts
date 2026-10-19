@@ -17,6 +17,7 @@ describe('XP_SOURCES', () => {
     expect(XP_SOURCES['trade.open']).toMatchObject({ enabled: true, base: 10, dailyCap: 200 });
     expect(XP_SOURCES['game.table']).toMatchObject({ enabled: true, base: 5, dailyCap: 150 });
     expect(XP_SOURCES['game.jetpack']).toMatchObject({ enabled: true, base: 5, dailyCap: 100 });
+    expect(XP_SOURCES['game.race']).toMatchObject({ enabled: true, base: 5, dailyCap: 100 });
     expect(XP_SOURCES['journal.setup']).toMatchObject({ enabled: true, base: 10, dailyCap: 50 });
   });
 

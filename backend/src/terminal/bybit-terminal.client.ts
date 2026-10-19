@@ -22,7 +22,7 @@ const RECV_WINDOW = '5000';
 export class BybitTerminalClient extends BybitAuthService {
   private readonly logger = new Logger(BybitTerminalClient.name);
 
-  /** Публичные рыночные данные — без ключей. */
+  /** Публичные рыночные данные — без ключей, всегда с основного адреса: у демо они те же. */
   publicGet(path: string, params: Record<string, string>): Promise<any> {
     const query = new URLSearchParams(params).toString();
     return this.send(path, () => bybitFetch(`${this.baseUrl}${path}?${query}`, { signal: AbortSignal.timeout(TIMEOUT_MS) }));
@@ -33,7 +33,7 @@ export class BybitTerminalClient extends BybitAuthService {
       const timestamp = Date.now().toString();
       const query = this.buildQueryString({ ...params, recv_window: RECV_WINDOW, timestamp });
       const signature = this.createSignature(timestamp + creds.apiKey + RECV_WINDOW + query, creds.apiSecret);
-      return bybitFetch(`${this.baseUrl}${path}?${query}`, {
+      return bybitFetch(`${this.baseFor(creds)}${path}?${query}`, {
         method: 'GET',
         headers: this.buildAuthHeaders(creds.apiKey, timestamp, signature, RECV_WINDOW),
         signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -98,7 +98,7 @@ export class BybitTerminalClient extends BybitAuthService {
         const timestamp = Date.now().toString();
         const raw = JSON.stringify(body);
         const signature = this.createSignature(timestamp + creds.apiKey + RECV_WINDOW + raw, creds.apiSecret);
-        return bybitFetch(`${this.baseUrl}${path}`, {
+        return bybitFetch(`${this.baseFor(creds)}${path}`, {
           method: 'POST',
           headers: this.buildAuthHeaders(creds.apiKey, timestamp, signature, RECV_WINDOW),
           body: raw,

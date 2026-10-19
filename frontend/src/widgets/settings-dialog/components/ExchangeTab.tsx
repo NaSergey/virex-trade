@@ -30,6 +30,7 @@ function usePermissionsHints(): Record<string, string> {
   const t = useTranslations('settings');
   return {
     bybit: t('permissionsHintBybit'),
+    'bybit-demo': t('permissionsHintBybitDemo'),
     okx: t('permissionsHintOkx'),
     bitget: t('permissionsHintBitget'),
     kucoin: t('permissionsHintKucoin'),

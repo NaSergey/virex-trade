@@ -39,8 +39,14 @@ describe('GAMES — каталог игр', () => {
     }
   });
 
-  it('написаны блэкджек, покер, джетпак и торговля', () => {
-    expect(GAMES.filter((g) => g.available).map((g) => g.id)).toEqual(['blackjack', 'poker', 'jetpack', 'trading']);
+  it('написаны блэкджек, покер, джетпак, гонки и торговля', () => {
+    expect(GAMES.filter((g) => g.available).map((g) => g.id)).toEqual([
+      'blackjack',
+      'poker',
+      'jetpack',
+      'race',
+      'trading',
+    ]);
   });
 
   // Без обоих карточка отрисует <Image> без src и уронит витрину.

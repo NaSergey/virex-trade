@@ -33,13 +33,22 @@ import type { JwtPayload } from '../auth/strategies/jwt.strategy';
   // принимает обе формы. Клиент обязан ставить тот же флаг.
   addTrailingSlash: false,
   namespace: '/games',
-  cors: { origin: process.env.FRONTEND_URL || 'http://localhost:3000', credentials: true },
+  cors: {
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    credentials: true,
+  },
 })
 export class GamesGateway implements OnGatewayInit, OnGatewayDisconnect {
   private readonly logger = new Logger(GamesGateway.name);
 
   @WebSocketServer()
   private server: Server;
+
+  /** Игровые события сокета (нажатия гонки) — обработчик на событие. */
+  private readonly listeners = new Map<
+    string,
+    (userId: string, payload: unknown) => void
+  >();
 
   constructor(private readonly jwt: JwtService) {}
 
@@ -58,11 +67,29 @@ export class GamesGateway implements OnGatewayInit, OnGatewayDisconnect {
         return;
       }
       try {
-        const payload = await this.jwt.verifyAsync<JwtPayload>(token, { secret: resolveJwtAccessSecret() });
+        const payload = await this.jwt.verifyAsync<JwtPayload>(token, {
+          secret: resolveJwtAccessSecret(),
+        });
         client.data.userId = payload.sub;
         next();
       } catch {
         next(new Error('unauthorized'));
+      }
+    });
+    // Обработчики игровых событий ставятся каждому подключённому сокету. До них
+    // доходит только сокет, прошедший middleware выше: без userId — молча мимо.
+    server.on('connection', (client: Socket) => {
+      for (const [event, handler] of this.listeners) {
+        client.on(event, (payload: unknown) => {
+          const userId = client.data.userId as string | undefined;
+          if (!userId) return;
+          // Ошибка обработчика не должна ронять процесс игр.
+          try {
+            handler(userId, payload);
+          } catch (e) {
+            this.logger.error(`${event}: ${(e as Error).message}`);
+          }
+        });
       }
     });
   }
@@ -93,7 +120,11 @@ export class GamesGateway implements OnGatewayInit, OnGatewayDisconnect {
    * Каждому сокету комнаты — свой вид. Нужен покеру: карманные карты видны
    * только владельцу, и общий снимок в комнату их бы раскрыл.
    */
-  async emitPersonal(tableId: string, event: string, build: (userId: string) => unknown) {
+  async emitPersonal(
+    tableId: string,
+    event: string,
+    build: (userId: string) => unknown,
+  ) {
     const sockets = await this.server.in(tableId).fetchSockets();
     for (const s of sockets) {
       const userId = s.data.userId as string | undefined;
@@ -109,5 +140,17 @@ export class GamesGateway implements OnGatewayInit, OnGatewayDisconnect {
   /** Сколько сокетов подписано на комнату — джетпак засыпает, когда смотреть некому. */
   async roomSize(room: string): Promise<number> {
     return (await this.server.in(room).fetchSockets()).length;
+  }
+
+  /**
+   * Игровое действие по сокету — нажатия гонки. Деньги так не двигаются: монеты
+   * по-прежнему списываются и платятся только REST и транзакцией; здесь — руль.
+   * Регистрируется на старте модуля, до первого подключения.
+   */
+  listen(
+    event: string,
+    handler: (userId: string, payload: unknown) => void,
+  ): void {
+    this.listeners.set(event, handler);
   }
 }

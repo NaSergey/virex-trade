@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import * as crypto from 'crypto';
-import { BYBIT_API } from '../bybit-gate';
+import { BYBIT_API, bybitBase } from '../bybit-gate';
 
 // Per-user Bybit API credentials, decrypted just-in-time by CredentialsService.
 // Never cached on `this` — every signed call takes them explicitly so one
@@ -8,6 +8,8 @@ import { BYBIT_API } from '../bybit-gate';
 export interface BybitCredentials {
   apiKey: string;
   apiSecret: string;
+  /** Ключ демо-счёта (биржа `bybit-demo`): запросы с ним идут на демо-адрес Bybit. */
+  demo?: boolean;
 }
 
 @Injectable()
@@ -17,6 +19,14 @@ export class BybitAuthService {
    * `bybitFetch`: лимит Bybit на IP сервера общий для всех (`bybit-gate.ts`).
    */
   protected readonly baseUrl = BYBIT_API;
+
+  /**
+   * Адрес запроса с ключом: демо-ключ существует только на демо-адресе Bybit.
+   * Публичные данные у демо те же — для них остаётся `baseUrl`.
+   */
+  protected baseFor(creds: BybitCredentials): string {
+    return bybitBase(creds.demo);
+  }
 
   protected hasKeys(creds: BybitCredentials | null | undefined): creds is BybitCredentials {
     return !!creds?.apiKey && !!creds?.apiSecret;

@@ -1,7 +1,7 @@
 import { ServiceUnavailableException } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
-import { BUDGET, BybitGate, PAUSE_MS, WINDOW_MS } from './bybit-gate';
+import { BUDGET, BYBIT_API, BYBIT_DEMO_API, BybitGate, PAUSE_MS, WINDOW_MS, bybitBase } from './bybit-gate';
 
 /** Шлюз на подменных часах: сон двигает время, а не ждёт его. */
 function makeGate(budget: number, maxWaitMs = 10_000, status = 200) {
@@ -111,6 +111,15 @@ describe('BybitGate — бан IP', () => {
   });
 });
 
+describe('bybitBase — адрес запроса с ключом', () => {
+  it('демо-ключу — демо-адрес, остальным — основной', () => {
+    expect(bybitBase(true)).toBe(BYBIT_DEMO_API);
+    expect(bybitBase(false)).toBe(BYBIT_API);
+    expect(bybitBase(undefined)).toBe(BYBIT_API);
+    expect(BYBIT_DEMO_API).toBe('https://api-demo.bybit.com/v5');
+  });
+});
+
 /**
  * Инвариант: к Bybit ходят только через шлюз. Лимит — на IP сервера, и
  * запрос мимо шлюза тратит общий бюджет так, что шлюз этого не видит.
@@ -128,16 +137,16 @@ describe('к Bybit — только через шлюз', () => {
   walk(SRC);
   const rel = (f: string) => path.relative(SRC, f).replace(/\\/g, '/');
 
-  it('адрес api.bybit.com написан только в шлюзе', () => {
+  it.each(['api.bybit.com', 'api-demo.bybit.com'])('адрес %s написан только в шлюзе', (host) => {
     const offenders = files
-      .filter((f) => fs.readFileSync(f, 'utf8').includes('api.bybit.com'))
+      .filter((f) => fs.readFileSync(f, 'utf8').includes(host))
       .map(rel)
       .filter((f) => f !== 'bybit/bybit-gate.ts');
     expect(offenders).toEqual([]);
   });
 
   it('нет голого fetch по адресу Bybit', () => {
-    const bare = /(?<![\w.])fetch\(\s*`\$\{(?:this\.baseUrl|BYBIT_API)/;
+    const bare = /(?<![\w.])fetch\(\s*`\$\{(?:this\.baseUrl|this\.baseFor\(|bybitBase\(|BYBIT_API|BYBIT_DEMO_API)/;
     const offenders = files.filter((f) => bare.test(fs.readFileSync(f, 'utf8'))).map(rel);
     expect(offenders).toEqual([]);
   });

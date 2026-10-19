@@ -49,7 +49,7 @@ export class BybitTradeService extends BybitAuthService {
       const signatureString = timestamp + creds.apiKey + recvWindow + queryString;
       const signature = this.createSignature(signatureString, creds.apiSecret);
 
-      const response = await bybitFetch(`${this.baseUrl}/position/closed-pnl?${queryString}`, {
+      const response = await bybitFetch(`${this.baseFor(creds)}/position/closed-pnl?${queryString}`, {
         method: 'GET',
         headers: this.buildAuthHeaders(creds.apiKey, timestamp, signature, recvWindow),
       });
@@ -102,7 +102,7 @@ export class BybitTradeService extends BybitAuthService {
       const signatureString = timestamp + creds.apiKey + recvWindow + queryString;
       const signature = this.createSignature(signatureString, creds.apiSecret);
 
-      const response = await bybitFetch(`${this.baseUrl}/execution/list?${queryString}`, {
+      const response = await bybitFetch(`${this.baseFor(creds)}/execution/list?${queryString}`, {
         method: 'GET',
         headers: this.buildAuthHeaders(creds.apiKey, timestamp, signature, recvWindow),
       });

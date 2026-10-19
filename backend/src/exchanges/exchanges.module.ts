@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { BybitModule } from '../bybit/bybit.module';
 import { CredentialsModule } from '../credentials/credentials.module';
-import { BybitAdapter } from './adapters/bybit.adapter';
+import { BybitAdapter, BybitDemoAdapter } from './adapters/bybit.adapter';
 import { OkxAdapter } from './adapters/okx.adapter';
 import { BitgetAdapter } from './adapters/bitget.adapter';
 import { KucoinAdapter } from './adapters/kucoin.adapter';
@@ -22,6 +22,7 @@ import { ExchangeController } from './exchange.controller';
   controllers: [ExchangeController],
   providers: [
     BybitAdapter,
+    BybitDemoAdapter,
     OkxAdapter,
     BitgetAdapter,
     KucoinAdapter,

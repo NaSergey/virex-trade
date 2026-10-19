@@ -27,7 +27,7 @@ export class BybitBalanceService extends BybitAuthService {
       const signatureString = timestamp + creds.apiKey + recvWindow + queryString;
       const signature = this.createSignature(signatureString, creds.apiSecret);
 
-      const response = await bybitFetch(`${this.baseUrl}/account/wallet-balance?${queryString}`, {
+      const response = await bybitFetch(`${this.baseFor(creds)}/account/wallet-balance?${queryString}`, {
         method: 'GET',
         headers: this.buildAuthHeaders(creds.apiKey, timestamp, signature, recvWindow),
       });

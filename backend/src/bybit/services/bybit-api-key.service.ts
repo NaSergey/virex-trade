@@ -53,7 +53,7 @@ export class BybitApiKeyService extends BybitAuthService {
         creds.apiSecret,
       );
 
-      const response = await bybitFetch(`${this.baseUrl}/user/query-api`, {
+      const response = await bybitFetch(`${this.baseFor(creds)}/user/query-api`, {
         method: 'GET',
         headers: this.buildAuthHeaders(creds.apiKey, timestamp, signature, recvWindow),
       });

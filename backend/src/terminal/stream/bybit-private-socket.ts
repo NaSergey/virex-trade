@@ -4,6 +4,8 @@ import type { BybitCredentials } from '../../bybit/services/bybit-auth.service';
 
 /** Приватный поток Bybit V5. В REST-лимит 600 запросов на IP он не входит. */
 export const BYBIT_PRIVATE_WS = 'wss://stream.bybit.com/v5/private';
+/** Поток демо-счёта: ключ Demo Trading существует только там. Публичных тем у этого адреса нет. */
+export const BYBIT_PRIVATE_WS_DEMO = 'wss://stream-demo.bybit.com/v5/private';
 const TOPICS = ['position.linear', 'order.linear', 'wallet'];
 /** Bybit просит пинг раз в 20 с. */
 const PING_MS = 20_000;
@@ -52,7 +54,7 @@ export class BybitPrivateSocket {
   ) {
     this.seenAt = this.now();
     this.readyTimer = setTimeout(() => this.end('closed'), READY_MS);
-    this.ws = open(BYBIT_PRIVATE_WS);
+    this.ws = open(creds.demo ? BYBIT_PRIVATE_WS_DEMO : BYBIT_PRIVATE_WS);
     this.ws.on('open', () => this.auth());
     this.ws.on('message', (raw: unknown) => this.receive(raw));
     this.ws.on('close', () => this.end('closed'));
