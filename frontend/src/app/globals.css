@@ -2744,6 +2744,40 @@
   .pin:hover,
   .pin[aria-pressed="true"] { color: var(--ink); }
 
+  /* Кошельки Hyperliquid: соотношение лонгов и шортов — одна полоса, длина
+     отрезка по числу кошельков, число внутри. Цвета — стороны сделки, как у
+     слов «Лонг»/«Шорт» в соседних таблицах. */
+  .hl-ratio {
+    display: flex;
+    gap: 2px;
+    width: 100%;
+    min-width: 120px;
+    max-width: 240px;
+    height: 20px;
+  }
+  .hl-ratio i {
+    flex-basis: 0;
+    min-width: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-style: normal;
+    font-size: 12px;
+    line-height: 1;
+    color: var(--ground);
+  }
+  .hl-ratio .long { background: var(--profit); }
+  .hl-ratio .short { background: var(--loss); }
+
+  /* Доля сделок монеты: нейтральная полоса, цвет в этой системе — деньги. */
+  .hl-share { display: inline-flex; align-items: center; gap: var(--s2); }
+  .hl-share-bar {
+    width: 96px;
+    height: 6px;
+    background: var(--hair);
+  }
+  .hl-share-bar i { display: block; height: 100%; background: var(--ink-3); }
+
   /* ═══════════════ ЛАБОРАТОРИЯ ═══════════════ */
   /* Условия слева, результат справа. Линейку и отбивку от неё (--s4) колонки
      делят с .asym, а вот пропорция здесь своя: условия — список галок, ему

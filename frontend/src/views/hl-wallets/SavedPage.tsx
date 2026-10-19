@@ -9,7 +9,7 @@ import { Button } from '@/shared/ui/Button';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import { dateFormat } from '@/shared/lib/utils/intl';
-import { useHlPositions, useHlSaved, useSaveWallet, type HlWalletRow } from './api/hooks';
+import { useHlPositions, useHlSaved, useSaveWallet, useStarWallet, type HlWalletRow } from './api/hooks';
 import { pct } from './model/format';
 import { walletColumns } from './components/walletColumns';
 import { groupByCoin } from './model/coins';
@@ -34,6 +34,7 @@ export function HlSavedPage() {
   const saved = useHlSaved(enabled);
   const positions = useHlPositions(enabled);
   const { unsave } = useSaveWallet();
+  const star = useStarWallet();
 
   // Причина выпадения важнее «не торгует»: она говорит, почему кошелёк больше
   // не годится, а мёртвый кошелёк в отборе — уже следствие.
@@ -56,6 +57,29 @@ export function HlSavedPage() {
     key: 'status',
     header: t('colStatus'),
     render: (r) => <span className={r.qualified && r.alive ? undefined : 'muted'}>{statusOf(r)}</span>,
+  };
+  // Звезда — «этому кошельку доверяю»: залитая у отмеченных, они же стоят в таблице первыми.
+  const starCol: LedgerColumn<HlWalletRow> = {
+    key: 'star',
+    width: 28,
+    cellClassName: 'pin-cell',
+    noSkeleton: true,
+    render: (r) => (
+      <Button
+        variant="none"
+        className="pin"
+        aria-pressed={r.starred}
+        aria-label={r.starred ? t('unstarWallet') : t('starWallet')}
+        title={r.starred ? t('unstarTitle') : t('starTitle')}
+        // Строка раскрывается по клику, и звезда не должна её раскрывать.
+        onClick={(e) => {
+          e.stopPropagation();
+          star.mutate({ address: r.address, starred: !r.starred });
+        }}
+      >
+        {r.starred ? '★' : '☆'}
+      </Button>
+    ),
   };
   // Первой колонкой, а не последней: таблица широкая, и крайняя справа кнопка
   // уезжала за край экрана вместе с горизонтальной прокруткой.
@@ -89,9 +113,9 @@ export function HlSavedPage() {
     <Wrap page>
       <PageHead title={t('savedTitle')} lede={t('savedLede')} />
       <AddWalletForm />
-      <ErrorNote error={saved.error ?? unsave.error} fallback={t('loadFailed')} />
+      <ErrorNote error={saved.error ?? unsave.error ?? star.error} fallback={t('loadFailed')} />
       <LedgerTable
-        columns={walletColumns(t, [remove], [status])}
+        columns={walletColumns(t, [starCol, remove], [status])}
         rows={saved.data?.rows ?? []}
         rowKey={(r) => r.address}
         minWidth={1400}

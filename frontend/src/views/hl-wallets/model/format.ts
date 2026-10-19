@@ -15,3 +15,12 @@ export function usd(v: number | null | undefined): string {
   if (a >= 1e3) return `${+(v / 1e3).toFixed(1)}K`;
   return String(Math.round(v));
 }
+
+/** Сколько длилась сделка: «45 м», «5 ч 10 м», «3 д 4 ч» — две старшие единицы; буквы — по языку. */
+export function duration(ms: number, u: { d: string; h: string; m: string }): string {
+  const min = Math.max(0, Math.round(ms / 60_000));
+  if (min < 60) return `${min} ${u.m}`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h} ${u.h} ${min % 60} ${u.m}`;
+  return `${Math.floor(h / 24)} ${u.d} ${h % 24} ${u.h}`;
+}

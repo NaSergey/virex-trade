@@ -7,7 +7,8 @@ import type { HlWallet } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { hlInfo, WEIGHT } from '../hyperliquid/hl-gate';
 import { positionsOf, type HlPosition } from './positions';
-import { fillsOf, ordersOf, type HlFill, type HlOrder } from './activity';
+import { ordersOf, type HlOrder } from './activity';
+import { tradesOf } from './trades';
 import type { ClearinghouseState, RawFill, RawOpenOrder } from './hl-types';
 
 const ADDRESS = /^0x[0-9a-f]{40}$/;
@@ -53,6 +54,7 @@ function rowOf(w: HlWallet) {
     savedAt: w.savedAt,
     note: w.note,
     viewedAt: w.viewedAt,
+    starred: w.starredAt != null,
   };
 }
 
@@ -82,11 +84,20 @@ export class HlWalletsService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Прошедшие и живые кандидаты последнего отбора и сводка бота над таблицей. */
+  /**
+   * Прошедшие и живые кандидаты последнего отбора и сводка бота над таблицей.
+   * Сохранённые сюда не попадают: взятый в работу кошелёк переезжает на «Сохранённые».
+   */
   async list() {
     const [rows, last, candidates, analyzed] = await Promise.all([
       this.prisma.hlWallet.findMany({
-        where: { candidate: true, hiddenAt: null, qualified: true, ...ALIVE },
+        where: {
+          candidate: true,
+          hiddenAt: null,
+          savedAt: null,
+          qualified: true,
+          ...ALIVE,
+        },
         orderBy: { pnlMonth: 'desc' },
       }),
       this.prisma.hlWallet.aggregate({
@@ -111,13 +122,33 @@ export class HlWalletsService {
     };
   }
 
-  /** Сохранённые — все, и выпавшие из отбора тоже: причина видна в строке. */
+  /**
+   * Сохранённые — все, и выпавшие из отбора тоже: причина видна в строке.
+   * Кошельки со звёздочкой — первыми: ради них звезда и ставится.
+   */
   async saved() {
     const rows = await this.prisma.hlWallet.findMany({
       where: { savedAt: { not: null } },
       orderBy: { savedAt: 'desc' },
     });
+    rows.sort((a, b) => Number(!!b.starredAt) - Number(!!a.starredAt));
     return { rows: rows.map(rowOf) };
+  }
+
+  /** Звёздочка — только сохранённому: это «доверяю тем, кого взял в работу». */
+  async setStar(raw: string, on: boolean) {
+    const address = addressOf(raw);
+    const w = await this.prisma.hlWallet.findUnique({ where: { address } });
+    if (!w?.savedAt)
+      throw new NotFoundException({
+        message: 'Кошелёк не сохранён',
+        code: 'HL_WALLET_NOT_FOUND',
+      });
+    await this.prisma.hlWallet.update({
+      where: { address },
+      data: { starredAt: on ? (w.starredAt ?? new Date()) : null },
+    });
+    return { ok: true };
   }
 
   /** Сохранить или сменить заметку. Повторное сохранение время не двигает. */
@@ -206,17 +237,21 @@ export class HlWalletsService {
     });
   }
 
-  /** Последние сделки сохранённого кошелька (новые первыми, не больше 300). */
-  fills(
+  /**
+   * Сделки сохранённого кошелька — позиции, собранные из его исполнений (новые
+   * первыми), и разбивка по монетам. Окно истории у Hyperliquid — последние 2000
+   * исполнений, отсюда `since`.
+   */
+  trades(
     raw: string,
     now: number = Date.now(),
-  ): Promise<{ asOf: string; fills: HlFill[] }> {
-    return this.cached(raw, 'fills', now, async (address) => {
+  ): Promise<{ asOf: string } & ReturnType<typeof tradesOf>> {
+    return this.cached(raw, 'trades', now, async (address) => {
       const res = await hlInfo<RawFill[]>(
         { type: 'userFills', user: address, aggregateByTime: true },
         WEIGHT.default,
       );
-      return { asOf: new Date(now).toISOString(), fills: fillsOf(res) };
+      return { asOf: new Date(now).toISOString(), ...tradesOf(res) };
     });
   }
 
@@ -226,7 +261,7 @@ export class HlWalletsService {
    */
   private async cached<T>(
     raw: string,
-    kind: 'orders' | 'fills',
+    kind: 'orders' | 'trades',
     now: number,
     load: (address: string) => Promise<T>,
   ): Promise<T> {
@@ -258,7 +293,7 @@ export class HlWalletsService {
   async unsave(raw: string) {
     await this.prisma.hlWallet.updateMany({
       where: { address: addressOf(raw) },
-      data: { savedAt: null },
+      data: { savedAt: null, starredAt: null },
     });
     this.cache = null;
     return { ok: true };

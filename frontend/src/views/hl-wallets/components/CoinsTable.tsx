@@ -6,6 +6,7 @@ import { Money } from '@/shared/ui/Money';
 import type { CoinGroup } from '../model/coins';
 import { usd } from '../model/format';
 import { PositionsTable } from './PositionsTable';
+import { RatioBar } from './RatioBar';
 
 /**
  * Общие монеты сохранённых кошельков: по каждой — сколько кошельков её держат и
@@ -21,14 +22,7 @@ export function CoinsTable({ rows, isLoading }: { rows: CoinGroup[]; isLoading: 
     {
       key: 'direction',
       header: t('colDirection'),
-      render: (g) =>
-        g.direction === 'mixed' ? (
-          <span>
-            {t('mixed')} <span className="muted">· {t('longShort', { longs: g.longs, shorts: g.shorts })}</span>
-          </span>
-        ) : (
-          <span className={g.direction === 'long' ? 'pos' : 'neg'}>{t(g.direction)}</span>
-        ),
+      render: (g) => <RatioBar longs={g.longs} shorts={g.shorts} />,
     },
     { key: 'long', header: t('colLongSize'), align: 'right', cellClassName: 'n', render: (g) => usd(g.longNotional) },
     { key: 'short', header: t('colShortSize'), align: 'right', cellClassName: 'n', render: (g) => usd(g.shortNotional) },

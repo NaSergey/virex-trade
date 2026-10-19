@@ -53,6 +53,8 @@ export interface RawFill {
   side: 'A' | 'B';
   time: number;
   dir: string;
+  /** Размер позиции до этого исполнения (со знаком): по нему сделки и собираются. */
+  startPosition?: string;
   closedPnl: string;
   fee: string;
   crossed: boolean;

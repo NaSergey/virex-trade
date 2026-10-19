@@ -69,10 +69,22 @@ export class HlWalletsController {
     return this.wallets.orders(address);
   }
 
-  /** GET /api/admin/hl/saved/<адрес>/fills — последние сделки сохранённого кошелька. */
-  @Get('saved/:address/fills')
-  fills(@Param('address') address: string) {
-    return this.wallets.fills(address);
+  /** GET /api/admin/hl/saved/<адрес>/trades — сделки сохранённого кошелька и его монеты. */
+  @Get('saved/:address/trades')
+  trades(@Param('address') address: string) {
+    return this.wallets.trades(address);
+  }
+
+  /** POST /api/admin/hl/saved/<адрес>/star — отметить звёздочкой: кошельку доверяют. */
+  @Post('saved/:address/star')
+  star(@Param('address') address: string) {
+    return this.wallets.setStar(address, true);
+  }
+
+  /** DELETE /api/admin/hl/saved/<адрес>/star — снять звёздочку. */
+  @Delete('saved/:address/star')
+  unstar(@Param('address') address: string) {
+    return this.wallets.setStar(address, false);
   }
 
   /** PUT /api/admin/hl/saved/<адрес> — сохранить или сменить заметку. */

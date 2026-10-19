@@ -32,42 +32,29 @@ export function HlWalletsPage() {
   const locale = useLocale();
   const { user, loading: authLoading } = useAuth();
   const { data, isLoading, error } = useHlWallets(!!user?.isAdmin);
-  const { save, unsave } = useSaveWallet();
+  const { save } = useSaveWallet();
   const hide = useHideWallet();
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [sort, setSort] = useState<{ key: keyof HlWalletRow; dir: 1 | -1 }>({ key: 'pnlMonth', dir: -1 });
   const [page, setPage] = useState(1);
 
   // Занята только строка, чей запрос в пути, — не вся колонка.
-  const busy = (address: string) =>
-    (save.isPending && save.variables?.address === address) ||
-    (unsave.isPending && unsave.variables === address);
+  const busy = (address: string) => save.isPending && save.variables?.address === address;
 
   // Кнопки — справа, после чисел: слева стоит адрес, и глаз идёт по нему к цифрам.
+  // Сохранённый кошелёк из таблицы уходит (сервер его не отдаёт) — на «Сохранённые».
   const saveCol: LedgerColumn<HlWalletRow> = {
     key: 'save',
     noSkeleton: true,
     width: 110,
-    render: (r) =>
-      r.savedAt ? (
-        <Button
-          variant="bare"
-          tight
-          title={t('unsaveTitle')}
-          onClick={() => unsave.mutate(r.address)}
-          disabled={busy(r.address)}
-        >
-          {t('saved')}
-        </Button>
-      ) : (
-        <Button variant="bare" tight onClick={() => save.mutate({ address: r.address })} disabled={busy(r.address)}>
-          {t('save')}
-        </Button>
-      ),
+    render: (r) => (
+      <Button variant="bare" tight onClick={() => save.mutate({ address: r.address })} disabled={busy(r.address)}>
+        {t('save')}
+      </Button>
+    ),
   };
 
-  // Удалить — насовсем: бот этот кошелёк не вернёт. Сохранённый не удаляется —
-  // у него заметка; сперва «Убрать». Подтверждения нет: убирают десятки подряд.
+  // Удалить — насовсем: бот этот кошелёк не вернёт. Подтверждения нет: убирают десятки подряд.
   const hideCol: LedgerColumn<HlWalletRow> = {
     key: 'hide',
     noSkeleton: true,
@@ -76,9 +63,9 @@ export function HlWalletsPage() {
       <Button
         variant="bare"
         tight
-        title={r.savedAt ? t('hideSavedTitle') : t('hideTitle')}
+        title={t('hideTitle')}
         onClick={() => hide.mutate(r.address)}
-        disabled={!!r.savedAt || (hide.isPending && hide.variables === r.address)}
+        disabled={hide.isPending && hide.variables === r.address}
       >
         {t('hide')}
       </Button>
@@ -117,7 +104,7 @@ export function HlWalletsPage() {
         shown={filtered.length}
         total={all.length}
       />
-      <ErrorNote error={error ?? save.error ?? unsave.error ?? hide.error} fallback={t('loadFailed')} />
+      <ErrorNote error={error ?? save.error ?? hide.error} fallback={t('loadFailed')} />
       <LedgerTable
         columns={walletColumns(t, [], [saveCol, hideCol])}
         rowClassName={(r) => (r.viewedAt ? 'seen' : undefined)}

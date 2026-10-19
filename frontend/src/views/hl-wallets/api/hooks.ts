@@ -45,6 +45,8 @@ export interface HlWalletRow {
   note: string | null;
   /** Профиль открывали — строка таблицы гаснет. */
   viewedAt: string | null;
+  /** Звёздочка владельца: кошельку доверяют. Только у сохранённых. */
+  starred: boolean;
 }
 
 export interface HlWalletsResponse {
@@ -98,6 +100,46 @@ export interface HlFill {
   taker: boolean;
 }
 
+/** Сделка кошелька — позиция от нуля до нуля, собранная из его исполнений. */
+export interface HlTrade {
+  coin: string;
+  side: 'long' | 'short';
+  openedAt: number;
+  lastAt: number;
+  /** `null` — позиция ещё открыта. */
+  closedAt: number | null;
+  /** Открыта раньше окна истории: вход и объём — по видимой части. */
+  partial: boolean;
+  entryPx: number | null;
+  exitPx: number | null;
+  peakSize: number;
+  /** Наибольший размер в долларах по цене входа. */
+  notional: number;
+  /** Закрытый результат за вычетом комиссий. */
+  pnl: number;
+  fee: number;
+  /** Исполнения сделки, новые первыми. */
+  fills: HlFill[];
+}
+
+export interface HlCoinStat {
+  coin: string;
+  trades: number;
+  volume: number;
+  pnl: number;
+  /** Доля сделок монеты среди всех. */
+  share: number;
+}
+
+export interface HlTradesResponse {
+  asOf: string;
+  trades: HlTrade[];
+  coins: HlCoinStat[];
+  fillsCount: number;
+  /** С какого времени видны исполнения (окно Hyperliquid — последние 2000). */
+  since: number | null;
+}
+
 const BASE = '/api/admin/hl';
 /** Бот пересчитывает кошелёк раз в ~2 часа — чаще минуты таблицу перечитывать незачем. */
 const STALE_MS = 60_000;
@@ -139,13 +181,29 @@ export const useHlOrders = (address: string, enabled: boolean) =>
     staleTime: STALE_MS,
   });
 
-export const useHlFills = (address: string, enabled: boolean) =>
+export const useHlTrades = (address: string, enabled: boolean) =>
   useQuery({
-    queryKey: ['hlFills', address],
-    queryFn: () => apiJson<{ asOf: string; fills: HlFill[] }>(`${BASE}/saved/${address}/fills`),
+    queryKey: ['hlTrades', address],
+    queryFn: () => apiJson<HlTradesResponse>(`${BASE}/saved/${address}/trades`),
     enabled,
     staleTime: STALE_MS,
   });
+
+/** Звёздочка: ставится и снимается сразу в кэше, сервер запоминает для всех устройств. */
+export function useStarWallet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ address, starred }: { address: string; starred: boolean }) =>
+      apiJson<{ ok: true }>(`${BASE}/saved/${address}/star`, { method: starred ? 'POST' : 'DELETE' }),
+    onMutate: ({ address, starred }) => {
+      qc.setQueryData<{ rows: HlWalletRow[] }>(['hlSaved'], (d) =>
+        d && { ...d, rows: d.rows.map((r) => (r.address === address ? { ...r, starred } : r)) },
+      );
+    },
+    // Порядок строк (звёздные первыми) определяет сервер — перечитываем в любом исходе.
+    onSettled: () => void qc.invalidateQueries({ queryKey: ['hlSaved'] }),
+  });
+}
 
 /**
  * Профиль открыт: строка гаснет сразу (кэш правится до ответа — ссылка уводит

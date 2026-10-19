@@ -1,8 +1,7 @@
-import type { RawFill, RawOpenOrder } from './hl-types';
+import type { RawOpenOrder } from './hl-types';
 
-/** Сколько строк отдаём: у маркет-мейкера открытых ордеров сотни, сделок — тысячи, глазами их не читают. */
+/** Сколько строк отдаём: у маркет-мейкера открытых ордеров сотни, глазами их не читают. */
 export const MAX_ORDERS = 300;
-export const MAX_FILLS = 300;
 
 export interface HlOrder {
   coin: string;
@@ -52,20 +51,3 @@ export function ordersOf(raw: RawOpenOrder[]): HlOrder[] {
     .slice(0, MAX_ORDERS);
 }
 
-/** Новые сделки первыми; Hyperliquid отдаёт старые первыми. */
-export function fillsOf(raw: RawFill[]): HlFill[] {
-  return (raw ?? [])
-    .map((f) => ({
-      coin: f.coin,
-      side: sideOf(f.side),
-      price: Number(f.px),
-      size: Number(f.sz),
-      time: f.time,
-      dir: f.dir,
-      closedPnl: Number(f.closedPnl),
-      fee: Number(f.fee),
-      taker: !!f.crossed,
-    }))
-    .sort((a, b) => b.time - a.time)
-    .slice(0, MAX_FILLS);
-}

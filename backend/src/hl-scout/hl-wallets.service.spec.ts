@@ -131,7 +131,7 @@ describe('HlWalletsService — позиции', () => {
     await new HlWalletsService(prisma as never).unsave(ADDR);
     expect(prisma.hlWallet.updateMany).toHaveBeenCalledWith({
       where: { address: ADDR },
-      data: { savedAt: null },
+      data: { savedAt: null, starredAt: null },
     });
   });
 });
@@ -176,6 +176,35 @@ describe('HlWalletsService — просмотрен и удалён', () => {
       hiddenAt: null,
     });
   });
+
+  it('таблица не показывает сохранённые — они переезжают на свою страницу', async () => {
+    const prisma = makePrisma();
+    await new HlWalletsService(prisma as never).list();
+    expect(prisma.hlWallet.findMany.mock.calls[0][0].where).toMatchObject({
+      savedAt: null,
+    });
+  });
+});
+
+describe('HlWalletsService — звёздочка', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('ставится сохранённому и снимается; время не двигается повторной', async () => {
+    const starredAt = new Date(5);
+    const prisma = makePrisma({ address: ADDR, savedAt: new Date(1), starredAt });
+    const svc = new HlWalletsService(prisma as never);
+    await svc.setStar(ADDR, true);
+    expect(prisma.hlWallet.update.mock.calls[0][0].data).toEqual({ starredAt });
+    await svc.setStar(ADDR, false);
+    expect(prisma.hlWallet.update.mock.calls[1][0].data).toEqual({ starredAt: null });
+  });
+
+  it('не сохранённому звёздочку не ставят — 404', async () => {
+    const svc = new HlWalletsService(
+      makePrisma({ address: ADDR, savedAt: null }) as never,
+    );
+    await expect(svc.setStar(ADDR, true)).rejects.toBeInstanceOf(NotFoundException);
+  });
 });
 
 describe('HlWalletsService — ордера и сделки сохранённого', () => {
@@ -187,7 +216,7 @@ describe('HlWalletsService — ордера и сделки сохранённо
       makePrisma({ address: ADDR, savedAt: null }) as never,
     );
     await expect(svc.orders(ADDR)).rejects.toBeInstanceOf(NotFoundException);
-    await expect(svc.fills(ADDR)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(svc.trades(ADDR)).rejects.toBeInstanceOf(NotFoundException);
     expect(gate.hlInfo).not.toHaveBeenCalled();
   });
 
@@ -196,7 +225,7 @@ describe('HlWalletsService — ордера и сделки сохранённо
     const svc = new HlWalletsService(makePrisma(saved) as never);
     await svc.orders(ADDR, 1000);
     await svc.orders(ADDR, 2000);
-    await svc.fills(ADDR, 2000);
+    await svc.trades(ADDR, 2000);
     expect(gate.hlInfo).toHaveBeenCalledTimes(2);
     expect((gate.hlInfo as jest.Mock).mock.calls.map((c) => c[0].type)).toEqual(
       ['frontendOpenOrders', 'userFills'],
@@ -210,9 +239,9 @@ describe('HlWalletsService — ордера и сделки сохранённо
       .mockRejectedValueOnce(new Error('boom'))
       .mockResolvedValueOnce([]);
     const svc = new HlWalletsService(makePrisma(saved) as never);
-    await expect(svc.fills(ADDR, 1000)).rejects.toThrow('boom');
+    await expect(svc.trades(ADDR, 1000)).rejects.toThrow('boom');
     await new Promise((r) => setImmediate(r));
-    await expect(svc.fills(ADDR, 1500)).resolves.toMatchObject({ fills: [] });
+    await expect(svc.trades(ADDR, 1500)).resolves.toMatchObject({ trades: [] });
   });
 });
 
