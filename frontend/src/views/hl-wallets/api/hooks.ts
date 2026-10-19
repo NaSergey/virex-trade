@@ -66,6 +66,10 @@ export interface HlPosition {
   unrealizedPnl: number;
   leverage: number;
   liquidationPx: number | null;
+  /** Когда открыта (мс); `null` — ещё ищется или позиция старше окна истории биржи. */
+  openedAt?: number | null;
+  /** Открыта раньше окна истории: на деле — не позже `openedAt`. */
+  openedPartial?: boolean;
 }
 
 export interface HlPositionsResponse {

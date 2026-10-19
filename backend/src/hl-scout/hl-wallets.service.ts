@@ -20,6 +20,8 @@ const POSITIONS_TTL_MS = 15_000;
  * держится минуту и общий на всех обращающихся.
  */
 const ACTIVITY_TTL_MS = 60_000;
+/** Время открытия позиции не меняется, пока она держится, — повторно ищем не чаще, чем раз в две минуты. */
+const OPENED_RETRY_MS = 120_000;
 
 /** Живой — торговал за неделю или держит позицию. */
 const ALIVE = { OR: [{ volumeWeek: { gt: 0 } }, { openPositions: { gt: 0 } }] };
@@ -77,6 +79,13 @@ function addressOf(raw: string): string {
 export class HlWalletsService {
   private cache: { at: number; value: PositionsSnapshot } | null = null;
   private inflight: Promise<PositionsSnapshot> | null = null;
+  /** Время открытия позиций по кошельку и монете — пока позиция держится, оно то же. */
+  private readonly opened = new Map<
+    string,
+    Map<string, { at: number | null; partial: boolean; side: 'long' | 'short' }>
+  >();
+  private readonly openedTried = new Map<string, number>();
+  private resolving: Promise<void> | null = null;
   private readonly activity = new Map<
     string,
     { at: number; value: Promise<unknown> }
@@ -305,13 +314,88 @@ export class HlWalletsService {
    * Запрос в пути общий: две вкладки вне кэша дали бы двойной залп по
    * бюджету `api` (вес 2 на кошелёк).
    */
-  positions(now: number = Date.now()): Promise<PositionsSnapshot> {
-    if (this.cache && now - this.cache.at < POSITIONS_TTL_MS)
-      return Promise.resolve(this.cache.value);
-    this.inflight ??= this.loadPositions(now).finally(() => {
-      this.inflight = null;
+  async positions(now: number = Date.now()): Promise<PositionsSnapshot> {
+    let snap: PositionsSnapshot;
+    if (this.cache && now - this.cache.at < POSITIONS_TTL_MS) {
+      snap = this.cache.value;
+    } else {
+      this.inflight ??= this.loadPositions(now).finally(() => {
+        this.inflight = null;
+      });
+      snap = await this.inflight;
+    }
+    this.resolveOpened(snap, now);
+    return {
+      ...snap,
+      positions: snap.positions.map((p) => {
+        const o = this.opened.get(p.address)?.get(p.coin);
+        return o && o.side === p.side
+          ? { ...p, openedAt: o.at, openedPartial: o.partial }
+          : { ...p, openedAt: null, openedPartial: false };
+      }),
+    };
+  }
+
+  /**
+   * Время открытия берётся из исполнений и ищется в фоне: запрос тяжёлый (вес
+   * до 120), а позиции читают каждые 30 с. Ответ с позициями его не ждёт —
+   * время появится на следующем опросе. Закрытая позиция из памяти уходит:
+   * открытая заново — уже другая.
+   */
+  private resolveOpened(snap: PositionsSnapshot, now: number) {
+    const held = new Map<string, Set<string>>();
+    for (const p of snap.positions) {
+      if (!held.has(p.address)) held.set(p.address, new Set());
+      held.get(p.address)!.add(p.coin);
+    }
+    for (const [address, coins] of this.opened) {
+      for (const coin of coins.keys())
+        if (!held.get(address)?.has(coin)) coins.delete(coin);
+    }
+    const missing = snap.positions.some((p) => {
+      const o = this.opened.get(p.address)?.get(p.coin);
+      return !o || o.side !== p.side;
     });
-    return this.inflight;
+    if (!missing || this.resolving) return;
+    this.resolving = (async () => {
+      for (const [address] of held) {
+        const known = this.opened.get(address);
+        const need = snap.positions.some(
+          (p) =>
+            p.address === address &&
+            (!known?.get(p.coin) || known.get(p.coin)!.side !== p.side),
+        );
+        const tried = this.openedTried.get(address) ?? 0;
+        if (!need || now - tried < OPENED_RETRY_MS) continue;
+        this.openedTried.set(address, now);
+        try {
+          const raw = await hlInfo<RawFill[]>(
+            { type: 'userFills', user: address, aggregateByTime: true },
+            WEIGHT.userFills,
+          );
+          const open = tradesOf(raw).trades.filter((t) => t.closedAt == null);
+          const next = new Map<
+            string,
+            { at: number | null; partial: boolean; side: 'long' | 'short' }
+          >();
+          for (const t of open)
+            next.set(t.coin, {
+              at: t.openedAt,
+              partial: t.partial,
+              side: t.side,
+            });
+          // Позиция старше окна исполнений: в нём её входа нет, и искать его заново нечем.
+          for (const p of snap.positions)
+            if (p.address === address && !next.has(p.coin))
+              next.set(p.coin, { at: null, partial: true, side: p.side });
+          this.opened.set(address, next);
+        } catch {
+          // Отказ шлюза или сбой кошелька: время просто не покажется, повтор — через две минуты.
+        }
+      }
+    })().finally(() => {
+      this.resolving = null;
+    });
   }
 
   private async loadPositions(now: number): Promise<PositionsSnapshot> {

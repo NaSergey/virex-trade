@@ -12,6 +12,13 @@ export interface HlPosition {
   unrealizedPnl: number;
   leverage: number;
   liquidationPx: number | null;
+  /**
+   * Когда открыта: первое исполнение текущей сделки по монете. В `clearinghouseState`
+   * времени нет — его достаёт из исполнений `HlWalletsService`; пока не достал — `null`.
+   */
+  openedAt?: number | null;
+  /** Открыта раньше окна истории (2000 исполнений): `openedAt` — не позже, чем на самом деле. */
+  openedPartial?: boolean;
 }
 
 const num = (v: string | null | undefined) =>

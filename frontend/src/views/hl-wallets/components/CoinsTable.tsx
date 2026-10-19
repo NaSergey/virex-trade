@@ -9,6 +9,15 @@ import { formatPrice } from '@/shared/lib/utils/format';
 import { PositionsTable } from './PositionsTable';
 import { RatioBar } from './RatioBar';
 
+/** Объём стороны: монеты — главное, USDT — приглушённо рядом. */
+function Volume({ size, notional }: { size: number; notional: number }) {
+  return (
+    <>
+      {qty(size)} <span className="muted">· ${usd(notional)}</span>
+    </>
+  );
+}
+
 /**
  * Общие монеты сохранённых кошельков: по каждой — сколько кошельков её держат и
  * в какую сторону они смотрят вместе. Строка раскрывается позициями каждого
@@ -32,20 +41,20 @@ export function CoinsTable({ rows, isLoading }: { rows: CoinGroup[]; isLoading: 
       header: t('colDirection'),
       render: (g) => <RatioBar longs={g.longs} shorts={g.shorts} />,
     },
-    // Объём — в монетах; сумма в долларах — в подсказке.
+    // Объём — в монетах, а рядом тем же цветом приглушённо — в долларах.
     {
       key: 'long',
       header: t('colLongSize'),
       align: 'right',
       cellClassName: 'n',
-      render: (g) => <span title={`$${usd(g.longNotional)}`}>{qty(g.longSize)}</span>,
+      render: (g) => <Volume size={g.longSize} notional={g.longNotional} />,
     },
     {
       key: 'short',
       header: t('colShortSize'),
       align: 'right',
       cellClassName: 'n',
-      render: (g) => <span title={`$${usd(g.shortNotional)}`}>{qty(g.shortSize)}</span>,
+      render: (g) => <Volume size={g.shortSize} notional={g.shortNotional} />,
     },
     {
       key: 'net',
@@ -53,9 +62,9 @@ export function CoinsTable({ rows, isLoading }: { rows: CoinGroup[]; isLoading: 
       align: 'right',
       cellClassName: 'n',
       render: (g) => (
-        <span title={`$${usd(g.netNotional)}`} className={g.netSize >= 0 ? 'pos' : 'neg'}>
+        <span className={g.netSize >= 0 ? 'pos' : 'neg'}>
           {g.netSize > 0 ? '+' : ''}
-          {qty(g.netSize)}
+          {qty(g.netSize)} <span className="muted">· ${usd(g.netNotional)}</span>
         </span>
       ),
     },

@@ -103,7 +103,44 @@ describe('HlWalletsService — позиции', () => {
     expect(res.positions).toHaveLength(1);
     expect(res.failed).toEqual(['0xb']);
     await svc.positions(2000);
-    expect(gate.hlInfo).toHaveBeenCalledTimes(2);
+    const live = (gate.hlInfo as jest.Mock).mock.calls.filter(
+      (c) => c[0].type === 'clearinghouseState',
+    );
+    expect(live).toHaveLength(2);
+  });
+
+  it('время открытия берётся из исполнений в фоне и появляется на следующем опросе', async () => {
+    const prisma = makePrisma();
+    prisma.hlWallet.findMany.mockResolvedValue([{ address: '0xa' }]);
+    const pos = {
+      coin: 'BTC',
+      szi: '2',
+      entryPx: '1',
+      positionValue: '2',
+      unrealizedPnl: '1',
+      leverage: { type: 'cross', value: 3 },
+      liquidationPx: null,
+    };
+    (gate.hlInfo as jest.Mock).mockImplementation(async (body) =>
+      body.type === 'userFills'
+        ? [
+            { coin: 'BTC', px: '1', sz: '1', side: 'B', time: 5000, dir: '', startPosition: '0', closedPnl: '0', fee: '0', crossed: true },
+            { coin: 'BTC', px: '1', sz: '1', side: 'B', time: 6000, dir: '', startPosition: '1', closedPnl: '0', fee: '0', crossed: true },
+          ]
+        : { assetPositions: [{ position: pos }] },
+    );
+    const svc = new HlWalletsService(prisma as never);
+    const T = 10_000_000;
+    const first = await svc.positions(T);
+    expect(first.positions[0].openedAt).toBeNull();
+    await (svc as unknown as { resolving: Promise<void> }).resolving;
+    const second = await svc.positions(T + 1000);
+    expect(second.positions[0]).toMatchObject({ openedAt: 5000, openedPartial: false });
+    // Известное время заново не ищется.
+    await svc.positions(T + 200_000);
+    expect(
+      (gate.hlInfo as jest.Mock).mock.calls.filter((c) => c[0].type === 'userFills'),
+    ).toHaveLength(1);
   });
 
   it('сохранение сбрасывает кэш позиций — новый кошелёк виден сразу', async () => {
