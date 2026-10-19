@@ -177,3 +177,82 @@ describe('HlWalletsService — просмотрен и удалён', () => {
     });
   });
 });
+
+describe('HlWalletsService — ордера и сделки сохранённого', () => {
+  beforeEach(() => jest.clearAllMocks());
+  const saved = { address: ADDR, savedAt: new Date(1) };
+
+  it('не сохранённый кошелёк — 404: эндпоинт не прокси к Hyperliquid', async () => {
+    const svc = new HlWalletsService(
+      makePrisma({ address: ADDR, savedAt: null }) as never,
+    );
+    await expect(svc.orders(ADDR)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(svc.fills(ADDR)).rejects.toBeInstanceOf(NotFoundException);
+    expect(gate.hlInfo).not.toHaveBeenCalled();
+  });
+
+  it('ордера и сделки идут разными запросами и держатся минуту каждые', async () => {
+    (gate.hlInfo as jest.Mock).mockResolvedValue([]);
+    const svc = new HlWalletsService(makePrisma(saved) as never);
+    await svc.orders(ADDR, 1000);
+    await svc.orders(ADDR, 2000);
+    await svc.fills(ADDR, 2000);
+    expect(gate.hlInfo).toHaveBeenCalledTimes(2);
+    expect((gate.hlInfo as jest.Mock).mock.calls.map((c) => c[0].type)).toEqual(
+      ['frontendOpenOrders', 'userFills'],
+    );
+    await svc.orders(ADDR, 1000 + 61_000);
+    expect(gate.hlInfo).toHaveBeenCalledTimes(3);
+  });
+
+  it('сбой не залипает в кэше — следующий клик пробует заново', async () => {
+    (gate.hlInfo as jest.Mock)
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValueOnce([]);
+    const svc = new HlWalletsService(makePrisma(saved) as never);
+    await expect(svc.fills(ADDR, 1000)).rejects.toThrow('boom');
+    await new Promise((r) => setImmediate(r));
+    await expect(svc.fills(ADDR, 1500)).resolves.toMatchObject({ fills: [] });
+  });
+});
+
+describe('HlWalletsService — свой кошелёк', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('создаёт или поднимает запись: сохранён, удаление снято, адрес в нижнем регистре', async () => {
+    const prisma = makePrisma();
+    (prisma.hlWallet as unknown as Record<string, jest.Mock>).upsert = jest
+      .fn()
+      .mockImplementation(async ({ create }) => ({
+        ...create,
+        volumeWeek: 0,
+        openPositions: null,
+      }));
+    await new HlWalletsService(prisma as never).add(
+      '0x' + 'A'.repeat(40),
+      '  мой  ',
+    );
+    const arg = (prisma.hlWallet as unknown as Record<string, jest.Mock>).upsert
+      .mock.calls[0][0];
+    expect(arg.where).toEqual({ address: ADDR });
+    expect(arg.create).toMatchObject({ address: ADDR, note: 'мой' });
+    expect(arg.create.savedAt).toBeInstanceOf(Date);
+    expect(arg.update).toMatchObject({ hiddenAt: null, note: 'мой' });
+  });
+
+  it('пустая заметка прежнюю не стирает; не адрес — 400', async () => {
+    const prisma = makePrisma();
+    (prisma.hlWallet as unknown as Record<string, jest.Mock>).upsert = jest
+      .fn()
+      .mockResolvedValue({ address: ADDR });
+    const svc = new HlWalletsService(prisma as never);
+    await svc.add(ADDR, '');
+    expect(
+      (prisma.hlWallet as unknown as Record<string, jest.Mock>).upsert.mock
+        .calls[0][0].update,
+    ).not.toHaveProperty('note');
+    await expect(svc.add('vault', undefined)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+});

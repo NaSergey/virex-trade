@@ -12,13 +12,19 @@ import { dateFormat } from '@/shared/lib/utils/intl';
 import { useHlPositions, useHlSaved, useSaveWallet, type HlWalletRow } from './api/hooks';
 import { pct } from './model/format';
 import { walletColumns } from './components/walletColumns';
-import { NoteField } from './components/NoteField';
-import { PositionsTable } from './components/PositionsTable';
+import { groupByCoin } from './model/coins';
+import { CoinsTable } from './components/CoinsTable';
+import { WalletDetail } from './components/WalletDetail';
+import { AddWalletForm } from './components/AddWalletForm';
 
 /**
- * Кошельки, которые владелец взял в работу: та же статистика, заметка и что
- * они держат прямо сейчас. Выпавший из отбора кошелёк остаётся здесь — с
- * причиной, а не исчезает молча.
+ * Кошельки, которые владелец взял в работу: та же статистика и причина, если
+ * кошелёк выпал из отбора. Строка раскрывается заметкой и вкладками «Позиции /
+ * Ордера / История сделок». Ниже — общие монеты всех сохранённых кошельков и
+ * направление, в которое они смотрят вместе.
+ *
+ * Затемнения «просмотрено», как в общей таблице, здесь нет: сохранённый
+ * кошелёк — тот, с которым работают, и гаснуть ему незачем.
  */
 export function HlSavedPage() {
   const t = useTranslations('hlWallets');
@@ -51,14 +57,21 @@ export function HlSavedPage() {
     header: t('colStatus'),
     render: (r) => <span className={r.qualified && r.alive ? undefined : 'muted'}>{statusOf(r)}</span>,
   };
+  // Первой колонкой, а не последней: таблица широкая, и крайняя справа кнопка
+  // уезжала за край экрана вместе с горизонтальной прокруткой.
   const remove: LedgerColumn<HlWalletRow> = {
     key: 'remove',
     noSkeleton: true,
+    width: 90,
     render: (r) => (
       <Button
         variant="bare"
         tight
-        onClick={() => unsave.mutate(r.address)}
+        // Строка раскрывается по клику, и «Убрать» не должно её раскрывать.
+        onClick={(e) => {
+          e.stopPropagation();
+          unsave.mutate(r.address);
+        }}
         disabled={unsave.isPending && unsave.variables === r.address}
       >
         {t('remove')}
@@ -67,22 +80,28 @@ export function HlSavedPage() {
   };
 
   const snap = positions.data;
+  // Монеты, которые держат хотя бы два сохранённых кошелька: монета одного
+  // кошелька — его личное дело, она видна в раскрытии самой строки.
+  const coins = groupByCoin(snap?.positions ?? []);
+  const posLoading = authLoading || positions.isLoading;
 
   return (
     <Wrap page>
       <PageHead title={t('savedTitle')} lede={t('savedLede')} />
+      <AddWalletForm />
       <ErrorNote error={saved.error ?? unsave.error} fallback={t('loadFailed')} />
       <LedgerTable
-        columns={walletColumns(t, [], [status, remove])}
+        columns={walletColumns(t, [remove], [status])}
         rows={saved.data?.rows ?? []}
         rowKey={(r) => r.address}
-        rowClassName={(r) => (r.viewedAt ? 'seen' : undefined)}
         minWidth={1400}
         // Пока восстанавливается сессия, запрос ещё выключен — без authLoading
         // таблица на перезагрузке мигала бы «ничего не сохранено».
         isLoading={authLoading || saved.isLoading}
         empty={t('savedEmpty')}
-        renderExpanded={(r) => <NoteField address={r.address} note={r.note} />}
+        renderExpanded={(r) => (
+          <WalletDetail row={r} positions={snap?.positions ?? []} positionsLoading={posLoading} />
+        )}
       />
 
       <SectionHead title={t('positions')} style={{ marginTop: 'var(--s5)' }}>
@@ -94,7 +113,8 @@ export function HlSavedPage() {
       </SectionHead>
       <ErrorNote error={positions.error} fallback={t('loadFailed')} />
       {snap?.failed.length ? <p className="warn">{t('positionsFailed', { n: snap.failed.length })}</p> : null}
-      <PositionsTable rows={snap?.positions ?? []} isLoading={authLoading || positions.isLoading} />
+      <p className="muted">{t('commonCoinsLede')}</p>
+      <CoinsTable rows={coins} isLoading={posLoading} />
     </Wrap>
   );
 }

@@ -7,11 +7,18 @@ import type { HlWallet } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { hlInfo, WEIGHT } from '../hyperliquid/hl-gate';
 import { positionsOf, type HlPosition } from './positions';
-import type { ClearinghouseState } from './hl-types';
+import { fillsOf, ordersOf, type HlFill, type HlOrder } from './activity';
+import type { ClearinghouseState, RawFill, RawOpenOrder } from './hl-types';
 
 const ADDRESS = /^0x[0-9a-f]{40}$/;
 /** Позиции сохранённых — вживую, но не чаще раза в 15 с на всех: вес 2 на кошелёк. */
 const POSITIONS_TTL_MS = 15_000;
+/**
+ * Ордера и сделки сохранённого кошелька — по открытию вкладки, а не опросом.
+ * `userFills` у Hyperliquid тяжёлый (вес растёт с числом строк), поэтому ответ
+ * держится минуту и общий на всех обращающихся.
+ */
+const ACTIVITY_TTL_MS = 60_000;
 
 /** Живой — торговал за неделю или держит позицию. */
 const ALIVE = { OR: [{ volumeWeek: { gt: 0 } }, { openPositions: { gt: 0 } }] };
@@ -68,6 +75,10 @@ function addressOf(raw: string): string {
 export class HlWalletsService {
   private cache: { at: number; value: PositionsSnapshot } | null = null;
   private inflight: Promise<PositionsSnapshot> | null = null;
+  private readonly activity = new Map<
+    string,
+    { at: number; value: Promise<unknown> }
+  >();
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -161,6 +172,82 @@ export class HlWalletsService {
       data: { hiddenAt: w.hiddenAt ?? new Date() },
     });
     return { ok: true };
+  }
+
+  /**
+   * Добавить свой кошелёк по адресу — минуя отбор бота. Строки может не быть
+   * (кошелёк не в лидерборде или не прошёл) — создаётся; была удалённая — снова
+   * видна. Разбор подхватит бот: у него `analyzedAt` пуст, а такие идут первыми.
+   */
+  async add(raw: string, note: string | undefined) {
+    const address = addressOf(raw);
+    const text = note?.trim() || null;
+    const now = new Date();
+    const row = await this.prisma.hlWallet.upsert({
+      where: { address },
+      create: { address, savedAt: now, note: text },
+      update: { savedAt: now, hiddenAt: null, ...(text ? { note: text } : {}) },
+    });
+    this.cache = null;
+    return rowOf(row);
+  }
+
+  /** Открытые ордера сохранённого кошелька (новые первыми, не больше 300). */
+  orders(
+    raw: string,
+    now: number = Date.now(),
+  ): Promise<{ asOf: string; orders: HlOrder[] }> {
+    return this.cached(raw, 'orders', now, async (address) => {
+      const res = await hlInfo<RawOpenOrder[]>(
+        { type: 'frontendOpenOrders', user: address },
+        WEIGHT.default,
+      );
+      return { asOf: new Date(now).toISOString(), orders: ordersOf(res) };
+    });
+  }
+
+  /** Последние сделки сохранённого кошелька (новые первыми, не больше 300). */
+  fills(
+    raw: string,
+    now: number = Date.now(),
+  ): Promise<{ asOf: string; fills: HlFill[] }> {
+    return this.cached(raw, 'fills', now, async (address) => {
+      const res = await hlInfo<RawFill[]>(
+        { type: 'userFills', user: address, aggregateByTime: true },
+        WEIGHT.default,
+      );
+      return { asOf: new Date(now).toISOString(), fills: fillsOf(res) };
+    });
+  }
+
+  /**
+   * Только сохранённые: иначе эндпоинт — прокси к Hyperliquid по любому адресу
+   * на бюджет `api`. Ответ и запрос в пути — общие на (вид, кошелёк).
+   */
+  private async cached<T>(
+    raw: string,
+    kind: 'orders' | 'fills',
+    now: number,
+    load: (address: string) => Promise<T>,
+  ): Promise<T> {
+    const address = addressOf(raw);
+    const w = await this.prisma.hlWallet.findUnique({
+      where: { address },
+      select: { savedAt: true },
+    });
+    if (!w?.savedAt)
+      throw new NotFoundException({
+        message: 'Кошелёк не сохранён',
+        code: 'HL_WALLET_NOT_FOUND',
+      });
+    const key = `${kind}:${address}`;
+    const hit = this.activity.get(key);
+    if (hit && now - hit.at < ACTIVITY_TTL_MS) return hit.value as Promise<T>;
+    const value = load(address);
+    this.activity.set(key, { at: now, value });
+    // Сбой в кэше не держим: следующий клик пробует заново.
+    value.catch(() => this.activity.delete(key));
+    return value;
   }
 
   /**

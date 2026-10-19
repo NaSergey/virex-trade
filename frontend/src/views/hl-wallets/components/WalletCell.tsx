@@ -12,7 +12,11 @@ import { profileUrl, shortAddress } from '../model/format';
 export function WalletCell({ address }: { address: string }) {
   const t = useTranslations('hlWallets');
   const view = useViewWallet();
-  const mark = () => view.mutate(address);
+  // stopPropagation: в раскрывающейся таблице клик по ссылке не должен ещё и раскрыть строку.
+  const mark = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    view.mutate(address);
+  };
   return (
     <>
       <span className="n" title={address}>

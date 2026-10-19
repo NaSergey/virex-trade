@@ -30,3 +30,30 @@ export interface ClearinghouseState {
     };
   }[];
 }
+
+/** `type: frontendOpenOrders` — открытые ордера кошелька. */
+export interface RawOpenOrder {
+  coin: string;
+  side: 'A' | 'B';
+  limitPx: string;
+  sz: string;
+  origSz: string;
+  timestamp: number;
+  orderType: string;
+  reduceOnly: boolean;
+  isTrigger: boolean;
+  triggerPx: string;
+}
+
+/** `type: userFills` — последние сделки кошелька (до 2000, старые первыми). */
+export interface RawFill {
+  coin: string;
+  px: string;
+  sz: string;
+  side: 'A' | 'B';
+  time: number;
+  dir: string;
+  closedPnl: string;
+  fee: string;
+  crossed: boolean;
+}

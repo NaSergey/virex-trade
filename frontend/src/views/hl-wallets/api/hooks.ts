@@ -72,6 +72,32 @@ export interface HlPositionsResponse {
   failed: string[];
 }
 
+export interface HlOrder {
+  coin: string;
+  side: 'buy' | 'sell';
+  price: number;
+  size: number;
+  /** Объём при выставлении: размер меньше него — ордер исполнен частично. */
+  origSize: number;
+  type: string;
+  reduceOnly: boolean;
+  triggerPx: number | null;
+  time: number;
+}
+
+export interface HlFill {
+  coin: string;
+  side: 'buy' | 'sell';
+  price: number;
+  size: number;
+  time: number;
+  /** Подпись Hyperliquid: «Open Long», «Close Short», «Long > Short». */
+  dir: string;
+  closedPnl: number;
+  fee: number;
+  taker: boolean;
+}
+
 const BASE = '/api/admin/hl';
 /** Бот пересчитывает кошелёк раз в ~2 часа — чаще минуты таблицу перечитывать незачем. */
 const STALE_MS = 60_000;
@@ -90,6 +116,9 @@ export const useHlSaved = (enabled: boolean) =>
     queryFn: () => apiJson<{ rows: HlWalletRow[] }>(`${BASE}/saved`),
     enabled,
     staleTime: STALE_MS,
+    // Только что добавленный кошелёк бот разберёт в течение минуты — пока есть
+    // непроверенные, список перечитывается, и статистика появляется сама.
+    refetchInterval: (q) => (q.state.data?.rows.some((r) => !r.analyzedAt) ? 10_000 : false),
   });
 
 export const useHlPositions = (enabled: boolean) =>
@@ -99,6 +128,23 @@ export const useHlPositions = (enabled: boolean) =>
     enabled,
     // Позиции — то, ради чего кошелёк сохранён: перечитываются, пока страница открыта.
     refetchInterval: 30_000,
+  });
+
+/** Ордера и сделки — только когда открыта их вкладка; сервер держит ответ минуту. */
+export const useHlOrders = (address: string, enabled: boolean) =>
+  useQuery({
+    queryKey: ['hlOrders', address],
+    queryFn: () => apiJson<{ asOf: string; orders: HlOrder[] }>(`${BASE}/saved/${address}/orders`),
+    enabled,
+    staleTime: STALE_MS,
+  });
+
+export const useHlFills = (address: string, enabled: boolean) =>
+  useQuery({
+    queryKey: ['hlFills', address],
+    queryFn: () => apiJson<{ asOf: string; fills: HlFill[] }>(`${BASE}/saved/${address}/fills`),
+    enabled,
+    staleTime: STALE_MS,
   });
 
 /**
@@ -124,6 +170,24 @@ export function useHideWallet() {
   return useMutation({
     mutationFn: (address: string) => apiJson<{ ok: true }>(`${BASE}/wallets/${address}`, { method: 'DELETE' }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['hlWallets'] }),
+  });
+}
+
+/** Добавить свой кошелёк по адресу — в сохранённые, минуя отбор бота. */
+export function useAddWallet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (address: string) =>
+      apiJson<HlWalletRow>(`${BASE}/saved`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: address.trim() }),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['hlSaved'] });
+      void qc.invalidateQueries({ queryKey: ['hlWallets'] });
+      void qc.invalidateQueries({ queryKey: ['hlPositions'] });
+    },
   });
 }
 

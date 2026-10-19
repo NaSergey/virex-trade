@@ -17,7 +17,11 @@ export const HL_LEADERBOARD =
  * Вес — по документации: `clearinghouseState` 2, прочие `info` 20.
  */
 export const WINDOW_MS = 60_000;
-export const WEIGHT = { clearinghouseState: 2, portfolio: 20 } as const;
+export const WEIGHT = {
+  clearinghouseState: 2,
+  portfolio: 20,
+  default: 20,
+} as const;
 
 /**
  * Доля на процесс. В проде `api` и `worker` на одном IP, общего счётчика у них

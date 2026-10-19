@@ -2676,6 +2676,26 @@
   /* Своей черты у строки нет: под ней сразу идёт шапка таблицы со своей, и две
      линейки вставали в сорока пикселях одна над другой. Отбор и создание
      закрывает та же черта, что открывает таблицу, — они к ней и относятся. */
+  /* Фильтры таблицы кошельков (админка): одна строка управления и сетка
+     одинаковых полей — на узком экране сетка сама уходит в меньше колонок. */
+  .hlf {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s3);
+    padding: var(--s2) 0 var(--s3);
+  }
+  .hlf-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--s4);
+  }
+  .hlf-count { margin-left: auto; }
+  .hlf-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: var(--s3);
+  }
   .newrow {
     display: flex;
     align-items: center;

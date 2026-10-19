@@ -12,6 +12,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from '../admin/guards/admin.guard';
 import { HlWalletsService } from './hl-wallets.service';
 import { SaveWalletDto } from './dto/save-wallet.dto';
+import { AddWalletDto } from './dto/add-wallet.dto';
 
 /**
  * Кошельки Hyperliquid — раздел владельца на поддомене админки. Под тем же
@@ -54,6 +55,24 @@ export class HlWalletsController {
   @Get('saved/positions')
   positions() {
     return this.wallets.positions();
+  }
+
+  /** POST /api/admin/hl/saved — добавить свой кошелёк по адресу. */
+  @Post('saved')
+  add(@Body() dto: AddWalletDto) {
+    return this.wallets.add(dto.address, dto.note);
+  }
+
+  /** GET /api/admin/hl/saved/<адрес>/orders — открытые ордера сохранённого кошелька. */
+  @Get('saved/:address/orders')
+  orders(@Param('address') address: string) {
+    return this.wallets.orders(address);
+  }
+
+  /** GET /api/admin/hl/saved/<адрес>/fills — последние сделки сохранённого кошелька. */
+  @Get('saved/:address/fills')
+  fills(@Param('address') address: string) {
+    return this.wallets.fills(address);
   }
 
   /** PUT /api/admin/hl/saved/<адрес> — сохранить или сменить заметку. */
