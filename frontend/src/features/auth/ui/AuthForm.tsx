@@ -10,8 +10,11 @@ import { useAuth } from '../model/AuthContext';
 
 export type AuthMode = 'login' | 'register';
 
-/** Путь внутри продукта: один слэш, дальше не слэш (иначе это чужой домен). */
-const NEXT_PATH = /^\/(?!\/)/;
+/**
+ * Путь внутри продукта: один слэш, дальше не слэш (иначе это чужой домен). И
+ * не обратный слэш: браузер читает `/\evil.example` как `//evil.example`.
+ */
+const NEXT_PATH = /^\/(?![/\\])/;
 
 /** Главная продукта — терминал (владелец 2026-10-17; до этого — обзор дневника). */
 const HOME = '/terminal';
@@ -20,9 +23,10 @@ const HOME = '/terminal';
  * Куда вести после входа. Принимается только путь внутри продукта —
  * начинающийся с одного слэша: без проверки `?next=//evil.example` браузер
  * прочтёт как адрес чужого сайта и уведёт туда сразу после ввода пароля.
+ * `fallback` — своя главная там, где она другая (у админки — `/`).
  */
-export function safeNext(raw: string | null | undefined): string {
-  return raw && NEXT_PATH.test(raw) ? raw : HOME;
+export function safeNext(raw: string | null | undefined, fallback: string = HOME): string {
+  return raw && NEXT_PATH.test(raw) ? raw : fallback;
 }
 
 /**
@@ -39,6 +43,8 @@ export function safeNext(raw: string | null | undefined): string {
  * Поле «Имя» во входе не снимается, а сворачивается (`.auth-collapse`):
  * смена режима не перестраивает форму рывком. Свёрнутое поле выключено и
  * `inert` — не валидируется, не отправляется, фокус в него не попадает.
+ *
+ * `loginOnly` — вход админки на поддомене: ни регистрации, ни демо там нет.
  */
 export function AuthForm({
   initialMode = 'register',
@@ -46,6 +52,7 @@ export function AuthForm({
   onModeChange,
   next = HOME,
   refCode,
+  loginOnly = false,
 }: {
   initialMode?: AuthMode;
   mode?: AuthMode;
@@ -54,6 +61,7 @@ export function AuthForm({
   next?: string;
   /** Кто пригласил: id из ссылки `?auth=register&ref=<userId>`. */
   refCode?: string;
+  loginOnly?: boolean;
 }) {
   const { login, register } = useAuth();
   const router = useRouter();
@@ -61,7 +69,7 @@ export function AuthForm({
   const uid = useId();
 
   const [own, setOwn] = useState<AuthMode>(initialMode);
-  const mode = controlled ?? own;
+  const mode = loginOnly ? 'login' : (controlled ?? own);
   const setMode = (m: AuthMode) => {
     setOwn(m);
     onModeChange?.(m);
@@ -163,27 +171,31 @@ export function AuthForm({
         </Button>
       </form>
 
-      {/* Демо стоит сразу под входом, а не в конце: человеку, который ещё не
-          решил заводить аккаунт, посмотреть продукт нужно раньше, чем
-          выбирать между входом и регистрацией. */}
-      <p className="auth-or" aria-hidden>
-        {t('or')}
-      </p>
-      <Button variant="default" style={{ width: '100%' }} onClick={onDemo} disabled={busy}>
-        {demoing ? t('submitting') : t('demoButton')}
-      </Button>
+      {loginOnly ? null : (
+        <>
+          {/* Демо стоит сразу под входом, а не в конце: человеку, который ещё не
+              решил заводить аккаунт, посмотреть продукт нужно раньше, чем
+              выбирать между входом и регистрацией. */}
+          <p className="auth-or" aria-hidden>
+            {t('or')}
+          </p>
+          <Button variant="default" style={{ width: '100%' }} onClick={onDemo} disabled={busy}>
+            {demoing ? t('submitting') : t('demoButton')}
+          </Button>
 
-      <Button
-        variant="bare"
-        style={{ marginTop: 'var(--s3)', width: '100%' }}
-        disabled={busy}
-        onClick={() => {
-          setMode(mode === 'login' ? 'register' : 'login');
-          setError(null);
-        }}
-      >
-        {mode === 'login' ? t('switchToRegister') : t('switchToLogin')}
-      </Button>
+          <Button
+            variant="bare"
+            style={{ marginTop: 'var(--s3)', width: '100%' }}
+            disabled={busy}
+            onClick={() => {
+              setMode(mode === 'login' ? 'register' : 'login');
+              setError(null);
+            }}
+          >
+            {mode === 'login' ? t('switchToRegister') : t('switchToLogin')}
+          </Button>
+        </>
+      )}
     </div>
   );
 }

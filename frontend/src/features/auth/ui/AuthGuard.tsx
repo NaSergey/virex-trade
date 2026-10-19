@@ -4,6 +4,8 @@ import { useEffect, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '../model/AuthContext';
 
+const toLanding = (pathname: string) => `/?auth=login&next=${encodeURIComponent(pathname)}`;
+
 /**
  * Реагирует на потерю сессии УЖЕ на странице — не гейт входа.
  *
@@ -24,16 +26,23 @@ import { useAuth } from '../model/AuthContext';
  * «Настройки» можно положить в закладки, и возвращать её владельца на Обзор
  * только потому, что сессия истекла, значит терять то, ради чего он пришёл.
  */
-export function AuthGuard({ children }: { children: ReactNode }) {
+export function AuthGuard({
+  children,
+  loginUrl = toLanding,
+}: {
+  children: ReactNode;
+  /** Куда уводить потерявшего сессию; у админки на поддомене — свой `/login`. */
+  loginUrl?: (pathname: string) => string;
+}) {
   const { user, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
     if (!loading && !user) {
-      router.replace(`/?auth=login&next=${encodeURIComponent(pathname)}`);
+      router.replace(loginUrl(pathname));
     }
-  }, [loading, user, pathname, router]);
+  }, [loading, user, pathname, router, loginUrl]);
 
   // Проверка закончилась, сессии нет — переход на вход уже начат. Держать в
   // это мгновение заглушки значило бы обещать содержимое, которого не будет.

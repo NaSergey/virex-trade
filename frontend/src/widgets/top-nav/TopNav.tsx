@@ -26,11 +26,12 @@ import { LocaleSwitch } from '@/shared/ui/LocaleSwitch';
 import { ThemeToggle } from '@/shared/ui/ThemeToggle';
 import { TradePlayMark } from '@/shared/ui/TradePlayMark';
 import { useLocaleControl } from '@/shared/i18n';
+import { adminOrigin } from '@/shared/lib/utils/admin-host';
 import { isGamesDarkRoute } from '@/shared/lib/utils/games-dark-route';
 import { JOURNAL_PAGES, isJournalPage, isJournalPath } from '@/shared/lib/utils/journal-route';
 import { openSettings } from '@/widgets/settings-dialog';
 
-type Tab = 'terminal' | 'journal' | 'market' | 'backtest' | 'games' | 'admin';
+type Tab = 'terminal' | 'journal' | 'market' | 'backtest' | 'games';
 
 type NavItem = { id: Tab; labelKey: Tab; href: string };
 
@@ -188,7 +189,7 @@ export function TopNav() {
   useLayoutEffect(() => {
     const place = (animated: boolean) => {
       const active = navRef.current?.querySelector<HTMLElement>('[aria-current="page"]');
-      // Страницы вне рейки (`/profile`, `/admin`) не дают
+      // Страницы вне рейки (`/profile`, `/settings`) не дают
       // активной ссылки — плашку тогда нужно спрятать, а не оставить от
       // прошлой страницы: иначе появление «Терминала» сдвигает рейку, а
       // плашка остаётся на координатах, снятых до сдвига, и повисает между
@@ -388,16 +389,22 @@ export function TopNav() {
                 >
                   {t('referrals')}
                 </Button>
-                {/* Аналитика по пользователям сервиса — не раздел работы с
-                    журналом, а инструмент владельца, тот же класс пунктов, что
-                    донат и рефералы. В общей рейке разделов она обещала бы
-                    доступ, которого у обычного пользователя нет; здесь её видно
-                    только владельцу (`user.isAdmin`), и это тот редкий случай,
-                    когда за пунктом — не окно, а обычный переход по адресу. */}
+                {/* Админка — не раздел работы с журналом, а инструмент
+                    владельца, тот же класс пунктов, что донат и рефералы. В
+                    общей рейке разделов она обещала бы доступ, которого у
+                    обычного пользователя нет; здесь её видно только владельцу
+                    (`user.isAdmin`). Живёт она на поддомене `admin.*` (вход
+                    там свой), поэтому за пунктом — обычная ссылка, а не Link.
+                    Меню рисуется только после клика, на клиенте: `location`
+                    здесь уже есть. */}
                 {user?.isAdmin && (
-                  <Link className="acct-item" href="/admin" onClick={closeMenu}>
+                  <a
+                    className="acct-item"
+                    href={adminOrigin(window.location.protocol, window.location.host)}
+                    onClick={closeMenu}
+                  >
                     {t('admin')}
-                  </Link>
+                  </a>
                 )}
               </div>
               <Button

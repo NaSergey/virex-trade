@@ -630,6 +630,66 @@
   @media (hover: hover) {
     .subnav { display: none; }
   }
+  /* Шапка админки на поддомене `admin.*` (`AdminChrome`): та же линейка и та
+     же высота, что у шапки продукта, разделы — языком `.subnav`. Рейки,
+     баланса и меню профиля здесь нет — это инструмент владельца. */
+  .adm-top {
+    max-width: var(--wrap);
+    margin: 0 auto;
+    padding: 0 var(--s4);
+    height: var(--top-h);
+    display: flex;
+    align-items: center;
+    gap: var(--s5);
+    border-bottom: 1px solid var(--rule);
+  }
+  .adm-brand {
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .adm-nav {
+    display: flex;
+    align-self: stretch;
+    gap: var(--s4);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .adm-nav a {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid transparent;
+    color: var(--ink-3);
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color 0.12s, border-color 0.12s;
+  }
+  .adm-nav a:hover { color: var(--ink-2); }
+  .adm-nav a[aria-current="page"] {
+    border-bottom-color: var(--ink);
+    color: var(--ink);
+  }
+  .adm-user {
+    margin-left: auto;
+    font-size: var(--t-xs);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .adm-login {
+    max-width: 360px;
+    margin: var(--s5) auto 0;
+  }
+  @media (max-width: 640px) {
+    .adm-brand,
+    .adm-user { display: none; }
+  }
   .top-r {
     display: flex;
     align-items: center;

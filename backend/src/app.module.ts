@@ -25,6 +25,7 @@ import { BattlePassModule } from './battlepass/battlepass.module';
 import { TerminalModule } from './terminal/terminal.module';
 import { ProfileModule } from './profile/profile.module';
 import { BackupModule } from './backup/backup.module';
+import { HlScoutModule } from './hl-scout/hl-scout.module';
 import { GAME_MODULES } from './games-app.module';
 import { runsGames } from './role';
 
@@ -65,6 +66,7 @@ import { runsGames } from './role';
     TerminalModule,
     ProfileModule,
     BackupModule,
+    HlScoutModule,
   ],
   controllers: [AppController],
   providers: [AppService],

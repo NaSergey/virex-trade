@@ -1416,3 +1416,39 @@ model TerminalEntryFollow {
   @@index([active, userId])
   @@map("terminal_entry_follows")
 }
+
+/// Кошелёк Hyperliquid в отборе бота (backend/src/hl-scout; спека
+/// docs/superpowers/specs/2026-10-19-hyperliquid-wallet-scout-design.md).
+/// Владелец один, поэтому «сохранён» — поле кошелька, а не связь с пользователем.
+model HlWallet {
+  /// Адрес в нижнем регистре.
+  address       String    @id
+  /// Прошёл последний отбор лидерборда.
+  candidate     Boolean   @default(false)
+  /// Последний отбор, в котором кошелёк был кандидатом; максимум — время отбора.
+  seenAt        DateTime?
+  /// Оборот за 7 дней по лидерборду — признак «живого».
+  volumeWeek    Float     @default(0)
+  analyzedAt    DateTime?
+  qualified     Boolean   @default(false)
+  /// Код причины отказа (`RejectReason` в stability.ts); текст — на фронте.
+  rejectReason  String?
+  accountValue  Float?
+  openPositions Int?
+  pnlWeek       Float?
+  pnlMonth      Float?
+  pnl90         Float?
+  pnlAllTime    Float?
+  roiMonth      Float?
+  weeks         Int?
+  weeksMoving   Int?
+  weeksUp       Int?
+  bestWeekShare Float?
+  maxDrawdown   Float?
+  savedAt       DateTime?
+  note          String?
+
+  @@index([candidate, qualified])
+  @@index([analyzedAt])
+  @@map("hl_wallets")
+}

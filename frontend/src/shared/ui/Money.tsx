@@ -21,16 +21,19 @@ export function Money({
   large,
   /** «USDT» и подобное: единица отбивается от числа, но не красится. */
   unit,
+  /** Знаков после точки: суммы в десятки тысяч и больше читаются без центов. */
+  digits = 2,
   className,
 }: {
   value: number;
   large?: boolean;
   unit?: string;
+  digits?: number;
   className?: string;
 }) {
   return (
     <span className={cn(moneyClass(value), large && 'money-l', className)}>
-      {formatMoney(value)}
+      {formatMoney(value, digits)}
       {unit ? ` ${unit}` : ''}
     </span>
   );
