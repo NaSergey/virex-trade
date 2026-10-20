@@ -380,22 +380,23 @@ export function OrderPanel({
     sRange && sLowerVal != null && screenPrice != null ? curvedSliderPos(sLowerVal, sRange.min, sRange.max, screenPrice) : null;
   // Реальные цены уровней — для предпросмотра; те же самые пойдут на сервер
   // при отправке (см. onOpenScaled в SessionScreen).
+  // Только когда заданы обе границы, как на графике и при отправке: нетронутая граница,
+  // подставленная ценой графика, двигала бы среднюю за каждым тиком.
   const sPrices =
-    price != null && sUpperVal != null && sLowerVal != null
-      ? gridPrices(Math.min(sLowerVal, sUpperVal), Math.max(sLowerVal, sUpperVal), sCount).map((p) => fromScreen(p, scale))
+    price != null && sUpper != null && sUpper > 0 && sLower != null && sLower > 0
+      ? gridPrices(Math.min(sLower, sUpper), Math.max(sLower, sUpper), sCount).map((p) => fromScreen(p, scale))
       : [];
   // Средняя точка входа сетки — если исполнятся все уровни, это и есть цена,
   // от которой отсчитывается риск: тот же приём, что у screenPrice в Market,
   // только сама точка не рыночная. Средняя — по объёму уровней (`gridAvgEntry`),
-  // её двигают распределение и закрепления; середина верх/низ — только пока
-  // сторона сетки не ясна. Общий якорь на стоп и тейк, не свой у каждого:
+  // её двигают распределение и закрепления; пока границы не заданы обе, средней
+  // нет, а якорь — цена графика. Общий якорь на стоп и тейк, не свой у каждого:
   // levelSliderRange сама разводит их по разные стороны от него (см. belowSide там же).
   const sAvgReal =
     sPrices.length > 0 && sDirection
       ? gridAvgEntry({ prices: sPrices, direction: sDirection, qtyPins: scaledDraft.qtyPins, tilt: scaledDraft.tilt })
       : null;
-  const sAvgEntry =
-    sAvgReal != null ? toScreen(sAvgReal, scale) : sUpperVal != null && sLowerVal != null ? (sUpperVal + sLowerVal) / 2 : null;
+  const sAvgEntry = sAvgReal != null ? toScreen(sAvgReal, scale) : null;
   const sStopAnchor = sAvgEntry ?? screenPrice;
   const sTakeAnchor = sAvgEntry ?? screenPrice;
   const sStopRange = sStopAnchor != null ? levelSliderRange('stop', sStopAnchor, sDirection) : null;
