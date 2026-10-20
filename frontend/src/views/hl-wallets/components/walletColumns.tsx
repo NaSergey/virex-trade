@@ -49,6 +49,7 @@ export function walletColumns(
     num('weeksUp', t('colWeeksUp'), (r) => (r.weeksUp == null ? '—' : `${r.weeksUp} / ${r.weeksMoving}`)),
     num('bestWeekShare', t('colBestWeek'), (r) => pct(r.bestWeekShare)),
     num('maxDrawdown', t('colDrawdown'), (r) => pct(r.maxDrawdown)),
+    num('weeklyT', t('colT'), (r) => (r.weeklyT == null ? '—' : r.weeklyT.toFixed(1))),
     num('netExposure', t('colExposure'), (r) => <Exposure row={r} t={t} />),
     ...extra,
   ];

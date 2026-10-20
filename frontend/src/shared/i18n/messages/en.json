@@ -2211,7 +2211,8 @@
       "weeksUp": "weeks in profit {share}",
       "oneSpike": "profit from one spike ({share})",
       "drawdown": "drawdown {share}",
-      "bot": "bot: trades last minutes"
+      "bot": "bot: trades last minutes",
+      "luck": "looks like luck (t < 2)"
     },
     "positions": "Open positions",
     "asOf": "as of {at}",
@@ -2309,6 +2310,9 @@
     "styleAria": "Wallet style",
     "scopeAll": "All wallets",
     "scopeDirectional": "Without neutral",
-    "scopeAria": "Which wallets to count"
+    "scopeAria": "Which wallets to count",
+    "colT": "t-stat",
+    "fT": "Reliability t",
+    "tHint": "Weekly-return t-statistic: how far the profit is from luck. 2 is about a 1-in-40 chance; steady strategies score higher, lumpy ones lower."
   }
 }

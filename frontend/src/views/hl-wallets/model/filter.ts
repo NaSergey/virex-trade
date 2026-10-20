@@ -10,7 +10,8 @@ export type NumFilterKey =
   | 'roiMin'
   | 'upShareMin'
   | 'bestWeekMax'
-  | 'drawdownMax';
+  | 'drawdownMax'
+  | 'tMin';
 
 export type ViewFilter = 'all' | 'new' | 'viewed';
 
@@ -29,6 +30,7 @@ export const EMPTY_FILTERS: WalletFilters = {
   upShareMin: '',
   bestWeekMax: '',
   drawdownMax: '',
+  tMin: '',
   view: 'all',
   style: 'all',
 };
@@ -70,6 +72,7 @@ export function applyFilters(rows: HlWalletRow[], f: WalletFilters): HlWalletRow
     if (f.style === 'directional' && r.style !== 'directional') return false;
     const upShare = r.weeksMoving ? (r.weeksUp ?? 0) / r.weeksMoving : null;
     return (
+      min(r.weeklyT, f.tMin) &&
       min(r.accountValue, f.balanceMin) &&
       min(r.pnlWeek, f.pnlWeekMin) &&
       min(r.pnlMonth, f.pnlMonthMin) &&

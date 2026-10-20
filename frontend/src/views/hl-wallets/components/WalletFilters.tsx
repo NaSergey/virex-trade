@@ -18,7 +18,7 @@ import {
  * `unit` — единица справа: подпись над полем остаётся названием колонки, а не
  * фразой «PnL 30д от, $».
  */
-const FIELDS: { key: NumFilterKey; label: string; bound: 'from' | 'to'; unit: '$' | '%' }[] = [
+const FIELDS: { key: NumFilterKey; label: string; bound: 'from' | 'to'; unit?: '$' | '%' }[] = [
   { key: 'balanceMin', label: 'fBalance', bound: 'from', unit: '$' },
   { key: 'pnlWeekMin', label: 'fPnlWeek', bound: 'from', unit: '$' },
   { key: 'pnlMonthMin', label: 'fPnlMonth', bound: 'from', unit: '$' },
@@ -28,6 +28,7 @@ const FIELDS: { key: NumFilterKey; label: string; bound: 'from' | 'to'; unit: '$
   { key: 'upShareMin', label: 'fUpShare', bound: 'from', unit: '%' },
   { key: 'bestWeekMax', label: 'fBestWeek', bound: 'to', unit: '%' },
   { key: 'drawdownMax', label: 'fDrawdown', bound: 'to', unit: '%' },
+  { key: 'tMin', label: 'fT', bound: 'from' },
 ];
 
 /**

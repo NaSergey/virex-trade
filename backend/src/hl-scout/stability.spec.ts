@@ -1,4 +1,10 @@
-import { analyzePortfolio, stitch, toSeries, valueAt } from './stability';
+import {
+  analyzePortfolio,
+  stitch,
+  toSeries,
+  valueAt,
+  weeklyTStat,
+} from './stability';
 import type { Point, Portfolio, PortfolioWindow } from './hl-types';
 
 const DAY = 86_400_000;
@@ -162,5 +168,48 @@ describe('analyzePortfolio', () => {
 
   it('пустой портфель — «noData»', () => {
     expect(analyzePortfolio([], NOW).reason).toBe('noData');
+  });
+});
+
+describe('weeklyTStat', () => {
+  it('ровный плюс с небольшим шумом — большая t', () => {
+    expect(
+      weeklyTStat([0.01, 0.012, 0.009, 0.011, 0.01, 0.013])!,
+    ).toBeGreaterThan(8);
+  });
+
+  it('плюс на шуме — мала: среднее тонет в разбросе', () => {
+    expect(weeklyTStat([0.05, -0.04, 0.06, -0.05, 0.04, -0.03])!).toBeLessThan(
+      1,
+    );
+  });
+
+  it('мало недель или нулевой разброс — судить не по чему', () => {
+    expect(weeklyTStat([0.01, 0.02])).toBeNull();
+    expect(weeklyTStat([0.01, 0.01, 0.01, 0.01])).toBeNull();
+  });
+});
+
+describe('analyzePortfolio — везение', () => {
+  it('прошёл всё, кроме t: 16 недель в плюсе из 26, но среднее тонет в разбросе', () => {
+    // +2000 в 16 неделях и −2500 в 10: общий плюс есть, а t около нуля.
+    const pnl = byWeeks(210, (k) =>
+      k % 5 === 0 || k % 5 === 1 ? -2500 : 2000,
+    );
+    const { stats, reason } = analyzePortfolio(
+      makePortfolio({ days: 210, pnl }),
+      NOW,
+    );
+    expect(stats.weeklyT).toBeLessThan(2);
+    expect(reason).toBe('luck');
+  });
+
+  it('ровный рост t не режет', () => {
+    const { stats, reason } = analyzePortfolio(
+      makePortfolio({ days: 210, pnl: byWeeks(210, () => 1000) }),
+      NOW,
+    );
+    expect(reason).toBeNull();
+    expect(stats.weeklyT == null || stats.weeklyT >= 2).toBe(true);
   });
 });

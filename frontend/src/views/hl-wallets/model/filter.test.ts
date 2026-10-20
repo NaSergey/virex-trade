@@ -25,6 +25,7 @@ const row = (o: Partial<HlWalletRow>): HlWalletRow => ({
   note: null,
   viewedAt: null,
   starred: false,
+  weeklyT: 3,
   netExposure: 0.8,
   grossExposure: 1,
   style: 'directional',
@@ -76,5 +77,10 @@ describe('applyFilters', () => {
     ];
     expect(applyFilters(rows, { ...EMPTY_FILTERS, style: 'directional' }).map((r) => r.address)).toEqual(['a']);
     expect(hasFilters({ ...EMPTY_FILTERS, style: 'directional' })).toBe(true);
+  });
+
+  it('t от: слабее порога и без t — не проходят', () => {
+    const rows = [row({ address: 'a', weeklyT: 3.5 }), row({ address: 'b', weeklyT: 1.2 }), row({ address: 'c', weeklyT: null })];
+    expect(applyFilters(rows, { ...EMPTY_FILTERS, tMin: '3' }).map((r) => r.address)).toEqual(['a']);
   });
 });

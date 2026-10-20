@@ -58,6 +58,7 @@ function rowOf(w: HlWallet) {
     note: w.note,
     viewedAt: w.viewedAt,
     starred: w.starredAt != null,
+    weeklyT: w.weeklyT,
     netExposure: w.netExposure,
     grossExposure: w.grossExposure,
     style: styleOf(w.netExposure, w.grossExposure),

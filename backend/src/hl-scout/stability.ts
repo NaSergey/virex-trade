@@ -5,6 +5,7 @@ import {
   MIN_MOVING_WEEKS,
   MIN_UP_SHARE,
   MIN_WEEKS,
+  MIN_WEEKLY_T,
 } from './criteria';
 import type { Point, Portfolio } from './hl-types';
 
@@ -28,6 +29,7 @@ export type RejectReason =
   | 'weeksUp'
   | 'oneSpike'
   | 'drawdown'
+  | 'luck'
   | 'bot';
 
 export interface WalletStats {
@@ -42,6 +44,26 @@ export interface WalletStats {
   weeksUp: number;
   bestWeekShare: number | null;
   maxDrawdown: number;
+  /** t-статистика недельной доходности: насколько плюс отличим от везения. null — не из чего считать. */
+  weeklyT: number | null;
+}
+
+/**
+ * t-статистика среднего недельной доходности: `среднее / (σ / √n)`. Отвечает на
+ * вопрос «а не везение ли это»: при нулевом мастерстве она колеблется около нуля,
+ * и t ≥ 2 — примерно один шанс из сорока. Честная оговорка: она выше у ровных
+ * стратегий (мейкер, carry) и ниже у рывковых — направленному трейдеру с редкими
+ * крупными неделями выйти за порог труднее. Нулевой разброс (все недели одинаковы)
+ * или меньше 3 недель — `null`: судить не по чему.
+ */
+export function weeklyTStat(returns: number[]): number | null {
+  const n = returns.length;
+  if (n < 3) return null;
+  const mean = returns.reduce((s, x) => s + x, 0) / n;
+  const sd = Math.sqrt(
+    returns.reduce((s, x) => s + (x - mean) ** 2, 0) / (n - 1),
+  );
+  return sd > 0 ? mean / (sd / Math.sqrt(n)) : null;
 }
 
 export function toSeries(points: Point[] | undefined): Series {
@@ -125,6 +147,7 @@ export function analyzePortfolio(
         weeksUp: 0,
         bestWeekShare: null,
         maxDrawdown: 0,
+        weeklyT: null,
       },
       reason: 'noData',
     };
@@ -139,11 +162,17 @@ export function analyzePortfolio(
 
   // Недели — от «сейчас» назад, только целиком внутри истории.
   const weekly: number[] = [];
+  const weeklyReturns: number[] = [];
   for (let k = 0; k < HORIZON_WEEKS; k++) {
     const end = now - k * WEEK;
     const begin = end - WEEK;
     if (begin < first) break;
-    weekly.push(at(end) - at(begin));
+    const pnlWeek = at(end) - at(begin);
+    weekly.push(pnlWeek);
+    // Доходность недели — к балансу на её начало: $500 на счёте в $5k и в $500k —
+    // разные результаты, и t по долларам сравнивала бы размеры счетов.
+    const base = valueAt(av, begin) ?? av[0]?.[1] ?? 0;
+    if (base > 0) weeklyReturns.push(pnlWeek / base);
   }
   const moving = weekly.filter((x) => Math.abs(x) > EPS);
   const weeksUp = moving.filter((x) => x > EPS).length;
@@ -188,6 +217,7 @@ export function analyzePortfolio(
     weeksUp,
     bestWeekShare,
     maxDrawdown,
+    weeklyT: weeklyTStat(weeklyReturns),
   };
 
   return { stats, reason: verdict(stats, horizonPnl) };
@@ -204,5 +234,6 @@ function verdict(s: WalletStats, horizonPnl: number): RejectReason | null {
   if (s.weeksUp / s.weeksMoving < MIN_UP_SHARE) return 'weeksUp';
   if ((s.bestWeekShare ?? 1) > MAX_BEST_WEEK_SHARE) return 'oneSpike';
   if (s.maxDrawdown > MAX_DRAWDOWN) return 'drawdown';
+  if (s.weeklyT != null && s.weeklyT < MIN_WEEKLY_T) return 'luck';
   return null;
 }
