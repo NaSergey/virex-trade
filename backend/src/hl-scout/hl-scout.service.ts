@@ -271,7 +271,10 @@ export class HlScoutService implements OnApplicationBootstrap, OnModuleDestroy {
             WEIGHT.userFills,
           );
           const b = behaviorOf(fills);
-          metrics = { medianHoldMs: b.medianHoldMs, fillsPerDay: b.fillsPerDay };
+          metrics = {
+            medianHoldMs: b.medianHoldMs,
+            fillsPerDay: b.fillsPerDay,
+          };
           behavior = { ...metrics, behaviorAt: new Date(now) };
         }
         if (isBot(metrics)) reason = 'bot';

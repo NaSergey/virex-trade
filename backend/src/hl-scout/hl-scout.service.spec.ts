@@ -187,21 +187,41 @@ describe('HlScoutService — разбор', () => {
       ]);
       const win = (name: string) => [
         name,
-        { accountValueHistory: pts, pnlHistory: pts.map(([t], i) => [t, String(i * 500)]), vlm: '1' },
+        {
+          accountValueHistory: pts,
+          pnlHistory: pts.map(([t], i) => [t, String(i * 500)]),
+          vlm: '1',
+        },
       ];
-      return ['perpWeek', 'perpMonth', 'perpAllTime', 'week', 'month', 'allTime'].map(win);
+      return [
+        'perpWeek',
+        'perpMonth',
+        'perpAllTime',
+        'week',
+        'month',
+        'allTime',
+      ].map(win);
     };
     const botFills = () =>
       Array.from({ length: 80 }, (_, i) => ({
-        coin: 'ETH', px: '100', sz: '1', side: i % 2 ? 'A' : 'B',
-        time: NOW - (80 - i) * 120_000, dir: '', startPosition: i % 2 ? '1' : '0',
-        closedPnl: '0', fee: '0', crossed: true,
+        coin: 'ETH',
+        px: '100',
+        sz: '1',
+        side: i % 2 ? 'A' : 'B',
+        time: NOW - (80 - i) * 120_000,
+        dir: '',
+        startPosition: i % 2 ? '1' : '0',
+        closedPnl: '0',
+        fee: '0',
+        crossed: true,
       }));
     const state = { assetPositions: [] };
 
     it('кривая прошла, но торгует по минуте — отказ «бот», метрики записаны', async () => {
       const prisma = makePrisma({
-        findFirst: jest.fn().mockResolvedValue({ address: '0xa', behaviorAt: null }),
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ address: '0xa', behaviorAt: null }),
       });
       (gate.hlInfo as jest.Mock)
         .mockResolvedValueOnce(goodPortfolio())
@@ -235,9 +255,13 @@ describe('HlScoutService — разбор', () => {
 
     it('кривая не прошла — исполнения не запрашиваются вовсе', async () => {
       const prisma = makePrisma({
-        findFirst: jest.fn().mockResolvedValue({ address: '0xa', behaviorAt: null }),
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ address: '0xa', behaviorAt: null }),
       });
-      (gate.hlInfo as jest.Mock).mockResolvedValueOnce([]).mockResolvedValueOnce(state);
+      (gate.hlInfo as jest.Mock)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce(state);
       await new HlScoutService(prisma as never).analyzeNext(clock);
       expect(gate.hlInfo).toHaveBeenCalledTimes(2);
     });

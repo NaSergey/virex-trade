@@ -6,6 +6,7 @@ import {
 import type { HlWallet } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { hlInfo, WEIGHT } from '../hyperliquid/hl-gate';
+import { styleOf } from './exposure';
 import { positionsOf, type HlPosition } from './positions';
 import { ordersOf, type HlOrder } from './activity';
 import { tradesOf } from './trades';
@@ -57,6 +58,9 @@ function rowOf(w: HlWallet) {
     note: w.note,
     viewedAt: w.viewedAt,
     starred: w.starredAt != null,
+    netExposure: w.netExposure,
+    grossExposure: w.grossExposure,
+    style: styleOf(w.netExposure, w.grossExposure),
   };
 }
 

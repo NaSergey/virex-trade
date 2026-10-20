@@ -6,6 +6,7 @@ import { fmtPctSigned } from '@/shared/lib/utils/format';
 import type { HlWalletRow } from '../api/hooks';
 import { pct, usd } from '../model/format';
 import { WalletCell } from './WalletCell';
+import { Exposure } from './Exposure';
 
 type T = ReturnType<typeof useTranslations>;
 
@@ -48,6 +49,7 @@ export function walletColumns(
     num('weeksUp', t('colWeeksUp'), (r) => (r.weeksUp == null ? '—' : `${r.weeksUp} / ${r.weeksMoving}`)),
     num('bestWeekShare', t('colBestWeek'), (r) => pct(r.bestWeekShare)),
     num('maxDrawdown', t('colDrawdown'), (r) => pct(r.maxDrawdown)),
+    num('netExposure', t('colExposure'), (r) => <Exposure row={r} t={t} />),
     ...extra,
   ];
 }

@@ -25,6 +25,9 @@ const row = (o: Partial<HlWalletRow>): HlWalletRow => ({
   note: null,
   viewedAt: null,
   starred: false,
+  netExposure: 0.8,
+  grossExposure: 1,
+  style: 'directional',
   ...o,
 });
 
@@ -62,5 +65,16 @@ describe('applyFilters', () => {
     expect(applyFilters(rows, { ...EMPTY_FILTERS, view: 'new' }).map((r) => r.address)).toEqual(['a']);
     expect(applyFilters(rows, { ...EMPTY_FILTERS, view: 'viewed' }).map((r) => r.address)).toEqual(['b']);
     expect(hasFilters({ ...EMPTY_FILTERS, view: 'new' })).toBe(true);
+  });
+
+  it('«направленные» убирают хедж, пары и кошельки без позиций и без снимка', () => {
+    const rows = [
+      row({ address: 'a', style: 'directional' }),
+      row({ address: 'b', style: 'neutral' }),
+      row({ address: 'c', style: 'flat' }),
+      row({ address: 'd', style: null }),
+    ];
+    expect(applyFilters(rows, { ...EMPTY_FILTERS, style: 'directional' }).map((r) => r.address)).toEqual(['a']);
+    expect(hasFilters({ ...EMPTY_FILTERS, style: 'directional' })).toBe(true);
   });
 });

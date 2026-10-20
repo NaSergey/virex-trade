@@ -1,11 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useAuth } from '@/features/auth';
 import { Wrap } from '@/shared/ui/Wrap';
 import { PageHead } from '@/shared/ui/PageHead';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { Button } from '@/shared/ui/Button';
+import { Seg } from '@/shared/ui/Seg';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import { dateFormat } from '@/shared/lib/utils/intl';
@@ -103,10 +105,16 @@ export function HlSavedPage() {
     ),
   };
 
+  const [scope, setScope] = useState<'all' | 'directional'>('all');
   const snap = positions.data;
   // Монеты, которые держат хотя бы два сохранённых кошелька: монета одного
   // кошелька — его личное дело, она видна в раскрытии самой строки.
-  const coins = groupByCoin(snap?.positions ?? []);
+  // По умолчанию — все; «направленные» убирают кошельки, у которых лонг и шорт гасят
+  // друг друга: их ноги по отдельным монетам — не мнение о рынке.
+  const hedged = new Set((saved.data?.rows ?? []).filter((r) => r.style === 'neutral').map((r) => r.address));
+  const coins = groupByCoin(
+    (snap?.positions ?? []).filter((p) => scope === 'all' || !hedged.has(p.address)),
+  );
   const posLoading = authLoading || positions.isLoading;
 
   return (
@@ -138,6 +146,17 @@ export function HlSavedPage() {
       <ErrorNote error={positions.error} fallback={t('loadFailed')} />
       {snap?.failed.length ? <p className="warn">{t('positionsFailed', { n: snap.failed.length })}</p> : null}
       <p className="muted">{t('commonCoinsLede')}</p>
+      <div style={{ margin: 'var(--s2) 0 var(--s3)' }}>
+        <Seg
+          options={[
+            { value: 'all', label: t('scopeAll') },
+            { value: 'directional', label: t('scopeDirectional') },
+          ]}
+          value={scope}
+          onChange={setScope}
+          ariaLabel={t('scopeAria')}
+        />
+      </div>
       <CoinsTable rows={coins} isLoading={posLoading} />
     </Wrap>
   );

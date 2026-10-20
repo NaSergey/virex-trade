@@ -2299,6 +2299,16 @@
     "add": "Add",
     "addAria": "Hyperliquid wallet address",
     "addPlaceholder": "Wallet address: 0x…",
-    "addFailed": "Failed to add the wallet"
+    "addFailed": "Failed to add the wallet",
+    "colExposure": "Exposure",
+    "exposureHint": "Positions to balance: net (long − short) and gross (long + short). Net near zero with open positions means a hedge or a pair.",
+    "styleFlat": "no positions",
+    "styleNeutral": "neutral",
+    "styleAll": "Any",
+    "styleDirectional": "Directional",
+    "styleAria": "Wallet style",
+    "scopeAll": "All wallets",
+    "scopeDirectional": "Without neutral",
+    "scopeAria": "Which wallets to count"
   }
 }

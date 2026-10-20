@@ -50,4 +50,3 @@ export function ordersOf(raw: RawOpenOrder[]): HlOrder[] {
     .sort((a, b) => b.time - a.time)
     .slice(0, MAX_ORDERS);
 }
-

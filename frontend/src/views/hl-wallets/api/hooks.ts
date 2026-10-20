@@ -48,6 +48,11 @@ export interface HlWalletRow {
   viewedAt: string | null;
   /** Звёздочка владельца: кошельку доверяют. Только у сохранённых. */
   starred: boolean;
+  /** Позиции к балансу: (лонг − шорт) / баланс и (лонг + шорт) / баланс; null — снимка ещё не было. */
+  netExposure: number | null;
+  grossExposure: number | null;
+  /** Нейтральный — лонг и шорт гасят друг друга (хедж, пара); направленный — перекос в одну сторону. */
+  style: 'flat' | 'neutral' | 'directional' | null;
 }
 
 export interface HlWalletsResponse {

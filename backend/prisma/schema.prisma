@@ -1460,8 +1460,31 @@ model HlWallet {
   medianHoldMs  Float?
   fillsPerDay   Float?
   behaviorAt    DateTime?
+  /// Чистая экспозиция позиций к балансу: (лонг − шорт) / баланс по последнему снимку.
+  /// Плюс — в лонге, минус — в шорте; около нуля при открытых позициях — хедж или пара.
+  netExposure   Float?
+  /// Брутто: (лонг + шорт) / баланс — плечо кошелька в целом.
+  grossExposure Float?
+  exposureAt    DateTime?
 
   @@index([candidate, qualified])
   @@index([analyzedAt])
   @@map("hl_wallets")
+}
+
+/// Снимок позиций кошелька из отбора бота: по строке на кошелёк за проход. Нужен
+/// для проверки гипотезы «куда смотрят успешные кошельки» вперёд — сверить
+/// направление в момент `at` с движением цены после. Хранится 120 дней.
+model HlPositionSnapshot {
+  id        Int      @id @default(autoincrement())
+  at        DateTime
+  address   String
+  /// Баланс кошелька на момент снимка (по последнему разбору), для нормировки.
+  equity    Float?
+  /// [{ coin, szi (со знаком), notional, entryPx, upnl }]; пусто — позиций нет.
+  positions Json
+
+  @@index([at])
+  @@index([address, at])
+  @@map("hl_position_snapshots")
 }

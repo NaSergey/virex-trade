@@ -14,7 +14,10 @@ export type NumFilterKey =
 
 export type ViewFilter = 'all' | 'new' | 'viewed';
 
-export type WalletFilters = Record<NumFilterKey, string> & { view: ViewFilter };
+/** `directional` — только кошельки с перекосом в одну сторону; хедж, пары и пустые уходят. */
+export type StyleFilter = 'all' | 'directional';
+
+export type WalletFilters = Record<NumFilterKey, string> & { view: ViewFilter; style: StyleFilter };
 
 export const EMPTY_FILTERS: WalletFilters = {
   balanceMin: '',
@@ -27,6 +30,7 @@ export const EMPTY_FILTERS: WalletFilters = {
   bestWeekMax: '',
   drawdownMax: '',
   view: 'all',
+  style: 'all',
 };
 
 /** Пусто или не число — фильтр не действует: наполовину набранное «-» не должно прятать таблицу. */
@@ -39,7 +43,11 @@ function parse(raw: string): number | null {
 const scaled = (v: number, scale: number) => +(v * scale).toFixed(6);
 
 export function hasFilters(f: WalletFilters): boolean {
-  return f.view !== 'all' || (Object.keys(f) as (keyof WalletFilters)[]).some((k) => k !== 'view' && parse(f[k]) != null);
+  return (
+    f.view !== 'all' ||
+    f.style !== 'all' ||
+    (Object.keys(f) as (keyof WalletFilters)[]).some((k) => k !== 'view' && k !== 'style' && parse(f[k]) != null)
+  );
 }
 
 /**
@@ -59,6 +67,7 @@ export function applyFilters(rows: HlWalletRow[], f: WalletFilters): HlWalletRow
   return rows.filter((r) => {
     if (f.view === 'new' && r.viewedAt) return false;
     if (f.view === 'viewed' && !r.viewedAt) return false;
+    if (f.style === 'directional' && r.style !== 'directional') return false;
     const upShare = r.weeksMoving ? (r.weeksUp ?? 0) / r.weeksMoving : null;
     return (
       min(r.accountValue, f.balanceMin) &&

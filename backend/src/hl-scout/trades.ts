@@ -79,7 +79,8 @@ export function tradesOf(raw: RawFill[]): {
   const volume = new Map<string, number>();
 
   const finish = (coin: string, acc: Acc, closed: boolean) => {
-    const entryPx = acc.entrySize > 0 ? acc.entryNotional / acc.entrySize : null;
+    const entryPx =
+      acc.entrySize > 0 ? acc.entryNotional / acc.entrySize : null;
     const exitPx = acc.exitSize > 0 ? acc.exitNotional / acc.exitSize : null;
     done.push({
       coin,
@@ -105,7 +106,8 @@ export function tradesOf(raw: RawFill[]): {
     volume.set(f.coin, (volume.get(f.coin) ?? 0) + px * sz);
 
     let cur = open.get(f.coin);
-    const known = f.startPosition != null && Number.isFinite(Number(f.startPosition));
+    const known =
+      f.startPosition != null && Number.isFinite(Number(f.startPosition));
     // Без `startPosition` размер ведём сами: от начала видимой истории.
     const start = known
       ? Number(f.startPosition)
@@ -122,7 +124,8 @@ export function tradesOf(raw: RawFill[]): {
       cur = undefined;
     }
 
-    const flips = !isZero(start, scale) && !isZero(end, scale) && start * end < 0;
+    const flips =
+      !isZero(start, scale) && !isZero(end, scale) && start * end < 0;
     // Доля исполнения, ушедшая на закрытие старой стороны (при развороте — |start|, иначе всё).
     const closePart = flips ? Math.abs(start) / sz : 1;
 

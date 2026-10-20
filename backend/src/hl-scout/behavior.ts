@@ -24,9 +24,7 @@ export function behaviorOf(raw: RawFill[]): Behavior {
   const { trades, fillsCount, since } = tradesOf(raw);
   const closed = trades.filter((t) => t.closedAt != null && !t.partial);
   // `tradesOf` отдаёт не больше MAX_TRADES сделок — для медианы достаточно.
-  const holds = closed
-    .map((t) => t.lastAt - t.openedAt)
-    .sort((a, b) => a - b);
+  const holds = closed.map((t) => t.lastAt - t.openedAt).sort((a, b) => a - b);
   const medianHoldMs =
     holds.length >= BOT_MIN_TRADES ? holds[Math.floor(holds.length / 2)] : null;
   const last = (raw ?? []).reduce((m, f) => Math.max(m, f.time), 0);

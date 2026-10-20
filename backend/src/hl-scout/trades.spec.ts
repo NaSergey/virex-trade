@@ -37,9 +37,7 @@ describe('tradesOf — исполнения в сделки', () => {
       pos += 1;
     }
     for (let i = 0; i < 5; i++) {
-      raw.push(
-        fill('ETH', false, 1, pos, 110, { closedPnl: '4' }),
-      );
+      raw.push(fill('ETH', false, 1, pos, 110, { closedPnl: '4' }));
       pos -= 1;
     }
     const { trades, fillsCount } = tradesOf(raw);
@@ -118,10 +116,9 @@ describe('tradesOf — исполнения в сделки', () => {
   });
 
   it('без startPosition размер ведётся по исполнениям', () => {
-    const raw = [
-      fill('ETH', true, 2, 0),
-      fill('ETH', false, 2, 0),
-    ].map(({ startPosition: _s, ...f }) => f as RawFill);
+    const raw = [fill('ETH', true, 2, 0), fill('ETH', false, 2, 0)].map(
+      ({ startPosition: _s, ...f }) => f as RawFill,
+    );
     const { trades } = tradesOf(raw);
     expect(trades).toHaveLength(1);
     expect(trades[0].closedAt).not.toBeNull();

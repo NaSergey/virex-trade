@@ -4,7 +4,14 @@ import { useTranslations } from 'next-intl';
 import { Button } from '@/shared/ui/Button';
 import { Field, Input } from '@/shared/ui/Field';
 import { Seg } from '@/shared/ui/Seg';
-import { EMPTY_FILTERS, hasFilters, type NumFilterKey, type ViewFilter, type WalletFilters } from '../model/filter';
+import {
+  EMPTY_FILTERS,
+  hasFilters,
+  type NumFilterKey,
+  type StyleFilter,
+  type ViewFilter,
+  type WalletFilters,
+} from '../model/filter';
 
 /**
  * Поля в порядке колонок таблицы. `bound` — «от» или «до» стоит прямо в поле,
@@ -45,10 +52,20 @@ export function WalletFilters({
     { value: 'new', label: t('viewNew') },
     { value: 'viewed', label: t('viewViewed') },
   ];
+  const styles: { value: StyleFilter; label: string }[] = [
+    { value: 'all', label: t('styleAll') },
+    { value: 'directional', label: t('styleDirectional') },
+  ];
   return (
     <div className="hlf" role="search" aria-label={t('filtersAria')}>
       <div className="hlf-head">
         <Seg options={views} value={value.view} onChange={(view) => onChange({ ...value, view })} ariaLabel={t('viewAria')} />
+        <Seg
+          options={styles}
+          value={value.style}
+          onChange={(style) => onChange({ ...value, style })}
+          ariaLabel={t('styleAria')}
+        />
         <span className="muted hlf-count">{t('shownOf', { shown, total })}</span>
         {hasFilters(value) ? (
           <Button variant="bare" tight onClick={() => onChange(EMPTY_FILTERS)}>

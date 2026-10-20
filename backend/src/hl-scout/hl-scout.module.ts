@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AdminGuard } from '../admin/guards/admin.guard';
 import { HlScoutService } from './hl-scout.service';
+import { HlSnapshotService } from './hl-snapshot.service';
 import { HlWalletsService } from './hl-wallets.service';
 import { HlWalletsController } from './hl-wallets.controller';
 
@@ -10,6 +11,6 @@ import { HlWalletsController } from './hl-wallets.controller';
  */
 @Module({
   controllers: [HlWalletsController],
-  providers: [HlScoutService, HlWalletsService, AdminGuard],
+  providers: [HlScoutService, HlSnapshotService, HlWalletsService, AdminGuard],
 })
 export class HlScoutModule {}

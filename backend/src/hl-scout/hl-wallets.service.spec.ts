@@ -124,8 +124,30 @@ describe('HlWalletsService — позиции', () => {
     (gate.hlInfo as jest.Mock).mockImplementation(async (body) =>
       body.type === 'userFills'
         ? [
-            { coin: 'BTC', px: '1', sz: '1', side: 'B', time: 5000, dir: '', startPosition: '0', closedPnl: '0', fee: '0', crossed: true },
-            { coin: 'BTC', px: '1', sz: '1', side: 'B', time: 6000, dir: '', startPosition: '1', closedPnl: '0', fee: '0', crossed: true },
+            {
+              coin: 'BTC',
+              px: '1',
+              sz: '1',
+              side: 'B',
+              time: 5000,
+              dir: '',
+              startPosition: '0',
+              closedPnl: '0',
+              fee: '0',
+              crossed: true,
+            },
+            {
+              coin: 'BTC',
+              px: '1',
+              sz: '1',
+              side: 'B',
+              time: 6000,
+              dir: '',
+              startPosition: '1',
+              closedPnl: '0',
+              fee: '0',
+              crossed: true,
+            },
           ]
         : { assetPositions: [{ position: pos }] },
     );
@@ -135,11 +157,16 @@ describe('HlWalletsService — позиции', () => {
     expect(first.positions[0].openedAt).toBeNull();
     await (svc as unknown as { resolving: Promise<void> }).resolving;
     const second = await svc.positions(T + 1000);
-    expect(second.positions[0]).toMatchObject({ openedAt: 5000, openedPartial: false });
+    expect(second.positions[0]).toMatchObject({
+      openedAt: 5000,
+      openedPartial: false,
+    });
     // Известное время заново не ищется.
     await svc.positions(T + 200_000);
     expect(
-      (gate.hlInfo as jest.Mock).mock.calls.filter((c) => c[0].type === 'userFills'),
+      (gate.hlInfo as jest.Mock).mock.calls.filter(
+        (c) => c[0].type === 'userFills',
+      ),
     ).toHaveLength(1);
   });
 
@@ -228,19 +255,27 @@ describe('HlWalletsService — звёздочка', () => {
 
   it('ставится сохранённому и снимается; время не двигается повторной', async () => {
     const starredAt = new Date(5);
-    const prisma = makePrisma({ address: ADDR, savedAt: new Date(1), starredAt });
+    const prisma = makePrisma({
+      address: ADDR,
+      savedAt: new Date(1),
+      starredAt,
+    });
     const svc = new HlWalletsService(prisma as never);
     await svc.setStar(ADDR, true);
     expect(prisma.hlWallet.update.mock.calls[0][0].data).toEqual({ starredAt });
     await svc.setStar(ADDR, false);
-    expect(prisma.hlWallet.update.mock.calls[1][0].data).toEqual({ starredAt: null });
+    expect(prisma.hlWallet.update.mock.calls[1][0].data).toEqual({
+      starredAt: null,
+    });
   });
 
   it('не сохранённому звёздочку не ставят — 404', async () => {
     const svc = new HlWalletsService(
       makePrisma({ address: ADDR, savedAt: null }) as never,
     );
-    await expect(svc.setStar(ADDR, true)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(svc.setStar(ADDR, true)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });
 
