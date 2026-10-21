@@ -207,6 +207,8 @@ git pull
 docker compose --env-file .env.prod -f docker-compose.prod.yml --profile edge up -d --build
 ```
 
+Автоматический деплой по пушу в `main` — `docs/deploy/auto-deploy.md`.
+
 Схема БД синхронизируется на старте `api` (`prisma db push`). Миграций в
 проекте нет; если очередное изменение схемы требует удаления колонки с
 данными, `db push` откажется — это намеренно, `api` не поднимется, и данные
