@@ -32,7 +32,8 @@ function makePrisma(removedWords = 1) {
 describe('EnglishService', () => {
   it('карточка: upsert по id, даты — Date', async () => {
     const prisma = makePrisma();
-    await new EnglishService(prisma as never).saveCard('u01:hello', {
+    await new EnglishService(prisma as never).saveCard({
+      cardId: 'u01:hello',
       due: '2026-10-22T10:00:00.000Z',
       interval: 1,
       ease: 2.5,

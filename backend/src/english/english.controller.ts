@@ -17,7 +17,7 @@ import { WordDto } from './dto/word.dto';
 import { LessonDto } from './dto/lesson.dto';
 import { AnswerDto } from './dto/answer.dto';
 
-/** id из адреса: id карточки — `<раздел>:<слово>`, слово книги бывает фразой. */
+/** id из адреса: слово владельца или раздел курса. */
 function idParam(value: string): string {
   if (!value || value.length > 120) throw new BadRequestException('Bad id');
   return value;
@@ -39,10 +39,10 @@ export class EnglishController {
     return this.english.state();
   }
 
-  /** PUT /api/admin/english/cards/<id> — состояние карточки после ответа. */
-  @Put('cards/:cardId')
-  saveCard(@Param('cardId') cardId: string, @Body() dto: CardStateDto) {
-    return this.english.saveCard(idParam(cardId), dto);
+  /** PUT /api/admin/english/cards — состояние карточки после ответа (id — в теле). */
+  @Put('cards')
+  saveCard(@Body() dto: CardStateDto) {
+    return this.english.saveCard(dto);
   }
 
   /** POST /api/admin/english/words — добавить своё слово. */

@@ -47,7 +47,8 @@ export class EnglishService {
     };
   }
 
-  async saveCard(cardId: string, dto: CardStateDto) {
+  async saveCard(dto: CardStateDto) {
+    const { cardId } = dto;
     const data = {
       due: new Date(dto.due),
       interval: dto.interval,
