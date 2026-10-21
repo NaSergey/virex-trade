@@ -51,6 +51,8 @@ describe('материал курса', () => {
       expect(ids.has(id), `повтор ${id}`).toBe(false);
       ids.add(id);
       expect(w.en.trim(), id).toBe(w.en);
+      // Пометки части речи словаря («(n)», «(adj)») озвучка прочла бы вслух.
+      expect(/\((?:n|v|adj|adv)\b/.test(w.en), id).toBe(false);
       expect(CYRILLIC.test(w.en), id).toBe(false);
       expect(CYRILLIC.test(w.ru), id).toBe(true);
       if (w.example) {
@@ -108,7 +110,7 @@ describe('материал курса', () => {
       const words = WORDS.filter((w) => w.unit === s.id);
       const items = EXERCISES.filter((e) => e.unit === s.id);
       if (s.kind === 'unit') {
-        expect(words.length, s.id).toBeGreaterThanOrEqual(8);
+        expect(words.length, s.id).toBeGreaterThanOrEqual(5);
         expect(items.length, s.id).toBeGreaterThanOrEqual(10);
         expect(new Set(items.map((e) => e.type)).size, s.id).toBe(4);
       } else if (s.kind === 'reading') {

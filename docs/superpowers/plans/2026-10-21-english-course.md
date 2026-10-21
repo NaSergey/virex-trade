@@ -65,7 +65,7 @@ Starter (SB + WB). Спека — `docs/superpowers/specs/2026-10-21-english-cou
 
 **Produces (HTTP, префикс `/api/admin/english`):**
 - `GET state` → `{ cards: {cardId, due, interval, ease, reps, lapses, firstAt}[], words: {id, en, ru}[], lessons: string[], answers: {itemId, unit, right, wrong, lastCorrect}[] }` (даты — ISO).
-- `PUT cards/:cardId` body `{ due, interval, ease, reps, lapses, firstAt }` → `{ ok }`; `cardId` ≤ 120 символов.
+- `PUT cards` body `{ cardId, due, interval, ease, reps, lapses, firstAt }` → `{ ok }`; `cardId` ≤ 120 символов (в теле, не в адресе).
 - `POST words` `{ en, ru }` → `{ id, en, ru }`; `DELETE words/:id` → `{ ok }` / 404 (снимает и `english_cards` `my:<id>`).
 - `PUT lessons/:lessonId` `{ done }` → `{ ok }`.
 - `POST answers` `{ itemId, unit, correct }` → `{ ok }` (upsert с инкрементом `right`/`wrong`).
@@ -119,7 +119,7 @@ interface ContentBlock { words: Word[]; lessons: Lesson[]; exercises: Exercise[]
 
 **Целостность материала (`content.test.ts`):** id разделов уникальны; у слова и упражнения раздел
 есть в `COURSE`; id карточек (`unit:en`) и упражнений уникальны, id упражнения начинается с
-`<unit>-`; у каждого `unit` — урок, ≥ 8 слов, ≥ 10 упражнений, все четыре вида; у `reading` —
+`<unit>-`; у каждого `unit` — урок, ≥ 5 слов (у Unit 4 в словаре книги их 7), ≥ 10 упражнений, все четыре вида; у `reading` —
 урок и слова, без упражнений; у `revision` — урок, `covers` из `unit`, без своих упражнений и
 слов; `choice` — `___` в `q`, ответ в пределах, варианты различны; `gap` — ровно один `___`;
 `order` — слова = токены `answers[0]` (без регистра и пунктуации); у каждого урока есть блок `book`.
