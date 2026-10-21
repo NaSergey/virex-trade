@@ -143,7 +143,7 @@ export const B7: ContentBlock = {
         },
         {
           type: 'note',
-          text: 'Русский говорит «играть *в* футбол», а по-английски предлога нет: *I play football*, не *I play in football*. И день недели — всегда с *on*: *on Monday*, а не *in Monday*.',
+          text: 'Русский говорит «играть *в* футбол», а по-английски предлога нет: *I play football*, не *I play in football*. И с днём недели нужен *on*: *on Monday*, а не *in Monday*.',
         },
         {
           type: 'note',
@@ -168,7 +168,7 @@ export const B7: ContentBlock = {
       blocks: [
         {
           type: 'p',
-          text: 'Когда в Present Simple говорят о *he, she, it* (он, она, оно — один человек или предмет), к глаголу добавляется окончание *-s*: *he plays, she rides, it eats*. Для *I, you, we, they* глагол остаётся прежним. Если глагол кончается на *-s, -sh, -ch, -o*, добавляется *-es*: *wash → washes, brush → brushes, watch → watches, go → goes, do → does*. Глагол *have* меняется иначе: *he has*.',
+          text: 'Когда в Present Simple говорят о *he, she, it* (он, она, оно — один человек или предмет), к глаголу добавляется окончание *-s*: *he plays, she rides, it eats*. Для *I, you, we, they* глагол остаётся прежним. Если глагол кончается на *-s, -sh, -ch, -x, -o*, добавляется *-es*: *wash → washes, brush → brushes, watch → watches, go → goes, do → does*. Глагол *have* меняется иначе: *he has*.',
         },
         {
           type: 'p',
@@ -202,7 +202,7 @@ export const B7: ContentBlock = {
           items: [
             ["Ted gets up at six o'clock every day.", 'Тед каждый день встаёт в шесть часов.'],
             ["She washes her dog at nine o'clock.", 'Она моет свою собаку в девять часов.'],
-            ['Tilly loves birds. She watches them in the park.', 'Тилли обожает птиц. Она наблюдает за ними в парке.'],
+            ['Tilly loves birds. She watches the birds in the park.', 'Тилли обожает птиц. Она наблюдает за птицами в парке.'],
             ['He has breakfast at half past ten.', 'Он завтракает в половине одиннадцатого.'],
             ["It's lunch time! It's one o'clock.", 'Время обеда! Сейчас час дня.'],
             ['The cat drinks water from a bowl.', 'Кошка пьёт воду из миски.'],
@@ -271,7 +271,7 @@ export const B7: ContentBlock = {
           items: [
             ['Where is my school bag?', 'Где моя школьная сумка?'],
             ["Who is that girl? She's my sister.", 'Кто эта девочка? Это моя сестра.'],
-            ["What is this? It's a sky car.", 'Что это? Это небесная машина.'],
+            ["What is this? It's a bus.", 'Что это? Это автобус.'],
             ["Where are the children? They're in the garden.", 'Где дети? Они в саду.'],
             ["Who are you? I'm Anna.", 'Кто ты? Я Анна.'],
             ["Where is the bright light? It's in the sky.", 'Где яркий свет? Он в небе.'],
@@ -334,23 +334,23 @@ export const B7: ContentBlock = {
       { type: 'gap', q: 'I ___ (ride) my bike in the park.', answers: ['ride'], ru: 'Я катаюсь на велосипеде в парке.' },
       { type: 'gap', q: 'We ___ (swim) in the swimming pool on Thursdays.', answers: ['swim'], ru: 'По четвергам мы плаваем в бассейне.' },
       { type: 'gap', q: 'You ___ (have) a swimming lesson on Tuesdays.', answers: ['have'], ru: 'По вторникам у тебя урок плавания.' },
-      { type: 'order', words: ['on', 'Mondays', 'we', 'play', 'volleyball'], answers: ['On Mondays we play volleyball.'], ru: 'По понедельникам мы играем в волейбол.' },
-      { type: 'order', words: ['I', 'do', 'my', 'homework', 'on', 'Sundays'], answers: ['I do my homework on Sundays.'], ru: 'По воскресеньям я делаю домашнее задание.' },
+      { type: 'order', words: ['on', 'Mondays', 'we', 'play', 'volleyball'], answers: ['On Mondays we play volleyball.', 'We play volleyball on Mondays.'], ru: 'По понедельникам мы играем в волейбол.' },
+      { type: 'order', words: ['I', 'do', 'my', 'homework', 'on', 'Sundays'], answers: ['I do my homework on Sundays.', 'On Sundays I do my homework.'], ru: 'По воскресеньям я делаю домашнее задание.' },
       {
         type: 'order',
         words: ['they', 'go', 'to', 'the', 'swimming', 'pool', 'every', 'Friday'],
-        answers: ['They go to the swimming pool every Friday.'],
+        answers: ['They go to the swimming pool every Friday.', 'Every Friday they go to the swimming pool.'],
         ru: 'Каждую пятницу они ходят в бассейн.',
       },
       {
         type: 'translate',
         ru: 'Мы играем в баскетбол по средам.',
-        answers: ['We play basketball on Wednesdays.', 'On Wednesdays we play basketball.'],
+        answers: ['We play basketball on Wednesdays.', 'On Wednesdays we play basketball.', 'We play basketball every Wednesday.', 'Every Wednesday we play basketball.'],
       },
       {
         type: 'translate',
         ru: 'Я катаюсь на велосипеде по субботам.',
-        answers: ['I ride my bike on Saturdays.', 'On Saturdays I ride my bike.', 'I ride a bike on Saturdays.', 'On Saturdays I ride a bike.'],
+        answers: ['I ride my bike on Saturdays.', 'On Saturdays I ride my bike.', 'I ride a bike on Saturdays.', 'On Saturdays I ride a bike.', 'I ride my bike every Saturday.', 'Every Saturday I ride my bike.'],
       },
       {
         type: 'translate',
@@ -422,7 +422,7 @@ export const B7: ContentBlock = {
       { type: 'choice', q: 'What ___ they? — They\'re robots.', options: ['is', 'are', 'am'], answer: 1, ru: 'Что это такое? — Это роботы.' },
       { type: 'gap', q: '___ is the robot? — It\'s behind the door.', answers: ['Where'], ru: 'Где робот? — Он за дверью.' },
       { type: 'gap', q: '___ are those girls? — They\'re my friends.', answers: ['Who'], ru: 'Кто эти девочки? — Это мои подруги.' },
-      { type: 'gap', q: '___ is this? — It\'s a sky car.', answers: ['What'], ru: 'Что это? — Это небесная машина.' },
+      { type: 'gap', q: '___ is this? — It\'s a bus.', answers: ['What'], ru: 'Что это? — Это автобус.' },
       { type: 'order', words: ['where', 'is', 'my', 'school', 'bag'], answers: ['Where is my school bag?'], ru: 'Где моя школьная сумка?' },
       { type: 'order', words: ['who', 'are', 'those', 'children'], answers: ['Who are those children?'], ru: 'Кто эти дети?' },
       {
@@ -442,6 +442,9 @@ export const B7: ContentBlock = {
           'Who is this? This is my uncle.',
           "Who is that? That's my uncle.",
           "Who is he? He's my uncle.",
+          "Who is this? He's my uncle.",
+          "Who is that? He's my uncle.",
+          "Who is it? He's my uncle.",
         ],
       },
       {

@@ -76,7 +76,7 @@ export const B5: ContentBlock = {
         },
         {
           type: 'p',
-          text: 'Выбор между *is* и *are* зависит от предмета, о котором говорим: один предмет — *there is* (в речи и на письме чаще *there’s*), два и больше — *there are*. Полную форму *there are* не сокращают: *there’re* на письме не пишут.',
+          text: 'Выбор между *is* и *are* зависит от предмета, о котором говорим: один предмет — *there is* (в речи и на письме чаще *there’s*), два и больше — *there are*. Форму *there are* на письме обычно не сокращают: *there’re* в учебниках не встретишь.',
         },
         {
           type: 'rule',
@@ -207,7 +207,7 @@ export const B5: ContentBlock = {
           title: 'Have we / you / they got …?',
           rows: [
             ['Have we got …?', 'Have we got a laser?', 'У нас есть лазер?'],
-            ['Have you got …?', 'Have you got a sky car?', 'У вас есть летающая машина?'],
+            ['Have you got …?', 'Have you got a car?', 'У вас есть машина?'],
             ['Have they got …?', 'Have they got a house?', 'У них есть дом?'],
             ['Yes, we / you / they have.', 'Have they got a dog? — Yes, they have.', 'У них есть собака? — Да.'],
             ['No, we / you / they haven’t.', 'Have we got a laser? — No, we haven’t.', 'У нас есть лазер? — Нет.'],
@@ -227,9 +227,9 @@ export const B5: ContentBlock = {
           items: [
             ['Have we got a laser?', 'У нас есть лазер?'],
             ['Yes, we have.', 'Да, есть.'],
-            ['Have the guards got a sky car?', 'У стражников есть летающая машина?'],
+            ['Have the guards got a car?', 'У стражников есть машина?'],
             ['No, they haven’t.', 'Нет.'],
-            ['Have you and your family got a house?', 'У тебя и твоей семьи есть дом?'],
+            ['Have Tilly and Ted got a ball?', 'У Тилли и Теда есть мяч?'],
             ['Let’s go!', 'Пойдём!'],
             ['Let’s run to the park.', 'Давай побежим в парк.'],
             ['Let’s hide behind the sofa.', 'Давай спрячемся за диваном.'],
@@ -394,7 +394,7 @@ export const B5: ContentBlock = {
       unit: 'u13',
       type: 'translate',
       ru: 'Под кроватью лежит кот.',
-      answers: ['There is a cat under the bed.'],
+      answers: ['There is a cat under the bed.', 'There is a cat under my bed.'],
     },
 
     // Unit 14
@@ -412,7 +412,7 @@ export const B5: ContentBlock = {
       unit: 'u14',
       type: 'choice',
       q: '___ the ball, Ted!',
-      options: ['Catch', 'You catch', 'Catches'],
+      options: ['Catch', 'Catching', 'Catches'],
       answer: 0,
       ru: 'Лови мяч, Тед!',
     },
@@ -471,7 +471,7 @@ export const B5: ContentBlock = {
       unit: 'u14',
       type: 'order',
       words: ['sit', 'down', 'please'],
-      answers: ['Sit down, please.'],
+      answers: ['Sit down, please.', 'Please sit down.'],
       ru: 'Садись, пожалуйста.',
     },
     {
@@ -479,7 +479,7 @@ export const B5: ContentBlock = {
       unit: 'u14',
       type: 'order',
       words: ['hide', 'behind', 'the', 'sofa', 'Tilly'],
-      answers: ['Hide behind the sofa, Tilly!'],
+      answers: ['Hide behind the sofa, Tilly!', 'Tilly, hide behind the sofa!'],
       ru: 'Прячься за диваном, Тилли!',
     },
     {
@@ -513,6 +513,7 @@ export const B5: ContentBlock = {
         'How are you? I’m fine, thanks.',
         'How are you? I’m fine, thank you.',
         'How are you? Fine, thanks.',
+        'How are you? Fine, thank you.',
       ],
     },
 
@@ -530,10 +531,10 @@ export const B5: ContentBlock = {
       id: 'u15-02',
       unit: 'u15',
       type: 'choice',
-      q: 'Have the guards got sky cars? — No, they ___.',
+      q: 'Have the guards got cars? — No, they ___.',
       options: ['haven’t', 'hasn’t', 'aren’t'],
       answer: 0,
-      ru: 'У стражников есть летающие машины? — Нет.',
+      ru: 'У стражников есть машины? — Нет.',
     },
     {
       id: 'u15-03',
