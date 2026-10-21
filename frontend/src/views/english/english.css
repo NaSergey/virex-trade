@@ -1,0 +1,389 @@
+/* ═══════════════════════════════════════════════════════════════
+   УЧЕБНИК АНГЛИЙСКОГО — раздел владельца в админке (views/english).
+
+   Тот же язык, что у продукта: кость на почти чёрном, нулевой радиус,
+   структуру держат линейки, выбор — выворот, цвет — только «верно»
+   (.pos) и «неверно» (.neg). Все классы — `.en-*`, файл сносится вместе
+   с каталогом.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── вкладки раздела ─────────────────────────────────────────────── */
+.en-tabs {
+  display: flex;
+  gap: var(--s4);
+  margin: var(--s3) 0 var(--s4);
+  background: linear-gradient(var(--hair), var(--hair)) left bottom / 100% 1px no-repeat;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.en-tabs a {
+  padding: var(--s2) 0;
+  border-bottom: 1px solid transparent;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.12s, border-color 0.12s;
+}
+.en-tabs a:hover { color: var(--ink-2); }
+.en-tabs a[aria-current="page"] {
+  border-bottom-color: var(--ink);
+  color: var(--ink);
+}
+
+.en-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+}
+.en-section { margin-top: var(--s5); }
+.en-section h3 { margin-bottom: var(--s3); }
+.en-back {
+  display: inline-block;
+  margin-bottom: var(--s3);
+  color: var(--ink-2);
+  font-size: var(--t-s);
+  text-decoration: none;
+}
+.en-back:hover { color: var(--ink); }
+
+/* ── озвучка ─────────────────────────────────────────────────────── */
+.en-phrase {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--s1);
+}
+.en-say {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  color: var(--ink-3);
+  vertical-align: middle;
+}
+.en-say:hover { color: var(--ink); }
+.en-say-slow { font-size: var(--t-xs); }
+
+/* ── уроки: курс слева, урок справа ──────────────────────────────── */
+.en-lessons {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: var(--s5);
+  align-items: start;
+}
+.en-course {
+  position: sticky;
+  top: var(--s3);
+  max-height: calc(100dvh - var(--top-h) - var(--s5));
+  overflow-y: auto;
+  border-top: 1px solid var(--rule);
+  scrollbar-width: thin;
+}
+.en-course ol { list-style: none; margin: 0; padding: 0; }
+.en-course a {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  gap: var(--s2);
+  align-items: baseline;
+  padding: 6px var(--s2);
+  border-bottom: 1px solid var(--hair);
+  color: var(--ink-2);
+  font-size: var(--t-s);
+  text-decoration: none;
+}
+.en-course a:hover { color: var(--ink); }
+.en-course a[aria-current="page"] {
+  background: var(--ink);
+  color: var(--ground);
+}
+.en-course a[aria-current="page"] .muted,
+.en-course a[aria-current="page"] .pos { color: var(--ground); }
+.en-course .is-current .en-course-title { color: var(--ink); font-weight: 600; }
+.en-course .is-current a[aria-current="page"] .en-course-title { color: var(--ground); }
+.en-course-revision a,
+.en-course-reading a { padding-left: var(--s4); font-size: var(--t-xs); }
+.en-course-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.en-course-score { font-family: var(--font-mono); font-size: var(--t-xs); }
+.en-mark { font-family: var(--font-mono); text-align: center; }
+
+.en-lesson { min-width: 0; }
+.en-lesson-head {
+  padding-bottom: var(--s3);
+  border-bottom: 1px solid var(--rule);
+}
+.en-kicker {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.en-lesson-head h2 { margin: var(--s2) 0 var(--s1); font-size: var(--t-l); }
+.en-topic { color: var(--ink-2); }
+.en-grammar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin: var(--s3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.en-grammar li {
+  padding: 2px var(--s2);
+  border: 1px solid var(--hair-2);
+  font-size: var(--t-s);
+}
+
+.en-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+  margin-top: var(--s4);
+  max-width: 760px;
+  line-height: 1.6;
+}
+.en-p { margin: 0; }
+.en-p b, .en-note b { color: var(--ink); }
+.en-note {
+  padding: var(--s2) var(--s3);
+  border-left: 2px solid var(--ink);
+  color: var(--ink-2);
+}
+.en-rule h4,
+.en-book h4 {
+  margin-bottom: var(--s2);
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.en-rule table { width: 100%; border-collapse: collapse; }
+.en-rule th,
+.en-rule td {
+  padding: 6px var(--s3) 6px 0;
+  border-bottom: 1px solid var(--hair);
+  text-align: left;
+  vertical-align: baseline;
+}
+.en-rule th { font-weight: 600; white-space: nowrap; }
+.en-examples {
+  display: grid;
+  gap: var(--s2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.en-examples li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--s3);
+  padding-bottom: var(--s2);
+  border-bottom: 1px solid var(--hair);
+}
+.en-book {
+  padding: var(--s3);
+  border: 1px solid var(--hair-2);
+}
+.en-book ol { margin: 0; padding-left: var(--s4); }
+.en-book li + li { margin-top: var(--s1); }
+
+.en-lesson-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s3);
+  margin-top: var(--s5);
+  padding-top: var(--s3);
+  border-top: 1px solid var(--rule);
+}
+.en-next {
+  margin-left: auto;
+  color: var(--ink-2);
+  text-decoration: none;
+}
+.en-next:hover { color: var(--ink); }
+
+/* ── карточки ────────────────────────────────────────────────────── */
+.en-stats { margin-bottom: var(--s3); font-size: var(--t-s); }
+.en-card-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s3);
+  max-width: 640px;
+  margin: 0 auto;
+}
+.en-card {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s3);
+  width: 100%;
+  min-height: 260px;
+  padding: var(--s4);
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink);
+  text-align: center;
+  cursor: pointer;
+}
+.en-card:hover { border-color: var(--ink-2); }
+.en-card-front { font-size: var(--t-xl); line-height: 1.2; }
+.en-card-back {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding-top: var(--s3);
+  border-top: 1px solid var(--hair);
+  font-size: var(--t-l);
+}
+.en-card-example { font-size: var(--t-s); }
+.en-card-hint { font-size: var(--t-xs); }
+.en-card-say { display: flex; gap: var(--s3); }
+.en-grades {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s2);
+  width: 100%;
+}
+.en-grades .btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  height: auto;
+  padding: var(--s2);
+}
+.en-grade-in { font-family: var(--font-mono); font-size: var(--t-xs); }
+.en-grades .btn.solid .en-grade-in { color: inherit; opacity: 0.7; }
+
+.en-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: var(--s2);
+  margin-bottom: var(--s3);
+}
+
+/* ── практика ────────────────────────────────────────────────────── */
+.en-run { max-width: 760px; }
+.en-run-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+.en-run-head h2 { font-size: var(--t-l); }
+.en-progress {
+  display: flex;
+  gap: 2px;
+  margin: var(--s2) 0 var(--s4);
+}
+.en-progress span {
+  flex: 1;
+  height: 3px;
+  background: var(--hair);
+}
+.en-progress .is-right { background: var(--profit); }
+.en-progress .is-wrong { background: var(--loss); }
+.en-total { margin: var(--s3) 0; font-size: var(--t-l); }
+
+.en-ex {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  max-width: 760px;
+}
+.en-ex-task {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.en-ex-q { margin: 0; font-size: var(--t-l); line-height: 1.5; }
+.en-ex-hint { margin: 0; }
+.en-gap {
+  display: inline-block;
+  min-width: 3em;
+  margin: 0 0.2em;
+  border-bottom: 1px solid var(--ink);
+  text-align: center;
+}
+.en-gap-in.in {
+  width: 8em;
+  margin: 0 0.3em;
+  font-size: inherit;
+  vertical-align: baseline;
+}
+.en-options,
+.en-bank,
+.en-ex-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+}
+.en-built {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  min-height: 44px;
+  margin: 0;
+  padding: var(--s2) 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: var(--t-m);
+}
+.en-chip {
+  padding: 4px var(--s2);
+  border: 1px solid var(--hair-2);
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--t-m);
+  cursor: pointer;
+}
+.en-chip:hover:not(:disabled) { border-color: var(--ink); }
+.en-chip:disabled { cursor: default; opacity: 0.7; }
+.en-ex-result {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s3);
+  padding-top: var(--s3);
+  border-top: 1px solid var(--hair);
+}
+.en-ex-result p { margin: 0; }
+
+/* ── слух и речь ─────────────────────────────────────────────────── */
+.en-marks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4em;
+  margin: 0;
+  font-size: var(--t-l);
+}
+.en-mark-missing { text-decoration: line-through; }
+.en-mark-extra { font-style: italic; opacity: 0.7; }
+.en-marks-score { margin-left: var(--s2); font-family: var(--font-mono); font-size: var(--t-s); }
+
+/* ── узкий экран ─────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .en-lessons { grid-template-columns: minmax(0, 1fr); gap: var(--s4); }
+  .en-course { position: static; max-height: 240px; }
+}
+@media (max-width: 640px) {
+  .en-examples li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .en-grades { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .en-add { grid-template-columns: minmax(0, 1fr); }
+  .en-card { min-height: 200px; }
+  .en-card-front { font-size: var(--t-l); }
+  .en-next { margin-left: 0; }
+}

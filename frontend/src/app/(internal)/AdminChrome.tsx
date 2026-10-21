@@ -15,13 +15,17 @@ const ITEMS = [
   { href: '/', key: 'wallets' },
   { href: '/saved', key: 'saved' },
   { href: '/users', key: 'users' },
+  // Учебник английского — свои вкладки внутри (views/english), пункт горит на всех.
+  { href: '/english', key: 'english' },
 ] as const;
+
+const isCurrent = (path: string, href: string) => path === href || (href !== '/' && path.startsWith(`${href}/`));
 
 /** Потерявшего сессию — на вход поддомена, с возвратом туда, где он был. */
 const toLogin = (path: string) => `/login?next=${encodeURIComponent(adminPath(path))}`;
 
 /**
- * Обвязка админки на поддомене `admin.*`: название, три раздела, почта и
+ * Обвязка админки на поддомене `admin.*`: название, разделы, почта и
  * выход. Рейки продукта, баланса и Battle Pass здесь нет — это инструмент
  * владельца, а не продукт, и их запросы здесь никому не нужны.
  *
@@ -41,7 +45,7 @@ export function AdminChrome({ children }: { children: ReactNode }) {
         <span className="adm-brand">{t('brand')}</span>
         <nav className="adm-nav">
           {ITEMS.map((i) => (
-            <Link key={i.href} href={i.href} aria-current={path === i.href ? 'page' : undefined}>
+            <Link key={i.href} href={i.href} aria-current={isCurrent(path, i.href) ? 'page' : undefined}>
               {t(i.key)}
             </Link>
           ))}

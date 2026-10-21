@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isCorrect, normalize } from './check';
+import { fillGap, isCorrect, isGapCorrect, normalize } from './check';
 
 describe('normalize', () => {
   it('регистр, пунктуация и пробелы не важны', () => {
@@ -44,5 +44,20 @@ describe('isCorrect', () => {
 
   it('притяжательный не равен is', () => {
     expect(isCorrect('Tom is dog', ["Tom's dog"])).toBe(false);
+  });
+});
+
+describe('пропуск', () => {
+  it("'m прилипает к слову слева", () => {
+    expect(fillGap('I ___ not a teacher.', "'m")).toBe("I'm not a teacher.");
+    expect(fillGap('She ___ my friend.', ' is ')).toBe('She is my friend.');
+  });
+
+  it('сокращение в пропуске равно полной форме', () => {
+    expect(isGapCorrect('I ___ not a teacher.', "'m", ['am'])).toBe(true);
+    expect(isGapCorrect('I ___ not a teacher.', 'am', ["'m"])).toBe(true);
+    expect(isGapCorrect('He ___ (not be) here.', "isn't", ['is not'])).toBe(true);
+    expect(isGapCorrect('I ___ a teacher.', 'is', ['am'])).toBe(false);
+    expect(isGapCorrect('I ___ a teacher.', ' ', ['am'])).toBe(false);
   });
 });

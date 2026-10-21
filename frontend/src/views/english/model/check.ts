@@ -29,3 +29,21 @@ export function isCorrect(input: string, answers: readonly string[]): boolean {
   const given = normalize(input);
   return given !== '' && answers.some((a) => normalize(a) === given);
 }
+
+/** Пропуск `___`, заполненный ответом; `'m`, `'s` прилипают к слову слева, как в «I'm». */
+export function fillGap(q: string, value: string): string {
+  const v = value.trim();
+  return /^['’]/.test(v) ? q.replace(/\s*___/, v) : q.replace('___', v);
+}
+
+/**
+ * Ответ на пропуск сверяется фразой целиком: «'m» в пропуске после «I» — это
+ * «I'm», а отдельно от «I» сокращение не раскрыть.
+ */
+export function isGapCorrect(q: string, input: string, answers: readonly string[]): boolean {
+  if (!input.trim()) return false;
+  return isCorrect(
+    fillGap(q, input),
+    answers.map((a) => fillGap(q, a)),
+  );
+}
