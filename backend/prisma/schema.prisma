@@ -1509,6 +1509,8 @@ model EnglishCard {
   lapses    Int
   /// Первый ответ — по нему считается «новых сегодня».
   firstAt   DateTime
+  /// «Знаю» — слово выучено и в карточки больше не попадает (вернуть — из словаря).
+  known     Boolean  @default(false)
   updatedAt DateTime @updatedAt
 
   @@map("english_cards")
@@ -1542,5 +1544,37 @@ model EnglishAnswer {
   lastAt      DateTime @default(now())
 
   @@map("english_answers")
+}
+
+/// Занятия за день (местная дата владельца `YYYY-MM-DD`): из них — страница
+/// «Сегодня», серия дней и календарь.
+model EnglishDay {
+  day     String @id
+  cards   Int    @default(0)
+  answers Int    @default(0)
+  correct Int    @default(0)
+  phrases Int    @default(0)
+
+  @@map("english_days")
+}
+
+/// Своя тема — подборка слов под разговор («Собеседование», «В аэропорту»).
+model EnglishTheme {
+  id        String              @id @default(cuid())
+  title     String
+  createdAt DateTime            @default(now())
+  words     EnglishThemeWord[]
+
+  @@map("english_themes")
+}
+
+/// Слово в своей теме — по id карточки (учебник, общий словарь или своё слово).
+model EnglishThemeWord {
+  themeId String
+  cardId  String
+  theme   EnglishTheme @relation(fields: [themeId], references: [id], onDelete: Cascade)
+
+  @@id([themeId, cardId])
+  @@map("english_theme_words")
 }
 // ═══ /english ═══

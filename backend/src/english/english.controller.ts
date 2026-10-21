@@ -16,6 +16,8 @@ import { CardStateDto } from './dto/card-state.dto';
 import { WordDto } from './dto/word.dto';
 import { LessonDto } from './dto/lesson.dto';
 import { AnswerDto } from './dto/answer.dto';
+import { PhraseDto } from './dto/phrase.dto';
+import { ThemeDto, ThemeWordDto } from './dto/theme.dto';
 
 /** id из адреса: слово владельца или раздел курса. */
 function idParam(value: string): string {
@@ -67,5 +69,29 @@ export class EnglishController {
   @Post('answers')
   answer(@Body() dto: AnswerDto) {
     return this.english.answer(dto);
+  }
+
+  /** POST /api/admin/english/phrases — фраза диктанта или произношения сделана. */
+  @Post('phrases')
+  phrase(@Body() dto: PhraseDto) {
+    return this.english.phrase(dto.day);
+  }
+
+  /** POST /api/admin/english/themes — своя тема. */
+  @Post('themes')
+  addTheme(@Body() dto: ThemeDto) {
+    return this.english.addTheme(dto.title);
+  }
+
+  /** DELETE /api/admin/english/themes/<id> — удалить тему (слова остаются). */
+  @Delete('themes/:id')
+  deleteTheme(@Param('id') id: string) {
+    return this.english.deleteTheme(idParam(id));
+  }
+
+  /** PUT /api/admin/english/themes/<id>/words — слово в тему или из неё (id карточки — в теле). */
+  @Put('themes/:id/words')
+  setThemeWord(@Param('id') id: string, @Body() dto: ThemeWordDto) {
+    return this.english.setThemeWord(idParam(id), dto.cardId, dto.on);
   }
 }

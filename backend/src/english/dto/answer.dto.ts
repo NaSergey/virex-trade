@@ -1,4 +1,11 @@
-import { IsBoolean, IsString, MaxLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+} from 'class-validator';
+import { DAY } from './day';
 
 /** Тело `POST /api/admin/english/answers` — один ответ на упражнение. */
 export class AnswerDto {
@@ -12,4 +19,9 @@ export class AnswerDto {
 
   @IsBoolean()
   correct!: boolean;
+
+  /** Местная дата ответа — в счётчик занятий дня. */
+  @IsOptional()
+  @Matches(DAY)
+  day?: string;
 }

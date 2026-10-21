@@ -1,13 +1,17 @@
 import {
+  IsBoolean,
   IsDateString,
   IsInt,
   IsNumber,
+  IsOptional,
   IsString,
+  Matches,
   Max,
   MaxLength,
   Min,
   MinLength,
 } from 'class-validator';
+import { DAY } from './day';
 
 /**
  * Тело `PUT /api/admin/english/cards` — состояние карточки после ответа. id —
@@ -46,4 +50,13 @@ export class CardStateDto {
 
   @IsDateString()
   firstAt!: string;
+
+  /** «Знаю» — слово выучено, в карточки больше не попадает. */
+  @IsBoolean()
+  known!: boolean;
+
+  /** Местная дата ответа — в счётчик занятий дня; без неё день не считается. */
+  @IsOptional()
+  @Matches(DAY)
+  day?: string;
 }

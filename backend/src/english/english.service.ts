@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CardStateDto } from './dto/card-state.dto';
 import type { WordDto } from './dto/word.dto';
@@ -6,6 +7,11 @@ import type { AnswerDto } from './dto/answer.dto';
 
 /** Карточка своего слова — тот же id строит фронт (`views/english/model/deck.ts`). */
 export const myCardId = (wordId: string) => `my:${wordId}`;
+
+/** Сколько дней занятий отдаётся в состоянии — календарь страницы «Сегодня». */
+const DAYS_BACK = 400;
+
+type DayCounter = 'cards' | 'answers' | 'correct' | 'phrases';
 
 /**
  * Прогресс владельца в учебнике английского (спека
@@ -19,11 +25,19 @@ export class EnglishService {
 
   /** Всё разом: строк сотни, раздел грузит это одним запросом. */
   async state() {
-    const [cards, words, lessons, answers] = await Promise.all([
+    const [cards, words, lessons, answers, days, themes] = await Promise.all([
       this.prisma.englishCard.findMany(),
       this.prisma.englishWord.findMany({ orderBy: { createdAt: 'asc' } }),
       this.prisma.englishLesson.findMany({ orderBy: { doneAt: 'asc' } }),
       this.prisma.englishAnswer.findMany(),
+      this.prisma.englishDay.findMany({
+        orderBy: { day: 'desc' },
+        take: DAYS_BACK,
+      }),
+      this.prisma.englishTheme.findMany({
+        orderBy: { createdAt: 'asc' },
+        include: { words: { select: { cardId: true } } },
+      }),
     ]);
     return {
       cards: cards.map((c) => ({
@@ -34,9 +48,10 @@ export class EnglishService {
         reps: c.reps,
         lapses: c.lapses,
         firstAt: c.firstAt,
+        known: c.known,
       })),
       words: words.map((w) => ({ id: w.id, en: w.en, ru: w.ru })),
-      lessons: lessons.map((l) => l.lessonId),
+      lessons: lessons.map((l) => ({ id: l.lessonId, doneAt: l.doneAt })),
       answers: answers.map((a) => ({
         itemId: a.itemId,
         unit: a.unit,
@@ -44,7 +59,30 @@ export class EnglishService {
         wrong: a.wrong,
         lastCorrect: a.lastCorrect,
       })),
+      days: days.map((d) => ({
+        day: d.day,
+        cards: d.cards,
+        answers: d.answers,
+        correct: d.correct,
+        phrases: d.phrases,
+      })),
+      themes: themes.map((t) => ({
+        id: t.id,
+        title: t.title,
+        cards: t.words.map((w) => w.cardId),
+      })),
     };
+  }
+
+  /** Счётчик занятий дня — в той же транзакции, что и само занятие. */
+  private countDay(day: string, add: Partial<Record<DayCounter, number>>) {
+    return this.prisma.englishDay.upsert({
+      where: { day },
+      create: { day, ...add },
+      update: Object.fromEntries(
+        Object.entries(add).map(([k, v]) => [k, { increment: v }]),
+      ),
+    });
   }
 
   async saveCard(dto: CardStateDto) {
@@ -56,12 +94,17 @@ export class EnglishService {
       reps: dto.reps,
       lapses: dto.lapses,
       firstAt: new Date(dto.firstAt),
+      known: dto.known,
     };
-    await this.prisma.englishCard.upsert({
-      where: { cardId },
-      create: { cardId, ...data },
-      update: data,
-    });
+    const ops: Prisma.PrismaPromise<unknown>[] = [
+      this.prisma.englishCard.upsert({
+        where: { cardId },
+        create: { cardId, ...data },
+        update: data,
+      }),
+    ];
+    if (dto.day) ops.push(this.countDay(dto.day, { cards: 1 }));
+    await this.prisma.$transaction(ops);
     return { ok: true };
   }
 
@@ -72,10 +115,12 @@ export class EnglishService {
     return { id: word.id, en: word.en, ru: word.ru };
   }
 
-  /** Слово уходит вместе с состоянием своей карточки — иначе строка осталась бы сиротой. */
+  /** Слово уходит вместе с состоянием своей карточки и местом в темах. */
   async deleteWord(id: string) {
-    const [, removed] = await this.prisma.$transaction([
-      this.prisma.englishCard.deleteMany({ where: { cardId: myCardId(id) } }),
+    const cardId = myCardId(id);
+    const [, , removed] = await this.prisma.$transaction([
+      this.prisma.englishCard.deleteMany({ where: { cardId } }),
+      this.prisma.englishThemeWord.deleteMany({ where: { cardId } }),
       this.prisma.englishWord.deleteMany({ where: { id } }),
     ]);
     if (removed.count === 0) throw new NotFoundException('Word not found');
@@ -97,22 +142,66 @@ export class EnglishService {
 
   async answer(dto: AnswerDto) {
     const hit = dto.correct ? 1 : 0;
-    await this.prisma.englishAnswer.upsert({
-      where: { itemId: dto.itemId },
-      create: {
-        itemId: dto.itemId,
-        unit: dto.unit,
-        right: hit,
-        wrong: 1 - hit,
-        lastCorrect: dto.correct,
-      },
-      update: {
-        unit: dto.unit,
-        right: { increment: hit },
-        wrong: { increment: 1 - hit },
-        lastCorrect: dto.correct,
-        lastAt: new Date(),
-      },
+    const ops: Prisma.PrismaPromise<unknown>[] = [
+      this.prisma.englishAnswer.upsert({
+        where: { itemId: dto.itemId },
+        create: {
+          itemId: dto.itemId,
+          unit: dto.unit,
+          right: hit,
+          wrong: 1 - hit,
+          lastCorrect: dto.correct,
+        },
+        update: {
+          unit: dto.unit,
+          right: { increment: hit },
+          wrong: { increment: 1 - hit },
+          lastCorrect: dto.correct,
+          lastAt: new Date(),
+        },
+      }),
+    ];
+    if (dto.day) ops.push(this.countDay(dto.day, { answers: 1, correct: hit }));
+    await this.prisma.$transaction(ops);
+    return { ok: true };
+  }
+
+  /** Фраза диктанта или произношения — только в счётчик дня. */
+  async phrase(day: string) {
+    await this.countDay(day, { phrases: 1 });
+    return { ok: true };
+  }
+
+  async addTheme(title: string) {
+    const theme = await this.prisma.englishTheme.create({
+      data: { title: title.trim() },
+    });
+    return { id: theme.id, title: theme.title, cards: [] as string[] };
+  }
+
+  async deleteTheme(id: string) {
+    const { count } = await this.prisma.englishTheme.deleteMany({
+      where: { id },
+    });
+    if (count === 0) throw new NotFoundException('Theme not found');
+    return { ok: true };
+  }
+
+  async setThemeWord(themeId: string, cardId: string, on: boolean) {
+    if (!on) {
+      await this.prisma.englishThemeWord.deleteMany({
+        where: { themeId, cardId },
+      });
+      return { ok: true };
+    }
+    const theme = await this.prisma.englishTheme.findUnique({
+      where: { id: themeId },
+      select: { id: true },
+    });
+    if (!theme) throw new NotFoundException('Theme not found');
+    await this.prisma.englishThemeWord.createMany({
+      data: [{ themeId, cardId }],
+      skipDuplicates: true,
     });
     return { ok: true };
   }

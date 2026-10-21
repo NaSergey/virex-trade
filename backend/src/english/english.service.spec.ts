@@ -24,6 +24,22 @@ function makePrisma(removedWords = 1) {
       findMany: jest.fn().mockResolvedValue([]),
       upsert: jest.fn().mockResolvedValue({}),
     },
+    englishDay: {
+      findMany: jest.fn().mockResolvedValue([]),
+      upsert: jest.fn().mockResolvedValue({}),
+    },
+    englishTheme: {
+      findMany: jest.fn().mockResolvedValue([]),
+      findUnique: jest.fn().mockResolvedValue({ id: 't1' }),
+      create: jest
+        .fn()
+        .mockImplementation(async ({ data }) => ({ id: 't1', ...data })),
+      deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
+    englishThemeWord: {
+      createMany: jest.fn().mockResolvedValue({ count: 1 }),
+      deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
     $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
   };
   return prisma;
@@ -40,6 +56,7 @@ describe('EnglishService', () => {
       reps: 1,
       lapses: 0,
       firstAt: '2026-10-21T10:00:00.000Z',
+      known: false,
     });
     const { where, create, update } =
       prisma.englishCard.upsert.mock.calls[0][0];
@@ -116,7 +133,68 @@ describe('EnglishService', () => {
       { id: 'w1', en: 'a', ru: 'б', createdAt: new Date() },
     ]);
     const state = await new EnglishService(prisma as never).state();
-    expect(state.lessons).toEqual(['sp']);
+    expect(state.lessons).toEqual([{ id: 'sp', doneAt: expect.any(Date) }]);
     expect(state.words).toEqual([{ id: 'w1', en: 'a', ru: 'б' }]);
+  });
+
+  it('карточка и ответ с датой — в счётчик дня той же транзакцией', async () => {
+    const prisma = makePrisma();
+    const service = new EnglishService(prisma as never);
+    await service.saveCard({
+      cardId: 'v:house',
+      due: '2026-10-22T10:00:00.000Z',
+      interval: 1,
+      ease: 2.5,
+      reps: 1,
+      lapses: 0,
+      firstAt: '2026-10-21T10:00:00.000Z',
+      known: true,
+      day: '2026-10-21',
+    });
+    await service.answer({
+      itemId: 'u01-01',
+      unit: 'u01',
+      correct: true,
+      day: '2026-10-21',
+    });
+    expect(prisma.englishCard.upsert.mock.calls[0][0].update.known).toBe(true);
+    const [card, answer] = prisma.englishDay.upsert.mock.calls.map((c) => c[0]);
+    expect(card.create).toEqual({ day: '2026-10-21', cards: 1 });
+    expect(answer.update).toEqual({
+      answers: { increment: 1 },
+      correct: { increment: 1 },
+    });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+  });
+
+  it('без даты день не считается', async () => {
+    const prisma = makePrisma();
+    await new EnglishService(prisma as never).answer({
+      itemId: 'u01-01',
+      unit: 'u01',
+      correct: false,
+    });
+    expect(prisma.englishDay.upsert).not.toHaveBeenCalled();
+  });
+
+  it('удаление слова снимает его из тем', async () => {
+    const prisma = makePrisma();
+    await new EnglishService(prisma as never).deleteWord('w1');
+    expect(prisma.englishThemeWord.deleteMany).toHaveBeenCalledWith({
+      where: { cardId: 'my:w1' },
+    });
+  });
+
+  it('слово в несуществующую тему — 404, снятие — без проверки', async () => {
+    const prisma = makePrisma();
+    prisma.englishTheme.findUnique.mockResolvedValue(null);
+    const service = new EnglishService(prisma as never);
+    await expect(
+      service.setThemeWord('nope', 'v:house', true),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    await service.setThemeWord('nope', 'v:house', false);
+    expect(prisma.englishThemeWord.deleteMany).toHaveBeenCalledWith({
+      where: { themeId: 'nope', cardId: 'v:house' },
+    });
   });
 });
