@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Field';
 import type { Exercise } from '../content/types';
@@ -19,6 +19,9 @@ export function fullSentence(e: Exercise): string {
       return e.answers[0];
   }
 }
+
+/** Сколько после проверки Enter не листает дальше — защита от автоповтора клавиши. */
+export const ENTER_GUARD_MS = 400;
 
 const TASK: Record<Exercise['type'], string> = {
   choice: 'Выбери вариант',
@@ -45,8 +48,10 @@ export function ExerciseView({
   const [bank] = useState(() => (e.type === 'order' ? scramble(e.words) : []));
   const [built, setBuilt] = useState<number[]>([]);
   const [result, setResult] = useState<boolean | null>(null);
+  const settledAt = useRef(0);
 
   const settle = (correct: boolean) => {
+    settledAt.current = Date.now();
     setResult(correct);
     onAnswer(correct);
   };
@@ -68,7 +73,9 @@ export function ExerciseView({
   const submit = (ev: FormEvent) => {
     ev.preventDefault();
     if (result === null) check();
-    else onNext();
+    // Зажатый Enter автоповтором нажал бы «Дальше» сразу за проверкой — и итог
+    // задания пролетел бы мимо глаз.
+    else if (Date.now() - settledAt.current > ENTER_GUARD_MS) onNext();
   };
 
   const [before, after] = e.type === 'choice' || e.type === 'gap' ? e.q.split('___') : ['', ''];

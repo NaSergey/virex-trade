@@ -28,3 +28,14 @@ describe('alignScore', () => {
     expect(alignScore([])).toBe(0);
   });
 });
+
+describe('alignWords — формы', () => {
+  it('сокращение равно полной форме', () => {
+    expect(kinds("I'm twelve.", 'I am twelve')).toEqual(['o:I', 'o:am', 'o:twelve']);
+    expect(kinds("I don't like milk", 'I do not like milk').every((k) => k.startsWith('o:'))).toBe(true);
+  });
+
+  it('число цифрами равно числу словом', () => {
+    expect(kinds('I am twelve.', 'I am 12')).toEqual(['o:I', 'o:am', 'o:twelve']);
+  });
+});

@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Field';
 import { alignWords } from '../model/align';
 import type { Phrase } from '../model/phrases';
 import { speak } from '../model/speech';
+import { ENTER_GUARD_MS } from './ExerciseView';
 import { Marks } from './Marks';
 import { Say } from './Say';
 
@@ -13,11 +14,16 @@ import { Say } from './Say';
 export function Dictation({ phrase, onNext }: { phrase: Phrase; onNext: () => void }) {
   const [value, setValue] = useState('');
   const [checked, setChecked] = useState(false);
+  const checkedAt = useRef(0);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (checked) onNext();
-    else if (value.trim()) setChecked(true);
+    if (checked) {
+      if (Date.now() - checkedAt.current > ENTER_GUARD_MS) onNext();
+    } else if (value.trim()) {
+      checkedAt.current = Date.now();
+      setChecked(true);
+    }
   };
 
   return (

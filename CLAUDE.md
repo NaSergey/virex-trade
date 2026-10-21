@@ -31,7 +31,7 @@
 ## Стек и структура
 
 - **backend** — NestJS + Prisma + PostgreSQL. Модули: `admin`, `analytics`, `auth`, `bots`,
-  `bybit`, `credentials`, `exchanges`, `hl-scout`, `market-events`, `profile`, `settings`, `tags`,
+  `bybit`, `credentials`, `english`, `exchanges`, `hl-scout`, `market-events`, `profile`, `settings`, `tags`,
   `telegram`, `terminal`, `trades`.
 - **frontend** — Next.js App Router + FSD.
 - **Docker Compose**, `start.bat` / `stop.bat` для локального запуска.
@@ -2345,6 +2345,26 @@ standalone-сборке (`node .next/standalone/server.js` с `HOSTNAME=0.0.0.0`
   бы следующий кошелёк без запроса, и очередь пустела бы за секунды.
 - Позиции сохранённых `api` читает вживую (`clearinghouseState`, кэш 15 с), а не из базы.
 - **Профиль кошелька — HyperDash** (`profileUrl` в `views/hl-wallets/model/format.ts`).
+
+## Учебник английского в админке (2026-10-21)
+
+`admin.<домен>/english` — личный раздел владельца: курс по Friends Starter (Students' Book + Workbook,
+Pearson), четыре вкладки — уроки, карточки, практика, слух и речь. Спека —
+`docs/superpowers/specs/2026-10-21-english-course-design.md`.
+
+- **Раздел изолирован и сносится целиком** (требование владельца): код — только
+  `frontend/src/views/english/` и `backend/src/english/`, точки подключения и порядок сноса —
+  `views/english/README.md`. Тексты интерфейса — по-русски внутри вью, не в словарях i18n (там
+  один ключ `adminShell.english`); стили — `english.css` вью. Таблицы `english_*` без `userId` и
+  без связей (владелец один, как у `HlWallet`). Новое в разделе — туда же, не в общий код.
+- **Материал — статика фронта** (`content/units/b1.ts`…`b8.ts`, блок книги на файл). Тексты и
+  упражнения книги не копируются: слова — из её словаря (SB 92–95), объяснения, примеры,
+  переводы и упражнения — свои, со ссылками на страницы SB/WB. PDF на сервер не кладётся.
+  Целостность держит `content.test.ts`; упражнения юнита — без опережения книги.
+- **Интервалы карточек считает фронт** (`model/srs.ts`, единственная копия), сервер хранит.
+  id карточки — `<раздел>:<слово>` и идёт в теле `PUT /api/admin/english/cards`, не в адресе.
+- **Пропуск сверяется фразой целиком** (`isGapCorrect`): `'m` в пропуске после `I` — это `I'm`.
+- Озвучка и распознавание — Web Speech API браузера; распознавание только в Chrome/Edge.
 
 ## Бэкап базы в Telegram (2026-10-15)
 

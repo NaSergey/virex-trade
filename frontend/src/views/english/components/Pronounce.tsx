@@ -33,12 +33,19 @@ export function Pronounce({ phrase, onNext }: { phrase: Phrase; onNext: () => vo
     setFinal(false);
     setError(null);
     setActive(true);
+    // Запись, оборванная кнопкой или тишиной, финала не присылает — тогда
+    // итог по тому, что успели услышать.
+    let got = '';
     stop.current = listen({
       onText: (text, isFinal) => {
+        got = text;
         setHeard(text);
         if (isFinal) setFinal(true);
       },
-      onEnd: () => setActive(false),
+      onEnd: () => {
+        setActive(false);
+        if (got) setFinal(true);
+      },
       onError: (code) => setError(ERRORS[code] ?? `Распознавание не сработало (${code}).`),
     });
   };

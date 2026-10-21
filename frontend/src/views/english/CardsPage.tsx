@@ -59,11 +59,16 @@ export function CardsPage() {
   const card = q ? pickCard(q, lastId) : null;
   const prev = card && data ? (data.cards.get(card.id) ?? null) : null;
 
-  // Часы идут, чтобы слово со сроком «через минуту» пришло само, без перезагрузки.
+  // Часы идут, только пока показывать нечего: слово со сроком «через минуту»
+  // придёт само. Пока карточка на экране, они стоят — иначе срок соседней
+  // наступил бы посреди показа, и карточка подменилась бы на глазах, а оценка
+  // ушла бы чужой.
+  const idle = card === null;
   useEffect(() => {
+    if (!idle) return;
     const t = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => window.clearInterval(t);
-  }, []);
+  }, [idle]);
 
   const answer = (grade: Grade) => {
     if (!card) return;
@@ -74,12 +79,16 @@ export function CardsPage() {
     setNow(t);
   };
 
-  // Клавиатура: пробел/Enter — перевернуть, 1–4 — ответ. В полях ввода — молчит.
+  // Клавиатура: пробел/Enter — перевернуть, 1–4 — ответ. В полях ввода и с
+  // модификаторами (Ctrl+1 — вкладка браузера) — молчит; пробел и Enter на
+  // кнопке или ссылке — её собственное нажатие (🔊, сама карточка).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (!card || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
       const tag = (e.target as HTMLElement | null)?.tagName;
-      if (!card || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if (!flipped && (e.key === ' ' || e.key === 'Enter')) {
+        if (tag === 'BUTTON' || tag === 'A') return;
         e.preventDefault();
         setFlipped(true);
       } else if (flipped) {
@@ -128,7 +137,7 @@ export function CardsPage() {
 
           {card ? (
             <section className="en-card-box">
-              <button type="button" className="en-card" onClick={() => setFlipped(true)} aria-label="Перевернуть карточку">
+              <Button variant="none" className="en-card" onClick={() => setFlipped(true)} aria-label="Перевернуть карточку">
                 <span className="en-card-front" lang={dir === 'en' ? 'en' : 'ru'}>
                   {front}
                 </span>
@@ -144,7 +153,7 @@ export function CardsPage() {
                 ) : (
                   <span className="en-card-hint muted">Нажми или пробел — перевернуть</span>
                 )}
-              </button>
+              </Button>
               <div className="en-card-say">
                 <Say text={card.en} />
                 {card.example && flipped ? <Say text={card.example[0]} /> : null}

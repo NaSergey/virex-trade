@@ -8,8 +8,10 @@ import type { CardState } from '../model/srs';
 
 /**
  * Прогресс владельца в учебнике (`backend/src/english`). Состояние грузится
- * одним запросом и дальше живёт в кэше: меняет его только этот человек, и
- * каждая мутация правит кэш сразу, не дожидаясь ответа. Ошибка — перечитка.
+ * одним запросом; каждая мутация правит кэш сразу, не дожидаясь ответа, ошибка —
+ * перечитка. Возвращаясь на вкладку, состояние перечитывается: прогресс общий
+ * у телефона и компьютера, и карточка, оценённая по устаревшему состоянию,
+ * затёрла бы ответ с другого устройства.
  */
 
 const BASE = '/api/admin/english';
@@ -68,16 +70,23 @@ export function useEnglishState() {
   return useQuery({
     queryKey: KEY,
     queryFn: async () => toState(await apiJson<StateResponse>(`${BASE}/state`)),
-    staleTime: Infinity,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
   });
 }
 
-/** Мутация, которая правит кэш до ответа сервера. */
+/**
+ * Мутация, которая правит кэш до ответа сервера. Перечитка в полёте
+ * отменяется: пришедшая после правки, она вернула бы состояние до неё.
+ */
 function useStateMutation<V>(request: (v: V) => Promise<unknown>, apply: (s: EnglishState, v: V) => EnglishState) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: request,
-    onMutate: (v: V) => qc.setQueryData<EnglishState>(KEY, (s) => (s ? apply(s, v) : s)),
+    onMutate: async (v: V) => {
+      await qc.cancelQueries({ queryKey: KEY });
+      qc.setQueryData<EnglishState>(KEY, (s) => (s ? apply(s, v) : s));
+    },
     onError: () => void qc.invalidateQueries({ queryKey: KEY }),
   });
 }

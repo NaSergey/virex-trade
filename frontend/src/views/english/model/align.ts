@@ -1,3 +1,5 @@
+import { normalize } from './check';
+
 /**
  * Разметка диктанта и произношения по словам: какие слова эталона услышаны
  * (`ok`), какие пропущены (`missing`), что лишнее (`extra`). Выравнивание — по
@@ -14,17 +16,23 @@ interface Token {
   key: string;
 }
 
+const NUMBERS = 'zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty'.split(' ');
+
+/** «12» и «twelve» — одно слово: распознавание речи отдаёт числа цифрами. */
+const numberKey = (piece: string) => (/^\d+$/.test(piece) && Number(piece) <= 20 ? NUMBERS[Number(piece)] : piece);
+
+/**
+ * Слова фразы. Сокращение раскрывается (`normalize`): «I'm» и «I am» — одно и
+ * то же, а распознавание речи часто отдаёт полную форму. Раскрытое слово
+ * показывается полной формой.
+ */
 const tokenize = (text: string): Token[] =>
-  text
-    .split(/\s+/)
-    .map((raw) => ({
-      word: raw.replace(/^[^\p{L}\p{N}']+|[^\p{L}\p{N}']+$/gu, ''),
-      key: raw
-        .toLowerCase()
-        .replace(/[’‘]/g, "'")
-        .replace(/[^a-z0-9']/g, ''),
-    }))
-    .filter((t) => t.key !== '');
+  text.split(/\s+/).flatMap((raw) => {
+    const word = raw.replace(/^[^\p{L}\p{N}']+|[^\p{L}\p{N}']+$/gu, '');
+    const pieces = normalize(raw).split(' ').filter(Boolean).map(numberKey);
+    if (pieces.length <= 1) return pieces.map((key) => ({ word, key }));
+    return pieces.map((key) => ({ word: key === 'i' ? 'I' : key, key }));
+  });
 
 export function alignWords(expected: string, actual: string): WordMark[] {
   const a = tokenize(expected);
