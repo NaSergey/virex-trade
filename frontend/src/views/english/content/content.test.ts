@@ -3,9 +3,8 @@ import { COURSE, EXERCISES, LESSONS, SECTION_BY_ID, WORDS } from './index';
 import type { Exercise } from './types';
 
 /**
- * Целостность материала. Проверки «у юнита есть слова и упражнения» идут по
- * заполненным разделам — тем, у кого уже есть урок; что заполнены все, держит
- * последний тест.
+ * Целостность материала: каждый раздел курса заполнен, каждое упражнение
+ * решаемо, английское написано латиницей, перевод — по-русски.
  */
 
 const CYRILLIC = /[а-яё]/i;
@@ -33,6 +32,10 @@ const englishOf = (e: Exercise): string[] => {
 };
 
 describe('материал курса', () => {
+  it('у каждого раздела курса есть урок', () => {
+    expect(COURSE.filter((s) => !LESSONS.has(s.id)).map((s) => s.id)).toEqual([]);
+  });
+
   it('id разделов уникальны, повторения ссылаются на юниты', () => {
     expect(new Set(COURSE.map((s) => s.id)).size).toBe(COURSE.length);
     for (const s of COURSE) {
@@ -105,7 +108,7 @@ describe('материал курса', () => {
     }
   });
 
-  it('заполненные разделы: у юнита — слова и все четыре вида упражнений, у остальных упражнений нет', () => {
+  it('разделы: у юнита — слова и все четыре вида упражнений, у остальных упражнений нет', () => {
     for (const s of filled) {
       const words = WORDS.filter((w) => w.unit === s.id);
       const items = EXERCISES.filter((e) => e.unit === s.id);
