@@ -3,6 +3,7 @@
 import { useRef, useState, type FormEvent } from 'react';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Field';
+import { usePhraseDone } from '../api/hooks';
 import { alignWords } from '../model/align';
 import type { Phrase } from '../model/phrases';
 import { speak } from '../model/speech';
@@ -15,6 +16,7 @@ export function Dictation({ phrase, onNext }: { phrase: Phrase; onNext: () => vo
   const [value, setValue] = useState('');
   const [checked, setChecked] = useState(false);
   const checkedAt = useRef(0);
+  const done = usePhraseDone();
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -23,6 +25,7 @@ export function Dictation({ phrase, onNext }: { phrase: Phrase; onNext: () => vo
     } else if (value.trim()) {
       checkedAt.current = Date.now();
       setChecked(true);
+      done.mutate();
     }
   };
 

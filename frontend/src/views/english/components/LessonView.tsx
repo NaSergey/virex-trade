@@ -93,7 +93,7 @@ export function LessonView({
           {done ? 'Пройден ✓ · снять отметку' : 'Отметить пройденным'}
         </Button>
         {next ? (
-          <Link className="en-next" href={`/english?s=${next.id}`}>
+          <Link className="en-next" href={`/english/lessons?s=${next.id}`}>
             Дальше: {next.title} →
           </Link>
         ) : null}

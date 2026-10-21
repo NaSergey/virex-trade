@@ -1,2 +1,2 @@
-/** Уроки по книге — admin.<домен>/english. */
-export { LessonsPage as default } from '@/views/english/LessonsPage';
+/** Сегодня — admin.<домен>/english. */
+export { TodayPage as default } from '@/views/english/TodayPage';

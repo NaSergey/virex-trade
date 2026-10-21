@@ -50,3 +50,7 @@ yarn-error.log*
 # Кука-джар curl/Playwright с живым refresh_token — не секрет .env, но так же
 # не для гита.
 cookies.txt
+
+# Записи нейросетевого голоса учебника английского — десятки МБ, на сервере лежат
+# вне репозитория (frontend/src/views/english/README.md, «Озвучка»).
+/frontend/public/assets/english-audio/

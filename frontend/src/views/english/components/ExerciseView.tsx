@@ -4,21 +4,11 @@ import { useRef, useState, type FormEvent } from 'react';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Field';
 import type { Exercise } from '../content/types';
-import { fillGap, isCorrect, isGapCorrect } from '../model/check';
+import { isCorrect, isGapCorrect } from '../model/check';
+import { fullSentence } from '../model/sentence';
 import { scramble } from '../model/random';
 import { Say } from './Say';
 
-/** Полная фраза с ответом — для показа и озвучки. Подсказки в скобках из неё уходят. */
-export function fullSentence(e: Exercise): string {
-  switch (e.type) {
-    case 'choice':
-      return fillGap(e.q, e.options[e.answer]).replace(/\s*\([^)]*\)/g, '');
-    case 'gap':
-      return fillGap(e.q, e.answers[0]).replace(/\s*\([^)]*\)/g, '');
-    default:
-      return e.answers[0];
-  }
-}
 
 /** Сколько после проверки Enter не листает дальше — защита от автоповтора клавиши. */
 export const ENTER_GUARD_MS = 400;

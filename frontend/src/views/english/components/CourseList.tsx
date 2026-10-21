@@ -27,7 +27,7 @@ export function CourseList({
         {rows.map(({ section, done, score }) => (
           <li key={section.id} className={cn(`en-course-${section.kind}`, section.id === currentId && 'is-current')}>
             <Link
-              href={`/english?s=${section.id}`}
+              href={`/english/lessons?s=${section.id}`}
               aria-current={section.id === selectedId ? 'page' : undefined}
               scroll={false}
             >

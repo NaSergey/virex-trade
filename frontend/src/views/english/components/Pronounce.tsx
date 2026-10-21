@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Mic } from 'lucide-react';
 import { Button } from '@/shared/ui/Button';
+import { usePhraseDone } from '../api/hooks';
 import { alignWords } from '../model/align';
 import type { Phrase } from '../model/phrases';
 import { listen } from '../model/speech';
@@ -24,6 +25,9 @@ export function Pronounce({ phrase, onNext }: { phrase: Phrase; onNext: () => vo
   const [active, setActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const stop = useRef<(() => void) | null>(null);
+  const done = usePhraseDone();
+  // В счётчик дня фраза идёт один раз, сколько бы её ни повторяли.
+  const counted = useRef(false);
 
   // Ушли со страницы или к другой фразе посреди записи — микрофон выключается.
   useEffect(() => () => stop.current?.(), []);
@@ -44,7 +48,12 @@ export function Pronounce({ phrase, onNext }: { phrase: Phrase; onNext: () => vo
       },
       onEnd: () => {
         setActive(false);
-        if (got) setFinal(true);
+        if (!got) return;
+        setFinal(true);
+        if (!counted.current) {
+          counted.current = true;
+          done.mutate();
+        }
       },
       onError: (code) => setError(ERRORS[code] ?? `Распознавание не сработало (${code}).`),
     });

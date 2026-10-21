@@ -4,12 +4,14 @@ import { useState, type FormEvent } from 'react';
 import { Button } from '@/shared/ui/Button';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { Input } from '@/shared/ui/Field';
-import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import { useAddWord, useDeleteWord } from '../api/hooks';
 import type { CustomWord } from '../model/deck';
 import { Say } from './Say';
 
-/** Свои слова: форма и список. Карточка своего слова встаёт в колоду первой. */
+/**
+ * Свои слова — наверху карточек: форма и список под раскрытием. Своё слово
+ * встаёт в колоду первым.
+ */
 export function MyWords({ words }: { words: readonly CustomWord[] }) {
   const add = useAddWord();
   const remove = useDeleteWord();
@@ -30,38 +32,15 @@ export function MyWords({ words }: { words: readonly CustomWord[] }) {
     );
   };
 
-  const columns: LedgerColumn<CustomWord>[] = [
-    {
-      key: 'en',
-      header: 'Слово',
-      render: (w) => (
-        <span className="en-phrase">
-          <span lang="en">{w.en}</span>
-          <Say text={w.en} />
-        </span>
-      ),
-    },
-    { key: 'ru', header: 'Перевод', render: (w) => w.ru },
-    {
-      key: 'del',
-      align: 'right',
-      noSkeleton: true,
-      render: (w) => (
-        <Button variant="bare" tight onClick={() => remove.mutate(w.id)}>
-          Удалить
-        </Button>
-      ),
-    },
-  ];
-
   return (
-    <section className="en-section">
-      <h3>Мои слова</h3>
+    <section className="en-mywords">
       <form className="en-add" onSubmit={submit}>
         <Input
           lang="en"
-          placeholder="Слово по-английски"
+          placeholder="Новое слово"
           aria-label="Слово по-английски"
+          autoCapitalize="none"
+          autoCorrect="off"
           maxLength={100}
           value={en}
           onChange={(e) => setEn(e.target.value)}
@@ -78,7 +57,25 @@ export function MyWords({ words }: { words: readonly CustomWord[] }) {
         </Button>
       </form>
       <ErrorNote error={add.error ?? remove.error} fallback="Не удалось сохранить слово" />
-      {words.length > 0 ? <LedgerTable columns={columns} rows={[...words]} rowKey={(w) => w.id} /> : null}
+      {words.length > 0 ? (
+        <details className="en-mylist">
+          <summary>Мои слова · {words.length}</summary>
+          <ul>
+            {words.map((w) => (
+              <li key={w.id}>
+                <span className="en-phrase">
+                  <span lang="en">{w.en}</span>
+                  <Say text={w.en} />
+                </span>
+                <span className="muted">{w.ru}</span>
+                <Button variant="bare" tight onClick={() => remove.mutate(w.id)}>
+                  Удалить
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
     </section>
   );
 }

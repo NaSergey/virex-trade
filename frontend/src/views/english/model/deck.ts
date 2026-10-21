@@ -1,14 +1,19 @@
 import type { Word } from '../content/types';
+import type { VocabWord } from '../content/themes';
 import { MIN, type CardState } from './srs';
 
-/** Карточка колоды: слово книги или своё. */
+/** Откуда слово: свои, учебник, общий словарь. */
+export type Source = 'my' | 'book' | 'vocab';
+
+/** Карточка: слово с переводом и откуда оно. */
 export interface DeckCard {
   id: string;
   en: string;
   ru: string;
   example?: [string, string];
-  /** Раздел книги; у своего слова — null. */
-  unit: string | null;
+  source: Source;
+  /** Раздел учебника или тема общего словаря; у своего слова — null. */
+  group: string | null;
 }
 
 export interface CustomWord {
@@ -17,26 +22,66 @@ export interface CustomWord {
   ru: string;
 }
 
+/** Своя тема: подборка слов под разговор. */
+export interface UserTheme {
+  id: string;
+  title: string;
+  cards: string[];
+}
+
 export const cardIdOf = (w: Word) => `${w.unit}:${w.en}`;
+export const vocabCardId = (w: VocabWord) => `v:${w.en}`;
 /** Тот же id строит сервер (`backend/src/english`, `myCardId`) — удаляя слово, он снимает карточку. */
 export const myCardId = (wordId: string) => `my:${wordId}`;
 
 /**
- * Колода: свои слова первыми — их добавляют, чтобы учить сейчас, — затем слова
- * открытых разделов в порядке книги.
+ * Все карточки в порядке, в котором новые идут в работу: свои слова первыми —
+ * их добавляют, чтобы учить сейчас, — затем учебник по порядку, затем общий
+ * словарь по частоте.
  */
-export function buildDeck(
+export function catalog(
   words: readonly Word[],
-  open: ReadonlySet<string>,
+  vocab: readonly VocabWord[],
   custom: readonly CustomWord[],
 ): DeckCard[] {
   return [
-    ...custom.map((w) => ({ id: myCardId(w.id), en: w.en, ru: w.ru, unit: null })),
-    ...words
-      .filter((w) => open.has(w.unit))
-      .map((w) => ({ id: cardIdOf(w), en: w.en, ru: w.ru, example: w.example, unit: w.unit })),
+    ...custom.map((w): DeckCard => ({ id: myCardId(w.id), en: w.en, ru: w.ru, source: 'my', group: null })),
+    ...words.map(
+      (w): DeckCard => ({ id: cardIdOf(w), en: w.en, ru: w.ru, example: w.example, source: 'book', group: w.unit }),
+    ),
+    ...[...vocab]
+      .sort((a, b) => a.rank - b.rank)
+      .map(
+        (w): DeckCard => ({ id: vocabCardId(w), en: w.en, ru: w.ru, example: w.example, source: 'vocab', group: w.theme }),
+      ),
   ];
 }
+
+/**
+ * Колода — что учим сейчас: `all` (свои, открытые разделы учебника, словарь),
+ * `my`, `book`, `vocab`, `theme:<тема словаря>`, `mine:<своя тема>`. Учебник —
+ * только открытые разделы: слова урока, до которого не дошли, рано учить; в свою
+ * тему владелец кладёт что хочет, и она берёт слова как есть.
+ */
+export function deckOf(
+  cards: readonly DeckCard[],
+  spec: string,
+  open: ReadonlySet<string>,
+  themes: readonly UserTheme[],
+): DeckCard[] {
+  const openBook = (c: DeckCard) => c.source !== 'book' || open.has(c.group ?? '');
+  if (spec.startsWith('mine:')) {
+    const ids = new Set(themes.find((t) => t.id === spec.slice(5))?.cards ?? []);
+    return cards.filter((c) => ids.has(c.id));
+  }
+  if (spec.startsWith('theme:')) return cards.filter((c) => c.source === 'vocab' && c.group === spec.slice(6));
+  if (spec === 'my' || spec === 'book' || spec === 'vocab') return cards.filter((c) => c.source === spec && openBook(c));
+  return cards.filter(openBook);
+}
+
+export type Status = 'new' | 'learning' | 'known';
+
+export const statusOf = (s: CardState | undefined): Status => (!s ? 'new' : s.known ? 'known' : 'learning');
 
 /** Изучаемое слово, которому до срока меньше этого, можно показать в этой же сессии. */
 export const LEARN_AHEAD = 10 * MIN;
@@ -45,6 +90,17 @@ export function startOfDay(now: number): number {
   const d = new Date(now);
   d.setHours(0, 0, 0, 0);
   return d.getTime();
+}
+
+/**
+ * Новое за сегодня — с первым ответом сегодня. Слово, которое сразу отметили
+ * «знаю», лимит не тратит: его не учили, а отсеяли.
+ */
+export function newToday(states: ReadonlyMap<string, CardState>, now: number): number {
+  const dayStart = startOfDay(now);
+  let n = 0;
+  for (const s of states.values()) if (s.firstAt >= dayStart && !(s.known && s.reps === 1)) n += 1;
+  return n;
 }
 
 export interface Queue {
@@ -65,17 +121,17 @@ export function queue(
   now: number,
   newLimit: number,
 ): Queue {
-  const dayStart = startOfDay(now);
-  let newToday = 0;
-  for (const s of states.values()) if (s.firstAt >= dayStart) newToday += 1;
-
+  const today = newToday(states, now);
   const due: [DeckCard, number][] = [];
   const ahead: [DeckCard, number][] = [];
-  const unseen: DeckCard[] = [];
+  const fresh: DeckCard[] = [];
+  const room = Math.max(0, newLimit - today);
   let nextDue: number | null = null;
   for (const card of deck) {
     const s = states.get(card.id);
-    if (!s) unseen.push(card);
+    if (!s) {
+      if (fresh.length < room) fresh.push(card);
+    } else if (s.known) continue;
     else if (s.due <= now) due.push([card, s.due]);
     else if (s.interval === 0 && s.due <= now + LEARN_AHEAD) ahead.push([card, s.due]);
     else nextDue = nextDue === null ? s.due : Math.min(nextDue, s.due);
@@ -83,9 +139,9 @@ export function queue(
   const byDue = (a: [DeckCard, number], b: [DeckCard, number]) => a[1] - b[1];
   return {
     due: due.sort(byDue).map(([c]) => c),
-    fresh: unseen.slice(0, Math.max(0, newLimit - newToday)),
+    fresh,
     ahead: ahead.sort(byDue).map(([c]) => c),
-    newToday,
+    newToday: today,
     nextDue,
   };
 }
