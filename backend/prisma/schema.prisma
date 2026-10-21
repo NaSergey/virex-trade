@@ -1490,3 +1490,57 @@ model HlPositionSnapshot {
   @@index([address, at])
   @@map("hl_position_snapshots")
 }
+
+// ═══ english ═══ Учебник английского в админке (backend/src/english; спека
+// docs/superpowers/specs/2026-10-21-english-course-design.md). Блок сносится
+// целиком вместе с модулем: связей с другими таблицами нет. Владелец один —
+// поэтому без userId, как у HlWallet.
+
+/// Состояние карточки интервального повторения. Интервалы считает фронт
+/// (`views/english/model/srs.ts`), сервер хранит.
+model EnglishCard {
+  /// `<раздел>:<слово>` у слов книги, `my:<id>` у своих.
+  cardId    String   @id
+  due       DateTime
+  /// Интервал в днях; 0 — слово в изучении (новое или забытое).
+  interval  Float
+  ease      Float
+  reps      Int
+  lapses    Int
+  /// Первый ответ — по нему считается «новых сегодня».
+  firstAt   DateTime
+  updatedAt DateTime @updatedAt
+
+  @@map("english_cards")
+}
+
+/// Своё слово владельца — карточка `my:<id>`.
+model EnglishWord {
+  id        String   @id @default(cuid())
+  en        String
+  ru        String
+  createdAt DateTime @default(now())
+
+  @@map("english_words")
+}
+
+/// Пройденный раздел курса (`sp`, `u01`, `r1`, …).
+model EnglishLesson {
+  lessonId String   @id
+  doneAt   DateTime @default(now())
+
+  @@map("english_lessons")
+}
+
+/// Ответы на упражнение: счётчики и последний — по нему «работа над ошибками».
+model EnglishAnswer {
+  itemId      String   @id
+  unit        String
+  right       Int      @default(0)
+  wrong       Int      @default(0)
+  lastCorrect Boolean
+  lastAt      DateTime @default(now())
+
+  @@map("english_answers")
+}
+// ═══ /english ═══

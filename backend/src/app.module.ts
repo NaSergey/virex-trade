@@ -26,6 +26,7 @@ import { TerminalModule } from './terminal/terminal.module';
 import { ProfileModule } from './profile/profile.module';
 import { BackupModule } from './backup/backup.module';
 import { HlScoutModule } from './hl-scout/hl-scout.module';
+import { EnglishModule } from './english/english.module';
 import { GAME_MODULES } from './games-app.module';
 import { runsGames } from './role';
 
@@ -67,6 +68,7 @@ import { runsGames } from './role';
     ProfileModule,
     BackupModule,
     HlScoutModule,
+    EnglishModule,
   ],
   controllers: [AppController],
   providers: [AppService],
