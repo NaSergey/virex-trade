@@ -290,7 +290,7 @@ export const B2: ContentBlock = {
         },
         {
           type: 'note',
-          text: 'Русское «они» — *they*, а не *them*; а «мы» — *we*, а не *us*. И не забывай *-s* после числа: *three planets*, а не *three planet* (в русском после «трёх» тоже форма меняется, но по-другому — по-английски она одна: *+s*).',
+          text: 'Русскому «вы» соответствует *you* (и с ним тоже *are*: *You are my friends*), а «они» — *they*. И не забывай *-s* после числа: *three planets*, а не *three planet* (в русском после «трёх» тоже форма меняется, но по-другому — по-английски она одна: *+s*).',
         },
         {
           type: 'p',
@@ -406,7 +406,7 @@ export const B2: ContentBlock = {
     { id: 'u04-10', unit: 'u04', type: 'order', words: ['is', 'she', 'in', 'class', '5B'], answers: ['Is she in class 5B?'], ru: 'Она в 5Б классе?' },
     { id: 'u04-11', unit: 'u04', type: 'order', words: ['he', 'is', 'my', 'best', 'friend'], answers: ['He is my best friend.'], ru: 'Он мой лучший друг.' },
     { id: 'u04-12', unit: 'u04', type: 'translate', ru: 'Сколько ему лет?', answers: ['How old is he?'] },
-    { id: 'u04-13', unit: 'u04', type: 'translate', ru: 'Мне десять.', answers: ['I am ten.'] },
+    { id: 'u04-13', unit: 'u04', type: 'translate', ru: 'Мне десять.', answers: ['I am ten.', 'I am ten years old.'] },
     { id: 'u04-14', unit: 'u04', type: 'translate', ru: 'Она в моём классе?', answers: ['Is she in my class?'] },
 
     // ───────── Unit 5 ─────────
@@ -437,7 +437,7 @@ export const B2: ContentBlock = {
     { id: 'u06-09', unit: 'u06', type: 'order', words: ['the', 'stars', 'are', 'beautiful'], answers: ['The stars are beautiful.'], ru: 'Звёзды прекрасные.' },
     { id: 'u06-10', unit: 'u06', type: 'order', words: ['we', 'are', 'in', 'the', 'sky'], answers: ['We are in the sky.'], ru: 'Мы в небе.' },
     { id: 'u06-11', unit: 'u06', type: 'order', words: ['they', 'are', 'my', 'friends'], answers: ['They are my friends.'], ru: 'Они мои друзья.' },
-    { id: 'u06-12', unit: 'u06', type: 'translate', ru: 'Облака белые.', answers: ['The clouds are white.'] },
+    { id: 'u06-12', unit: 'u06', type: 'translate', ru: 'Облака белые.', answers: ['The clouds are white.', 'Clouds are white.'] },
     { id: 'u06-13', unit: 'u06', type: 'translate', ru: 'Вы мои друзья.', answers: ['You are my friends.'] },
     { id: 'u06-14', unit: 'u06', type: 'translate', ru: 'Три планеты красные.', answers: ['Three planets are red.'] },
   ],

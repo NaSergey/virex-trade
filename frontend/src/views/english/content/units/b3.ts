@@ -104,7 +104,7 @@ export const B3: ContentBlock = {
             ["My grandmother isn't old.", 'Моя бабушка не старая.'],
             ["I'm not little!", 'Я не маленький!'],
             ["This is my little sister. She's six.", 'Это моя маленькая сестра. Ей шесть.'],
-            ["Mum and dad aren't here.", 'Мамы и папы здесь нет.'],
+            ["Mum and Dad aren't here.", 'Мамы и папы здесь нет.'],
           ],
         },
         {
@@ -122,7 +122,7 @@ export const B3: ContentBlock = {
         {
           type: 'book',
           items: [
-            'SB стр. 26: упр. 1 — прочитай диалог Софи и Микки, затем перечитай вслух по ролям; упр. 2 — отметь, какие утверждения верны, а какие нет (письменно).',
+            'SB стр. 26: упр. 1 — прочитай диалог Софи и Мики, затем перечитай вслух по ролям; упр. 2 — отметь, какие утверждения верны, а какие нет (письменно).',
             'SB стр. 27: упр. 3 — подпиши семейное дерево и повтори слова вслух; упр. 6 — исправь предложения (письменно); упр. 7 — прочитай описания и ответь на вопрос Who\'s this?; упр. 5 — задай такой же вопрос по фотографиям из упр. 4. Упр. 4 и 8 — на слух: диска нет, пропусти их или в упр. 8 допиши слова песенки по смыслу.',
             'WB стр. 18: упр. 1–5 письменно.',
           ],
@@ -180,7 +180,7 @@ export const B3: ContentBlock = {
         },
         {
           type: 'note',
-          text: 'Про *he / she / it* всегда *has / hasn\'t*: *Yes, he has*, а не *Yes, he have*. И говори *next to*, а не *near to*: *next to the book* — «рядом с книгой».',
+          text: 'Про *he / she / it* всегда *has / hasn\'t*: *Yes, he has*, а не *Yes, he have*. И не теряй *to* в *next to*: *next to the book* («рядом с книгой»), а не *next the book*.',
         },
         {
           type: 'p',
@@ -205,7 +205,7 @@ export const B3: ContentBlock = {
         },
         {
           type: 'p',
-          text: 'В ответе вместо *this* ставят *it* (один предмет) или *they* (несколько). Заодно повторяем множественное число. Большинство слов получает *-s* (*car → cars*), слова на *-s* получают *-es* (*bus → buses*), а три слова юнита особенные: *child → children*, *person → people*, и *people* — уже множественное число.',
+          text: 'В ответе вместо *this* ставят *it* (один предмет) или *they* (несколько). Заодно повторяем множественное число. Большинство слов получает *-s* (*car → cars*), слова на *-s* получают *-es* (*bus → buses*), а два слова юнита особенные: *child → children* и *person → people* (*people* — уже множественное число, без *-s*).',
         },
         {
           type: 'rule',
@@ -343,7 +343,7 @@ export const B3: ContentBlock = {
     { id: 'u09-09', unit: 'u09', type: 'order', words: ['what', 'are', 'those'], answers: ['What are those?'], ru: 'Что это там, вдалеке?' },
     { id: 'u09-10', unit: 'u09', type: 'order', words: ['those', 'houses', 'are', 'round'], answers: ['Those houses are round.'], ru: 'Те дома круглые.' },
     { id: 'u09-11', unit: 'u09', type: 'order', words: ['that', 'tree', "isn't", 'very', 'big'], answers: ["That tree isn't very big."], ru: 'То дерево не очень большое.' },
-    { id: 'u09-12', unit: 'u09', type: 'translate', ru: 'Что это? — Это цветок.', answers: ['What is this? It is a flower.', 'What is it? It is a flower.'] },
+    { id: 'u09-12', unit: 'u09', type: 'translate', ru: 'Что это? — Это цветок.', answers: ['What is this? It is a flower.', 'What is it? It is a flower.', 'What is that? It is a flower.'] },
     { id: 'u09-13', unit: 'u09', type: 'translate', ru: 'Вон те люди — мои друзья.', answers: ['Those people are my friends.'] },
     { id: 'u09-14', unit: 'u09', type: 'translate', ru: 'Что это там? — Это автобусы.', answers: ['What are those? They are buses.'] },
   ],

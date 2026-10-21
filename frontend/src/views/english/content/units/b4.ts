@@ -12,7 +12,7 @@ export const B4: ContentBlock = {
     { en: 'country, countries', ru: 'страна, страны', unit: 'u10', example: ['Russia is a big country.', 'Россия — большая страна.'] },
     { en: 'Great Britain', ru: 'Великобритания', unit: 'u10', example: ['Are they from Great Britain?', 'Они из Великобритании?'] },
     { en: 'Greece', ru: 'Греция', unit: 'u10', example: ['Tassos is from Greece.', 'Тассос из Греции.'] },
-    { en: 'photo', ru: 'фотография', unit: 'u10', example: ['This is a photo of my family.', 'Это фотография моей семьи.'] },
+    { en: 'photo', ru: 'фотография', unit: 'u10', example: ['Look at the photo! This is my family.', 'Посмотри на фото! Это моя семья.'] },
     { en: 'Russia', ru: 'Россия', unit: 'u10', example: ["We aren't from Russia.", 'Мы не из России.'] },
     { en: 'the USA', ru: 'США', unit: 'u10', example: ['My friends are from the USA.', 'Мои друзья из США.'] },
     { en: 'Where are you from?', ru: 'Откуда ты? Откуда вы?', unit: 'u10', example: ["Where are you from? — I'm from China.", 'Откуда ты? — Я из Китая.'] },
@@ -60,7 +60,7 @@ export const B4: ContentBlock = {
     { en: 'horse', ru: 'лошадь', unit: 'cc1', example: ["My horse isn't tall.", 'Моя лошадь невысокая.'] },
     { en: 'India', ru: 'Индия', unit: 'cc1', example: ['India is a big country.', 'Индия — большая страна.'] },
     { en: 'kangaroo', ru: 'кенгуру', unit: 'cc1', example: ['Kangaroos are from Australia.', 'Кенгуру родом из Австралии.'] },
-    { en: 'language', ru: 'язык (речь)', unit: 'cc1', example: ['Russian is my language.', 'Русский — мой язык.'] },
+    { en: 'language', ru: 'язык (речь)', unit: 'cc1', example: ['English is a language.', 'Английский — это язык.'] },
     { en: 'lion', ru: 'лев', unit: 'cc1', example: ['Lions are big animals.', 'Львы — крупные животные.'] },
     { en: 'South Africa', ru: 'Южная Африка', unit: 'cc1', example: ['Is South Africa a big country?', 'Южная Африка — большая страна?'] },
     { en: 'tall', ru: 'высокий (о росте)', unit: 'cc1', example: ["My brother isn't tall.", 'Мой брат невысокий.'] },
@@ -303,7 +303,7 @@ export const B4: ContentBlock = {
         {
           type: 'examples',
           items: [
-            ['Russian is my language. English is my new language.', 'Русский — мой язык. Английский — мой новый язык.'],
+            ['English is my new language.', 'Английский — мой новый язык.'],
             ['Lions are big animals.', 'Львы — крупные животные.'],
             ['India is a big country.', 'Индия — большая страна.'],
             ['Kangaroos are from Australia.', 'Кенгуру родом из Австралии.'],

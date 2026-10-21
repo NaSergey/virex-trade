@@ -232,7 +232,7 @@ export const B1: ContentBlock = {
         },
         {
           type: 'note',
-          text: 'Русскоязычные чаще всего путают названия букв: *I* — «ай», а *E* — «и»; *G* — «джи», а *J* — «джей»; *W* — «дабл-ю» («двойное U»), а *Y* — «уай». Выучи эти четыре пары отдельно: именно на них строятся упражнения с буквами в SB (упр. 14–15) и WB (упр. 6).',
+          text: 'Русскоязычные чаще всего путают названия букв: *I* — «ай», а *E* — «и»; *G* — «джи», а *J* — «джей»; *W* — «дабл-ю» («двойное U»), а *Y* — «уай». Выучи эти три пары отдельно: именно на них строятся упражнения с буквами в SB (упр. 14–15) и WB (упр. 6).',
         },
         {
           type: 'note',
@@ -265,7 +265,7 @@ export const B1: ContentBlock = {
         },
         {
           type: 'p',
-          text: 'В живой речи формы сливаются: *I am → I\'m*, *you are → you\'re*, *what is → what\'s*, *name is → name\'s*. Говорят всегда сокращённо: *I\'m Micky. My name\'s Sophie.* Апостроф — это выпавшая буква.',
+          text: 'В живой речи формы сливаются: *I am → I\'m*, *you are → you\'re*, *what is → what\'s*, *name is → name\'s*. Обычно говорят сокращённо: *I\'m Micky. My name\'s Sophie.* Апостроф — это выпавшая буква.',
         },
         {
           type: 'p',
@@ -520,8 +520,8 @@ export const B1: ContentBlock = {
     { id: 'sp-06', unit: 'sp', type: 'gap', q: 'Read the numbers ___ one to twenty.', answers: ['from'], ru: 'Прочитай числа от одного до двадцати.' },
     { id: 'sp-07', unit: 'sp', type: 'gap', q: 'Write in the ___.', answers: ['notebook'], ru: 'Пиши в тетради.' },
     { id: 'sp-08', unit: 'sp', type: 'gap', q: 'Eleven, twelve, ___, fourteen.', answers: ['thirteen'], ru: 'Одиннадцать, двенадцать, тринадцать, четырнадцать.' },
-    { id: 'sp-09', unit: 'sp', type: 'order', words: ['read', 'the', 'book', 'please'], answers: ['Read the book, please.'], ru: 'Прочитай книгу, пожалуйста.' },
-    { id: 'sp-10', unit: 'sp', type: 'order', words: ['listen', 'and', 'repeat', 'please'], answers: ['Listen and repeat, please.'], ru: 'Слушай и повторяй, пожалуйста.' },
+    { id: 'sp-09', unit: 'sp', type: 'order', words: ['read', 'the', 'book', 'please'], answers: ['Read the book, please.', 'Please read the book.'], ru: 'Прочитай книгу, пожалуйста.' },
+    { id: 'sp-10', unit: 'sp', type: 'order', words: ['listen', 'and', 'repeat', 'please'], answers: ['Listen and repeat, please.', 'Please listen and repeat.'], ru: 'Слушай и повторяй, пожалуйста.' },
     { id: 'sp-11', unit: 'sp', type: 'order', words: ['write', 'all', 'the', 'numbers'], answers: ['Write all the numbers.'], ru: 'Напиши все числа.' },
     { id: 'sp-12', unit: 'sp', type: 'translate', ru: 'Смотри, окно!', answers: ['Look, the window!', 'Look at the window!'] },
     { id: 'sp-13', unit: 'sp', type: 'translate', ru: 'Спой алфавит со мной.', answers: ['Sing the alphabet with me.'] },
@@ -551,13 +551,13 @@ export const B1: ContentBlock = {
     { id: 'u02-05', unit: 'u02', type: 'gap', q: 'Ted is nice. ___ is my dog.', answers: ['He'], ru: 'Тед милый. Он моя собака.' },
     { id: 'u02-06', unit: 'u02', type: 'gap', q: '___ name is Joe.', answers: ['His'], ru: 'Его зовут Джо.' },
     { id: 'u02-07', unit: 'u02', type: 'gap', q: "What's ___ name? Her name's Tilly.", answers: ['her'], ru: 'Как её зовут? Её зовут Тилли.' },
-    { id: 'u02-08', unit: 'u02', type: 'gap', q: 'Suzie ___ my friend.', answers: ['is'], ru: 'Сьюзи — моя подруга.' },
+    { id: 'u02-08', unit: 'u02', type: 'gap', q: 'Suzie ___ my friend.', answers: ['is', "'s"], ru: 'Сьюзи — моя подруга.' },
     { id: 'u02-09', unit: 'u02', type: 'order', words: ['her', 'name', 'is', 'Tilly'], answers: ['Her name is Tilly.'], ru: 'Её зовут Тилли.' },
     { id: 'u02-10', unit: 'u02', type: 'order', words: ['he', 'is', 'my', 'friend'], answers: ['He is my friend.'], ru: 'Он мой друг.' },
     { id: 'u02-11', unit: 'u02', type: 'order', words: ['what', 'is', 'his', 'name'], answers: ['What is his name?'], ru: 'Как его зовут?' },
     { id: 'u02-12', unit: 'u02', type: 'translate', ru: 'Её зовут Сьюзи.', answers: ['Her name is Suzie.', "Her name's Suzie."] },
     { id: 'u02-13', unit: 'u02', type: 'translate', ru: 'Как его зовут?', answers: ['What is his name?'] },
-    { id: 'u02-14', unit: 'u02', type: 'translate', ru: 'Тед — его собака.', answers: ['Ted is his dog.'] },
+    { id: 'u02-14', unit: 'u02', type: 'translate', ru: 'Тед — его собака.', answers: ['Ted is his dog.', "Ted's his dog."] },
 
     // ───────── Unit 3 ─────────
     { id: 'u03-01', unit: 'u03', type: 'choice', q: "It's ___ pen.", options: ['a', 'an'], answer: 0, ru: 'Это ручка.' },
