@@ -6,6 +6,23 @@ import { AUDIO_BASE, audioId } from './audio';
  */
 
 /**
+ * Голос — женский (просьба владельца): записи озвучены женским `bf_emma`, и
+ * запасной голос браузера не должен звучать другим человеком. Пол браузер не
+ * сообщает — только имя голоса, поэтому известные имена списком. Пол важнее
+ * качества: мужской нейросетевой хуже простого женского.
+ */
+const FEMALE =
+  /female|woman|google us english|sonia|libby|maisie|hazel|susan|aria|jenny|ana\b|emma|michelle|ava|sara|serena|kate|stephanie|martha|samantha|karen|moira|tessa|fiona|victoria|allison|zira|catherine|natasha|clara|emily|amy|joanna|salli|kimberly|ivy|kendra/i;
+const MALE =
+  /\bmale|daniel|george|ryan|thomas|arthur|oliver|guy|davis|tony|aaron|fred|alex\b|rishi|gordon|lee\b|david|mark|james|brian|matthew|joey|justin|eric|christopher|andrew|roger/i;
+
+function genderScore(name: string): number {
+  if (FEMALE.test(name)) return 20;
+  if (MALE.test(name)) return -20;
+  return 0;
+}
+
+/**
  * Голос браузера — запасной, для фраз без записи (свои слова). Лучше всего
  * нейросетевые: «Natural»/«Neural»/«Online» у Edge, «Enhanced»/«Premium» у
  * iPhone, «Google» у Chrome; встроенные голоса Windows звучат роботом. Среди
@@ -17,7 +34,7 @@ export function pickVoice<V extends { lang: string; name?: string }>(voices: rea
     if (!lang.startsWith('en')) return -1;
     const name = v.name ?? '';
     const quality = /natural|neural|online|premium|enhanced/i.test(name) ? 10 : /google/i.test(name) ? 6 : 0;
-    return quality + (lang === 'en-gb' ? 3 : lang === 'en-us' ? 2 : 1);
+    return genderScore(name) + quality + (lang === 'en-gb' ? 3 : lang === 'en-us' ? 2 : 1);
   };
   let best: V | null = null;
   for (const v of voices) if (score(v) >= 0 && (!best || score(v) > score(best))) best = v;
