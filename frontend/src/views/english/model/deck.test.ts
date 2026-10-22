@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { VocabWord } from '../content/themes';
 import type { Word } from '../content/types';
-import { catalog, deckOf, newToday, pickCard, queue, startOfDay, statusOf, type DeckCard } from './deck';
-import { DAY, MIN, type CardState } from './srs';
+import { catalog, dayProgress, deckOf, newToday, pickCard, queue, startOfDay, statusOf, type DeckCard } from './deck';
+import { DAY, MIN, review, type CardState } from './srs';
 
 const NOW = new Date(2026, 9, 21, 15, 0).getTime();
 const word = (en: string, unit: string): Word => ({ en, ru: 'перевод', unit });
@@ -97,5 +97,29 @@ describe('pickCard', () => {
     expect(pickCard(q, 'a')?.id).toBe('b');
     expect(pickCard({ ...q, due: [], fresh: [] }, 'c')?.id).toBe('c');
     expect(pickCard({ ...q, due: [], fresh: [], ahead: [] }, null)).toBeNull();
+  });
+});
+
+describe('dayProgress', () => {
+  const deck = ['a', 'b', 'c', 'd', 'e', 'f'].map(card);
+  const morning = startOfDay(NOW) + 60 * MIN;
+
+  it('пройдено — отвечено сегодня и не в очереди; всего — с очередью', () => {
+    const states = new Map([
+      ['a', review(null, 2, morning)], // новое, «помню» утром — вернётся завтра
+      ['b', review(state({ interval: 3, due: morning }), 2, morning)], // повторено утром
+      ['c', review(null, 0, NOW - MIN)], // «не знаю» — снова в очереди
+      ['d', review(state({ interval: 4 }), 3, morning)], // «знаю» сегодня
+      ['e', state({ interval: 2, due: NOW + DAY, firstAt: NOW - 9 * DAY })], // ответ был вчера
+    ]);
+    const q = queue(deck, states, NOW, 3); // два новых сегодня уже было (a, c) — место одному
+    expect(q.fresh.map((c) => c.id)).toEqual(['f']);
+    expect(dayProgress(deck, states, q, NOW)).toEqual({ done: 3, total: 5 });
+  });
+
+  it('очередь пуста — всё пройдено', () => {
+    const states = new Map([['a', review(null, 2, morning)]]);
+    const q = queue(deck.slice(0, 1), states, NOW, 20);
+    expect(dayProgress(deck.slice(0, 1), states, q, NOW)).toEqual({ done: 1, total: 1 });
   });
 });

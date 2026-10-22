@@ -15,7 +15,7 @@ import { COURSE, EXERCISES, WORDS } from './content';
 import { VOCAB } from './content/vocab';
 import { activityOf, localDay, streak } from './model/activity';
 import { currentSection, openUnits } from './model/course';
-import { catalog, deckOf, queue } from './model/deck';
+import { catalog, dayProgress, deckOf, queue } from './model/deck';
 import { GOAL_ANSWERS, GOAL_PHRASES, mistakeCount, plural, practiceTarget } from './model/today';
 
 // Те же ключи и значения по умолчанию, что у страницы карточек: очередь здесь — её очередь.
@@ -68,6 +68,7 @@ function Today({ data, error }: { data: EnglishState; error: unknown }) {
     [data.words, data.lessons, data.themes, deckSpec],
   );
   const q = useMemo(() => queue(deck, data.cards, now, newLimit), [deck, data.cards, now, newLimit]);
+  const day = dayProgress(deck, data.cards, q, now);
   const deckEmpty = deck.length === 0;
   const repeat = q.due.length + q.ahead.length;
 
@@ -99,12 +100,6 @@ function Today({ data, error }: { data: EnglishState; error: unknown }) {
 
       <ul className="en-plan">
         <PlanRow
-          href="/english/cards"
-          title="Карточки"
-          status={deckEmpty ? 'колода пуста' : `повторить ${repeat} · новых ${q.fresh.length}`}
-          done={!deckEmpty && repeat === 0 && q.fresh.length === 0}
-        />
-        <PlanRow
           href="/english/lessons"
           title="Урок"
           status={lesson ? lesson.title : 'курс пройден'}
@@ -124,6 +119,12 @@ function Today({ data, error }: { data: EnglishState; error: unknown }) {
           title="Слух и речь"
           status={`фраз сегодня ${phrasesToday} из ${GOAL_PHRASES}`}
           done={phrasesToday >= GOAL_PHRASES}
+        />
+        <PlanRow
+          href="/english/cards"
+          title="Карточки"
+          status={deckEmpty ? 'колода пуста' : day.total > 0 ? `пройдено ${day.done} из ${day.total}` : 'на сегодня всё'}
+          done={!deckEmpty && repeat === 0 && q.fresh.length === 0}
         />
       </ul>
 

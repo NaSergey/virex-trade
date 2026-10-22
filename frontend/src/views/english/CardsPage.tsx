@@ -9,6 +9,7 @@ import { PageHead } from '@/shared/ui/PageHead';
 import { Seg } from '@/shared/ui/Seg';
 import { SkeletonLines } from '@/shared/ui/Skeleton';
 import { usePersistentValue } from '@/shared/lib/storage/usePersistentValue';
+import { cn } from '@/shared/lib/utils/css';
 import { dateFormat } from '@/shared/lib/utils/intl';
 import { useEnglishState, useSaveCard } from './api/hooks';
 import { MyWords } from './components/MyWords';
@@ -17,8 +18,8 @@ import { COURSE, WORDS } from './content';
 import { THEMES } from './content/themes';
 import { VOCAB } from './content/vocab';
 import { openUnits } from './model/course';
-import { catalog, deckOf, pickCard, queue } from './model/deck';
-import { delayLabel, review, type Grade } from './model/srs';
+import { catalog, dayProgress, deckOf, pickCard, queue } from './model/deck';
+import { review, type Grade } from './model/srs';
 
 type Dir = 'en' | 'ru';
 const NEW_LIMITS = [10, 20, 50] as const;
@@ -66,6 +67,7 @@ export function CardsPage() {
   const q = useMemo(() => (data ? queue(deck, data.cards, now, newLimit) : null), [data, deck, now, newLimit]);
   const card = q ? pickCard(q, lastId) : null;
   const prev = card && data ? (data.cards.get(card.id) ?? null) : null;
+  const day = q && data ? dayProgress(deck, data.cards, q, now) : null;
 
   // Часы идут, только пока показывать нечего: слово со сроком «через минуту»
   // придёт само. Пока карточка на экране, они стоят — иначе срок соседней
@@ -162,10 +164,26 @@ export function CardsPage() {
             />
           </div>
 
-          <p className="en-stats muted">
-            Повторить: {q!.due.length + q!.ahead.length} · новых сегодня: {Math.min(q!.newToday, newLimit)} из {newLimit} ·
-            в колоде: {deck.length}
-          </p>
+          {day && day.total > 0 ? (
+            <div className={cn('en-day', !card && 'is-done')}>
+              <div className="en-day-head">
+                <span>Сегодня</span>
+                <span className="en-day-count">
+                  {day.done} из {day.total}
+                </span>
+              </div>
+              <div
+                className="en-day-bar"
+                role="progressbar"
+                aria-label="Карточки за сегодня"
+                aria-valuemin={0}
+                aria-valuemax={day.total}
+                aria-valuenow={day.done}
+              >
+                <span style={{ width: `${(day.done / day.total) * 100}%` }} />
+              </div>
+            </div>
+          ) : null}
 
           {card ? (
             <section className="en-card-box">
@@ -194,12 +212,13 @@ export function CardsPage() {
               {flipped ? (
                 <div className="en-grades">
                   {GRADES.map(({ grade, label, key }) => (
-                    <Button key={grade} variant={grade === 2 ? 'solid' : 'default'} onClick={() => answer(grade)}>
-                      <span>{label}</span>
-                      <span className="en-grade-in muted">
-                        <span className="en-grade-key">{key} · </span>
-                        {grade === 3 ? 'больше нет' : delayLabel(review(prev, grade, now).due - now)}
-                      </span>
+                    <Button
+                      key={grade}
+                      variant={grade === 2 ? 'solid' : 'default'}
+                      title={`Клавиша ${key}`}
+                      onClick={() => answer(grade)}
+                    >
+                      {label}
                     </Button>
                   ))}
                 </div>
@@ -212,7 +231,7 @@ export function CardsPage() {
                 : 'Слова учебника приходят из уроков, свои — из формы выше.'}
             </EmptyState>
           ) : (
-            <EmptyState title="На сегодня всё">
+            <EmptyState title={day && day.done > 0 ? 'Карточки на сегодня пройдены' : 'На сегодня всё'}>
               {q!.nextDue ? `Следующее повторение — ${nextAt(q!.nextDue)}. ` : ''}
               {q!.newToday >= newLimit ? 'Лимит новых слов на сегодня пройден.' : 'Новых слов в этой колоде не осталось.'}
             </EmptyState>

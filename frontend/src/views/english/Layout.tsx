@@ -8,13 +8,18 @@ import { Wrap } from '@/shared/ui/Wrap';
 import { adminPath } from '@/shared/lib/utils/admin-host';
 import './english.css';
 
+/**
+ * Порядок — путь занятия: план дня, затем учебник (урок → практика → речь на
+ * фразах пройденных уроков), затем слова (карточки → темы-словарь). План на
+ * «Сегодня» идёт в том же порядке.
+ */
 const TABS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: '/english', label: 'Сегодня', icon: CalendarCheck },
   { href: '/english/lessons', label: 'Уроки', icon: BookOpen },
-  { href: '/english/cards', label: 'Карточки', icon: Layers },
-  { href: '/english/words', label: 'Темы', icon: Library },
   { href: '/english/practice', label: 'Практика', icon: PenLine },
   { href: '/english/speak', label: 'Речь', icon: Mic },
+  { href: '/english/cards', label: 'Карточки', icon: Layers },
+  { href: '/english/words', label: 'Темы', icon: Library },
 ];
 
 /** Тест по теме открывается из «Тем» — вкладка горит и на нём. */

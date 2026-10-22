@@ -215,7 +215,25 @@
 .en-next:hover { color: var(--ink); }
 
 /* ── карточки ────────────────────────────────────────────────────── */
-.en-stats { margin-bottom: var(--s3); font-size: var(--t-s); }
+/* Прогресс за день: полоса заполняется и зеленеет, когда очередь пуста. */
+.en-day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  max-width: 640px;
+  margin: 0 auto var(--s3);
+}
+.en-day-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+  font-size: var(--t-s);
+}
+.en-day-count { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.en-day-bar { height: 3px; background: var(--hair); }
+.en-day-bar span { display: block; height: 100%; background: var(--ink); transition: width 0.3s ease; }
+.en-day.is-done .en-day-bar span { background: var(--profit); }
 .en-card-box {
   display: flex;
   flex-direction: column;
@@ -259,16 +277,7 @@
   gap: var(--s2);
   width: 100%;
 }
-.en-grades .btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  height: auto;
-  padding: var(--s2);
-}
-.en-grade-in { font-family: var(--font-mono); font-size: var(--t-xs); }
-.en-grades .btn.solid .en-grade-in { color: inherit; opacity: 0.7; }
+.en-grades .btn { height: auto; min-height: 52px; }
 
 .en-add {
   display: grid;
@@ -512,7 +521,6 @@
     background: var(--ground);
   }
   .en-grades .btn { min-height: 56px; padding: 6px 2px; }
-  .en-grade-key { display: none; }
   .en-add { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .en-add .btn { grid-column: 1 / -1; }
   .en-mylist li { grid-template-columns: minmax(0, 1fr) auto; }

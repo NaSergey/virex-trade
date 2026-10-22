@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DAY, MIN, delayLabel, relearn, review, type CardState } from './srs';
+import { DAY, MIN, relearn, review, type CardState } from './srs';
 
 const NOW = Date.UTC(2026, 9, 21, 12);
 
@@ -58,16 +58,5 @@ describe('review — выученное слово', () => {
     const known = review(learned, 3, NOW);
     expect(known).toMatchObject({ known: true, interval: 4 });
     expect(relearn(known, NOW + 1)).toMatchObject({ known: false, interval: 0, due: NOW + 1 });
-  });
-});
-
-describe('delayLabel', () => {
-  it('минуты, часы, дни, месяцы', () => {
-    expect(delayLabel(MIN)).toBe('1 мин');
-    expect(delayLabel(10 * MIN)).toBe('10 мин');
-    expect(delayLabel(3 * 60 * MIN)).toBe('3 ч');
-    expect(delayLabel(DAY)).toBe('1 д');
-    expect(delayLabel(45 * DAY)).toBe('1.5 мес');
-    expect(delayLabel(365 * DAY)).toBe('1 г');
   });
 });

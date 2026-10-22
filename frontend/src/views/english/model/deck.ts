@@ -1,6 +1,6 @@
 import type { Word } from '../content/types';
 import type { VocabWord } from '../content/themes';
-import { MIN, type CardState } from './srs';
+import { DAY, MIN, type CardState } from './srs';
 
 /** Откуда слово: свои, учебник, общий словарь. */
 export type Source = 'my' | 'book' | 'vocab';
@@ -144,6 +144,41 @@ export function queue(
     newToday: today,
     nextDue,
   };
+}
+
+/**
+ * Когда слову ответили в последний раз. Отдельно не хранится: `review` ставит
+ * срок ровно через `interval` дней после ответа, «знаю» — на сам ответ. У слова
+ * в изучении (interval 0) не выводится — но оно и так всегда в очереди: его шаги
+ * короче `LEARN_AHEAD`.
+ */
+const answeredAt = (s: CardState) => s.due - (s.known ? 0 : s.interval * DAY);
+
+export interface DayProgress {
+  done: number;
+  total: number;
+}
+
+/**
+ * Карточки колоды за сегодня: пройдено — отвечено сегодня и в очередь не
+ * вернулось, всего — пройденное и то, что ждёт в очереди. Очередь пуста —
+ * на сегодня пройдено.
+ */
+export function dayProgress(
+  deck: readonly DeckCard[],
+  states: ReadonlyMap<string, CardState>,
+  q: Queue,
+  now: number,
+): DayProgress {
+  const dayStart = startOfDay(now);
+  const waiting = new Set([...q.due, ...q.fresh, ...q.ahead].map((c) => c.id));
+  let done = 0;
+  for (const card of deck) {
+    if (waiting.has(card.id)) continue;
+    const s = states.get(card.id);
+    if (s && (s.known || s.interval > 0) && answeredAt(s) >= dayStart) done += 1;
+  }
+  return { done, total: done + waiting.size };
 }
 
 /** Следующая карточка: срочные, потом новые, потом изучаемые; только что показанную — в последнюю очередь. */

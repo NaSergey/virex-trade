@@ -64,13 +64,3 @@ export function relearn(prev: CardState | null, now: number): CardState {
   const s = prev ?? { due: now, interval: 0, ease: 2.5, reps: 0, lapses: 0, firstAt: now, known: false };
   return { ...s, known: false, interval: 0, due: now };
 }
-
-/** Подпись кнопки: через сколько слово вернётся. */
-export function delayLabel(ms: number): string {
-  const round1 = (n: number) => String(Math.round(n * 10) / 10);
-  if (ms < 60 * MIN) return `${Math.round(ms / MIN)} мин`;
-  if (ms < DAY) return `${Math.round(ms / (60 * MIN))} ч`;
-  if (ms < 30 * DAY) return `${Math.round(ms / DAY)} д`;
-  if (ms < 365 * DAY) return `${round1(ms / (30 * DAY))} мес`;
-  return `${round1(ms / (365 * DAY))} г`;
-}
