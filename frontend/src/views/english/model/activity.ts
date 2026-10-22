@@ -9,6 +9,8 @@ export interface DayRow {
   answers: number;
   correct: number;
   phrases: number;
+  /** Ответы в тестах по темам слов. */
+  quiz: number;
 }
 
 /** Местная дата `YYYY-MM-DD`: день занятий — по часам владельца, а не по UTC. */
@@ -24,7 +26,7 @@ export function shiftDay(day: string, n: number): string {
   return localDay(new Date(y, m - 1, d - n, 12).getTime());
 }
 
-export const activityOf = (r: DayRow | undefined) => (r ? r.cards + r.answers + r.phrases : 0);
+export const activityOf = (r: DayRow | undefined) => (r ? r.cards + r.answers + r.phrases + (r.quiz ?? 0) : 0);
 
 /**
  * Серия дней подряд с занятиями. Сегодня ещё не занимался — серия не рвётся,

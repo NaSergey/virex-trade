@@ -197,4 +197,13 @@ describe('EnglishService', () => {
       where: { themeId: 'nope', cardId: 'v:house' },
     });
   });
+
+  it('ответ в тесте — в счётчик дня', async () => {
+    const prisma = makePrisma();
+    await new EnglishService(prisma as never).quiz('2026-10-22');
+    expect(prisma.englishDay.upsert.mock.calls[0][0].create).toEqual({
+      day: '2026-10-22',
+      quiz: 1,
+    });
+  });
 });

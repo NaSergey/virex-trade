@@ -1554,6 +1554,8 @@ model EnglishDay {
   answers Int    @default(0)
   correct Int    @default(0)
   phrases Int    @default(0)
+  /// Ответы в тестах по темам слов.
+  quiz    Int    @default(0)
 
   @@map("english_days")
 }

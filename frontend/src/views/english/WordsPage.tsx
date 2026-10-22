@@ -12,6 +12,7 @@ import { Seg } from '@/shared/ui/Seg';
 import { SkeletonLines } from '@/shared/ui/Skeleton';
 import { usePersistentValue } from '@/shared/lib/storage/usePersistentValue';
 import { useEnglishState, useSaveCard, useThemeWord, type EnglishState } from './api/hooks';
+import { ThemeHub } from './components/words/ThemeHub';
 import { Themes } from './components/words/Themes';
 import { WordRow } from './components/words/WordRow';
 import { COURSE, WORDS } from './content';
@@ -26,12 +27,17 @@ const ALL_UNITS: ReadonlySet<string> = new Set(COURSE.map((s) => s.id));
 const decodeDeck = (raw: string | null) => raw || 'all';
 const encodeDeck = (v: string) => v;
 
-/** Словарь: все слова — учебник целиком, общий словарь и свои, — со статусом и действиями. */
+type View = 'themes' | 'list';
+
+/**
+ * Темы и слова. Первым — темы с прогрессом: выбрать тему, учить её карточками
+ * или пройти тест; вторым видом — все слова списком со статусом и действиями.
+ */
 export function WordsPage() {
   const state = useEnglishState();
   return (
     <>
-      <PageHead title="Словарь" lede="Все слова в одном месте: что новое, что изучаешь, что уже знаешь. «Знаю» убирает слово из карточек." />
+      <PageHead title="Темы и слова" lede="Выбери тему разговора — учи её карточками или проверь себя тестом. «Знаю» убирает слово из карточек." />
       <ErrorNote error={state.error} fallback="Не удалось загрузить прогресс" />
       {state.data ? <Words data={state.data} /> : <SkeletonLines widths={[100, 100, 60]} />}
     </>
@@ -43,6 +49,7 @@ function Words({ data }: { data: EnglishState }) {
   const save = useSaveCard();
   const themeWord = useThemeWord();
   const [, setDeck] = usePersistentValue<string>('virex.english.deck', decodeDeck, 'all', encodeDeck);
+  const [view, setView] = useState<View>('themes');
   const [spec, setSpec] = useState('all');
   const [status, setStatus] = useState<StatusFilter>('all');
   const [query, setQuery] = useState('');
@@ -73,13 +80,43 @@ function Words({ data }: { data: EnglishState }) {
     if (mineId) themeWord.mutate({ themeId: mineId, cardId: c.id, on: false });
   };
 
-  const learn = () => {
-    setDeck(spec);
+  const learnSpec = (s: string) => {
+    setDeck(s);
     router.push('/english/cards');
   };
+  const learn = () => learnSpec(spec);
+  const test = (s: string) => router.push(`/english/test?deck=${encodeURIComponent(s)}`);
+  const browse = (s: string) => {
+    setSpec(s);
+    setStatus('all');
+    setView('list');
+  };
+
+  const viewSeg = (
+    <Seg<View>
+      ariaLabel="Вид"
+      className="en-wview"
+      options={[
+        { value: 'themes', label: 'Темы' },
+        { value: 'list', label: 'Все слова' },
+      ]}
+      value={view}
+      onChange={setView}
+    />
+  );
+
+  if (view === 'themes') {
+    return (
+      <div className="en-words">
+        {viewSeg}
+        <ThemeHub data={data} cards={cards} onLearn={learnSpec} onTest={test} onBrowse={browse} />
+      </div>
+    );
+  }
 
   return (
     <div className="en-words">
+      {viewSeg}
       <div className="en-wfilters">
         <Input
           type="search"
@@ -126,6 +163,9 @@ function Words({ data }: { data: EnglishState }) {
         />
         <Button variant="solid" className="en-wlearn" disabled={pool.length === 0} onClick={learn}>
           Учить эти слова
+        </Button>
+        <Button className="en-wlearn" disabled={pool.length === 0} onClick={() => test(spec)}>
+          Тест
         </Button>
       </div>
 

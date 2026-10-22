@@ -11,7 +11,7 @@ export const myCardId = (wordId: string) => `my:${wordId}`;
 /** Сколько дней занятий отдаётся в состоянии — календарь страницы «Сегодня». */
 const DAYS_BACK = 400;
 
-type DayCounter = 'cards' | 'answers' | 'correct' | 'phrases';
+type DayCounter = 'cards' | 'answers' | 'correct' | 'phrases' | 'quiz';
 
 /**
  * Прогресс владельца в учебнике английского (спека
@@ -65,6 +65,7 @@ export class EnglishService {
         answers: d.answers,
         correct: d.correct,
         phrases: d.phrases,
+        quiz: d.quiz,
       })),
       themes: themes.map((t) => ({
         id: t.id,
@@ -169,6 +170,12 @@ export class EnglishService {
   /** Фраза диктанта или произношения — только в счётчик дня. */
   async phrase(day: string) {
     await this.countDay(day, { phrases: 1 });
+    return { ok: true };
+  }
+
+  /** Ответ в тесте по теме слов — только в счётчик дня: тест — тренировка, не учёт. */
+  async quiz(day: string) {
+    await this.countDay(day, { quiz: 1 });
     return { ok: true };
   }
 

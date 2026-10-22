@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { calendar, localDay, shiftDay, streak, type DayRow } from './activity';
 
-const row = (day: string, cards = 1): [string, DayRow] => [day, { day, cards, answers: 0, correct: 0, phrases: 0 }];
+const row = (day: string, cards = 1): [string, DayRow] => [day, { day, cards, answers: 0, correct: 0, phrases: 0, quiz: 0 }];
 
 describe('дни занятий', () => {
   it('местная дата и сдвиг по календарю через границу месяца и года', () => {

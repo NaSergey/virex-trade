@@ -106,7 +106,7 @@ function useStateMutation<V>(request: (v: V) => Promise<unknown>, apply: (s: Eng
 /** Счётчик дня в кэше — тот же, что сервер нарастит по `day` запроса. */
 function bumpDay(s: EnglishState, add: Partial<Omit<DayRow, 'day'>>): EnglishState {
   const day = localDay(Date.now());
-  const prev = s.days.get(day) ?? { day, cards: 0, answers: 0, correct: 0, phrases: 0 };
+  const prev = s.days.get(day) ?? { day, cards: 0, answers: 0, correct: 0, phrases: 0, quiz: 0 };
   const next = { ...prev };
   for (const [k, v] of Object.entries(add) as [keyof Omit<DayRow, 'day'>, number][]) next[k] += v;
   return { ...s, days: new Map(s.days).set(day, next) };
@@ -178,6 +178,14 @@ export function usePhraseDone() {
   return useStateMutation<void>(
     () => apiJson(`${BASE}/phrases`, send('POST', { day: localDay(Date.now()) })),
     (s) => bumpDay(s, { phrases: 1 }),
+  );
+}
+
+/** Ответ в тесте по теме слов — в счётчик дня. */
+export function useQuizDone() {
+  return useStateMutation<void>(
+    () => apiJson(`${BASE}/quiz`, send('POST', { day: localDay(Date.now()) })),
+    (s) => bumpDay(s, { quiz: 1 }),
   );
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DeckCard } from './deck';
 import type { CardState } from './srs';
-import { byStatus, countStatuses, matchQuery } from './words';
+import { byStatus, countStatuses, matchQuery, specTitle } from './words';
 
 const card = (id: string, en: string, ru: string): DeckCard => ({ id, en, ru, source: 'vocab', group: null });
 const state = (known: boolean): CardState => ({ due: 0, interval: 0, ease: 2.5, reps: 1, lapses: 0, firstAt: 0, known });
@@ -25,3 +25,14 @@ describe('словарь', () => {
     expect(byStatus(cards, states, 'all')).toHaveLength(3);
   });
 });
+
+describe('specTitle', () => {
+  it('тема словаря, своя тема, подборки', () => {
+    const themes = [{ id: 't1', title: 'Собеседование', cards: [] }];
+    expect(specTitle('theme:food', themes)).toBe('Еда, кафе, ресторан');
+    expect(specTitle('mine:t1', themes)).toBe('Собеседование');
+    expect(specTitle('book', themes)).toBe('Учебник');
+    expect(specTitle('all', themes)).toBe('Все слова');
+  });
+});
+

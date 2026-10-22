@@ -31,6 +31,7 @@ export function dayTitle(label: string, row: DayRow | undefined): string {
     row.cards ? `${row.cards} ${plural(row.cards, ['карточка', 'карточки', 'карточек'])}` : '',
     row.answers ? `${row.answers} ${plural(row.answers, ['задание', 'задания', 'заданий'])}` : '',
     row.phrases ? `${row.phrases} ${plural(row.phrases, ['фраза', 'фразы', 'фраз'])}` : '',
+    row.quiz ? `${row.quiz} ${plural(row.quiz, ['ответ', 'ответа', 'ответов'])} в тестах` : '',
   ].filter(Boolean);
   return `${label}: ${parts.join(', ')}`;
 }

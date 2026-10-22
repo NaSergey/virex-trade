@@ -3,7 +3,7 @@ import type { Exercise, Section } from '../content/types';
 import type { DayRow } from './activity';
 import { activityLevel, dayTitle, doneLessons, mistakeCount, plural, practiceTarget } from './today';
 
-const day = (p: Partial<DayRow>): DayRow => ({ day: '2026-10-21', cards: 0, answers: 0, correct: 0, phrases: 0, ...p });
+const day = (p: Partial<DayRow>): DayRow => ({ day: '2026-10-21', cards: 0, answers: 0, correct: 0, phrases: 0, quiz: 0, ...p });
 const section = (id: string, kind: Section['kind'] = 'unit'): Section => ({
   id,
   kind,
@@ -40,6 +40,7 @@ describe('сегодня', () => {
       '21 окт: 34 карточки, 12 заданий, 3 фразы',
     );
     expect(dayTitle('21 окт', day({ cards: 1 }))).toBe('21 окт: 1 карточка');
+    expect(dayTitle('21 окт', day({ quiz: 22 }))).toBe('21 окт: 22 ответа в тестах');
     expect(dayTitle('21 окт', undefined)).toBe('21 окт: занятий нет');
   });
 

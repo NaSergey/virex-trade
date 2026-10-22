@@ -12,10 +12,13 @@ const TABS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: '/english', label: 'Сегодня', icon: CalendarCheck },
   { href: '/english/lessons', label: 'Уроки', icon: BookOpen },
   { href: '/english/cards', label: 'Карточки', icon: Layers },
-  { href: '/english/words', label: 'Словарь', icon: Library },
+  { href: '/english/words', label: 'Темы', icon: Library },
   { href: '/english/practice', label: 'Практика', icon: PenLine },
   { href: '/english/speak', label: 'Речь', icon: Mic },
 ];
+
+/** Тест по теме открывается из «Тем» — вкладка горит и на нём. */
+const isTab = (path: string, href: string) => path === href || (href === '/english/words' && path === '/english/test');
 
 /**
  * Учебник английского — раздел владельца на поддомене админки (спека
@@ -39,7 +42,7 @@ export function EnglishLayout({ children }: { children: ReactNode }) {
       </div>
       <nav className="en-tabs" aria-label="Разделы учебника">
         {TABS.map(({ href, label, icon: Icon }) => (
-          <Link key={href} href={href} aria-current={path === href ? 'page' : undefined}>
+          <Link key={href} href={href} aria-current={isTab(path, href) ? 'page' : undefined}>
             <Icon className="en-tab-ic" size={20} aria-hidden />
             <span>{label}</span>
           </Link>

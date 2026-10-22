@@ -77,6 +77,12 @@ export class EnglishController {
     return this.english.phrase(dto.day);
   }
 
+  /** POST /api/admin/english/quiz — ответ в тесте по теме слов (тело — `{ day }`). */
+  @Post('quiz')
+  quiz(@Body() dto: PhraseDto) {
+    return this.english.quiz(dto.day);
+  }
+
   /** POST /api/admin/english/themes — своя тема. */
   @Post('themes')
   addTheme(@Body() dto: ThemeDto) {

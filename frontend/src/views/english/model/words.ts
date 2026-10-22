@@ -1,4 +1,5 @@
-import { statusOf, type DeckCard, type Status } from './deck';
+import { THEMES } from '../content/themes';
+import { statusOf, type DeckCard, type Status, type UserTheme } from './deck';
 import type { CardState } from './srs';
 
 export type StatusFilter = Status | 'all';
@@ -26,4 +27,11 @@ export function byStatus(
   status: StatusFilter,
 ): DeckCard[] {
   return status === 'all' ? [...cards] : cards.filter((c) => statusOf(states.get(c.id)) === status);
+}
+
+/** Название подборки для заголовков: «Еда, кафе, ресторан», своя тема, «Учебник». */
+export function specTitle(spec: string, themes: readonly UserTheme[]): string {
+  if (spec.startsWith('mine:')) return themes.find((t) => t.id === spec.slice(5))?.title ?? 'Своя тема';
+  if (spec.startsWith('theme:')) return THEMES.find((t) => t.id === spec.slice(6))?.title ?? 'Тема';
+  return { my: 'Мои слова', book: 'Учебник', vocab: 'Общий словарь' }[spec] ?? 'Все слова';
 }
