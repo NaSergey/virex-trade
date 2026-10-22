@@ -18,7 +18,7 @@ Friends Starter (SB + WB). Спека — `docs/superpowers/specs/2026-10-21-eng
   раздел — приложение: нижняя панель вкладок, шапка админки скрыта, манифест для главного
   экрана — `frontend/public/assets/english/`.
 - `tools/` — озвучка: `export-texts.ts` выгружает все фразы, `audio.py` озвучивает их
-  нейросетевым голосом Kokoro (Apache-2.0, голос `bf_emma`).
+  нейросетевым голосом Kokoro (Apache-2.0, голос `af_heart` — выбран владельцем по образцам).
 
 ## Озвучка
 
@@ -26,10 +26,13 @@ Friends Starter (SB + WB). Спека — `docs/superpowers/specs/2026-10-21-eng
 всё без записи — лучшим голосом браузера. Записи в git не лежат (десятки МБ):
 
 1. `cd frontend && npx vite-node --config vitest.config.ts src/views/english/tools/export-texts.ts texts.json`
-2. `python -I src/views/english/tools/audio.py texts.json public/assets/english-audio` —
-   озвучивает только новые фразы; модель — каталог kokoro (см. docstring скрипта).
-3. На сервер: `scp`/`rsync` каталога в `/opt/english-audio/`; nginx поддомена отдаёт его как
-   `/assets/english-audio/` (`location` в `/etc/nginx/conf.d/virex-admin.conf`).
+2. `python -I src/views/english/tools/audio.py texts.json public/assets/english-audio/af_heart` —
+   озвучивает только новые фразы; модель — каталог kokoro (см. docstring скрипта). Каталог
+   назван голосом (`VOICE` в `model/audio.ts`): другой голос — другой каталог и `VOICE`.
+3. На сервер: каталог голоса — в `/opt/english-audio/<голос>/` (например,
+   `tar czf - -C public/assets/english-audio/af_heart . | ssh … 'tar xzf - -C /opt/english-audio/af_heart'`);
+   nginx поддомена отдаёт `/opt/english-audio/` как `/assets/english-audio/` (`location` в
+   `/etc/nginx/conf.d/virex-admin.conf`). Без этого шага на проде звучит голос браузера.
 
 ## Точки подключения
 

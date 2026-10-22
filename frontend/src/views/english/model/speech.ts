@@ -6,7 +6,7 @@ import { AUDIO_BASE, audioId } from './audio';
  */
 
 /**
- * Голос — женский (просьба владельца): записи озвучены женским `bf_emma`, и
+ * Голос — женский (просьба владельца): записи озвучены женским `af_heart`, и
  * запасной голос браузера не должен звучать другим человеком. Пол браузер не
  * сообщает — только имя голоса, поэтому известные имена списком. Пол важнее
  * качества: мужской нейросетевой хуже простого женского.
@@ -26,7 +26,7 @@ function genderScore(name: string): number {
  * Голос браузера — запасной, для фраз без записи (свои слова). Лучше всего
  * нейросетевые: «Natural»/«Neural»/«Online» у Edge, «Enhanced»/«Premium» у
  * iPhone, «Google» у Chrome; встроенные голоса Windows звучат роботом. Среди
- * равных — британский, как в учебнике.
+ * равных — американский, как у записей.
  */
 export function pickVoice<V extends { lang: string; name?: string }>(voices: readonly V[]): V | null {
   const score = (v: V) => {
@@ -34,7 +34,7 @@ export function pickVoice<V extends { lang: string; name?: string }>(voices: rea
     if (!lang.startsWith('en')) return -1;
     const name = v.name ?? '';
     const quality = /natural|neural|online|premium|enhanced/i.test(name) ? 10 : /google/i.test(name) ? 6 : 0;
-    return genderScore(name) + quality + (lang === 'en-gb' ? 3 : lang === 'en-us' ? 2 : 1);
+    return genderScore(name) + quality + (lang === 'en-us' ? 3 : lang === 'en-gb' ? 2 : 1);
   };
   let best: V | null = null;
   for (const v of voices) if (score(v) >= 0 && (!best || score(v) > score(best))) best = v;
@@ -50,7 +50,7 @@ function synth(text: string, slow: boolean): void {
   const utterance = new SpeechSynthesisUtterance(text);
   const voice = pickVoice(synth.getVoices());
   if (voice) utterance.voice = voice;
-  utterance.lang = voice?.lang ?? 'en-GB';
+  utterance.lang = voice?.lang ?? 'en-US';
   utterance.rate = slow ? 0.7 : 0.95;
   synth.speak(utterance);
 }

@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { pickVoice } from './speech';
 
 describe('pickVoice', () => {
-  it('британский голос раньше американского и прочих', () => {
-    const voices = [{ lang: 'ru-RU' }, { lang: 'en-US' }, { lang: 'en_GB' }];
-    expect(pickVoice(voices)?.lang).toBe('en_GB');
+  it('американский голос (как у записей) раньше британского и прочих', () => {
+    const voices = [{ lang: 'ru-RU' }, { lang: 'en_GB' }, { lang: 'en_US' }];
+    expect(pickVoice(voices)?.lang).toBe('en_US');
   });
 
   it('нейросетевой и Google — раньше встроенного, даже американский', () => {
@@ -30,8 +30,8 @@ describe('pickVoice', () => {
     ).toContain('Sonia');
   });
 
-  it('нет британского — американский, нет и его — любой английский', () => {
-    expect(pickVoice([{ lang: 'en-AU' }, { lang: 'en-US' }])?.lang).toBe('en-US');
+  it('нет американского — британский, нет и его — любой английский', () => {
+    expect(pickVoice([{ lang: 'en-AU' }, { lang: 'en-GB' }])?.lang).toBe('en-GB');
     expect(pickVoice([{ lang: 'de-DE' }, { lang: 'en-IN' }])?.lang).toBe('en-IN');
     expect(pickVoice([{ lang: 'ru-RU' }])).toBeNull();
   });

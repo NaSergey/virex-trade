@@ -3,8 +3,12 @@
  * (Kokoro, `tools/audio.py`) и лежат файлами `<id>.mp3`. Имя файла — хэш
  * текста, его считает и выгрузка фраз для озвучки (`tools/export-texts.ts`), и
  * плеер: второй таблицы «текст → файл» нет.
+ *
+ * Каталог — имя голоса: смена голоса меняет адрес, и браузер не играет старые
+ * записи из кэша. Голос выбран владельцем по образцам (`bf_emma` забракован).
  */
-export const AUDIO_BASE = '/assets/english-audio';
+export const VOICE = 'af_heart';
+export const AUDIO_BASE = `/assets/english-audio/${VOICE}`;
 
 /** cyrb53 — быстрый 53-битный хэш строки; коллизий на десятках тысяч фраз нет. */
 function cyrb53(text: string): number {
