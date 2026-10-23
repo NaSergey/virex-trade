@@ -6,7 +6,6 @@ import { Button } from '@/shared/ui/Button';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { PageHead } from '@/shared/ui/PageHead';
-import { Seg } from '@/shared/ui/Seg';
 import { SkeletonLines } from '@/shared/ui/Skeleton';
 import { cn } from '@/shared/lib/utils/css';
 import {
@@ -24,7 +23,11 @@ import {
 import { BlockForm, type BlockValue, type Scope } from './components/BlockForm';
 import { WEEKDAYS, daysLabel, duration, endLabel, hhmm, weekdayOf } from './model/time';
 
-const ALL = -1;
+const blocksWord = (n: number) => {
+  const d = n % 10;
+  const h = n % 100;
+  return d === 1 && h !== 11 ? 'блок' : d >= 2 && d <= 4 && (h < 12 || h > 14) ? 'блока' : 'блоков';
+};
 const FULL = ['понедельник', 'вторник', 'среду', 'четверг', 'пятницу', 'субботу', 'воскресенье'];
 
 /**
@@ -60,21 +63,14 @@ export function TemplatePage() {
     <>
       {head}
       <WeekGrid blocks={template.data} categories={state.data.categories} selected={wd} onSelect={setWeekday} />
-      <Seg
-        className="pl-week"
-        ariaLabel="День недели"
-        value={wd}
-        onChange={setWeekday}
-        options={[...WEEKDAYS.map((d, i) => ({ value: i, label: d })), { value: ALL, label: 'Все' }]}
-      />
       <DayEditor key={wd} weekday={wd} blocks={template.data} categories={state.data.categories} />
     </>
   );
 }
 
 /**
- * Неделя одним взглядом — семь колонок блоков (только с мышью и на широком
- * экране; на телефоне — вкладки дней). Колонка открывает свой день.
+ * Неделя одним взглядом и единственный выбор дня: колонка открывает свой день.
+ * На узком экране от колонки остаются день и часы — строка из семи кнопок.
  */
 function WeekGrid({
   blocks,
@@ -102,7 +98,10 @@ function WeekGrid({
             onClick={() => onSelect(i)}
           >
             <span className="pl-grid-head">
-              {d} <span className="muted">{tracked ? duration(tracked) : '—'}</span>
+              {d}{' '}
+              <span className="muted pl-grid-sum" title={tracked ? `отслеживается ${duration(tracked)}` : undefined}>
+                {tracked ? `${(Math.round(tracked / 6) / 10).toLocaleString('ru')} ч` : '—'}
+              </span>
             </span>
             {day.map((b) => (
               <span key={b.id} className={cn('pl-grid-row', !b.track && 'muted')}>
@@ -127,10 +126,9 @@ function DayEditor({ weekday, blocks: all, categories }: { weekday: number; bloc
   const [copyTo, setCopyTo] = useState<number | null>(null);
   const [clearing, setClearing] = useState(false);
 
-  const isAll = weekday === ALL;
-  const bit = isAll ? 0 : 1 << weekday;
+  const bit = 1 << weekday;
   const cats = new Map(categories.map((c) => [c.id, c]));
-  const blocks = all.filter((b) => isAll || b.days & bit);
+  const blocks = all.filter((b) => b.days & bit);
   const tracked = blocks.filter((b) => b.track).reduce((s, b) => s + b.endMin - b.startMin, 0);
   const busy = save.isPending || split.isPending || remove.isPending || del.isPending;
   const error = save.error ?? split.error ?? remove.error ?? del.error;
@@ -138,7 +136,7 @@ function DayEditor({ weekday, blocks: all, categories }: { weekday: number; bloc
 
   const submit = (b: Block | undefined, v: BlockValue, scope: Scope) => {
     // Общий блок, правка «только этот день» — делится на этот день и остальные.
-    if (b && !isAll && b.days !== bit && scope === 'day') {
+    if (b && b.days !== bit && scope === 'day') {
       // Дни не едут: сервер ставит копии ровно открытый день (лишнее поле — 400).
       const { title, category, startMin, endMin, track, tasks } = v;
       split.mutate({ id: b.id, weekday, block: { title, category, startMin, endMin, track, tasks } }, done);
@@ -148,10 +146,10 @@ function DayEditor({ weekday, blocks: all, categories }: { weekday: number; bloc
   };
 
   const formOf = (b?: Block) => {
-    const shared = b && !isAll && b.days !== bit;
+    const shared = b && b.days !== bit;
     return (
       <BlockForm
-        initial={b ?? (isAll ? undefined : { days: bit })}
+        initial={b ?? { days: bit }}
         categories={categories}
         withDays
         scopeDay={shared ? WEEKDAYS[weekday].toLowerCase() : undefined}
@@ -170,36 +168,34 @@ function DayEditor({ weekday, blocks: all, categories }: { weekday: number; bloc
 
   return (
     <>
-      {!isAll && (
-        <div className="pl-daytools">
-          <span className="muted">
-            {blocks.length ? `${blocks.length} блоков · отслеживается ${duration(tracked)}` : 'Блоков нет'}
-          </span>
-          <span className="pl-grow" />
-          {blocks.length > 0 && copyTo == null && (
-            <Button variant="bare" tight onClick={() => setCopyTo(0)}>
-              Скопировать на…
-            </Button>
-          )}
-          {blocks.length > 0 &&
-            (clearing ? (
-              <>
-                <Button variant="risk" disabled={clear.isPending} onClick={() => clear.mutate(weekday, { onSuccess: () => setClearing(false) })}>
-                  Очистить {WEEKDAYS[weekday].toLowerCase()}
-                </Button>
-                <Button variant="bare" tight onClick={() => setClearing(false)}>
-                  Отмена
-                </Button>
-              </>
-            ) : (
-              <Button variant="bare" tight onClick={() => setClearing(true)}>
-                Очистить день
+      <div className="pl-daytools">
+        <span className="muted">
+          {blocks.length ? `${blocks.length} ${blocksWord(blocks.length)} · отслеживается ${duration(tracked)}` : 'Блоков нет'}
+        </span>
+        <span className="pl-grow" />
+        {blocks.length > 0 && copyTo == null && (
+          <Button variant="bare" tight onClick={() => setCopyTo(0)}>
+            Скопировать на…
+          </Button>
+        )}
+        {blocks.length > 0 &&
+          (clearing ? (
+            <>
+              <Button variant="risk" disabled={clear.isPending} onClick={() => clear.mutate(weekday, { onSuccess: () => setClearing(false) })}>
+                Очистить {WEEKDAYS[weekday].toLowerCase()}
               </Button>
-            ))}
-        </div>
-      )}
+              <Button variant="bare" tight onClick={() => setClearing(false)}>
+                Отмена
+              </Button>
+            </>
+          ) : (
+            <Button variant="bare" tight onClick={() => setClearing(true)}>
+              Очистить день
+            </Button>
+          ))}
+      </div>
 
-      {!isAll && copyTo != null && (
+      {copyTo != null && (
         <div className="pl-copy">
           <p className="pl-note">
             План на {FULL[weekday]} заменит план выбранных дней. Общие блоки останутся общими — правка потом
@@ -239,7 +235,7 @@ function DayEditor({ weekday, blocks: all, categories }: { weekday: number; bloc
       <ErrorNote error={clear.error} fallback="Не удалось очистить день" />
 
       {blocks.length === 0 && editing !== 'new' ? (
-        <EmptyState title={isAll ? 'Шаблон пуст' : `На ${FULL[weekday]} блоков нет`}>
+        <EmptyState title={`На ${FULL[weekday]} блоков нет`}>
           Добавьте блоки: время, что делаю, пункты — или скопируйте сюда другой день. Напоминание придёт в
           Telegram в начале каждого отслеживаемого блока.
         </EmptyState>
@@ -288,7 +284,7 @@ function DayEditor({ weekday, blocks: all, categories }: { weekday: number; bloc
       ) : (
         <div className="pl-foot">
           <Button onClick={() => setEditing('new')}>
-            + Блок{isAll ? '' : ` на ${WEEKDAYS[weekday].toLowerCase()}`}
+            + Блок на {WEEKDAYS[weekday].toLowerCase()}
           </Button>
         </div>
       )}
