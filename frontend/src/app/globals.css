@@ -5693,6 +5693,7 @@
     padding: 6px 0 4px;
     border-top: 2px solid transparent;
     color: var(--ink-3);
+    font-family: var(--font-mono);
     font-size: 10px;
     text-decoration: none;
     -webkit-tap-highlight-color: transparent;
