@@ -1,6 +1,7 @@
 import type { Trade } from '@/entities/trade';
 import type { TagItem } from '@/entities/tag';
 import {
+  DEFAULT_SYMBOL,
   EXCHANGE_DRAWINGS,
   type BacktestCloseOrder,
   type BacktestEntryOrder,
@@ -162,6 +163,9 @@ export function toDetail(
       hideDate: false,
       hidePrice: false,
       priceScale: 1,
+      // Монета сессии — только у истории; у счёта монеты у позиций.
+      symbol: DEFAULT_SYMBOL,
+      hideSymbol: false,
       // Живой рынок: время идёт само, исполняет не браузер — как эфир.
       dataSource: 'live',
       status: 'active',

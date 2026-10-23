@@ -5,6 +5,7 @@ import {
   averageIn,
   checkEntrySide,
   checkLevels,
+  closeImpact,
   curvedSliderPos,
   curvedSliderValue,
   draftTakeFits,
@@ -17,7 +18,9 @@ import {
   levelSliderRange,
   liquidationPrice,
   openPnl,
+  parsePriceInput,
   previewSize,
+  roundLevel,
   riskAmount,
   signedPctFromStop,
   stopFromSignedPct,
@@ -474,5 +477,52 @@ describe('openPnl', () => {
   it('цены нет — число биржи из снимка счёта; нет и его — пусто', () => {
     expect(openPnl({ ...trade, unrealisedPnl: 42.3 }, null)).toBe(42.3);
     expect(openPnl({ ...trade, unrealisedPnl: null }, null)).toBeNull();
+  });
+});
+
+describe('поле цены уровня', () => {
+  it('toInputPrice не роняет страницу на нуле и мусоре — пустая строка', () => {
+    expect(toInputPrice(0)).toBe('');
+    expect(toInputPrice(-5)).toBe('');
+    expect(toInputPrice(Number.NaN)).toBe('');
+  });
+
+  it('parsePriceInput: положительное число из текста, запятая как точка', () => {
+    expect(parsePriceInput('112071.19')).toBe(112071.19);
+    expect(parsePriceInput(' 0,5 ')).toBe(0.5);
+    expect(parsePriceInput('1')).toBe(1);
+  });
+
+  it('parsePriceInput: пустое, ноль, точка и мусор — не число', () => {
+    for (const raw of ['', ' ', '0', '.', '-3', 'abc', '1.2.3']) expect(parsePriceInput(raw)).toBeNull();
+  });
+});
+
+describe('closeImpact — итог закрытия части позиции', () => {
+  it('от входа сделки, а не от текущей цены, с комиссиями', () => {
+    const r = closeImpact({ direction: 'long', entryPrice: 100 }, 1, 105, 50);
+    expect(r.usdt).toBeCloseTo(5 * 50 - (100 + 105) * 50 * 0.00055, 9);
+  });
+
+  it('скрытая цена: экранный уровень переводится в настоящий', () => {
+    // масштаб 2: экранные 210 — настоящие 105
+    const r = closeImpact({ direction: 'long', entryPrice: 100 }, 2, 210, 50);
+    expect(r.usdt).toBeCloseTo(5 * 50 - (100 + 105) * 50 * 0.00055, 9);
+  });
+
+  it('шорт в минусе — отрицательный итог', () => {
+    const r = closeImpact({ direction: 'short', entryPrice: 100 }, 1, 104, 10);
+    expect(r.usdt).toBeLessThan(-40);
+  });
+});
+
+describe('roundLevel — цена отпущенного уровня', () => {
+  it('до знаков монеты, если они известны', () => {
+    expect(roundLevel(43289.95283968977, 2)).toBe(43289.95);
+    expect(roundLevel(0.512345678, 4)).toBe(0.5123);
+  });
+
+  it('без знаков — шесть значащих, как у ползунков', () => {
+    expect(roundLevel(43289.95283968977)).toBe(43290);
   });
 });

@@ -1026,8 +1026,11 @@
      грида). margin-left: auto — без justify-content: space-between у
      .replay-controls, который раздвинул бы и левые кнопки между собой. */
   .replay-controls .view-switch { margin-left: auto; }
-  /* Копия переключателя над таблицей — только на телефоне. */
-  .view-switch-m { display: none; }
+  /* Копия переключателя над таблицей — только на телефоне. Два класса, а не
+     один: `.seg { display: flex }` ниже в том же слое и с той же
+     специфичностью перебивал одиночный класс, и на десктопе стояли два
+     переключателя. Правило телефона — вне слоёв и потому сильнее этого. */
+  .seg.view-switch-m { display: none; }
   .replay-chart-wrap { position: relative; flex: 1; min-height: 0; }
   /* Меню правой кнопки по графику: одна строка «Копировать цену». */
   .chart-menu { position: absolute; z-index: 5; min-width: 160px; background: var(--color-background); border: 1px solid var(--hair); padding: 2px; }

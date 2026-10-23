@@ -128,6 +128,7 @@ export function TradesTable({
   renderExpanded,
   priceDecimals,
   onSymbol,
+  showSymbol = true,
 }: {
   trades: Trade[];
   isLoading?: boolean;
@@ -188,6 +189,8 @@ export function TradesTable({
   priceDecimals?: (trade: Trade) => number | undefined;
   /** Нажатие на символ монеты — открыть её на графике (терминал); не задано — символ просто текст. */
   onSymbol?: (symbol: string) => void;
+  /** Колонка монеты; снимается у истории бектеста со случайной монетой — она скрыта до итога. */
+  showSymbol?: boolean;
 }) {
   const t = useTranslations('tradesTable');
   const { locale } = useLocaleControl();
@@ -271,7 +274,7 @@ export function TradesTable({
       // как у ордеров раскрытой записи.
       render: (tr) => (
         <span title={t('qtyTitle', { qty: formatQty(tr.qty) })}>
-          {formatPriceGrouped(tr.qty * tr.avgEntryPrice)}
+          {formatPriceGrouped(tr.notional ?? tr.qty * tr.avgEntryPrice)}
           {/* ×3 — позиция закрывалась тремя ордерами: размер сложен из частей. */}
           {tr.parts > 1 && <span className="lbl"> ×{tr.parts}</span>}
         </span>
@@ -319,7 +322,8 @@ export function TradesTable({
   ];
 
   const shown = columns.filter(
-    (c) => !(compact && ROOMY_ONLY.has(c.key)) && !(c.key === 'tags' && !showTags),
+    (c) =>
+      !(compact && ROOMY_ONLY.has(c.key)) && !(c.key === 'tags' && !showTags) && !(c.key === 'symbol' && !showSymbol),
   );
 
   return (

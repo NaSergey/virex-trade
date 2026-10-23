@@ -8,7 +8,8 @@ import { Field, Input } from '@/shared/ui/Field';
 import { Slider } from '@/shared/ui/Slider';
 import { formatMoney, formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
 import type { PositionLike } from '../api/types';
-import { fromScreen, levelImpact, toInputPrice, toScreen } from '../lib/money';
+import { closeImpact, fromScreen, toScreen } from '../lib/money';
+import { PriceInput } from './PriceInput';
 
 const clampPct = (v: number) => Math.max(0, Math.min(100, v));
 
@@ -27,6 +28,7 @@ export function LimitCloseModal({
   isPending,
   error,
   decimals,
+  showSymbol = true,
 }: {
   trade: PositionLike;
   /** Остаток открытой позиции в монете (qty - closedQty). */
@@ -39,25 +41,27 @@ export function LimitCloseModal({
   error: unknown;
   /** Знаков цены монеты сделки; не задано — общее правило формата. */
   decimals?: number;
+  /** Монета в подзаголовке; снимается у истории со случайной монетой — она скрыта до итога. */
+  showSymbol?: boolean;
 }) {
   const t = useTranslations('backtest');
   const { closing, close } = useDialogFade(onClose);
   const [price, setPrice] = useState(screenPrice);
   const [pct, setPct] = useState(100);
   const qty = (remaining * pct) / 100;
-  const impact = levelImpact(trade.direction, screenPrice, price, qty);
+  const impact = closeImpact(trade, scale, price, qty);
 
   return (
     <Dialog open={!closing} onOpenChange={(v) => !v && close()}>
       <DialogContent>
         <DialogHeader
           title={t('limitCloseTitle')}
-          subtitle={`${trade.symbol} · ${t('entry')} ${formatPriceGrouped(toScreen(trade.entryPrice, scale), decimals)} · ${t('unrealized')} ${formatPriceGrouped(screenPrice, decimals)}`}
+          subtitle={`${showSymbol ? `${trade.symbol} · ` : ''}${t('entry')} ${formatPriceGrouped(toScreen(trade.entryPrice, scale), decimals)} · ${t('unrealized')} ${formatPriceGrouped(screenPrice, decimals)}`}
         />
         <DialogBody>
           <Field label={t('closingPrice')}>
             {(id) => (
-              <Input id={id} full inputMode="decimal" value={toInputPrice(price)} onChange={(e) => setPrice(Number(e.target.value))} />
+              <PriceInput id={id} full value={price} onChange={setPrice} />
             )}
           </Field>
           <Field label={t('closedQtyCoin')}>

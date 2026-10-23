@@ -21,11 +21,13 @@ export {
   useBacktestStats,
   useCreateSession,
   useDeleteSession,
+  useLiveSymbols,
 } from './api/hooks';
 export { readLiveSymbol } from './model/useLiveSymbol';
 export { prefetchLiveFeed } from './model/useLiveFeed';
 export {
   DEFAULT_SYMBOL,
+  coinBase,
   type BacktestCloseOrder,
   type BacktestEntryOrder,
   type BacktestTrade,

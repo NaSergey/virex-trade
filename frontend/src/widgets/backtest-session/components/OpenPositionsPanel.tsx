@@ -59,6 +59,7 @@ export function OpenPositionsPanel({
   onCloseGrid,
   onTags,
   onSymbol,
+  showSymbol,
 }: {
   trades: BacktestTrade[];
   scale: number;
@@ -80,6 +81,8 @@ export function OpenPositionsPanel({
   onTags?: (trade: BacktestTrade) => void;
   /** Нажатие на символ монеты — открыть её на графике (терминал); не задано — символ просто текст. */
   onSymbol?: (symbol: string) => void;
+  /** Колонка монеты; снимается у истории со случайной монетой — она скрыта до итога. */
+  showSymbol?: boolean;
 }) {
   const t = useTranslations('backtest');
   const { locale } = useLocaleControl();
@@ -109,7 +112,8 @@ export function OpenPositionsPanel({
       size: String(remaining),
       avgPrice: String(entry),
       markPrice: mark != null ? String(toScreen(mark, scale)) : undefined,
-      positionValue: String(remaining * entry),
+      // Объём — в настоящих USDT: при скрытой цене `entry` в масштабе показа.
+      positionValue: String(remaining * trade.entryPrice),
       unrealisedPnl: pnl != null ? String(pnl) : undefined,
       leverage: String(trade.leverage),
       liqPrice: liq != null ? String(toScreen(liq, scale)) : undefined,
@@ -177,6 +181,7 @@ export function OpenPositionsPanel({
       extraColumns={actions}
       priceDecimals={decimalsOf && ((p) => decimalsOf(p.symbol))}
       onSymbol={onSymbol}
+      showSymbol={showSymbol}
       flush
     />
   );

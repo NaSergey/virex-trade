@@ -8,7 +8,7 @@ import { Field, Input } from '@/shared/ui/Field';
 import { Slider } from '@/shared/ui/Slider';
 import { formatMoney, formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
 import type { PositionLike } from '../api/types';
-import { levelImpact } from '../lib/money';
+import { closeImpact } from '../lib/money';
 
 const clampPct = (v: number) => Math.max(0, Math.min(100, v));
 
@@ -16,6 +16,7 @@ const clampPct = (v: number) => Math.max(0, Math.min(100, v));
 export function MarketCloseModal({
   trade,
   remaining,
+  scale,
   screenPrice,
   canClose,
   onSubmit,
@@ -23,9 +24,12 @@ export function MarketCloseModal({
   isPending,
   error,
   decimals,
+  showSymbol = true,
 }: {
   trade: PositionLike;
   remaining: number;
+  /** Масштаб показа цены: итог считается в настоящих ценах. */
+  scale: number;
   screenPrice: number;
   /** Как и раньше у «Закрыть по рынку» в OrderPanel: сделку нельзя закрыть в тот же
    * момент, когда она открыта (совпадает с проверкой `timeInvalid` на сервере) —
@@ -37,19 +41,20 @@ export function MarketCloseModal({
   error: unknown;
   /** Знаков цены монеты сделки; не задано — общее правило формата. */
   decimals?: number;
+  /** Монета в подзаголовке; снимается у истории со случайной монетой — она скрыта до итога. */
+  showSymbol?: boolean;
 }) {
   const t = useTranslations('backtest');
   const { closing, close } = useDialogFade(onClose);
   const [pct, setPct] = useState(100);
   const qty = (remaining * pct) / 100;
-  // Цена не меняется (закрытие сейчас) — levelImpact на равной цене даёт
-  // только комиссии, этого достаточно для предпросмотра объёма.
-  const impact = levelImpact(trade.direction, screenPrice, screenPrice, qty);
+  // Итог закрытия сейчас — от входа позиции по текущей цене, с комиссиями.
+  const impact = closeImpact(trade, scale, screenPrice, qty);
 
   return (
     <Dialog open={!closing} onOpenChange={(v) => !v && close()}>
       <DialogContent>
-        <DialogHeader title={t('marketCloseTitle')} subtitle={`${trade.symbol} · ${t('unrealized')} ${formatPriceGrouped(screenPrice, decimals)}`} />
+        <DialogHeader title={t('marketCloseTitle')} subtitle={`${showSymbol ? `${trade.symbol} · ` : ''}${t('unrealized')} ${formatPriceGrouped(screenPrice, decimals)}`} />
         <DialogBody>
           <Field label={t('closedQtyCoin')}>
             {(id) => (
@@ -67,6 +72,8 @@ export function MarketCloseModal({
           </Field>
           <Slider value={pct} min={0} max={100} step={1} onChange={(v) => setPct(clampPct(v))} aria-label={t('closedQtyCoin')} />
           <p className="muted">{t('marketCloseHint', { qty: formatQty(qty), pnl: formatMoney(impact.usdt) })}</p>
+          {/* Кнопка выключена — окно говорит почему, а не молчит (QA 2026-10-23). */}
+          {!canClose && <p className="muted">{t('marketCloseTooSoon')}</p>}
           <ErrorNote error={error} fallback={t('actionFailed')} />
         </DialogBody>
         <DialogActions

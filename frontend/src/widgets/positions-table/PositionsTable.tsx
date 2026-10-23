@@ -34,6 +34,7 @@ export function PositionsTable({
   flush,
   priceDecimals,
   onSymbol,
+  showSymbol = true,
   isLoading,
   skeletonRows,
 }: {
@@ -64,6 +65,8 @@ export function PositionsTable({
   priceDecimals?: (p: ExchangePosition) => number | undefined;
   /** Нажатие на символ монеты — открыть её на графике (терминал); не задано — символ просто текст. */
   onSymbol?: (symbol: string) => void;
+  /** Колонка монеты; снимается у истории бектеста со случайной монетой — она скрыта до итога. */
+  showSymbol?: boolean;
   /**
    * Позиции ещё едут — заглушки строк той же таблицы (профиль игрока). На
    * обзоре и в бектесте таблица рисуется уже с данными, и пропа там нет.
@@ -123,7 +126,7 @@ export function PositionsTable({
         </SectionHead>
       )}
       <LedgerTable
-        columns={columns}
+        columns={showSymbol ? columns : columns.filter((c) => c.key !== 'symbol')}
         rows={positions}
         rowKey={(p) => `${p.symbol}-${p.direction}`}
         isLoading={isLoading}

@@ -12,7 +12,8 @@ import { Slider } from '@/shared/ui/Slider';
 import { fmtPctSigned, formatMoney, formatPriceGrouped, formatQty, moneyClass } from '@/shared/lib/utils/format';
 import type { BacktestTrade } from '../api/types';
 import { checkCloseGridSide, closeGridAnchor, closeGridFromDraft, type CloseGridDraft, type CloseGridRow } from '../lib/close-grid';
-import { levelSliderRange, toInputPrice, toScreen } from '../lib/money';
+import { levelSliderRange, toScreen } from '../lib/money';
+import { PriceInput } from './PriceInput';
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
@@ -171,7 +172,7 @@ export function CloseGridPanel({
             onChange={set}
             aria-label={label}
           />
-          <Input id={id} full inputMode="decimal" value={toInputPrice(value)} onChange={(e) => set(Number(e.target.value))} />
+          <PriceInput id={id} full value={value} onChange={set} />
         </>
       )}
     </Field>

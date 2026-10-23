@@ -9,6 +9,12 @@ export interface Trade {
   direction: 'long' | 'short';
   qty: number;
   avgEntryPrice: number;
+  /**
+   * Объём в USDT, если цены строки показаны не настоящими (бектест со скрытой
+   * ценой): `qty × avgEntryPrice` тогда дал бы объём в масштабе показа. Не задан —
+   * считается из цены.
+   */
+  notional?: number;
   avgExitPrice: number;
   closedPnl: number;
   openFee: number;

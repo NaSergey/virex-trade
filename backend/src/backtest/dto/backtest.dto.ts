@@ -13,7 +13,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import { LIVE_SYMBOL_IDS } from '../../market-data/symbols';
+import { HISTORY_SYMBOL_IDS, LIVE_SYMBOL_IDS } from '../../market-data/symbols';
 import type { Direction, ExitReason } from '../backtest-math';
 
 /** Больше тридцати ордеров одной сеткой панель и не ставит. */
@@ -35,6 +35,11 @@ export class CreateSessionDto {
   @IsOptional()
   @IsIn(['real', 'synthetic', 'live'])
   dataSource?: 'real' | 'synthetic' | 'live';
+
+  /** Монета истории: 'random' — выберет сервер и скроет. Не задана — BTC. Только у истории. */
+  @IsOptional()
+  @IsIn([...HISTORY_SYMBOL_IDS, 'random'])
+  symbol?: string;
 }
 
 export class AdvanceDto {
@@ -43,7 +48,7 @@ export class AdvanceDto {
 }
 
 export class OpenTradeDto {
-  /** Монета сделки; не задана — BTC. Не-BTC принимает только эфир. */
+  /** Монета сделки; не задана — монета сессии (в эфире — BTC). Чужую сессии истории сервис отклонит. */
   @IsOptional()
   @IsIn(LIVE_SYMBOL_IDS)
   symbol?: string;
@@ -113,7 +118,7 @@ export class AddToTradeDto {
 }
 
 export class SetLeverageDto {
-  /** Плечо задаётся на монету, как на бирже; не задана — BTC. */
+  /** Плечо задаётся на монету, как на бирже; не задана — монета сессии (в эфире — BTC). */
   @IsOptional()
   @IsIn(LIVE_SYMBOL_IDS)
   symbol?: string;
@@ -186,7 +191,7 @@ export class CloseTradeDto {
 }
 
 export class CreateEntryOrdersDto {
-  /** Монета сетки; не задана — BTC. */
+  /** Монета сетки; не задана — монета сессии (в эфире — BTC). */
   @IsOptional()
   @IsIn(LIVE_SYMBOL_IDS)
   symbol?: string;
@@ -246,7 +251,7 @@ export class SetBacktestTagsDto {
 
 /** Запуск грид-бота (спека 2026-10-09-range-indicator-and-grid-bot-design.md). */
 export class StartBotDto {
-  /** Монета; не задана — BTC. */
+  /** Монета; не задана — монета сессии (в эфире — BTC). */
   @IsOptional()
   @IsIn(LIVE_SYMBOL_IDS)
   symbol?: string;
