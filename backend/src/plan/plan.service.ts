@@ -11,6 +11,7 @@ import type {
   ItemDto,
   ItemPatchDto,
   SettingsDto,
+  SplitDto,
 } from './dto/plan.dto';
 import {
   addDays,
@@ -113,6 +114,92 @@ export class PlanService {
 
   async deleteBlock(id: string) {
     await this.prisma.planBlock.deleteMany({ where: { id } });
+    await this.dropFutureDays();
+    return { success: true };
+  }
+
+  /**
+   * Правка блока только для одного дня недели: у блока этот день снимается
+   * (не осталось дней — блок удаляется), а на этот день встаёт копия с
+   * правкой. Одной транзакцией — иначе сбой посередине оставил бы день без
+   * блока или с двумя.
+   */
+  async splitBlock(id: string, weekday: number, dto: SplitDto) {
+    checkSpan(dto.startMin, dto.endMin);
+    const bit = 1 << weekday;
+    const block = await this.prisma.planBlock.findUnique({ where: { id } });
+    if (!block || !(block.days & bit))
+      throw new NotFoundException('Блок не найден в этом дне');
+    const rest = block.days & ~bit;
+    const [, created] = await this.prisma.$transaction([
+      rest === 0
+        ? this.prisma.planBlock.delete({ where: { id } })
+        : this.prisma.planBlock.update({ where: { id }, data: { days: rest } }),
+      this.prisma.planBlock.create({ data: blockData({ ...dto, days: bit }) }),
+    ]);
+    await this.dropFutureDays();
+    return created;
+  }
+
+  /** Убрать блок из одного дня недели; последний день — блок удаляется. */
+  async removeFromDay(id: string, weekday: number) {
+    const block = await this.prisma.planBlock.findUnique({ where: { id } });
+    if (!block) return { success: true };
+    const rest = block.days & ~(1 << weekday);
+    if (rest === 0) await this.prisma.planBlock.delete({ where: { id } });
+    else
+      await this.prisma.planBlock.update({
+        where: { id },
+        data: { days: rest },
+      });
+    await this.dropFutureDays();
+    return { success: true };
+  }
+
+  /**
+   * День `from` становится планом дней `to`: у всех блоков дни `to` снимаются,
+   * блокам дня `from` — ставятся. Битовая маска дней делает это без копий:
+   * общий блок остаётся одним блоком и правится потом во всех днях сразу.
+   */
+  async copyDay(from: number, to: number) {
+    const fromBit = 1 << from;
+    const target = to & ~fromBit;
+    if (target === 0) return { success: true };
+    const blocks = await this.prisma.planBlock.findMany();
+    await this.prisma.$transaction(
+      blocks.flatMap((b) => {
+        const days = b.days & fromBit ? b.days | target : b.days & ~target;
+        if (days === b.days) return [];
+        return days === 0
+          ? [this.prisma.planBlock.delete({ where: { id: b.id } })]
+          : [
+              this.prisma.planBlock.update({
+                where: { id: b.id },
+                data: { days },
+              }),
+            ];
+      }),
+    );
+    await this.dropFutureDays();
+    return { success: true };
+  }
+
+  /** Очистить день недели: блок только этого дня удаляется, у общих день снимается. */
+  async clearDay(weekday: number) {
+    const bit = 1 << weekday;
+    const blocks = await this.prisma.planBlock.findMany({ where: {} });
+    await this.prisma.$transaction(
+      blocks
+        .filter((b) => b.days & bit)
+        .map((b) =>
+          b.days === bit
+            ? this.prisma.planBlock.delete({ where: { id: b.id } })
+            : this.prisma.planBlock.update({
+                where: { id: b.id },
+                data: { days: b.days & ~bit },
+              }),
+        ),
+    );
     await this.dropFutureDays();
     return { success: true };
   }

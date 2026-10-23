@@ -224,3 +224,28 @@ export function useSaveSettings() {
 export function useTestMessage() {
   return useMutation({ mutationFn: () => apiJson(`${BASE}/test`, send('POST')) });
 }
+
+/** Правка блока только для одного дня недели (0 — пн): блок делится на «этот день» и остальные. */
+export function useSplitBlock() {
+  return usePlanMutation(({ id, weekday, block }: { id: string; weekday: number; block: Omit<Block, 'id' | 'days'> }) =>
+    apiJson(`${BASE}/template/${id}/split`, send('POST', { ...block, weekday })),
+  );
+}
+
+/** Убрать блок из одного дня недели; последний день — блок удаляется. */
+export function useRemoveFromDay() {
+  return usePlanMutation(({ id, weekday }: { id: string; weekday: number }) =>
+    apiJson(`${BASE}/template/${id}/days/${weekday}`, send('DELETE')),
+  );
+}
+
+/** План дня `from` — на дни `to` (битами), прежние блоки этих дней снимаются. */
+export function useCopyDay() {
+  return usePlanMutation(({ from, to }: { from: number; to: number }) =>
+    apiJson(`${BASE}/template/copy-day`, send('POST', { from, to })),
+  );
+}
+
+export function useClearDay() {
+  return usePlanMutation((weekday: number) => apiJson(`${BASE}/template/days/${weekday}`, send('DELETE')));
+}

@@ -16,11 +16,25 @@ import { AdminGuard } from '../admin/guards/admin.guard';
 import { TelegramService } from '../telegram/telegram.service';
 import { PlanService } from './plan.service';
 import { PlanBotService } from './plan-bot.service';
-import { BlockDto, ItemDto, ItemPatchDto, SettingsDto } from './dto/plan.dto';
+import {
+  BlockDto,
+  CopyDayDto,
+  ItemDto,
+  ItemPatchDto,
+  SettingsDto,
+  SplitDto,
+} from './dto/plan.dto';
 
 function idParam(value: string): string {
   if (!value || value.length > 40) throw new BadRequestException('Bad id');
   return value;
+}
+
+function weekdayParam(value: string): number {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 0 || n > 6)
+    throw new BadRequestException('Bad weekday');
+  return n;
 }
 
 /**
@@ -80,6 +94,31 @@ export class PlanController {
   @Delete('template/:id')
   deleteBlock(@Param('id') id: string) {
     return this.plan.deleteBlock(idParam(id));
+  }
+
+  /** POST /api/admin/plan/template/<id>/split — правка только для одного дня недели. */
+  @Post('template/:id/split')
+  splitBlock(@Param('id') id: string, @Body() dto: SplitDto) {
+    const { weekday, ...fields } = dto;
+    return this.plan.splitBlock(idParam(id), weekday, { ...fields, weekday });
+  }
+
+  /** DELETE /api/admin/plan/template/<id>/days/<0…6> — убрать блок из одного дня недели. */
+  @Delete('template/:id/days/:weekday')
+  removeFromDay(@Param('id') id: string, @Param('weekday') weekday: string) {
+    return this.plan.removeFromDay(idParam(id), weekdayParam(weekday));
+  }
+
+  /** POST /api/admin/plan/template/copy-day — план дня `from` на дни `to`. */
+  @Post('template/copy-day')
+  copyDay(@Body() dto: CopyDayDto) {
+    return this.plan.copyDay(dto.from, dto.to);
+  }
+
+  /** DELETE /api/admin/plan/template/days/<0…6> — очистить день недели. */
+  @Delete('template/days/:weekday')
+  clearDay(@Param('weekday') weekday: string) {
+    return this.plan.clearDay(weekdayParam(weekday));
   }
 
   /** GET /api/admin/plan/days/<YYYY-MM-DD> — блоки дня (сегодня и дальше — из шаблона при первом открытии). */

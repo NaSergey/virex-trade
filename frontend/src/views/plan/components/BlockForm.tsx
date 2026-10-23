@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Button } from '@/shared/ui/Button';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { Field, Input, Select } from '@/shared/ui/Field';
+import { Seg } from '@/shared/ui/Seg';
 import type { BlockFields, Category } from '../api/hooks';
 import { EVERY_DAY_MASK, WEEKDAYS, WEEKDAYS_MASK, WEEKEND_MASK, endLabel, hhmm, parseHHMM } from '../model/time';
 
@@ -11,6 +12,9 @@ export interface BlockValue extends BlockFields {
   tasks: string[];
   days: number;
 }
+
+/** Куда ложится правка общего блока шаблона: только в открытый день или во все его дни. */
+export type Scope = 'day' | 'all';
 
 /**
  * Форма блока — одна на шаблон и день: у шаблона есть дни недели (`withDays`),
@@ -21,20 +25,31 @@ export function BlockForm({
   initial,
   categories,
   withDays,
+  scopeDay,
   busy,
   error,
   onSave,
   onCancel,
   onDelete,
+  deleteLabel = 'Удалить',
+  onDeleteEverywhere,
 }: {
   initial?: Partial<BlockValue>;
   categories: Category[];
   withDays?: boolean;
+  /**
+   * Блок стоит в нескольких днях, а открыт один из них («Пн»): форма спрашивает,
+   * править только его или все дни блока. По умолчанию — только его.
+   */
+  scopeDay?: string;
   busy?: boolean;
   error?: unknown;
-  onSave: (v: BlockValue) => void;
+  onSave: (v: BlockValue, scope: Scope) => void;
   onCancel: () => void;
   onDelete?: () => void;
+  deleteLabel?: string;
+  /** Второе удаление — из всех дней блока (рядом с «Убрать из пн»). */
+  onDeleteEverywhere?: () => void;
 }) {
   const [title, setTitle] = useState(initial?.title ?? '');
   const [category, setCategory] = useState(initial?.category ?? categories[0]?.id ?? 'other');
@@ -43,6 +58,8 @@ export function BlockForm({
   const [track, setTrack] = useState(initial?.track ?? true);
   const [tasks, setTasks] = useState((initial?.tasks ?? []).join('\n'));
   const [days, setDays] = useState(initial?.days ?? WEEKDAYS_MASK);
+  const [scope, setScope] = useState<Scope>('day');
+  const showDays = withDays && (!scopeDay || scope === 'all');
 
   const startMin = parseHHMM(start);
   const endMin = parseHHMM(end, true);
@@ -52,13 +69,14 @@ export function BlockForm({
       ? 'Время начала и конца'
       : endMin <= startMin
         ? 'Конец позже начала (через полночь — двумя блоками)'
-        : withDays && days === 0
+        : showDays && days === 0
           ? 'Хотя бы один день недели'
           : null;
 
   const save = () => {
     if (problem || startMin == null || endMin == null) return;
-    onSave({
+    onSave(
+      {
       title: title.trim(),
       category,
       startMin,
@@ -69,7 +87,9 @@ export function BlockForm({
         .split('\n')
         .map((t) => t.trim())
         .filter(Boolean),
-    });
+      },
+      scope,
+    );
   };
 
   return (
@@ -104,7 +124,19 @@ export function BlockForm({
           )}
         </Field>
       </div>
-      {withDays && (
+      {scopeDay && (
+        <Seg
+          className="pl-scope"
+          ariaLabel="Где менять"
+          value={scope}
+          onChange={setScope}
+          options={[
+            { value: 'day', label: `Только ${scopeDay}` },
+            { value: 'all', label: 'Во всех днях блока' },
+          ]}
+        />
+      )}
+      {showDays && (
         <div className="field">
           <span className="lbl">Дни</span>
           <div className="pl-days">
@@ -153,7 +185,12 @@ export function BlockForm({
       <div className="pl-form-actions">
         {onDelete && (
           <Button variant="risk" onClick={onDelete} disabled={busy}>
-            Удалить
+            {deleteLabel}
+          </Button>
+        )}
+        {onDeleteEverywhere && (
+          <Button variant="bare" onClick={onDeleteEverywhere} disabled={busy}>
+            Удалить везде
           </Button>
         )}
         <span className="pl-grow" />

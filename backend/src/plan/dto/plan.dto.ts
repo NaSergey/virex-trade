@@ -117,3 +117,32 @@ export class SettingsDto {
   @Max(60)
   leadMin!: number;
 }
+
+/** Тело `POST /api/admin/plan/template/<id>/split` — правка блока только для одного дня недели. */
+export class SplitDto extends BlockFieldsDto {
+  /** 0 — понедельник. */
+  @IsInt()
+  @Min(0)
+  @Max(6)
+  weekday!: number;
+
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @MaxLength(200, { each: true })
+  tasks!: string[];
+}
+
+/** Тело `POST /api/admin/plan/template/copy-day`. */
+export class CopyDayDto {
+  @IsInt()
+  @Min(0)
+  @Max(6)
+  from!: number;
+
+  /** Дни-получатели битами, пн = 1 … вс = 64. */
+  @IsInt()
+  @Min(1)
+  @Max(127)
+  to!: number;
+}
