@@ -112,7 +112,8 @@ export function OpenPositionsPanel({
       size: String(remaining),
       avgPrice: String(entry),
       markPrice: mark != null ? String(toScreen(mark, scale)) : undefined,
-      positionValue: String(remaining * entry),
+      // Объём — в настоящих USDT: при скрытой цене `entry` в масштабе показа.
+      positionValue: String(remaining * trade.entryPrice),
       unrealisedPnl: pnl != null ? String(pnl) : undefined,
       leverage: String(trade.leverage),
       liqPrice: liq != null ? String(toScreen(liq, scale)) : undefined,

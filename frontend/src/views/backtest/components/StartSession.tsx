@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/shared/ui/Button';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
-import { FieldGroup, Input } from '@/shared/ui/Field';
+import { Field, FieldGroup, Input, Select } from '@/shared/ui/Field';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { Seg, type SegOption } from '@/shared/ui/Seg';
 import { useCreateSession, useLiveSymbols, type DataSource } from '@/widgets/backtest-session';
@@ -45,10 +45,7 @@ export function StartSession({ onStarted }: { onStarted: (id: string) => void })
     { value: 'real', label: t('marketReal') },
     { value: 'synthetic', label: t('marketSynthetic') },
   ];
-  const coins: SegOption<string>[] = [
-    { value: RANDOM, label: t('coinRandom') },
-    ...(symbolsData?.symbols ?? []).filter((s) => s.historySince != null).map((s) => ({ value: s.symbol, label: s.base })),
-  ];
+  const coins = (symbolsData?.symbols ?? []).filter((s) => s.historySince != null);
   const visibility: SegOption<Visibility>[] = [
     { value: 'show', label: t('show') },
     { value: 'hide', label: t('hide') },
@@ -74,10 +71,20 @@ export function StartSession({ onStarted }: { onStarted: (id: string) => void })
         onChange={(e) => setDeposit(e.target.value)}
         style={{ marginTop: 'var(--s4)', marginBottom: 'var(--s3)' }}
       />
+      {/* Список, а не сегменты: шесть делений не помещались в колонку формы. */}
       {market === 'real' && (
-        <FieldGroup label={t('coin')}>
-          <Seg options={coins} value={coin} onChange={setCoin} ariaLabel={t('coin')} />
-        </FieldGroup>
+        <Field label={t('coin')}>
+          {(id) => (
+            <Select id={id} full value={coin} onChange={(e) => setCoin(e.target.value)}>
+              <option value={RANDOM}>{t('coinRandom')}</option>
+              {coins.map((c) => (
+                <option key={c.symbol} value={c.symbol}>
+                  {c.base}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
       )}
       {market === 'real' && (
         <FieldGroup label={t('date')}>

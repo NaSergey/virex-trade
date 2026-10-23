@@ -1395,8 +1395,14 @@ export class BacktestService {
     });
     // CAS по closedQty — тот же замысел, что раньше был у `exitTime: null`:
     // параллельный дубликат этого же запроса не должен начислить PnL дважды.
+    // Диапазон, а не равенство: Prisma читает float8 с потерей последнего
+    // разряда (в базе 0.37572420704455345, прочитано 0.3757242070445534), и
+    // равенство с прочитанным не находило строку — после нескольких частичных
+    // закрытий каждое закрытие отвечало «сделка уже закрыта» при открытой
+    // позиции, и она залипала навсегда (QA 2026-10-23). Дубликат сдвинул бы
+    // closedQty на свой объём — это больше допуска, так что CAS его ловит.
     const cas = await tx.backtestTrade.updateMany({
-      where: { id: trade.id, closedQty: trade.closedQty },
+      where: { id: trade.id, closedQty: { gte: trade.closedQty - QTY_EPS, lte: trade.closedQty + QTY_EPS } },
       data: { closedQty: { increment: qty } },
     });
     if (cas.count === 0) return null;

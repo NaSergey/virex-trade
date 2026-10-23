@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { fetchCandles, saveCursor } from '../api/hooks';
+import { useQueryClient } from '@tanstack/react-query';
+import { fetchCandles, rememberCursor, saveCursor } from '../api/hooks';
 import type { BacktestCloseOrder, BacktestEntryOrder, BacktestTrade, SessionDetail } from '../api/types';
 import { advanceTo, type OpenPosition } from '../lib/advance';
 import {
@@ -18,6 +19,7 @@ import {
   type Candle,
 } from '../lib/candles';
 import { isPartialExit, type CloseOrder, type EntryFill, type Exit } from '../lib/fills';
+import { createInFlight } from './inFlight';
 
 /** Сколько минуток держать загруженными впереди момента сессии. */
 const LOOKAHEAD_MS = 3 * DAY;
@@ -27,6 +29,8 @@ const CHUNK = 5000;
 const CLOSED_LIMIT = 300;
 /** Дальше в прошлое пан не пускает — год от текущего момента сессии, не от сегодняшней даты. */
 export const HISTORY_CAP_MS = 365 * DAY;
+/** Сколько отказов подряд терпит исполнение одного ордера на вход (см. `createInFlight`). */
+const MAX_FILL_FAILURES = 3;
 /** Кусок истории на одну догрузку при пане. */
 const HISTORY_CHUNK = 500;
 /** Момент сохраняется на сервер не чаще, чем раз в столько. */
@@ -88,8 +92,10 @@ export interface Replay {
  */
 export function useReplay(
   detail: SessionDetail,
-  onExit: (trade: BacktestTrade, exit: Exit) => void,
-  onEntryFill: (order: BacktestEntryOrder, fill: EntryFill) => void,
+  /** Отправка закрытия; промис — чтобы при отказе снять пометку и проверять стоп дальше. */
+  onExit: (trade: BacktestTrade, exit: Exit) => Promise<unknown>,
+  /** Отправка исполнения ордера на вход; промис — то же для ордера (`createInFlight`). */
+  onEntryFill: (order: BacktestEntryOrder, fill: EntryFill) => Promise<unknown>,
   /**
    * Открытие, добор, срабатывание уровня сетки или закрытие в полёте — сервер
    * ещё не ответил, и появившаяся (или закрытая) сделка ещё не в `detail.trades`.
@@ -136,14 +142,14 @@ export function useReplay(
   const busy = useRef(false);
   const endedRef = useRef(false);
   /** Сделки, чьё полное закрытие уже отправлено: пока сессия не перечитана, второй раз их не закрываем. */
-  const closing = useRef(new Set<string>());
+  const [closing] = useState(() => createInFlight());
   /**
    * Лимиты закрытия, чьё частичное исполнение уже отправлено. Сделку при этом
    * в `closing` не кладём: она остаётся открытой, и её стоп, тейк и остальные
    * лимиты (сетка фиксации) обязаны проверяться дальше. Исключается только
    * сработавший лимит — чтобы не исполниться второй раз до перечитки.
    */
-  const firedCloseOrders = useRef(new Set<string>());
+  const [firedCloseOrders] = useState(() => createInFlight());
   const openTradesRef = useRef<BacktestTrade[]>([]);
   openTradesRef.current = detail.trades.filter((x) => x.exitTime == null);
   const closeOrdersRef = useRef<BacktestCloseOrder[]>([]);
@@ -155,8 +161,9 @@ export function useReplay(
   const onEntryFillRef = useRef(onEntryFill);
   onEntryFillRef.current = onEntryFill;
   /** Уровень сетки, чьё срабатывание уже отправлено: как и closing ниже, не даёт
-   * тому же уровню сработать второй раз, пока сессия не перечитана после ответа. */
-  const filling = useRef(new Set<string>());
+   * тому же уровню сработать второй раз, пока сессия не перечитана после ответа.
+   * Три отказа подряд — уровень оставлен: постоянная ошибка не шлёт запрос на тике. */
+  const [filling] = useState(() => createInFlight(MAX_FILL_FAILURES));
 
   /** Догружает минутки, пока загруженное не дойдёт до until или история не кончится. */
   const ensureMinutes = useCallback(async (until: number) => {
@@ -284,7 +291,7 @@ export function useReplay(
       try {
         const from = cursorRef.current;
         await ensureMinutes(target + LOOKAHEAD_MS);
-        const openTrades = openTradesRef.current.filter((t) => !closing.current.has(t.id));
+        const openTrades = openTradesRef.current.filter((t) => !closing.has(t.id));
         const positions: OpenPosition[] = openTrades.map((t) => ({
           tradeId: t.id,
           direction: t.direction,
@@ -292,7 +299,7 @@ export function useReplay(
           takeProfit: t.takeProfit,
           entryTime: Date.parse(t.entryTime),
         }));
-        const pendingEntryOrders = entryOrdersRef.current.filter((o) => !filling.current.has(o.id));
+        const pendingEntryOrders = entryOrdersRef.current.filter((o) => !filling.has(o.id));
         const { reach, complete, exits, entryFill } = advanceTo({
           from,
           target,
@@ -300,7 +307,7 @@ export function useReplay(
           loadedUntil: loadedUntil(minutesRef.current),
           positions,
           closeOrders: closeOrdersRef.current
-            .filter((o) => !firedCloseOrders.current.has(o.id))
+            .filter((o) => !firedCloseOrders.has(o.id))
             .map((o): CloseOrder => ({ id: o.id, price: o.price, qty: o.qty, tradeId: o.tradeId })),
           entryOrders: pendingEntryOrders.map((o) => ({ id: o.id, direction: o.direction, price: o.price })),
         });
@@ -309,15 +316,18 @@ export function useReplay(
             for (const exit of exits) {
               const trade = openTrades.find((t) => t.id === exit.tradeId);
               if (!trade) continue;
-              if (isPartialExit(trade, exit) && exit.closeOrderId) firedCloseOrders.current.add(exit.closeOrderId);
-              else closing.current.add(trade.id);
-              onExitRef.current(trade, exit);
+              const sent = onExitRef.current(trade, exit);
+              if (isPartialExit(trade, exit) && exit.closeOrderId) firedCloseOrders.track(exit.closeOrderId, sent);
+              else closing.track(trade.id, sent);
+              // Закрытие не сохранилось и после повторов — автопрокрутка встаёт. Минута
+              // выхода уже пройдена, и без паузы позиция жила бы дальше с прибылью вместо
+              // стопа, пока человек не заметит «Повторить» внизу (QA 2026-10-23).
+              sent.catch(() => setSpeed(null));
             }
             if (entryFill) {
               const order = pendingEntryOrders.find((o) => o.id === entryFill.orderId);
               if (order) {
-                filling.current.add(order.id);
-                onEntryFillRef.current(order, entryFill);
+                filling.track(order.id, onEntryFillRef.current(order, entryFill));
               }
             }
           }
@@ -338,7 +348,7 @@ export function useReplay(
         busy.current = false;
       }
     },
-    [ensureMinutes],
+    [ensureMinutes, closing, filling, firedCloseOrders],
   );
 
   /** Мгновенный прыжок до закрытия текущей свечи ТФ — без анимации, для ручного разбора. */
@@ -389,6 +399,7 @@ export function useReplay(
   // дала бы шестнадцать запросов в секунду. Сервер двигает момент только вперёд,
   // так что опоздавшее сохранение ничего не отмотает.
   const saved = useRef(cursor);
+  const qc = useQueryClient();
   const flush = useCallback(
     async (keepalive = false) => {
       const c = cursorRef.current;
@@ -399,6 +410,7 @@ export function useReplay(
       // как сохранённая, и следующей попытки не случилось бы до нового шага.
       const prev = saved.current;
       saved.current = c;
+      rememberCursor(qc, sessionId, c);
       try {
         await saveCursor(sessionId, c, keepalive);
       } catch (e) {
@@ -406,7 +418,7 @@ export function useReplay(
         throw e;
       }
     },
-    [sessionId],
+    [sessionId, qc],
   );
 
   // Интервал, а не таймер «через 3 секунды после последнего шага»: тот был

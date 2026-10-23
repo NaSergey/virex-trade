@@ -8,7 +8,8 @@ import { Field, Input } from '@/shared/ui/Field';
 import { Slider } from '@/shared/ui/Slider';
 import { formatMoney, formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
 import type { PositionLike } from '../api/types';
-import { fromScreen, levelImpact, toInputPrice, toScreen } from '../lib/money';
+import { closeImpact, fromScreen, toScreen } from '../lib/money';
+import { PriceInput } from './PriceInput';
 
 const clampPct = (v: number) => Math.max(0, Math.min(100, v));
 
@@ -48,7 +49,7 @@ export function LimitCloseModal({
   const [price, setPrice] = useState(screenPrice);
   const [pct, setPct] = useState(100);
   const qty = (remaining * pct) / 100;
-  const impact = levelImpact(trade.direction, screenPrice, price, qty);
+  const impact = closeImpact(trade, scale, price, qty);
 
   return (
     <Dialog open={!closing} onOpenChange={(v) => !v && close()}>
@@ -60,7 +61,7 @@ export function LimitCloseModal({
         <DialogBody>
           <Field label={t('closingPrice')}>
             {(id) => (
-              <Input id={id} full inputMode="decimal" value={toInputPrice(price)} onChange={(e) => setPrice(Number(e.target.value))} />
+              <PriceInput id={id} full value={price} onChange={setPrice} />
             )}
           </Field>
           <Field label={t('closedQtyCoin')}>

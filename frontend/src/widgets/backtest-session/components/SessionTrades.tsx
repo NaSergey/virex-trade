@@ -26,6 +26,8 @@ function toTrade(x: BacktestTrade, scale: number): Trade {
     direction: x.direction,
     qty: x.qty,
     avgEntryPrice: toScreen(x.entryPrice, scale),
+    // Объём — в настоящих USDT: цены строки в масштабе показа, а деньги — нет.
+    notional: x.qty * x.entryPrice,
     avgExitPrice: x.exitPrice != null ? toScreen(x.exitPrice, scale) : 0,
     closedPnl: x.pnl ?? 0,
     openFee: 0,
