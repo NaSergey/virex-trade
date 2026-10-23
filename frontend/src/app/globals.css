@@ -962,6 +962,8 @@
      грида). margin-left: auto — без justify-content: space-between у
      .replay-controls, который раздвинул бы и левые кнопки между собой. */
   .replay-controls .view-switch { margin-left: auto; }
+  /* Копия переключателя над таблицей — только на телефоне. */
+  .view-switch-m { display: none; }
   .replay-chart-wrap { position: relative; flex: 1; min-height: 0; }
   /* Меню правой кнопки по графику: одна строка «Копировать цену». */
   .chart-menu { position: absolute; z-index: 5; min-width: 160px; background: var(--color-background); border: 1px solid var(--hair); padding: 2px; }
@@ -5607,8 +5609,19 @@
      остаться в высоте экрана, и лишняя строка кнопок стоит графику высоты. */
   .replay-controls { gap: var(--s2); }
   .replay-controls .seg button { padding: 8px var(--s2); }
-  .replay-controls .view-switch { flex: 1 0 100%; margin-left: 0; overflow-x: auto; }
-  .replay-controls .view-switch button { flex: 1 0 auto; }
+  /* Таблицы переключаются над ними самими, а не в строке шага: под строкой
+     на телефоне стоит вся панель ордера. Переключатель липнет под шапкой,
+     как вкладки приложения. */
+  .replay-controls .view-switch { display: none; }
+  .view-switch-m {
+    display: flex;
+    position: sticky;
+    top: var(--top-h);
+    z-index: 5;
+    overflow-x: auto;
+    background: var(--ground);
+  }
+  .view-switch-m button { flex: 1 0 auto; }
   :root {
     --t-xl: 26px;
     --t-l: 19px;
