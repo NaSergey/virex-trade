@@ -1161,7 +1161,7 @@ export function Terminal({
     }
     if (kind === 'limitEntry') {
       const { screenPrice: sp } = dragCtxRef.current;
-      const nextEntry = toInputPrice(price);
+      const nextEntry = String(price);
       setLimitDraft((prev) => (sp == null ? { ...prev, entry: nextEntry } : { ...prev, ...applyEntryChange(prev, nextEntry, sp) }));
       return;
     }
@@ -1169,8 +1169,8 @@ export function Terminal({
       // Черновик сетки (и бота) — просто верх/низ диапазона, без стороны и без
       // зеркалирования: у него нет второго уровня, который надо сверять.
       const key = kind === 'gridUpper' ? 'upper' : 'lower';
-      if (dragCtxRef.current.orderTab === 'bot') setBotDraft((prev) => ({ ...prev, [key]: toInputPrice(price) }));
-      else setScaledDraft((prev) => ({ ...prev, [key]: toInputPrice(price) }));
+      if (dragCtxRef.current.orderTab === 'bot') setBotDraft((prev) => ({ ...prev, [key]: String(price) }));
+      else setScaledDraft((prev) => ({ ...prev, [key]: String(price) }));
       return;
     }
     if (kind !== 'stop' && kind !== 'take') return;
@@ -1181,15 +1181,15 @@ export function Terminal({
     // зеркалирования: сторону они берут от цены ордера, а не от рыночной, и
     // проверяются целиком при отправке (checkGridLevels).
     if (tradeId == null && activeTab === 'limit') {
-      setLimitDraft((prev) => ({ ...prev, [kind]: toInputPrice(price) }));
+      setLimitDraft((prev) => ({ ...prev, [kind]: String(price) }));
       return;
     }
     if (tradeId == null && activeTab === 'scaled') {
-      setScaledDraft((prev) => ({ ...prev, [kind]: toInputPrice(price) }));
+      setScaledDraft((prev) => ({ ...prev, [kind]: String(price) }));
       return;
     }
     if (tradeId == null && activeTab === 'bot') {
-      if (kind === 'stop') setBotDraft((prev) => ({ ...prev, stop: toInputPrice(price) }));
+      if (kind === 'stop') setBotDraft((prev) => ({ ...prev, stop: String(price) }));
       return;
     }
     if (tradeId != null) {
@@ -1216,14 +1216,14 @@ export function Terminal({
     // Черновик следующего ордера — направление ещё не зафиксировано, стоп может
     // поменять сторону и утянуть за собой уже введённый тейк (applyStopChange).
     if (kind === 'stop') {
-      const next = applyStopChange(d, toInputPrice(price), sp, null);
+      const next = applyStopChange(d, String(price), sp, null);
       setDraft((prev) => ({ ...prev, ...next }));
       return;
     }
     // Тейк, отпущенный по сторону стопа, не принимается — как и у открытой сделки:
     // линия возвращается на прежнюю цену, причина — в подсказке панели. Слайдер
     // тейка туда и так не пускает (его диапазон сужен по стороне стопа).
-    const take = toInputPrice(price);
+    const take = String(price);
     if (!draftTakeFits(Number(d.stop), Number(take), sp)) {
       setHint(t('takeSide'));
       return;
