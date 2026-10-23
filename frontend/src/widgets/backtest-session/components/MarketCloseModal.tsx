@@ -8,7 +8,7 @@ import { Field, Input } from '@/shared/ui/Field';
 import { Slider } from '@/shared/ui/Slider';
 import { formatMoney, formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
 import type { PositionLike } from '../api/types';
-import { levelImpact } from '../lib/money';
+import { closeImpact } from '../lib/money';
 
 const clampPct = (v: number) => Math.max(0, Math.min(100, v));
 
@@ -16,6 +16,7 @@ const clampPct = (v: number) => Math.max(0, Math.min(100, v));
 export function MarketCloseModal({
   trade,
   remaining,
+  scale,
   screenPrice,
   canClose,
   onSubmit,
@@ -27,6 +28,8 @@ export function MarketCloseModal({
 }: {
   trade: PositionLike;
   remaining: number;
+  /** Масштаб показа цены: итог считается в настоящих ценах. */
+  scale: number;
   screenPrice: number;
   /** Как и раньше у «Закрыть по рынку» в OrderPanel: сделку нельзя закрыть в тот же
    * момент, когда она открыта (совпадает с проверкой `timeInvalid` на сервере) —
@@ -45,9 +48,8 @@ export function MarketCloseModal({
   const { closing, close } = useDialogFade(onClose);
   const [pct, setPct] = useState(100);
   const qty = (remaining * pct) / 100;
-  // Цена не меняется (закрытие сейчас) — levelImpact на равной цене даёт
-  // только комиссии, этого достаточно для предпросмотра объёма.
-  const impact = levelImpact(trade.direction, screenPrice, screenPrice, qty);
+  // Итог закрытия сейчас — от входа позиции по текущей цене, с комиссиями.
+  const impact = closeImpact(trade, scale, screenPrice, qty);
 
   return (
     <Dialog open={!closing} onOpenChange={(v) => !v && close()}>

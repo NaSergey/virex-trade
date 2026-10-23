@@ -96,9 +96,25 @@ export const toInput = (v: number) => String(Number(v.toPrecision(8)));
  * ползунок визуально замирает точно по центру, сколько его ни тяни. Руками напечатанное
  * число это не трогает — оно остаётся как есть (поля модалки «Изменить уровни»). */
 export const toInputPrice = (v: number) => {
+  // Не цена (ноль, минус, NaN) — пустое поле: log10 даёт -Infinity, и toFixed
+  // с бесконечным числом знаков ронял страницу, стоило очистить поле.
+  if (!(v > 0) || !Number.isFinite(v)) return '';
   const integerDigits = Math.floor(Math.log10(v)) + 1;
   return v.toFixed(Math.max(0, 6 - integerDigits));
 };
+
+/**
+ * Набранный в поле текст цены — положительное число или null (пусто, ноль,
+ * одна точка, мусор). Запятая — как точка: так печатают с русской раскладки.
+ * Поле с черновиком текста (`PriceInput`) отдаёт наружу только то, что здесь
+ * разобралось, и набор «112071.19» не превращается на полпути в «1.00000».
+ */
+export function parsePriceInput(raw: string): number | null {
+  const text = raw.trim().replace(',', '.');
+  if (text === '') return null;
+  const n = Number(text);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
 
 export type LevelError = 'stopRequired' | 'stopSide' | 'takeSide' | 'entryRangeRequired' | 'entrySide';
 
@@ -399,6 +415,22 @@ export function levelImpact(direction: Direction, refPrice: number, levelPrice: 
   const pct = ((levelPrice - refPrice) / refPrice) * 100;
   const usdt = unrealizedPnl(direction, refPrice, levelPrice, qty);
   return { pct, usdt };
+}
+
+/**
+ * Итог закрытия части открытой позиции по цене уровня — для окон «Лимит
+ * закрытия» и «Закрыть по рынку». От входа сделки и в настоящих ценах: уровень
+ * приходит экранным (у скрытой цены он умножен на масштаб). Окна считали от
+ * текущей цены и в экранных — показывали одну комиссию у закрытия по рынку, а у
+ * скрытой цены и доллары в масштабе.
+ */
+export function closeImpact(
+  trade: { direction: Direction; entryPrice: number },
+  scale: number,
+  screenLevel: number,
+  qty: number,
+): { pct: number; usdt: number } {
+  return levelImpact(trade.direction, trade.entryPrice, fromScreen(screenLevel, scale), qty);
 }
 
 /**

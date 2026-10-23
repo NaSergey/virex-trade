@@ -4,11 +4,12 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader, useDialogFade } from '@/shared/ui/dialog';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
-import { Field, Input } from '@/shared/ui/Field';
+import { Field } from '@/shared/ui/Field';
 import { Slider } from '@/shared/ui/Slider';
 import { fmtPctSigned, formatPriceGrouped } from '@/shared/lib/utils/format';
 import type { PositionLike } from '../api/types';
-import { checkLevels, levelSliderRange, toInputPrice, toScreen } from '../lib/money';
+import { checkLevels, levelSliderRange, toScreen } from '../lib/money';
+import { PriceInput } from './PriceInput';
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
@@ -65,7 +66,7 @@ export function ChangeLevelsModal({
             label={
               <span className="fld-head">
                 <span>{t('stop')}</span>
-                <span className="fld-val">{fmtPctSigned(-stopPct)}</span>
+                <span className="fld-val">{fmtPctSigned(stopPct)}</span>
               </span>
             }
           >
@@ -79,7 +80,7 @@ export function ChangeLevelsModal({
                   onChange={setStop}
                   aria-label={t('stop')}
                 />
-                <Input id={id} full inputMode="decimal" value={toInputPrice(stop)} onChange={(e) => setStop(Number(e.target.value))} />
+                <PriceInput id={id} full value={stop} onChange={setStop} />
               </>
             )}
           </Field>
@@ -101,13 +102,7 @@ export function ChangeLevelsModal({
                   onChange={setTake}
                   aria-label={t('take')}
                 />
-                <Input
-                  id={id}
-                  full
-                  inputMode="decimal"
-                  value={take != null ? toInputPrice(take) : ''}
-                  onChange={(e) => setTake(e.target.value.trim() ? Number(e.target.value) : null)}
-                />
+                <PriceInput id={id} full value={take} onChange={setTake} onClear={() => setTake(null)} />
               </>
             )}
           </Field>
