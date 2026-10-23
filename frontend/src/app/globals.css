@@ -81,6 +81,9 @@
      останавливается всё остальное липкое на странице, и на узком экране шапка
      ниже — забыть поправить второе место было бы нечем. */
   --top-h: 48px;
+  /* Высота нижней панели разделов телефона (`.tabbar`) — ноль, пока её нет:
+     полноэкранные страницы вычитают её вместе с шапкой. */
+  --tab-h: 0px;
 
   --hair: var(--color-line);
   --hair-2: var(--color-line-2);
@@ -426,6 +429,10 @@
     gap: var(--s5);
     height: var(--top-h);
   }
+  /* Название раздела в шапке и нижняя панель разделов (`TabBar`) — только на
+     телефоне, где рейки нет. */
+  .top-title,
+  .tabbar { display: none; }
   .mark {
     display: flex;
     align-items: center;
@@ -906,7 +913,7 @@
      потоком: страница прокручивается целиком, а не панелями внутри.
      min-height — пол для низких окон (горизонтальный телефон): ниже него
      график схлопнулся бы в полоску, и лучше уж пусть страница прокрутится. */
-  .bt-live { --bt-screen: calc(100dvh - var(--top-h) - 1px - var(--s4) * 2); }
+  .bt-live { --bt-screen: calc(100dvh - var(--top-h) - var(--tab-h) - 1px - var(--s4) * 2); }
   .terminal-main { display: contents; }
   .terminal-chart { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
   @media (min-width: 1101px) {
@@ -955,6 +962,8 @@
      грида). margin-left: auto — без justify-content: space-between у
      .replay-controls, который раздвинул бы и левые кнопки между собой. */
   .replay-controls .view-switch { margin-left: auto; }
+  /* Копия переключателя над таблицей — только на телефоне. */
+  .view-switch-m { display: none; }
   .replay-chart-wrap { position: relative; flex: 1; min-height: 0; }
   /* Меню правой кнопки по графику: одна строка «Копировать цену». */
   .chart-menu { position: absolute; z-index: 5; min-width: 160px; background: var(--color-background); border: 1px solid var(--hair); padding: 2px; }
@@ -2815,7 +2824,7 @@
   .lab-stick {
     position: sticky;
     top: var(--top-h);
-    max-height: calc(100dvh - var(--top-h));
+    max-height: calc(100dvh - var(--top-h) - var(--tab-h));
     overflow-y: auto;
     /* Прокрутка внутри колонки есть, но её не видно и она не перехватывает
        колесо: докрутив условия до конца, страница едет дальше сама. С
@@ -3507,7 +3516,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--s3);
-    min-height: calc(100dvh - var(--top-h) - 1px);
+    min-height: calc(100dvh - var(--top-h) - var(--tab-h) - 1px);
     padding: var(--s4) 0;
   }
   /* Баннер — реклама сезона и наград над карточками (владелец 2026-10-17:
@@ -5609,8 +5618,19 @@
      остаться в высоте экрана, и лишняя строка кнопок стоит графику высоты. */
   .replay-controls { gap: var(--s2); }
   .replay-controls .seg button { padding: 8px var(--s2); }
-  .replay-controls .view-switch { flex: 1 0 100%; margin-left: 0; overflow-x: auto; }
-  .replay-controls .view-switch button { flex: 1 0 auto; }
+  /* Таблицы переключаются над ними самими, а не в строке шага: под строкой
+     на телефоне стоит вся панель ордера. Переключатель липнет под шапкой,
+     как вкладки приложения. */
+  .replay-controls .view-switch { display: none; }
+  .view-switch-m {
+    display: flex;
+    position: sticky;
+    top: var(--top-h);
+    z-index: 5;
+    overflow-x: auto;
+    background: var(--ground);
+  }
+  .view-switch-m button { flex: 1 0 auto; }
   :root {
     --t-xl: 26px;
     --t-l: 19px;
@@ -5638,45 +5658,78 @@
   .wrap,
   .top-in { padding: 0 var(--s3); }
 
-  /* ── шапка в две строки ──────────────────────────────────────── */
-  /* На телефоне разделы уезжают под марку и «Профиль»: те стоят по краям
-     флексом и ширины не отдают, и рейке из пяти разделов оставалось около
-     полутора сотен пикселей — видно было два с половиной. Строка вторая, во
-     всю ширину, и все пять листаются вбок как рейка вкладок.
+  /* ── приложение: шапка в строку, разделы внизу ─────────────────── */
+  /* На телефоне продукт ведёт себя как приложение (тот же приём, что у
+     учебника английского): разделы — панелью внизу под большим пальцем
+     (`TabBar`), шапка — одна строка со знаком, названием раздела, балансом и
+     профилем. Рейка разделов из шапки уходит. Отступы — от выреза и полоски
+     «домой» (`viewport-fit: cover` в корневом layout).
      Высота по-прежнему объявлена в --top-h, поэтому липкая колонка условий
      «Выборки» переезжает следом сама. */
-  :root { --top-h: 84px; }
+  :root { --top-h: calc(44px + env(safe-area-inset-top)); }
+  :root:has(.tabbar) { --tab-h: calc(56px + env(safe-area-inset-bottom)); }
+  .top { padding-top: env(safe-area-inset-top); }
   .top-in {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    grid-template-rows: 44px 1fr;
-    /* Ноль по вертикали явно: в широкой раскладке у шапки объявлен gap в --s5,
-       и он остался бы просветом между строками — обе ушли бы за её высоту. */
-    gap: 0 var(--s3);
+    height: 44px;
+    gap: var(--s3);
     align-items: center;
   }
-  .mark,
-  .top-r { grid-row: 1; }
-  /* Меню профиля открывается от нижнего края верхней строки, а не от края
-     самой кнопки: иначе оно начинается на пару пикселей выше рейки разделов
-     и накрывает её частично, а не целиком. */
-  .top-r {
-    justify-self: end;
-    align-self: stretch;
+  .top .nav { display: none; }
+  .top-title {
+    display: block;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
   }
-  .nav {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    align-self: stretch;
-    /* Рейка кончается краем экрана, а не полем полосы: иначе последний
-       раздел обрезается о невидимую границу и кажется, что он и есть
-       последний. Отбивку первого держит собственный паддинг рейки. */
-    margin: 0 calc(-1 * var(--s3));
-    padding: 0 var(--s3);
-    border-top: 1px solid var(--hair);
-    /* Листание вкладок не должно уводить браузер «назад» по свайпу. */
-    overscroll-behavior-x: contain;
+  /* Меню профиля открывается от нижнего края шапки, а не от края кнопки. */
+  .top-r { align-self: stretch; }
+  /* Страница кончается над панелью, а не под ней. */
+  body:has(.tabbar) { padding-bottom: var(--tab-h); }
+  .tabbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    padding-bottom: env(safe-area-inset-bottom);
+    border-top: 1px solid var(--rule);
+    background: rgb(var(--ground-rgb) / 0.86);
+    backdrop-filter: blur(24px) saturate(1.4);
   }
+  .tabbar a {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-height: 56px;
+    padding: 6px 0 4px;
+    border-top: 2px solid transparent;
+    color: var(--ink-3);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    transition: color 0.12s;
+  }
+  .tabbar a[aria-current="page"] {
+    border-top-color: var(--ink);
+    color: var(--ink);
+  }
+  /* Касание не подсвечивает ссылку серым прямоугольником браузера, а двойное
+     касание не приближает страницу. */
+  a,
+  button { -webkit-tap-highlight-color: transparent; }
 
   /* ── пальцевые мерки ─────────────────────────────────────────── */
   /* Управление здесь щупают пальцем, а не наводят курсором. Кегль, рамка и
@@ -5694,7 +5747,7 @@
   .fg summary { padding: 11px 0 11px 16px; }
   /* Крупнее под палец, но горизонтальные поля держим — на них лежит подсветка
      выбранного тега. */
-  .pick { padding: 6px 8px 4px; }
+  .pick { padding: 12px 8px 10px; }
 
   /* Поля ввода — не мельче 16px: Safari на iOS приближает страницу, как
      только фокус попадает в контрол с мелким кеглем, и обратно её потом
@@ -5714,6 +5767,49 @@
   .dh { padding: var(--s3) var(--s3) 0; }
   .db { padding: var(--s3); }
   .df { padding: var(--s3); }
+
+  /* ── дневник и рынок: мерки приложения ───────────────────────── */
+  /* Вкладки дневника липнут под шапкой, как переключатель таблиц терминала:
+     прокрутив ленту сделок, на соседнюю страницу не нужно возвращаться наверх.
+     Высота нажатия — 44px при том же кегле. */
+  .subnav {
+    position: sticky;
+    top: var(--top-h);
+    z-index: 6;
+    background-color: var(--ground);
+  }
+  .subnav a { padding: 14px 0; }
+  /* Поле даты и пресеты периода — одна высота, под палец. */
+  .strip-rail input[type="date"] { min-height: 44px; }
+  .strip-rail .seg button { min-height: 44px; }
+  /* Рынок: переключатели монет и окон — те же 44px. */
+  .pair .seg button,
+  .to-ctl .seg button,
+  .to-days .seg button { min-height: 44px; }
+  /* Фильтры аналитики: строка — вся полоса нажатия, флажок крупнее. */
+  .opt { padding: 12px 0; align-items: center; }
+  .opt input { width: 18px; height: 18px; }
+  .fg summary { padding: 14px 0 14px 16px; }
+  /* Кнопки без рамки и закреп в таблицах дневника. */
+  .wrap .btn.bare:not(.tight) { min-height: 44px; }
+  .pin { min-height: 44px; min-width: 40px; }
+  /* Мелкая подчёркнутая метка («+ тег», цена с графиком) — рамка нажатия
+     растёт невидимым полем, вёрстка строки не меняется. */
+  .newrow .in,
+  .newrow select.in,
+  .fb .in,
+  .fb select.in { min-height: 44px; }
+  .wrap .btn.bare.tight { min-height: 44px; }
+  .tag-add,
+  .px-cue,
+  button.tag { position: relative; }
+  .tag-add::after,
+  .px-cue::after,
+  button.tag::after {
+    content: "";
+    position: absolute;
+    inset: -12px -8px;
+  }
 
   /* ── обучение ────────────────────────────────────────────────── */
   /* Карточка тура не летает у элемента, а прилипает листом к низу: рядом с
@@ -5891,6 +5987,11 @@
   .fills td,
   .fills th { display: revert; }
   .fills { min-width: 0; }
+  /* Исполнения в раскрытой строке не переносят числа по строкам: таблица
+     листается вбок внутри своего блока, страница остаётся на месте. */
+  .ledger .fills { display: block; max-width: 100%; overflow-x: auto; }
+  .ledger .fills th,
+  .ledger .fills td { white-space: nowrap; padding-right: var(--s3); }
   .fills td,
   .fills th { text-align: left; }
   .fills td::before { display: none; }
@@ -6683,7 +6784,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--s4);
-  min-height: calc(100dvh - var(--top-h) - 1px);
+  min-height: calc(100dvh - var(--top-h) - var(--tab-h) - 1px);
   padding: var(--s4) var(--s4) calc(var(--s4) * 2);
   text-align: center;
 }
@@ -7442,7 +7543,7 @@
        приём, что у терминала бектеста (`--bt-screen`). min-height — пол для
        низких окон: ниже него стол сжался бы до нечитаемого, и лучше уж пусть
        страница прокрутится. */
-    height: calc(100dvh - var(--top-h) - 1px);
+    height: calc(100dvh - var(--top-h) - var(--tab-h) - 1px);
     min-height: 520px;
   }
   .ct-wait { color: var(--g-ink-2); text-align: center; margin: 8px 0; }
@@ -9507,4 +9608,78 @@
   .stg-grid { grid-template-columns: minmax(0, 1fr); }
   .stg-span2 { grid-column: auto; }
   .stg-me { grid-template-columns: 96px minmax(0, 1fr); }
+}
+
+/* Телефон: игры, список бектеста, профиль, окна — цели нажатия от 44px,
+   ряды делений листаются внутри себя, строки турниров — компактные карточки. */
+@media (max-width: 720px) {
+  .dlg .btn,
+  .dlg .seg button,
+  .dlg .in,
+  .games-page .btn,
+  .games-page .seg button,
+  .cbanner .btn,
+  .ptabs button,
+  .tfoot .btn,
+  .lists .btn,
+  .pagehead .btn,
+  .bt-col .btn:not(.tight),
+  .stg-foot .btn { min-height: 44px; }
+  /* Деления в окнах (длительность турнира и т. п.) не режутся краем окна —
+     ряд листается вбок, а не обрывается на «7 D». */
+  .dlg .seg { overflow-x: auto; max-width: 100%; }
+  .dlg .seg button { flex: 1 0 auto; }
+  /* Действия строки журнала бектеста — по 44px, иначе «Открыть»/«Удалить» —
+     две строки текста высотой в 17px, и в них не попасть пальцем. */
+  .row-actions { gap: var(--s1); }
+  .row-actions .btn.tight { min-height: 44px; padding: 0 var(--s2); }
+  /* Строка общей таблицы турниров — карточка на четыре ряда вместо шести
+     строк «подпись → значение»: подписи ячеек внутри строки не нужны, у
+     каждой ячейки и так свой текст («призовой фонд», «старт»). */
+  .tboard .ledger tbody tr:not(.exp) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: var(--s3);
+    row-gap: var(--s1);
+    align-items: center;
+    padding: var(--s3) 0;
+  }
+  .tboard .ledger td { display: block; width: auto; padding: 0; text-align: left; }
+  .tboard .ledger td::before { display: none; }
+  .tboard .ledger td:nth-child(1) { grid-area: 1 / 2; justify-self: end; }
+  .tboard .ledger td:nth-child(2) { grid-area: 1 / 1; }
+  .tboard .ledger td:nth-child(3) { grid-area: 2 / 1; }
+  .tboard .ledger td:nth-child(4) { grid-area: 2 / 2; justify-self: end; text-align: right; }
+  .tboard .ledger td:nth-child(5) { grid-area: 3 / 1; }
+  .tboard .ledger td:nth-child(6) { grid-area: 3 / 2; justify-self: end; }
+  .tboard .ledger td:nth-child(7) { grid-column: 1 / -1; }
+  .tboard .ledger td:nth-child(7):not(:has(*)) { display: none; }
+  .tboard .ledger td:nth-child(7) .btn { width: 100%; }
+  .tb-cell { align-items: inherit; }
+  .tboard .ledger td:nth-child(4) .tb-cell { align-items: flex-end; }
+  .tb-time { align-items: flex-end; }
+  .seats, .seats-n { width: 96px; }
+  /* Профиль: шестерёнка и вкладки — с зоной нажатия в палец, но без сдвига
+     вёрстки (лишние поля гасятся отрицательным отступом). */
+  .btn.pf-gear { min-width: 44px; min-height: 44px; margin: -13px -13px 0 auto; }
+  .pf-tabs .seg button { min-height: 44px; }
+  /* Столы и игры: «назад» и «⋯» — тоже кнопки. */
+  .ct-backlink, .jpg-back, .rc-back {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  .ct-more { min-width: 44px; min-height: 44px; }
+  .rc-stakes button { min-height: 44px; }
+  /* Бектест: ряд источника, поле депозита и «Начать» в той же колонке. */
+  .asym:has(.bt-col) .seg button,
+  .asym:has(.bt-col) .in,
+  .asym:has(.bt-col) .btn:not(.tight) { min-height: 44px; }
+  /* Джетпак: панель ставки и звук — в палец (панель при этом листается под
+     сценой, табов на экране игры нет). */
+  .jpg-check, .jpg-target { height: 44px; }
+  .jpg-amount { grid-template-columns: 44px minmax(0, 1fr) 44px; }
+  .jpg-step { height: 44px; }
+  .jpg-chip { height: 44px; }
+  .jpg-audio-set .audio-btn { width: 44px; height: 44px; }
 }

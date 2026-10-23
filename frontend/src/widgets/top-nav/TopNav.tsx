@@ -28,40 +28,9 @@ import { TradePlayMark } from '@/shared/ui/TradePlayMark';
 import { useLocaleControl } from '@/shared/i18n';
 import { adminOrigin } from '@/shared/lib/utils/admin-host';
 import { isGamesDarkRoute } from '@/shared/lib/utils/games-dark-route';
-import { JOURNAL_PAGES, isJournalPage, isJournalPath } from '@/shared/lib/utils/journal-route';
+import { JOURNAL_PAGES, isJournalPage } from '@/shared/lib/utils/journal-route';
 import { openSettings } from '@/widgets/settings-dialog';
-
-type Tab = 'terminal' | 'journal' | 'market' | 'backtest' | 'games';
-
-type NavItem = { id: Tab; labelKey: Tab; href: string };
-
-/**
- * Биржевой терминал — первым, перед «Дневником», и у всех (решение владельца
- * 2026-10-16): без ключа с правом торговли страница предлагает подключить его
- * или торговать на демо-счёте.
- *
- * «Дневник» — один пункт на три страницы: обзор, теги, аналитика (решение
- * владельца 2026-10-14). Ведёт на обзор, а между страницами переключают
- * вкладки самого дневника (`widgets/journal-nav`).
- */
-const NAV: NavItem[] = [
-  { id: 'terminal', labelKey: 'terminal', href: '/terminal' },
-  { id: 'journal', labelKey: 'journal', href: '/overview' },
-  { id: 'market', labelKey: 'market', href: '/market' },
-  { id: 'backtest', labelKey: 'backtest', href: '/backtest' },
-  { id: 'games', labelKey: 'games', href: '/games' },
-];
-
-/**
- * Открыт ли этот раздел сейчас.
- *
- * Не строгое равенство: у раздела могут появиться вложенные адреса
- * (`/tags/<id>`), и пункт обязан оставаться подсвеченным внутри своей ветки.
- * Граница проверяется по слэшу, иначе `/lab` подсвечивался бы на `/labels`.
- * «Дневник» — открыт на любой из своих страниц.
- */
-const isActive = (pathname: string, id: Tab) =>
-  id === 'journal' ? isJournalPath(pathname) : pathname === `/${id}` || pathname.startsWith(`/${id}/`);
+import { NAV, isActive } from './sections';
 
 /**
  * Разделы стоят горизонтальной рейкой в шапке, а не колонкой сбоку: страницы
@@ -113,6 +82,7 @@ export function TopNav() {
   // читалась бы кремовым пятном поверх чёрного содержимого под ней. Лобби
   // столов и турниры сюда не входят — там обычная тема (`isGamesDarkRoute`).
   const inGames = isGamesDarkRoute(pathname);
+  const section = NAV.find((item) => isActive(pathname, item.id));
 
   // Страницы «Дневника» — панелью под пунктом по наведению на него
   // (решение владельца 2026-10-14). Закрытие — с задержкой: курсор, идущий с
@@ -225,6 +195,12 @@ export function TopNav() {
         <Link href="/terminal" className="mark">
           <TradePlayMark width={46} height={28} />
         </Link>
+
+        {/* На телефоне рейки в шапке нет (разделы — панелью внизу, `TabBar`),
+            и шапка, как у приложения, называет открытый раздел. */}
+        <span className="top-title" aria-hidden>
+          {section && t(section.labelKey)}
+        </span>
 
         {/* role="tablist" здесь больше нет: вкладки не меняют адрес, а эти
             пункты меняют. Скринридер должен услышать навигацию по разделам
@@ -462,4 +438,4 @@ export function TopNav() {
   );
 }
 
-export type { Tab };
+export type { Tab } from './sections';
