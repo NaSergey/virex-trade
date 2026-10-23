@@ -1,11 +1,18 @@
-import { BadRequestException, ConflictException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  HttpException,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import type { BacktestTrade, BacktestTradeEntry, Prisma, Tag } from '@prisma/client';
 import { BattlePassService } from '../battlepass/battlepass.service';
 import { XP_SOURCES } from '../battlepass/xp-registry';
 import { PrismaService } from '../prisma/prisma.service';
 import { LiveMarketService } from '../market-data/live-market.service';
 import { MarketDataService } from '../market-data/market-data.service';
-import { DEFAULT_SYMBOL } from '../market-data/symbols';
+import { DEFAULT_SYMBOL, HISTORY_SYMBOL_IDS, historySince } from '../market-data/symbols';
 import { TIMEFRAMES, isValidTimeframe } from '../market-data/timeframes';
 import { botGridError, botLevelOf, botPrices, botQty, botStep, levelRiskPct, splitAtPrice } from './bot-grid';
 import { SYNTH_VERSION } from './synthetic/params';
@@ -25,6 +32,7 @@ import {
   tradeResult,
   type Direction,
   type ExitReason,
+  type StartWindow,
 } from './backtest-math';
 
 /** 'real' — отрезок истории, 'synthetic' — тренажёр, 'live' — живой рынок в эфире. */
@@ -36,6 +44,8 @@ export interface CreateSessionInput {
   hidePrice: boolean;
   /** Не задан — реальная история. */
   dataSource?: DataSource;
+  /** Монета истории или 'random' — выберет сервер и скроет. Не задана — BTC. */
+  symbol?: string;
 }
 
 export interface SessionCandlesInput {
@@ -46,7 +56,7 @@ export interface SessionCandlesInput {
 }
 
 export interface OpenTradeInput {
-  /** Не задана — BTC. */
+  /** Не задана — монета сессии (в эфире — BTC). */
   symbol?: string;
   direction: Direction;
   entryTime: Date;
@@ -72,7 +82,7 @@ export interface AddToTradeInput {
 }
 
 export interface CreateEntryOrdersInput {
-  /** Не задана — BTC. */
+  /** Не задана — монета сессии (в эфире — BTC). */
   symbol?: string;
   direction: Direction;
   stopLoss: number;
@@ -88,7 +98,7 @@ export interface CreateEntryOrdersInput {
 
 /** Запуск грид-бота: сетка, риск и момент запуска (как у входа по рынку). */
 export interface StartBotInput {
-  /** Не задана — BTC. */
+  /** Не задана — монета сессии (в эфире — BTC). */
   symbol?: string;
   lower: number;
   upper: number;
@@ -177,6 +187,9 @@ export function tradeView(t: TradeWithRelations) {
 const noHistory = () =>
   new ConflictException({ message: 'История минуток ещё не загружена — сессию не на чем начать', code: 'BACKTEST_NO_HISTORY' });
 
+const marketUnavailable = () =>
+  new ServiceUnavailableException({ message: 'Биржа не ответила — сессию не с чего начать', code: 'BACKTEST_MARKET_UNAVAILABLE' });
+
 export const sessionFinished = () =>
   new ConflictException({ message: 'Сессия уже завершена', code: 'BACKTEST_SESSION_FINISHED' });
 
@@ -199,26 +212,28 @@ const tournamentEnded = () =>
  * стоп обязан сработать, — поэтому цену и время сделки ставит сервер, а стопы,
  * тейки и лимитки исполняет движок эфира (`LiveEngineService`), а не браузер.
  */
-type MaybeLive = { dataSource?: string; tournament?: { mode: string } | null; endTime?: Date | null };
+type MaybeLive = { dataSource?: string; tournament?: { mode: string } | null; endTime?: Date | null; symbol?: string };
 const isLive = (s: MaybeLive) => s.dataSource === 'live' || s.tournament?.mode === 'live';
 /** Эфирный турнир: на кону призы, и завершить сессию раньше турнира нельзя. */
 const isLiveTournament = (s: MaybeLive) => s.tournament?.mode === 'live';
 
 const symbolUnavailable = () =>
   new BadRequestException({
-    message: 'Эта монета торгуется только в эфире',
+    message: 'Монета не этой сессии',
     code: 'BACKTEST_SYMBOL_UNAVAILABLE',
   });
 
 /**
- * Монета сделки или сетки. Не задана — BTC: так ходят прежние клиенты и
- * браузерная прокрутка истории. Не-BTC — только в эфире: у истории и тренажёра
- * свечей другой монеты нет, и сделку по ней нечем было бы проверить.
+ * Монета сделки или сетки. В эфире — любая из списка (её проверил DTO), не
+ * задана — BTC. У истории и тренажёра монета одна — своя у сессии (у тренажёра
+ * дефолтный BTC): не задана — она, другая — отказ, потому что свечей другой
+ * монеты прокрутка не показывает и сделку по ней нечем было бы проверить.
  */
 const symbolFor = (s: MaybeLive, symbol: string | undefined): string => {
-  const sym = symbol ?? DEFAULT_SYMBOL;
-  if (sym !== DEFAULT_SYMBOL && !isLive(s)) throw symbolUnavailable();
-  return sym;
+  if (isLive(s)) return symbol ?? DEFAULT_SYMBOL;
+  const own = s.symbol ?? DEFAULT_SYMBOL;
+  if (symbol !== undefined && symbol !== own) throw symbolUnavailable();
+  return own;
 };
 
 /**
@@ -277,23 +292,25 @@ export class BacktestService {
   async createSession(userId: string, input: CreateSessionInput) {
     if (input.dataSource === 'synthetic') return this.createSyntheticSession(userId, input);
     if (input.dataSource === 'live') return this.createLiveSession(userId, input);
-    const coverage = await this.marketData.getCoverage();
-    const win = startWindow(
-      coverage.find((c) => c.timeframe === 1440),
-      coverage.find((c) => c.timeframe === 1),
-    );
-    if (!win) throw noHistory();
 
-    // Точку старта и масштаб выбирает сервер: иначе создание сессии можно было
-    // бы перезапускать из браузера, пока не выпадет узнаваемый отрезок.
+    // Случайную монету, точку старта и масштаб выбирает сервер: иначе создание
+    // сессии можно было бы перезапускать из браузера, пока не выпадет узнаваемый
+    // отрезок.
+    const hideSymbol = input.symbol === 'random';
+    const symbol = hideSymbol
+      ? HISTORY_SYMBOL_IDS[Math.floor(this.rnd() * HISTORY_SYMBOL_IDS.length)]
+      : (input.symbol ?? DEFAULT_SYMBOL);
+    const win = await this.historyWindow(symbol);
+    if (!win) throw noHistory();
     const start = pickStart(win, this.rnd);
-    // Цена в точке старта — закрытие минутки, которая кончается в момент старта.
-    const [last] = await this.marketData.getCandles({ timeframe: 1, to: new Date(start - MINUTE_MS), limit: 1 });
+    const last = await this.priceBefore(symbol, start);
     if (!last) throw noHistory();
 
     const session = await this.prisma.backtestSession.create({
       data: {
         userId,
+        symbol,
+        hideSymbol,
         startTime: new Date(start),
         cursorTime: new Date(start),
         startBalance: input.startBalance,
@@ -305,6 +322,36 @@ export class BacktestService {
       },
     });
     return { session };
+  }
+
+  /**
+   * Где ставить старт истории: BTC — по покрытию хранилища, остальные — от их
+   * первой минутки на Binance до «сейчас» (их свечи не хранятся).
+   */
+  protected async historyWindow(symbol: string): Promise<StartWindow | null> {
+    if (symbol === DEFAULT_SYMBOL) {
+      const coverage = await this.marketData.getCoverage();
+      return startWindow(
+        coverage.find((c) => c.timeframe === 1440),
+        coverage.find((c) => c.timeframe === 1),
+      );
+    }
+    const since = new Date(historySince(symbol)!);
+    return startWindow({ from: since, to: null }, { from: since, to: new Date() });
+  }
+
+  /**
+   * Цена в точке старта — закрытие минутки, которая кончается в момент старта.
+   * Не-BTC — у Binance; не ответила — 503, а не сессия без цены.
+   */
+  protected async priceBefore(symbol: string, start: number) {
+    const to = new Date(start - MINUTE_MS);
+    if (symbol === DEFAULT_SYMBOL) return (await this.marketData.getCandles({ timeframe: 1, to, limit: 1 }))[0];
+    try {
+      return (await this.live.history(symbol, { timeframe: 1, to, limit: 1 }))[0];
+    } catch {
+      throw marketUnavailable();
+    }
   }
 
   protected async createSyntheticSession(userId: string, input: CreateSessionInput) {
@@ -1140,9 +1187,10 @@ export class BacktestService {
   }
 
   /** Плечо открытых сделок одной монеты: на бирже плечо задаётся на символ. */
-  async setLeverage(userId: string, sessionId: string, leverage: number, symbol: string = DEFAULT_SYMBOL) {
+  async setLeverage(userId: string, sessionId: string, leverage: number, rawSymbol?: string) {
     const s = await this.ownedSession(userId, sessionId);
     if (s.status !== 'active') throw sessionFinished();
+    const symbol = symbolFor(s, rawSymbol);
 
     return this.prisma.$transaction(async (tx) => {
       // cursorTime — свежим чтением внутри транзакции, а не из `s` выше: у modifyTrade

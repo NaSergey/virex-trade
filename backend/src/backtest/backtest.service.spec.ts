@@ -1,4 +1,5 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { HISTORY_SYMBOL_IDS, historySince } from '../market-data/symbols';
 import { BacktestService } from './backtest.service';
 import { SYNTH_VERSION } from './synthetic/params';
 
@@ -82,6 +83,8 @@ function makeService() {
   // Живая цена турнира: время и цену эфирной сделки ставит сервер, не браузер.
   const live = {
     quote: jest.fn().mockResolvedValue({ time: new Date(NOW), price: 70_000 }),
+    // История монет, которых нет в хранилище, — у Binance.
+    history: jest.fn().mockResolvedValue([{ time: new Date(T0), open: 1, high: 1, low: 1, close: 2_000, volume: 1 }]),
   };
   // XP за завершение сессии — не предмет этого файла, только заглушка.
   const battlePass = { award: jest.fn() };
@@ -186,6 +189,49 @@ describe('BacktestService — сессии', () => {
     const err = await rejection(service.createSession('u1', INPUT));
 
     expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_NO_HISTORY' });
+  });
+
+  it('без монеты — BTC без скрытия', async () => {
+    const { service, prisma } = makeService();
+
+    await service.createSession('u1', INPUT);
+
+    expect(prisma.backtestSession.create.mock.calls[0][0].data).toMatchObject({ symbol: 'BTCUSDT', hideSymbol: false });
+  });
+
+  it('монета истории: окно от её первой минутки, цена старта — у Binance', async () => {
+    const { service, prisma, marketData, live } = makeService();
+
+    await service.createSession('u1', { ...INPUT, hidePrice: true, symbol: 'ETHUSDT' });
+
+    const start = historySince('ETHUSDT')! + 200 * DAY; // rnd = 0 → начало окна
+    expect(marketData.getCoverage).not.toHaveBeenCalled();
+    expect(live.history).toHaveBeenCalledWith('ETHUSDT', { timeframe: 1, to: new Date(start - 60_000), limit: 1 });
+    const data = prisma.backtestSession.create.mock.calls[0][0].data;
+    expect(data).toMatchObject({ symbol: 'ETHUSDT', hideSymbol: false, startTime: new Date(start) });
+    expect(data.priceScale).toBeCloseTo(100 / 2_000, 12);
+  });
+
+  it('случайная монета — её выбирает сервер и скрывает', async () => {
+    const { service, prisma } = makeService();
+    const seq = [0.99];
+    (service as unknown as { rnd: () => number }).rnd = () => seq.shift() ?? 0;
+
+    await service.createSession('u1', { ...INPUT, symbol: 'random' });
+
+    const data = prisma.backtestSession.create.mock.calls[0][0].data;
+    expect(data).toMatchObject({ symbol: HISTORY_SYMBOL_IDS[HISTORY_SYMBOL_IDS.length - 1], hideSymbol: true });
+  });
+
+  it('Binance не ответил на цену старта — 503, сессии нет', async () => {
+    const { service, prisma, live } = makeService();
+    live.history.mockRejectedValue(new Error('Binance klines: HTTP 502'));
+
+    const err = await rejection(service.createSession('u1', { ...INPUT, symbol: 'SOLUSDT' }));
+
+    expect(err).toBeInstanceOf(ServiceUnavailableException);
+    expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_MARKET_UNAVAILABLE' });
+    expect(prisma.backtestSession.create).not.toHaveBeenCalled();
   });
 
   it('чужая сессия отвечает 404', async () => {
@@ -2055,13 +2101,44 @@ describe('BacktestService — монеты', () => {
     expect(prisma.backtestTrade.create.mock.calls[0][0].data.symbol).toBe('BTCUSDT');
   });
 
-  it('не-BTC вне эфира — отказ: у истории свечей другой монеты нет', async () => {
+  it('не-BTC в BTC-сессии истории — отказ: монета не этой сессии', async () => {
     const { service, prisma } = makeService();
     prisma.backtestSession.findUnique.mockResolvedValue({ ...SESSION, tournament: null });
 
     const e = await rejection(openEth(service));
 
     expect(e).toBeInstanceOf(BadRequestException);
+    expect(e.response.code).toBe('BACKTEST_SYMBOL_UNAVAILABLE');
+    expect(prisma.backtestTrade.create).not.toHaveBeenCalled();
+  });
+
+  const ETH_HISTORY = { ...SESSION, symbol: 'ETHUSDT', tournament: null };
+  const openHistory = (service: BacktestService, symbol?: string) =>
+    service.openTrade('u1', 's1', {
+      symbol,
+      direction: 'long',
+      entryTime: new Date(T0 + DAY),
+      entryPrice: 2_500,
+      stopLoss: 2_400,
+      riskPct: 1,
+      leverage: 10,
+    });
+
+  it('история на ETH: сделка без монеты — по монете сессии', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(ETH_HISTORY);
+
+    await openHistory(service);
+
+    expect(prisma.backtestTrade.create.mock.calls[0][0].data.symbol).toBe('ETHUSDT');
+  });
+
+  it('история на ETH: BTC — отказ', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(ETH_HISTORY);
+
+    const e = await rejection(openHistory(service, 'BTCUSDT'));
+
     expect(e.response.code).toBe('BACKTEST_SYMBOL_UNAVAILABLE');
     expect(prisma.backtestTrade.create).not.toHaveBeenCalled();
   });

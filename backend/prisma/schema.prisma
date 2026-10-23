@@ -365,9 +365,15 @@ model BacktestSession {
   hidePrice      Boolean
   /// Коэффициент показа цен; 1, если цена не скрыта. В базе цены настоящие.
   priceScale     Float
-  /// Откуда свечи: 'real' — отрезок price_candles, 'synthetic' — рынок строит генератор (backtest/synthetic),
+  /// Откуда свечи: 'real' — отрезок истории монеты `symbol` (BTC — price_candles, остальные — Binance),
+  /// 'synthetic' — рынок строит генератор (backtest/synthetic),
   /// 'live' — живой рынок в эфире: цену и время ставит сервер, уровни исполняет движок эфира.
   dataSource     String      @default("real")
+  /// Монета сессии истории ('real'), market-data/symbols.ts (historySince). У тренажёра и
+  /// эфира не используется: у эфира монета — у сделки и ордера.
+  symbol         String      @default("BTCUSDT")
+  /// Монету выбрал сервер случайно: интерфейс не показывает её до итога, как скрытую дату.
+  hideSymbol     Boolean     @default(false)
   /// Эфир ('live'): до какого момента движок проверил уровни сессии. Не cursorTime:
   /// тот двигают вход и выход сделки, и чтение от него пропускало бы кусок у
   /// остальных позиций. У турнирной сессии курсор общий — Tournament.processedUntil.
