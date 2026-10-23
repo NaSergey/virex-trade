@@ -58,6 +58,17 @@ function measure(el: Element): AnchorRect {
  *    `ResizeObserver` на самом узле, всё сведено в один кадр `rAF`: без этого
  *    дырка отстаёт от элемента при плавной прокрутке.
  */
+/**
+ * Первый видимый узел под меткой, а не первый в документе: у одной метки
+ * бывает два узла на разные экраны — рейка разделов в шапке и нижняя панель
+ * телефона (`data-tour="nav"`), и спрятанный стилем дал бы пустую дырку.
+ */
+function pick(selector: string): Element | null {
+  const all = document.querySelectorAll(selector);
+  for (const node of all) if (node.getClientRects().length > 0) return node;
+  return all[0] ?? null;
+}
+
 export function useAnchorRect(selector: string | undefined): AnchorState {
   /*
    * Узел, который УЖЕ в документе, измеряется сразу, без промежуточного
@@ -78,7 +89,7 @@ export function useAnchorRect(selector: string | undefined): AnchorState {
   const initial = (): AnchorState => {
     if (!selector) return { kind: 'center' };
     if (typeof document === 'undefined') return { kind: 'waiting' };
-    const el = document.querySelector(selector);
+    const el = pick(selector);
     return el ? { kind: 'found', rect: measure(el) } : { kind: 'waiting' };
   };
   const [state, setState] = useState<AnchorState>(initial);
@@ -157,12 +168,12 @@ export function useAnchorRect(selector: string | undefined): AnchorState {
       sync();
     };
 
-    const existing = document.querySelector(selector);
+    const existing = pick(selector);
     if (existing) {
       attach(existing);
     } else {
       observer = new MutationObserver(() => {
-        const found = document.querySelector(selector);
+        const found = pick(selector);
         if (found) attach(found);
       });
       observer.observe(document.body, { childList: true, subtree: true });

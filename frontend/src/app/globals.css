@@ -81,6 +81,9 @@
      останавливается всё остальное липкое на странице, и на узком экране шапка
      ниже — забыть поправить второе место было бы нечем. */
   --top-h: 48px;
+  /* Высота нижней панели разделов телефона (`.tabbar`) — ноль, пока её нет:
+     полноэкранные страницы вычитают её вместе с шапкой. */
+  --tab-h: 0px;
 
   --hair: var(--color-line);
   --hair-2: var(--color-line-2);
@@ -426,6 +429,10 @@
     gap: var(--s5);
     height: var(--top-h);
   }
+  /* Название раздела в шапке и нижняя панель разделов (`TabBar`) — только на
+     телефоне, где рейки нет. */
+  .top-title,
+  .tabbar { display: none; }
   .mark {
     display: flex;
     align-items: center;
@@ -906,7 +913,7 @@
      потоком: страница прокручивается целиком, а не панелями внутри.
      min-height — пол для низких окон (горизонтальный телефон): ниже него
      график схлопнулся бы в полоску, и лучше уж пусть страница прокрутится. */
-  .bt-live { --bt-screen: calc(100dvh - var(--top-h) - 1px - var(--s4) * 2); }
+  .bt-live { --bt-screen: calc(100dvh - var(--top-h) - var(--tab-h) - 1px - var(--s4) * 2); }
   .terminal-main { display: contents; }
   .terminal-chart { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
   @media (min-width: 1101px) {
@@ -2807,7 +2814,7 @@
   .lab-stick {
     position: sticky;
     top: var(--top-h);
-    max-height: calc(100dvh - var(--top-h));
+    max-height: calc(100dvh - var(--top-h) - var(--tab-h));
     overflow-y: auto;
     /* Прокрутка внутри колонки есть, но её не видно и она не перехватывает
        колесо: докрутив условия до конца, страница едет дальше сама. С
@@ -3499,7 +3506,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--s3);
-    min-height: calc(100dvh - var(--top-h) - 1px);
+    min-height: calc(100dvh - var(--top-h) - var(--tab-h) - 1px);
     padding: var(--s4) 0;
   }
   /* Баннер — реклама сезона и наград над карточками (владелец 2026-10-17:
@@ -5629,45 +5636,77 @@
   .wrap,
   .top-in { padding: 0 var(--s3); }
 
-  /* ── шапка в две строки ──────────────────────────────────────── */
-  /* На телефоне разделы уезжают под марку и «Профиль»: те стоят по краям
-     флексом и ширины не отдают, и рейке из пяти разделов оставалось около
-     полутора сотен пикселей — видно было два с половиной. Строка вторая, во
-     всю ширину, и все пять листаются вбок как рейка вкладок.
+  /* ── приложение: шапка в строку, разделы внизу ─────────────────── */
+  /* На телефоне продукт ведёт себя как приложение (тот же приём, что у
+     учебника английского): разделы — панелью внизу под большим пальцем
+     (`TabBar`), шапка — одна строка со знаком, названием раздела, балансом и
+     профилем. Рейка разделов из шапки уходит. Отступы — от выреза и полоски
+     «домой» (`viewport-fit: cover` в корневом layout).
      Высота по-прежнему объявлена в --top-h, поэтому липкая колонка условий
      «Выборки» переезжает следом сама. */
-  :root { --top-h: 84px; }
+  :root { --top-h: calc(44px + env(safe-area-inset-top)); }
+  :root:has(.tabbar) { --tab-h: calc(56px + env(safe-area-inset-bottom)); }
+  .top { padding-top: env(safe-area-inset-top); }
   .top-in {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    grid-template-rows: 44px 1fr;
-    /* Ноль по вертикали явно: в широкой раскладке у шапки объявлен gap в --s5,
-       и он остался бы просветом между строками — обе ушли бы за её высоту. */
-    gap: 0 var(--s3);
+    height: 44px;
+    gap: var(--s3);
     align-items: center;
   }
-  .mark,
-  .top-r { grid-row: 1; }
-  /* Меню профиля открывается от нижнего края верхней строки, а не от края
-     самой кнопки: иначе оно начинается на пару пикселей выше рейки разделов
-     и накрывает её частично, а не целиком. */
-  .top-r {
-    justify-self: end;
-    align-self: stretch;
+  .top .nav { display: none; }
+  .top-title {
+    display: block;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
   }
-  .nav {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    align-self: stretch;
-    /* Рейка кончается краем экрана, а не полем полосы: иначе последний
-       раздел обрезается о невидимую границу и кажется, что он и есть
-       последний. Отбивку первого держит собственный паддинг рейки. */
-    margin: 0 calc(-1 * var(--s3));
-    padding: 0 var(--s3);
-    border-top: 1px solid var(--hair);
-    /* Листание вкладок не должно уводить браузер «назад» по свайпу. */
-    overscroll-behavior-x: contain;
+  /* Меню профиля открывается от нижнего края шапки, а не от края кнопки. */
+  .top-r { align-self: stretch; }
+  /* Страница кончается над панелью, а не под ней. */
+  body:has(.tabbar) { padding-bottom: var(--tab-h); }
+  .tabbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    padding-bottom: env(safe-area-inset-bottom);
+    border-top: 1px solid var(--rule);
+    background: rgb(var(--ground-rgb) / 0.86);
+    backdrop-filter: blur(24px) saturate(1.4);
   }
+  .tabbar a {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-height: 56px;
+    padding: 6px 0 4px;
+    border-top: 2px solid transparent;
+    color: var(--ink-3);
+    font-size: 10px;
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    transition: color 0.12s;
+  }
+  .tabbar a[aria-current="page"] {
+    border-top-color: var(--ink);
+    color: var(--ink);
+  }
+  /* Касание не подсвечивает ссылку серым прямоугольником браузера, а двойное
+     касание не приближает страницу. */
+  a,
+  button { -webkit-tap-highlight-color: transparent; }
 
   /* ── пальцевые мерки ─────────────────────────────────────────── */
   /* Управление здесь щупают пальцем, а не наводят курсором. Кегль, рамка и
@@ -6674,7 +6713,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--s4);
-  min-height: calc(100dvh - var(--top-h) - 1px);
+  min-height: calc(100dvh - var(--top-h) - var(--tab-h) - 1px);
   padding: var(--s4) var(--s4) calc(var(--s4) * 2);
   text-align: center;
 }
@@ -7433,7 +7472,7 @@
        приём, что у терминала бектеста (`--bt-screen`). min-height — пол для
        низких окон: ниже него стол сжался бы до нечитаемого, и лучше уж пусть
        страница прокрутится. */
-    height: calc(100dvh - var(--top-h) - 1px);
+    height: calc(100dvh - var(--top-h) - var(--tab-h) - 1px);
     min-height: 520px;
   }
   .ct-wait { color: var(--g-ink-2); text-align: center; margin: 8px 0; }

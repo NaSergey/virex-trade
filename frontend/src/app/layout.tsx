@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { QueryProvider } from "./(internal)/QueryProvider";
@@ -51,8 +51,23 @@ const jetbrainsMono = JetBrains_Mono({
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getServerLocale();
   const messages = await loadMessages(locale);
-  return { title: messages.meta.title, description: messages.meta.description };
+  return {
+    title: messages.meta.title,
+    description: messages.meta.description,
+    // С телефона продукт ставится на главный экран приложением: без строки
+    // браузера, со своей иконкой. Манифест — в `/assets/`: этот каталог гейт
+    // `proxy.ts` пропускает без куки, а браузер берёт манифест без неё.
+    manifest: "/assets/app/manifest.webmanifest",
+    icons: { apple: "/assets/app/icon-180.png" },
+    appleWebApp: { capable: true, title: "Trade Play", statusBarStyle: "black-translucent" },
+  };
 }
+
+/*
+ * `viewport-fit: cover` — страница под вырезом и полоской «домой»; отступы от
+ * них держат шапка и нижняя панель разделов (`env(safe-area-inset-*)`).
+ */
+export const viewport: Viewport = { themeColor: "#050505", viewportFit: "cover" };
 
 export default async function RootLayout({
   children,

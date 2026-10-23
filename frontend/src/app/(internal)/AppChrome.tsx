@@ -3,7 +3,7 @@ import { DailyRewardPrompt } from '@/features/daily-reward';
 import { OnboardingProvider, TourOverlay } from '@/features/onboarding';
 import { GamesVeil } from '@/widgets/games-veil';
 import { SettingsHost } from '@/widgets/settings-dialog';
-import { TopNav } from '@/widgets/top-nav';
+import { TabBar, TopNav } from '@/widgets/top-nav';
 import { TerminalWarmup } from '@/views/terminal/components/TerminalWarmup';
 
 /**
@@ -25,6 +25,8 @@ export function AppChrome({ children }: { children: ReactNode }) {
       <GamesVeil />
       <TopNav />
       {children}
+      {/* На телефоне разделы — панелью внизу, как у приложения. */}
+      <TabBar />
       {/* Обучение — последним слоем и снаружи защиты: рейка, которую оно
           подсвечивает первым шагом, тоже стоит снаружи. Провайдер обнимает
           и её, потому что «Обучение заново» живёт в меню профиля. */}
