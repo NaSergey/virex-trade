@@ -26,6 +26,7 @@ export function ChangeLevelsModal({
   isPending,
   error,
   decimals,
+  showSymbol = true,
 }: {
   trade: PositionLike;
   scale: number;
@@ -37,6 +38,8 @@ export function ChangeLevelsModal({
   error: unknown;
   /** Знаков цены монеты сделки; не задано — общее правило формата. */
   decimals?: number;
+  /** Монета в подзаголовке; снимается у истории со случайной монетой — она скрыта до итога. */
+  showSymbol?: boolean;
 }) {
   const t = useTranslations('backtest');
   const { closing, close } = useDialogFade(onClose);
@@ -55,7 +58,7 @@ export function ChangeLevelsModal({
       <DialogContent>
         <DialogHeader
           title={t('changeLevelsTitle')}
-          subtitle={`${trade.symbol} · ${t(`direction.${trade.direction}`)} · ${formatPriceGrouped(toScreen(trade.entryPrice, scale), decimals)}`}
+          subtitle={`${showSymbol ? `${trade.symbol} · ` : ''}${t(`direction.${trade.direction}`)} · ${formatPriceGrouped(toScreen(trade.entryPrice, scale), decimals)}`}
         />
         <DialogBody>
           <Field

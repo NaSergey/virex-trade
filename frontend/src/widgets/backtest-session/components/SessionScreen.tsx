@@ -291,6 +291,10 @@ export function Terminal({
   // режимы держат монету сессии в памяти экрана и ничего не пишут.
   const [liveSymbol, setLiveSymbol] = useLiveSymbol();
   const [localSymbol, setLocalSymbol] = useState(session.symbol);
+  // Случайную монету истории сервер скрыл до итога: ни колонки монеты в таблицах,
+  // ни символа в подзаголовках окон. Раскрывает её итог завершённой сессии.
+  const symbolShown = !session.hideSymbol;
+  const coinPrefix = (sym: string) => (symbolShown ? `${sym} · ` : '');
   const symbol = isLive ? liveSymbol : localSymbol;
   const setSymbol = isLive ? setLiveSymbol : setLocalSymbol;
   // Своим useMemo — по той же причине, что и openTrades: levels сверяет по ссылке.
@@ -1537,6 +1541,7 @@ export function Terminal({
               onCloseGrid={(trade) => onCloseGrid(trade.id)}
               onTags={tags ? (trade) => setTagsModalFor(trade.id) : undefined}
               onSymbol={pickSymbol}
+              showSymbol={symbolShown}
             />
           )}
           {tab === 'orders' && (
@@ -1566,6 +1571,7 @@ export function Terminal({
                 onEditTags={tags ? (trade) => setHistoryTagsFor(trade.id) : undefined}
                 decimalsOf={decimalsOf}
                 onSymbol={pickSymbol}
+                showSymbol={symbolShown}
               />
             )}
             </div>
@@ -1583,6 +1589,7 @@ export function Terminal({
             scale={scale}
             screenPrice={tradePrice}
             decimals={decimalsOf(trade.symbol)}
+            showSymbol={symbolShown}
             onApply={(stop, take) => applyLevels(trade, tradePrice, stop, take)}
             onClose={() => setLevelsModalFor(null)}
             isPending={modifyM.isPending}
@@ -1600,6 +1607,7 @@ export function Terminal({
             scale={scale}
             screenPrice={tradePrice}
             decimals={decimalsOf(trade.symbol)}
+            showSymbol={symbolShown}
             onSubmit={(price, qty) => submitLimit(trade, price, qty)}
             onClose={() => setLimitModalFor(null)}
             isPending={createOrderM.isPending}
@@ -1616,6 +1624,7 @@ export function Terminal({
             remaining={trade.qty - trade.closedQty}
             screenPrice={tradePrice}
             decimals={decimalsOf(trade.symbol)}
+            showSymbol={symbolShown}
             canClose={canClose(trade)}
             onSubmit={(qty) => submitMarket(trade, qty)}
             onClose={() => setMarketModalFor(null)}
@@ -1629,7 +1638,7 @@ export function Terminal({
         return trade ? (
           <TagsDialog
             title={t('positionTagsTitle')}
-            subtitle={`${trade.symbol} · ${t(`direction.${trade.direction}`)} · ${formatPriceGrouped(toScreen(trade.entryPrice, scale), decimalsOf(trade.symbol))}`}
+            subtitle={`${coinPrefix(trade.symbol)}${t(`direction.${trade.direction}`)} · ${formatPriceGrouped(toScreen(trade.entryPrice, scale), decimalsOf(trade.symbol))}`}
             initialTagIds={trade.tags.map((g) => g.id)}
             isPending={tagsM.isPending}
             error={tagsM.error}
@@ -1643,7 +1652,7 @@ export function Terminal({
         return trade ? (
           <TagsDialog
             title={t('tradeTagsTitle')}
-            subtitle={`${trade.symbol} · ${t(`direction.${trade.direction}`)} · ${formatPriceGrouped(toScreen(trade.entryPrice, scale), decimalsOf(trade.symbol))}`}
+            subtitle={`${coinPrefix(trade.symbol)}${t(`direction.${trade.direction}`)} · ${formatPriceGrouped(toScreen(trade.entryPrice, scale), decimalsOf(trade.symbol))}`}
             initialTagIds={trade.tags.map((g) => g.id)}
             isPending={tagsM.isPending}
             error={tagsM.error}

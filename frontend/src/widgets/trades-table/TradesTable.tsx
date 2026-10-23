@@ -128,6 +128,7 @@ export function TradesTable({
   renderExpanded,
   priceDecimals,
   onSymbol,
+  showSymbol = true,
 }: {
   trades: Trade[];
   isLoading?: boolean;
@@ -188,6 +189,8 @@ export function TradesTable({
   priceDecimals?: (trade: Trade) => number | undefined;
   /** Нажатие на символ монеты — открыть её на графике (терминал); не задано — символ просто текст. */
   onSymbol?: (symbol: string) => void;
+  /** Колонка монеты; снимается у истории бектеста со случайной монетой — она скрыта до итога. */
+  showSymbol?: boolean;
 }) {
   const t = useTranslations('tradesTable');
   const { locale } = useLocaleControl();
@@ -319,7 +322,8 @@ export function TradesTable({
   ];
 
   const shown = columns.filter(
-    (c) => !(compact && ROOMY_ONLY.has(c.key)) && !(c.key === 'tags' && !showTags),
+    (c) =>
+      !(compact && ROOMY_ONLY.has(c.key)) && !(c.key === 'tags' && !showTags) && !(c.key === 'symbol' && !showSymbol),
   );
 
   return (

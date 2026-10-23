@@ -27,6 +27,7 @@ export function LimitCloseModal({
   isPending,
   error,
   decimals,
+  showSymbol = true,
 }: {
   trade: PositionLike;
   /** Остаток открытой позиции в монете (qty - closedQty). */
@@ -39,6 +40,8 @@ export function LimitCloseModal({
   error: unknown;
   /** Знаков цены монеты сделки; не задано — общее правило формата. */
   decimals?: number;
+  /** Монета в подзаголовке; снимается у истории со случайной монетой — она скрыта до итога. */
+  showSymbol?: boolean;
 }) {
   const t = useTranslations('backtest');
   const { closing, close } = useDialogFade(onClose);
@@ -52,7 +55,7 @@ export function LimitCloseModal({
       <DialogContent>
         <DialogHeader
           title={t('limitCloseTitle')}
-          subtitle={`${trade.symbol} · ${t('entry')} ${formatPriceGrouped(toScreen(trade.entryPrice, scale), decimals)} · ${t('unrealized')} ${formatPriceGrouped(screenPrice, decimals)}`}
+          subtitle={`${showSymbol ? `${trade.symbol} · ` : ''}${t('entry')} ${formatPriceGrouped(toScreen(trade.entryPrice, scale), decimals)} · ${t('unrealized')} ${formatPriceGrouped(screenPrice, decimals)}`}
         />
         <DialogBody>
           <Field label={t('closingPrice')}>

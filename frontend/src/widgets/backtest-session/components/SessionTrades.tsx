@@ -60,6 +60,7 @@ export function SessionTrades({
   onEditTags,
   decimalsOf,
   onSymbol,
+  showSymbol,
 }: {
   trades: BacktestTrade[];
   /** Масштаб показа; у завершённой сессии — 1, цены раскрыты. */
@@ -71,6 +72,8 @@ export function SessionTrades({
   decimalsOf?: (symbol: string) => number | undefined;
   /** Нажатие на символ монеты — открыть её на графике (терминал); не задано — символ просто текст. */
   onSymbol?: (symbol: string) => void;
+  /** Колонка монеты; снимается у истории со случайной монетой — она скрыта до итога. */
+  showSymbol?: boolean;
 }) {
   const t = useTranslations('backtest');
   const [page, setPage] = useState(1);
@@ -95,6 +98,7 @@ export function SessionTrades({
         )}
         onEditTags={onEditTags && ((tr) => onEditTags(byId.get(tr.id)!))}
         onSymbol={onSymbol}
+        showSymbol={showSymbol}
         empty={<EmptyState title={t('noTrades')} />}
       />
       {rows.length > 0 && (

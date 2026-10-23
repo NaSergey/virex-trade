@@ -1625,7 +1625,7 @@
     },
     "backtest": {
       "introTitle": "Backtest",
-      "introBody": "A random slice of BTC history: candles open one at a time, the future is hidden. You enter and exit yourself — the same decision as a real trade, without the real risk.",
+      "introBody": "A random slice of BTC, ETH, BNB, XRP or SOL history: candles open one at a time, the future is hidden. You enter and exit yourself — the same decision as a real trade, without the real risk.",
       "sessionsTitle": "Sessions",
       "sessionsBody": "Your runs, newest first. Resume an unfinished one from where you left off; a finished one already shows win rate, total R, and PnL.",
       "statsTitle": "Totals across sessions",

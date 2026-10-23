@@ -23,6 +23,7 @@ export function MarketCloseModal({
   isPending,
   error,
   decimals,
+  showSymbol = true,
 }: {
   trade: PositionLike;
   remaining: number;
@@ -37,6 +38,8 @@ export function MarketCloseModal({
   error: unknown;
   /** Знаков цены монеты сделки; не задано — общее правило формата. */
   decimals?: number;
+  /** Монета в подзаголовке; снимается у истории со случайной монетой — она скрыта до итога. */
+  showSymbol?: boolean;
 }) {
   const t = useTranslations('backtest');
   const { closing, close } = useDialogFade(onClose);
@@ -49,7 +52,7 @@ export function MarketCloseModal({
   return (
     <Dialog open={!closing} onOpenChange={(v) => !v && close()}>
       <DialogContent>
-        <DialogHeader title={t('marketCloseTitle')} subtitle={`${trade.symbol} · ${t('unrealized')} ${formatPriceGrouped(screenPrice, decimals)}`} />
+        <DialogHeader title={t('marketCloseTitle')} subtitle={`${showSymbol ? `${trade.symbol} · ` : ''}${t('unrealized')} ${formatPriceGrouped(screenPrice, decimals)}`} />
         <DialogBody>
           <Field label={t('closedQtyCoin')}>
             {(id) => (
