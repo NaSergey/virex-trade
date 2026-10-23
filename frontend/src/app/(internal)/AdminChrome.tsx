@@ -17,6 +17,8 @@ const ITEMS = [
   { href: '/users', key: 'users' },
   // Учебник английского — свои вкладки внутри (views/english), пункт горит на всех.
   { href: '/english', key: 'english' },
+  // План дня — свои вкладки внутри (views/plan).
+  { href: '/plan', key: 'plan' },
 ] as const;
 
 const isCurrent = (path: string, href: string) => path === href || (href !== '/' && path.startsWith(`${href}/`));

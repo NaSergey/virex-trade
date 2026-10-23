@@ -1,0 +1,340 @@
+/* ═══════════════════════════════════════════════════════════════
+   ПЛАН ДНЯ — раздел владельца в админке (views/plan).
+
+   Язык продукта: кость на почти чёрном, нулевой радиус, структуру держат
+   линейки, выбор — выворот, цвет — только «сделал» (.pos) и «не сделал»
+   (.neg). Все классы — `.pl-*`, файл сносится вместе с каталогом.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── вкладки ─────────────────────────────────────────────────────── */
+.pl-tabs {
+  display: flex;
+  gap: var(--s4);
+  margin: var(--s3) 0 var(--s4);
+  background: linear-gradient(var(--hair), var(--hair)) left bottom / 100% 1px no-repeat;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.pl-tabs a {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+  padding: var(--s2) 0;
+  border-bottom: 1px solid transparent;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.12s, border-color 0.12s;
+}
+.pl-tabs a:hover { color: var(--ink-2); }
+.pl-tabs a[aria-current="page"] {
+  border-bottom-color: var(--ink);
+  color: var(--ink);
+}
+.pl-tab-ic { display: none; }
+.pl-mtop { display: none; }
+.pl a,
+.pl button {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.pl-grow { flex: 1; }
+.pl-note { margin: var(--s2) 0; font-size: var(--t-s); }
+.pl-notice {
+  margin: 0 0 var(--s3);
+  padding: var(--s2) var(--s3);
+  border-left: 2px solid var(--doubt);
+  background: rgba(var(--ink-rgb), 0.03);
+  font-size: var(--t-s);
+}
+.pl code { font-family: var(--font-mono); font-size: var(--t-xs); }
+
+/* ── листалка дней ──────────────────────────────────────────────── */
+.pl-daynav {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+}
+.pl-daynav-label {
+  min-width: 96px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  letter-spacing: 0.08em;
+}
+.pl-nav {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--hair);
+  color: var(--ink-2);
+}
+.pl-nav:hover { color: var(--ink); border-color: var(--rule); }
+
+/* ── блоки дня и шаблона ────────────────────────────────────────── */
+.pl-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--rule);
+}
+.pl-item {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: var(--s3);
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--hair);
+}
+.pl-item-live {
+  /* Идущий блок — линейкой слева, а не цветом: цвет здесь значит «сделал / не сделал». */
+  box-shadow: inset 2px 0 0 var(--ink);
+  padding-left: var(--s2);
+}
+.pl-item-quiet { opacity: 0.6; }
+.pl-item-form { display: block; }
+.pl-new { margin-top: var(--s3); padding: var(--s3) 0; border-top: 1px solid var(--rule); }
+.pl-time {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-mono);
+  font-size: var(--t-s);
+  font-variant-numeric: tabular-nums;
+}
+.pl-body { min-width: 0; }
+.pl-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+}
+.pl-title { font-size: var(--t-m); }
+.pl-outcome {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.pl-edit {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  color: var(--ink-3);
+}
+.pl-edit:hover { color: var(--ink); }
+.pl-meta { margin-top: 2px; font-size: var(--t-s); }
+.pl-tasks-list {
+  list-style: none;
+  margin: var(--s2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pl-tasks-plain li::before { content: "· "; color: var(--ink-3); }
+.pl-tasks-plain { font-size: var(--t-s); color: var(--ink-2); }
+.pl-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  font-size: var(--t-s);
+  cursor: pointer;
+}
+.pl-check input { width: 16px; height: 16px; accent-color: var(--ink); }
+.pl-task-done { color: var(--ink-3); text-decoration: line-through; }
+.pl-answers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  margin-top: var(--s2);
+}
+.pl-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s3);
+  margin-top: var(--s4);
+}
+
+/* ── форма блока ────────────────────────────────────────────────── */
+.pl-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+.pl-form-row {
+  display: grid;
+  grid-template-columns: 120px 120px minmax(0, 220px);
+  gap: var(--s3);
+}
+.pl-tasks { min-height: 72px; resize: vertical; font: inherit; }
+.pl-days {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.pl-day {
+  min-width: 40px;
+  height: 32px;
+  border: 1px solid var(--hair);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+}
+.pl-day[aria-pressed="true"] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--ground);
+}
+.pl-days-presets { display: inline-flex; gap: var(--s2); margin-left: var(--s2); }
+.pl-form-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+.pl-week { margin-bottom: var(--s3); flex-wrap: wrap; }
+
+/* ── отчёт ──────────────────────────────────────────────────────── */
+.pl-bars { width: 100%; margin: var(--s2) 0 var(--s4); }
+.pl-bars svg { display: block; }
+.pl-bar-ok { fill: var(--ink); }
+.pl-bar-low { fill: var(--ink-3); }
+.pl-bars-goal { stroke: var(--ink-3); stroke-dasharray: 3 3; stroke-width: 1; }
+.pl-bars-lbl { fill: var(--ink-3); font-family: var(--font-mono); font-size: 10px; }
+.pl-outcomes {
+  list-style: none;
+  margin: var(--s2) 0 var(--s4);
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s5);
+  font-variant-numeric: tabular-nums;
+}
+.pl-outcomes span { margin-right: var(--s1); }
+.pl-cats {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-s);
+  font-variant-numeric: tabular-nums;
+}
+.pl-cats th {
+  padding: var(--s2) var(--s2) var(--s2) 0;
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  font-weight: normal;
+  letter-spacing: 0.08em;
+  text-align: left;
+  text-transform: uppercase;
+}
+.pl-cats td { padding: var(--s2) var(--s2) var(--s2) 0; border-bottom: 1px solid var(--hair); }
+
+/* ── настройки ──────────────────────────────────────────────────── */
+.pl-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  max-width: 420px;
+}
+.pl-inline { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s1); }
+
+/*
+ * Телефон — главное место ответа на напоминание: раздел на нём — приложение,
+ * как учебник. Шапки админки нет, вкладки — панелью внизу, кнопки ответа во
+ * всю ширину и не ниже 44 px. Отступы — от выреза и полоски «домой».
+ */
+@media (max-width: 760px) {
+  body:has(.pl-app) .adm-top { display: none; }
+  .pl.wrap {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+  .pl-mtop {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 44px;
+  }
+  .pl-mtop-brand {
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  .pl-mtop-out {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    color: var(--ink-3);
+    font-size: var(--t-xs);
+    text-decoration: none;
+  }
+  .pl-tabs {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+    margin: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    border-top: 1px solid var(--rule);
+    background: var(--ground);
+  }
+  .pl-tabs a {
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    min-height: 56px;
+    padding: 6px 0 4px;
+    border-bottom: 0;
+    border-top: 2px solid transparent;
+    font-family: inherit;
+    font-size: 10px;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+  .pl-tabs a[aria-current="page"] { border-top-color: var(--ink); }
+  .pl-tab-ic { display: block; }
+  .pl .pagehead { flex-direction: column; align-items: stretch; gap: var(--s2); }
+  .pl .pagehead h1 { font-size: var(--t-l); }
+  .pl .pagehead .lede { font-size: var(--t-s); }
+  /* iPhone увеличивает страницу при фокусе на поле мельче 16px. */
+  .pl .in,
+  .pl select,
+  .pl textarea { font-size: 16px; }
+
+  .pl-daynav { justify-content: space-between; }
+  .pl-nav { width: 44px; height: 44px; }
+  .pl-item { grid-template-columns: 52px minmax(0, 1fr); gap: var(--s2); }
+  .pl-edit { width: 44px; height: 44px; margin: -12px -8px -12px auto; }
+  .pl-answers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pl-answers .btn { min-height: 44px; }
+  .pl-answers .btn.solid { grid-column: 1 / -1; }
+  .pl-answers .btn.bare { grid-column: 1 / -1; justify-self: start; }
+  .pl-check { min-height: 36px; }
+  .pl-foot .btn { min-height: 44px; }
+  .pl-form-row { grid-template-columns: 1fr 1fr; }
+  .pl-form-row > :last-child { grid-column: 1 / -1; }
+  .pl-day { min-width: 0; flex: 1 1 calc(14% - 4px); height: 44px; }
+  .pl-days-presets { width: 100%; margin: var(--s1) 0 0; }
+  .pl-form-actions .btn { min-height: 44px; }
+  .pl-week { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .pl-week .pick,
+  .pl-week button { min-height: 44px; }
+  .pl-cats th:nth-child(4),
+  .pl-cats td:nth-child(4) { display: none; }
+  .pl-settings { max-width: none; }
+}

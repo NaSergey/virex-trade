@@ -1580,3 +1580,87 @@ model EnglishThemeWord {
   @@map("english_theme_words")
 }
 // ═══ /english ═══
+
+// ═══ plan ═══ План дня владельца в админке (backend/src/plan; спека
+// docs/superpowers/specs/2026-10-23-daily-plan-design.md). Блок сносится
+// целиком вместе с модулем: связей с таблицами продукта нет. Владелец один —
+// поэтому без userId, как у EnglishCard и HlWallet.
+
+/// Настройки плана — одна строка (id = 1).
+model PlanSettings {
+  id         Int      @id @default(1)
+  /// Часовой пояс владельца (IANA): по нему считаются «сегодня» и время блоков.
+  tz         String   @default("Europe/Moscow")
+  /// Утренний план в Telegram — минута суток; null — не слать.
+  morningMin Int?     @default(480)
+  /// Вечерний отчёт — минута суток; null — не слать. В воскресенье к нему — неделя.
+  eveningMin Int?     @default(1320)
+  /// За сколько минут до начала блока напоминать (0 — ровно в начале).
+  leadMin    Int      @default(0)
+  updatedAt  DateTime @updatedAt
+
+  @@map("plan_settings")
+}
+
+/// Блок недельного шаблона: из них собирается день, когда его открыли впервые.
+model PlanBlock {
+  id        String   @id @default(cuid())
+  /// Дни недели битами: пн = 1, вт = 2, … вс = 64.
+  days      Int
+  startMin  Int
+  endMin    Int
+  title     String
+  category  String
+  /// Что сделать в блоке — пункты по строке.
+  tasks     String[]
+  /// Отслеживать: напоминание в Telegram и место в статистике. Сон и еду обычно не отслеживают.
+  track     Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@map("plan_blocks")
+}
+
+/// День плана (местная дата владельца `YYYY-MM-DD`). Строка появляется, когда
+/// день впервые открыли или до него дошёл `worker`; тогда же копируется шаблон.
+model PlanDay {
+  day           String     @id
+  /// День правили руками — правка шаблона его не пересобирает.
+  edited        Boolean    @default(false)
+  morningSentAt DateTime?
+  eveningSentAt DateTime?
+  createdAt     DateTime   @default(now())
+  items         PlanItem[]
+
+  @@map("plan_days")
+}
+
+/// Блок конкретного дня. Статус — ответ владельца: planned (ответа нет),
+/// started («сажусь за работу»), done, partial, skipped («забил»), walk («иду гулять»).
+/// «Пропущено» не хранится — выводится: время вышло, а ответа нет.
+model PlanItem {
+  id         String    @id @default(cuid())
+  day        String
+  blockId    String?
+  startMin   Int
+  endMin     Int
+  title      String
+  category   String
+  /// Пункты блока: `[{ text, done }]`.
+  tasks      Json      @default("[]")
+  track      Boolean   @default(true)
+  status     String    @default("planned")
+  startedAt  DateTime?
+  answeredAt DateTime?
+  /// Напоминание о начале ушло — и его сообщение, которое правят кнопки.
+  notifiedAt DateTime?
+  messageId  Int?
+  /// Конец блока обработан: спросили итог или пометили сообщение.
+  endedAt    DateTime?
+  note       String?
+  createdAt  DateTime  @default(now())
+  planDay    PlanDay   @relation(fields: [day], references: [day], onDelete: Cascade)
+
+  @@index([day])
+  @@map("plan_items")
+}
+// ═══ /plan ═══
