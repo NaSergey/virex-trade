@@ -1236,6 +1236,22 @@ export function Terminal({
     ...SPEEDS.map((s) => ({ value: s, label: `×${s}` })),
   ];
 
+  // Один переключатель на два места: строка шага и, на телефоне, над таблицей.
+  const tableSwitch = (className: string) => (
+    <Seg
+      className={className}
+      data-tour="term-tables"
+      options={[
+        { value: 'open' as const, label: t('openPositionsTab') },
+        { value: 'orders' as const, label: t('ordersTab') },
+        { value: 'history' as const, label: t('historyTab') },
+      ]}
+      value={tab}
+      onChange={setTab}
+      ariaLabel={t('openPositionsTab')}
+    />
+  );
+
   return (
     // Терминал во всю ширину окна — единственное место продукта без .wrap
     // (см. комментарий у SessionScreen). Итог той же сессии после завершения
@@ -1378,20 +1394,7 @@ export function Terminal({
                     {detail.tournament ? t('backToTournament') : t('backToList')}
                   </Button>
                 )}
-                {tables && (
-                  <Seg
-                    className="view-switch"
-                    data-tour="term-tables"
-                    options={[
-                      { value: 'open' as const, label: t('openPositionsTab') },
-                      { value: 'orders' as const, label: t('ordersTab') },
-                      { value: 'history' as const, label: t('historyTab') },
-                    ]}
-                    value={tab}
-                    onChange={setTab}
-                    ariaLabel={t('openPositionsTab')}
-                  />
-                )}
+                {tables && tableSwitch('view-switch')}
               </div>
             )}
             {replay.ended && <p className="muted">{t('historyEnded')}</p>}
@@ -1496,6 +1499,9 @@ export function Terminal({
 
       {tables && (
         <div className="bt-table">
+          {/* На телефоне переключатель таблиц стоит над самой таблицей, а не в
+              строке шага: между ними там вся панель ордера. */}
+          {tableSwitch('view-switch view-switch-m')}
           {/* Над любой вкладкой: уровни и ордера двигают и снимают прямо на графике,
               какая бы таблица ни была открыта под ним. */}
           {positionHint && <p className="neg">{positionHint}</p>}
