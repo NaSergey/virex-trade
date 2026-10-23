@@ -72,6 +72,8 @@ export function MarketCloseModal({
           </Field>
           <Slider value={pct} min={0} max={100} step={1} onChange={(v) => setPct(clampPct(v))} aria-label={t('closedQtyCoin')} />
           <p className="muted">{t('marketCloseHint', { qty: formatQty(qty), pnl: formatMoney(impact.usdt) })}</p>
+          {/* Кнопка выключена — окно говорит почему, а не молчит (QA 2026-10-23). */}
+          {!canClose && <p className="muted">{t('marketCloseTooSoon')}</p>}
           <ErrorNote error={error} fallback={t('actionFailed')} />
         </DialogBody>
         <DialogActions

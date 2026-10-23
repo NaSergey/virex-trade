@@ -403,6 +403,19 @@ export const useSetBacktestTags = (id: string) => {
  * Сохранить момент сессии. keepalive — для ухода со страницы: такой запрос
  * браузер доводит до конца, даже когда вкладку уже закрывают.
  */
+/**
+ * Момент прокрутки — и в кэш сессии, а не только на сервер. Кэш живёт до
+ * перезагрузки вкладки (`gcTime: Infinity`), и вернувшийся в сессию («К списку»
+ * → «Продолжить») монтировал прокрутку с момента последней перечитки: терминал
+ * отматывался на всё сыгранное, и свечи шли по второму кругу (QA 2026-10-23).
+ * Только вперёд — как и сервер.
+ */
+export function rememberCursor(qc: QueryClient, id: string, cursor: number) {
+  qc.setQueryData<SessionDetail>(sessionKey(id), (d) =>
+    d && Date.parse(d.session.cursorTime) < cursor ? { ...d, session: { ...d.session, cursorTime: new Date(cursor).toISOString() } } : d,
+  );
+}
+
 export const saveCursor = (id: string, cursor: number, keepalive = false) =>
   apiJson<{ cursorTime: string }>(`/api/backtest/sessions/${id}`, {
     ...json('PATCH', { cursorTime: new Date(cursor).toISOString() }),

@@ -274,7 +274,7 @@ export function TradesTable({
       // как у ордеров раскрытой записи.
       render: (tr) => (
         <span title={t('qtyTitle', { qty: formatQty(tr.qty) })}>
-          {formatPriceGrouped(tr.qty * tr.avgEntryPrice)}
+          {formatPriceGrouped(tr.notional ?? tr.qty * tr.avgEntryPrice)}
           {/* ×3 — позиция закрывалась тремя ордерами: размер сложен из частей. */}
           {tr.parts > 1 && <span className="lbl"> ×{tr.parts}</span>}
         </span>

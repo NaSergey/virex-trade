@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { fetchCandles, saveCursor } from '../api/hooks';
+import { useQueryClient } from '@tanstack/react-query';
+import { fetchCandles, rememberCursor, saveCursor } from '../api/hooks';
 import type { BacktestCloseOrder, BacktestEntryOrder, BacktestTrade, SessionDetail } from '../api/types';
 import { advanceTo, type OpenPosition } from '../lib/advance';
 import {
@@ -394,6 +395,7 @@ export function useReplay(
   // дала бы шестнадцать запросов в секунду. Сервер двигает момент только вперёд,
   // так что опоздавшее сохранение ничего не отмотает.
   const saved = useRef(cursor);
+  const qc = useQueryClient();
   const flush = useCallback(
     async (keepalive = false) => {
       const c = cursorRef.current;
@@ -404,6 +406,7 @@ export function useReplay(
       // как сохранённая, и следующей попытки не случилось бы до нового шага.
       const prev = saved.current;
       saved.current = c;
+      rememberCursor(qc, sessionId, c);
       try {
         await saveCursor(sessionId, c, keepalive);
       } catch (e) {
@@ -411,7 +414,7 @@ export function useReplay(
         throw e;
       }
     },
-    [sessionId],
+    [sessionId, qc],
   );
 
   // Интервал, а не таймер «через 3 секунды после последнего шага»: тот был

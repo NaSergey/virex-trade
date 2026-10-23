@@ -1471,6 +1471,7 @@
     "closedQtyCoin": "Closed quantity",
     "limitCloseHint": "{qty} will close at {price}, result {pnl} USDT (fees included).",
     "marketCloseHint": "{qty} closes right now, result {pnl} USDT (fees included).",
+    "marketCloseTooSoon": "The position was opened this minute — it can be closed from the next one.",
     "limitCloseConfirm": "Place order",
     "marketCloseConfirm": "Close now",
     "cancelOrder": "Cancel",

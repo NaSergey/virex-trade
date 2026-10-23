@@ -1083,6 +1083,7 @@
     "closedQtyCoin": "Объём закрытия",
     "limitCloseHint": "{qty} будет закрыто по цене {price}, результат {pnl} USDT (с учётом комиссий).",
     "marketCloseHint": "{qty} закроется прямо сейчас, результат {pnl} USDT (с учётом комиссий).",
+    "marketCloseTooSoon": "Позиция открыта в эту минуту — закрыть её можно со следующей.",
     "limitCloseConfirm": "Поставить ордер",
     "marketCloseConfirm": "Закрыть сейчас",
     "cancelOrder": "Отменить",
