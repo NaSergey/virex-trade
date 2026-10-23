@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent, type RefObject } from 'react';
-import { magnetPrice, makePosition, moveAnchor, placement, simplifyIdx, translate } from '../../lib/drawings/geometry';
+import { magnetPrice, makeChannel, makePosition, moveAnchor, placement, simplifyIdx, translate } from '../../lib/drawings/geometry';
 import type { DPoint, Drawing, DrawingColor, DrawingKind, DrawingWidth, ToolId } from '../../lib/drawings/types';
 
 /** Всё, что график отдаёт слою рисунков. Объект обязан быть стабильным между рендерами — график в memo. */
@@ -49,6 +49,17 @@ const BRUSH_EPS_PX = 1;
 /** Позиция по клику: стоп на эту долю видимого диапазона цены, длина — в свечах. */
 const POSITION_RISK_FRAC = 0.06;
 const POSITION_BARS = 20;
+/** Канал по двум точкам: параллельная — на эту долю видимого диапазона цены. */
+const CHANNEL_FRAC = 0.08;
+/** С Shift вторая точка этих фигур встаёт на цену первой — горизонталь, как в TradingView. */
+const LEVELABLE: ReadonlySet<DrawingKind | 'ruler'> = new Set(['trend', 'ray', 'extended', 'arrow', 'channel']);
+
+/** Модификаторы нажатия: Shift выравнивает, Ctrl/⌘ на время переворачивает магнит. */
+interface Mods {
+  shift: boolean;
+  invertMagnet: boolean;
+}
+const modsOf = (e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }): Mods => ({ shift: e.shiftKey, invertMagnet: e.ctrlKey || e.metaKey });
 /** Двойной клик сразу после действия рисования — не жест графика (сброс зума, «к живому краю»). */
 const DBLCLICK_GUARD_MS = 450;
 
@@ -79,25 +90,37 @@ export function useDrawingGestures(opts: ChartDrawingProps | undefined, geoRef: 
   const [override, setOverride] = useState<Drawing | null>(null);
   const [ruler, setRuler] = useState<Ruler | null>(null);
   const lastAction = useRef(0);
-  const pending = useRef<{ x: number; y: number } | null>(null);
+  const pending = useRef<{ x: number; y: number; mods: Mods } | null>(null);
   const raf = useRef(0);
   const optsRef = useRef(opts);
   useLayoutEffect(() => {
     optsRef.current = opts;
   });
 
-  const pointAt = (clientX: number, clientY: number, snap: boolean, magnet: boolean): DPoint => {
+  const pointAt = (clientX: number, clientY: number, snap: boolean, magnet: boolean, invertMagnet = false): DPoint => {
     const g = geoRef.current;
     const x = g.svgX(clientX);
     const t = g.timeAt(x, snap);
     let p = g.priceAt(g.svgY(clientY));
-    if (magnet && optsRef.current?.magnet) p = magnetPrice(g.candleAt(t), p, g.yOf, g.px(MAGNET_PX));
+    if (magnet && !!optsRef.current?.magnet !== invertMagnet) p = magnetPrice(g.candleAt(t), p, g.yOf, g.px(MAGNET_PX));
     return { t, p };
+  };
+
+  /** Вторая точка фигуры из двух: с Shift — на цене первой. */
+  const secondAt = (g: Extract<Gesture, { type: 'create' }>, clientX: number, clientY: number, mods: Mods): DPoint => {
+    const b = pointAt(clientX, clientY, true, true, mods.invertMagnet);
+    return mods.shift && LEVELABLE.has(g.kind) ? { t: b.t, p: g.a.p } : b;
   };
 
   const draft = (kind: DrawingKind, points: DPoint[], id = newId()): Drawing => {
     const style = optsRef.current?.style ?? { color: 'blue' as const, width: 2 as const };
     return { id, kind, points, color: style.color, width: style.width };
+  };
+
+  /** Точки фигуры из двух поставленных; у канала третья — параллельная на доле видимой цены. */
+  const pointsOf = (kind: DrawingKind, a: DPoint, b: DPoint): DPoint[] => {
+    const geo = geoRef.current;
+    return kind === 'channel' ? makeChannel(a, b, (geo.hi - geo.lo) * CHANNEL_FRAC) : [a, b];
   };
 
   const cancel = useCallback(() => {
@@ -136,7 +159,7 @@ export function useDrawingGestures(opts: ChartDrawingProps | undefined, geoRef: 
       return;
     }
     if (g.a.t === b.t && g.a.p === b.p) return;
-    const d = draft(g.kind, [g.a, b]);
+    const d = draft(g.kind, pointsOf(g.kind, g.a, b));
     o?.onCommit(d);
     o?.onSelect(d.id);
     o?.onToolDone();
@@ -148,9 +171,9 @@ export function useDrawingGestures(opts: ChartDrawingProps | undefined, geoRef: 
     pending.current = null;
     if (!at || !g) return;
     if (g.type === 'create') {
-      g.b = pointAt(at.x, at.y, true, true);
+      g.b = secondAt(g, at.x, at.y, at.mods);
       if (g.kind === 'ruler') setRuler({ a: g.a, b: g.b });
-      else setPreview(draft(g.kind, [g.a, g.b], 'preview'));
+      else setPreview(draft(g.kind, pointsOf(g.kind, g.a, g.b), 'preview'));
     } else if (g.type === 'brush') {
       const geo = geoRef.current;
       g.pts.push(pointAt(at.x, at.y, false, false));
@@ -159,10 +182,11 @@ export function useDrawingGestures(opts: ChartDrawingProps | undefined, geoRef: 
       setPreview(draft('brush', [...g.pts], 'preview'));
     } else if (g.type === 'move') {
       const pt = pointAt(at.x, at.y, true, false);
-      g.next = translate(g.orig, pt.t - g.start.t, pt.p - g.start.p);
+      // С Shift фигура едет только по времени — уровень остаётся на своей цене.
+      g.next = translate(g.orig, pt.t - g.start.t, at.mods.shift ? 0 : pt.p - g.start.p);
       setOverride(g.next);
     } else {
-      g.next = moveAnchor(g.orig, g.i, pointAt(at.x, at.y, true, true));
+      g.next = moveAnchor(g.orig, g.i, pointAt(at.x, at.y, true, true, at.mods.invertMagnet));
       setOverride(g.next);
     }
   };
@@ -192,17 +216,18 @@ export function useDrawingGestures(opts: ChartDrawingProps | undefined, geoRef: 
     const g = gesture.current;
     if (g?.type === 'create' && g.phase === 'await') {
       capture(e);
-      finishCreate(g, pointAt(e.clientX, e.clientY, true, true));
+      finishCreate(g, secondAt(g, e.clientX, e.clientY, modsOf(e)));
       return true;
     }
-    if (!o.tool) {
+    // Shift+клик без инструмента — линейка, как в TradingView: мерить чаще, чем рисовать.
+    const tool = o.tool ?? (e.shiftKey && e.button === 0 ? 'ruler' : null);
+    if (!tool) {
       if (o.selectedId) o.onSelect(null);
       return false;
     }
     capture(e);
     lastAction.current = performance.now();
-    const pt = pointAt(e.clientX, e.clientY, true, true);
-    const tool = o.tool;
+    const pt = pointAt(e.clientX, e.clientY, true, true, e.ctrlKey || e.metaKey);
     const how = tool === 'ruler' ? 2 : placement(tool);
     if (how === 1 && tool !== 'ruler') {
       const points =
@@ -228,7 +253,7 @@ export function useDrawingGestures(opts: ChartDrawingProps | undefined, geoRef: 
     if (!g) return false;
     // Ожидание второй точки идёт за любым указателем, в том числе без нажатия (наведение мыши).
     if (!(g.type === 'create' && g.phase === 'await') && e.pointerId !== g.pointerId) return false;
-    pending.current = { x: e.clientX, y: e.clientY };
+    pending.current = { x: e.clientX, y: e.clientY, mods: modsOf(e) };
     if (!raf.current) {
       raf.current = requestAnimationFrame(() => {
         raf.current = 0;
@@ -270,10 +295,12 @@ export function useDrawingGestures(opts: ChartDrawingProps | undefined, geoRef: 
 
   const startShape = (d: Drawing, e: PointerEvent<SVGElement>) => {
     const o = optsRef.current;
-    if (!o || o.tool) return;
+    if (!o || o.tool || e.shiftKey) return;
     e.stopPropagation();
     capture(e);
     o.onSelect(d.id);
+    // Закреплённую можно выделить (чтобы открепить), но не сдвинуть.
+    if (d.locked) return;
     gesture.current = { type: 'move', pointerId: e.pointerId, orig: d, start: pointAt(e.clientX, e.clientY, true, false), next: null };
   };
 

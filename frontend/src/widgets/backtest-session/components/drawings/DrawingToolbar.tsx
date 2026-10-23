@@ -9,21 +9,27 @@ import {
   Brush,
   Eye,
   EyeOff,
+  Keyboard,
   Magnet,
   Minus,
+  MoveDiagonal,
   MoveUpRight,
+  Plus,
   Ruler,
+  RulerDimensionLine,
   Square,
   SeparatorVertical,
   Slash,
   TrendingDown,
   TrendingUp,
   Trash2,
+  Type,
 } from 'lucide-react';
 import { Button } from '@/shared/ui/Button';
 import { cn } from '@/shared/lib/utils/css';
+import { TOOL_KEYS, toolShortcut } from '../../lib/drawings/hotkeys';
 import type { ToolId } from '../../lib/drawings/types';
-import { FibIcon } from './FibIcon';
+import { ChannelIcon, FibIcon, HRayIcon } from './FibIcon';
 
 const ICON = 16;
 
@@ -32,21 +38,59 @@ type Icon = ComponentType<{ size?: number }>;
 const TOOL_ICON: Record<ToolId, Icon> = {
   trend: Slash,
   ray: MoveUpRight,
+  extended: MoveDiagonal,
   hline: Minus,
+  hray: HRayIcon,
   vline: SeparatorVertical,
+  cross: Plus,
+  channel: ChannelIcon,
   arrow: ArrowUpRight,
   arrowUp: ArrowUp,
   arrowDown: ArrowDown,
   fib: FibIcon,
   long: TrendingUp,
   short: TrendingDown,
+  range: RulerDimensionLine,
   brush: Brush,
   rect: Square,
+  text: Type,
   ruler: Ruler,
 };
 
-/** Кнопка панели — группа инструментов; у группы из одного выпадающего списка нет. */
-const GROUPS: ToolId[][] = [['trend', 'ray', 'hline', 'vline'], ['fib'], ['long', 'short'], ['brush'], ['arrow', 'arrowUp', 'arrowDown'], ['rect'], ['ruler']];
+/**
+ * Кнопка панели — группа инструментов; у группы из одного выпадающего списка нет.
+ * Состав групп — как у TradingView: линии с каналом, Фибоначчи, прогнозы и
+ * измерения, фигуры, стрелки, текст.
+ */
+const GROUPS: ToolId[][] = [
+  ['trend', 'ray', 'extended', 'hline', 'hray', 'vline', 'cross', 'channel'],
+  ['fib'],
+  ['long', 'short', 'range'],
+  ['brush', 'rect'],
+  ['arrow', 'arrowUp', 'arrowDown'],
+  ['text'],
+  ['ruler'],
+];
+
+/** Подсказка с клавишей: «Линия (Alt+T)». */
+const withKey = (label: string, key: string | null) => (key ? `${label} (${key})` : label);
+
+/** Клавиши без инструмента — для шпаргалки. Инструменты берутся из `TOOL_KEYS`. */
+const GENERAL_KEYS = [
+  [null, 'measure'],
+  ['Shift', 'level'],
+  ['Ctrl / ⌘', 'magnetHold'],
+  ['Ctrl+Z', 'undo'],
+  ['Ctrl+Y', 'redo'],
+  ['Ctrl+C, Ctrl+V', 'clone'],
+  ['Delete', 'delete'],
+  ['Ctrl+Alt+H', 'hideAll'],
+  ['Alt+R', 'resetChart'],
+  ['Esc', 'cancel'],
+] as const;
+
+/** Номер «группы» шпаргалки в общем состоянии открытого списка. */
+const KEYS_MENU = -1;
 
 /**
  * Полоса инструментов слева от графика; на узком экране — лента над ним (CSS).
@@ -119,7 +163,8 @@ export function DrawingToolbar({
               aria-pressed={tool === current}
               aria-haspopup={group.length > 1 ? 'menu' : undefined}
               aria-expanded={group.length > 1 ? open === gi : undefined}
-              title={t(`tool.${current}`)}
+              aria-keyshortcuts={toolShortcut(current) ?? undefined}
+              title={withKey(t(`tool.${current}`), toolShortcut(current))}
               onClick={() => press(gi, group, current)}
             >
               <Glyph size={ICON} />
@@ -132,6 +177,7 @@ export function DrawingToolbar({
                     <Button key={id} variant="none" role="menuitem" className={cn('draw-item', tool === id && 'on')} onClick={() => (tool === id ? (setOpen(null), onTool(null)) : pick(gi, id))}>
                       <G size={ICON} />
                       <span>{t(`tool.${id}`)}</span>
+                      {toolShortcut(id) && <kbd className="draw-kbd">{toolShortcut(id)}</kbd>}
                     </Button>
                   );
                 })}
@@ -142,7 +188,14 @@ export function DrawingToolbar({
       })}
 
       <span className="draw-sep" />
-      <Button variant="none" className={cn('draw-btn', magnet && 'on')} aria-pressed={magnet} aria-label={t('magnet')} title={t('magnet')} onClick={() => onMagnet(!magnet)}>
+      <Button
+        variant="none"
+        className={cn('draw-btn', magnet && 'on')}
+        aria-pressed={magnet}
+        aria-label={t('magnet')}
+        title={withKey(t('magnet'), t('magnetHint'))}
+        onClick={() => onMagnet(!magnet)}
+      >
         <Magnet size={ICON} />
       </Button>
       <Button
@@ -150,7 +203,7 @@ export function DrawingToolbar({
         className={cn('draw-btn', hidden && 'on')}
         aria-pressed={hidden}
         aria-label={hidden ? t('show') : t('hide')}
-        title={hidden ? t('show') : t('hide')}
+        title={withKey(hidden ? t('show') : t('hide'), 'Ctrl+Alt+H')}
         onClick={() => onHidden(!hidden)}
       >
         {hidden ? <EyeOff size={ICON} /> : <Eye size={ICON} />}
@@ -158,6 +211,35 @@ export function DrawingToolbar({
       <Button variant="none" className="draw-btn" aria-label={t('clearAll')} title={t('clearAll')} disabled={!canClear} onClick={onClear}>
         <Trash2 size={ICON} />
       </Button>
+      <div className="draw-group static">
+        <Button
+          variant="none"
+          className={cn('draw-btn', open === KEYS_MENU && 'on')}
+          aria-label={t('keys.title')}
+          title={t('keys.title')}
+          aria-haspopup="dialog"
+          aria-expanded={open === KEYS_MENU}
+          onClick={() => setOpen(open === KEYS_MENU ? null : KEYS_MENU)}
+        >
+          <Keyboard size={ICON} />
+        </Button>
+        {open === KEYS_MENU && (
+          <div className="draw-menu draw-keys" role="dialog" aria-label={t('keys.title')}>
+            {(Object.keys(TOOL_KEYS) as ToolId[]).map((id) => (
+              <div key={id} className="draw-keys-row">
+                <span>{t(`tool.${id}`)}</span>
+                <kbd className="draw-kbd">{toolShortcut(id)}</kbd>
+              </div>
+            ))}
+            {GENERAL_KEYS.map(([key, id]) => (
+              <div key={id} className="draw-keys-row">
+                <span>{t(`keys.${id}`)}</span>
+                <kbd className="draw-kbd">{key ?? t('keys.shiftClick')}</kbd>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

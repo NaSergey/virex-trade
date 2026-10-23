@@ -3,6 +3,7 @@ import {
   anchorsOf,
   extend,
   fibLevels,
+  makeChannel,
   magnetPrice,
   makePosition,
   moveAnchor,
@@ -167,5 +168,23 @@ describe('rulerStats и extend', () => {
   });
   it('extend продолжает луч на заданную длину', () => {
     expect(extend(0, 0, 3, 4, 10)).toEqual([6, 8]);
+  });
+});
+
+describe('канал', () => {
+  const ch: Drawing = { ...base, kind: 'channel', points: makeChannel({ t: 0, p: 100 }, { t: 10, p: 120 }, 5) };
+
+  it('третий якорь — середина параллельной линии', () => {
+    expect(anchorsOf(ch)[2]).toEqual({ t: 5, p: 115 });
+  });
+  it('первая точка тянет за собой параллельную, ширина остаётся', () => {
+    const [a, , c] = moveAnchor(ch, 0, { t: 2, p: 90 }).points;
+    expect(a).toEqual({ t: 2, p: 90 });
+    expect(c).toEqual({ t: 2, p: 95 });
+  });
+  it('средний якорь меняет ширину, а не наклон', () => {
+    const next = moveAnchor(ch, 2, { t: 7, p: 100 });
+    expect(next.points[2].p - next.points[0].p).toBe(-10);
+    expect(next.points[1]).toEqual({ t: 10, p: 120 });
   });
 });

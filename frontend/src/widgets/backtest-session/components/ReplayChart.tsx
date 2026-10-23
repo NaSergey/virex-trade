@@ -6,6 +6,7 @@ import { useNonPassiveWheel } from '@/shared/lib/hooks/useNonPassiveWheel';
 import { formatMoney, formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
 import { DrawingLayer } from './drawings/DrawingLayer';
 import { COLOR_VAR } from '../lib/drawings/types';
+import { isTypingTarget } from '../lib/drawings/hotkeys';
 import { useDrawingGestures, type ChartDrawingProps, type ChartGeo } from './drawings/useDrawingGestures';
 import {
   anchorTimeAt,
@@ -395,6 +396,18 @@ export const ReplayChart = memo(function ReplayChart({
     setView({ count: DEFAULT_COUNT, anchorTime: null });
     setPriceRange(null);
   }
+  // Alt+R — вид графика по умолчанию (как в TradingView): окно к живому краю, зум цены и RSI сброшены.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.altKey || e.shiftKey || e.ctrlKey || e.metaKey || e.code !== 'KeyR' || isTypingTarget(e.target)) return;
+      e.preventDefault();
+      setView({ count: DEFAULT_COUNT, anchorTime: null });
+      setPriceRange(null);
+      setRsiRange(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   // Плавный сдвиг «живого» окна (FLIP через CSS-transition) — группа свечей
   // и меток времени, которую двигаем; остальное — снимок предыдущего тика,
   // чтобы отличить «появилась новая свеча» от пана/зума/клика «→ сейчас».
@@ -1742,11 +1755,11 @@ export const ReplayChart = memo(function ReplayChart({
         {/* Уровни, линии разметки и их плашки — в поле цены: далёкий стоп иначе
             лёг бы линией поперёк панели RSI. */}
         <g clipPath={`url(#${clipId}-levels)`}>
-        {/* Горизонтальные линии разметки: цена — плашкой на полосе цены, как у уровней сделки. */}
+        {/* Горизонтальные линии разметки (линия, луч, перекрестие): цена — плашкой на полосе цены, как у уровней сделки. */}
         {drawing &&
           !drawing.hidden &&
           shownDrawings.map((d) => {
-            if (d.kind !== 'hline') return null;
+            if (d.kind !== 'hline' && d.kind !== 'hray' && d.kind !== 'cross') return null;
             const yy = y(d.points[0].p);
             if (yy < PT || yy > plotBottom) return null;
             return (
