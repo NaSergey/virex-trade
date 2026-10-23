@@ -20,6 +20,7 @@ import {
   openPnl,
   parsePriceInput,
   previewSize,
+  roundLevel,
   riskAmount,
   signedPctFromStop,
   stopFromSignedPct,
@@ -512,5 +513,16 @@ describe('closeImpact — итог закрытия части позиции', 
   it('шорт в минусе — отрицательный итог', () => {
     const r = closeImpact({ direction: 'short', entryPrice: 100 }, 1, 104, 10);
     expect(r.usdt).toBeLessThan(-40);
+  });
+});
+
+describe('roundLevel — цена отпущенного уровня', () => {
+  it('до знаков монеты, если они известны', () => {
+    expect(roundLevel(43289.95283968977, 2)).toBe(43289.95);
+    expect(roundLevel(0.512345678, 4)).toBe(0.5123);
+  });
+
+  it('без знаков — шесть значащих, как у ползунков', () => {
+    expect(roundLevel(43289.95283968977)).toBe(43290);
   });
 });

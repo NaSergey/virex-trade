@@ -13,7 +13,9 @@ import { parsePriceInput, toInputPrice } from '../lib/money';
  *
  * Наружу уходит только разобранное положительное число (`parsePriceInput`);
  * пустое — `onClear`, если уровень необязателен, иначе родителя не трогает.
- * Ползунок или сброс, сдвинувшие значение снаружи, переписывают текст.
+ * Ползунок или сброс, сдвинувшие значение снаружи, переписывают текст. Уход с
+ * поля, где осталось неразобранное (стёртый стоп), возвращает действующее
+ * значение: иначе на экране было бы пусто, а «Применить» ушло со старой ценой.
  */
 export function PriceInput({
   value,
@@ -29,7 +31,8 @@ export function PriceInput({
   const [text, setText] = useState(() => (value != null ? toInputPrice(value) : ''));
   // Последнее значение, которое поле видело: своё (набранное) или пришедшее снаружи.
   const [seen, setSeen] = useState(value);
-  if (value !== seen) {
+  // Object.is, а не !==: NaN снаружи иначе перерисовывал бы поле без конца.
+  if (!Object.is(value, seen)) {
     setSeen(value);
     if (parsePriceInput(text) !== value) setText(value != null ? toInputPrice(value) : '');
   }
@@ -39,6 +42,10 @@ export function PriceInput({
       {...rest}
       inputMode="decimal"
       value={text}
+      onBlur={(e) => {
+        if (parsePriceInput(text) !== value) setText(value != null ? toInputPrice(value) : '');
+        rest.onBlur?.(e);
+      }}
       onChange={(e) => {
         const raw = e.target.value;
         setText(raw);

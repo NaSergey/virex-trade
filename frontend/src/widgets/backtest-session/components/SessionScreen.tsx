@@ -45,6 +45,7 @@ import {
   openPnl,
   previewSize,
   toInput,
+  roundLevel,
   toInputPrice,
   toScreen,
   withoutLockedLevels,
@@ -926,8 +927,18 @@ export function Terminal({
   // мутации доходит до экрана только с перерисовкой, а двойной клик успевает
   // раньше: уходили два POST, и позиция удваивалась (QA 2026-10-23).
   const sending = useRef(false);
-  const release = () => {
-    sending.current = false;
+  // Пометка снимается по промису, а не колбэком `mutate`: у react-query колбэки
+  // получает только последний вызов на наблюдателе, а `openM` зовёт и прокрутка
+  // (исполнение ордера, `mutateAsync`) — совпав по времени, она съедала бы
+  // `onSettled` кнопки, и панель вставала до перезагрузки. Ошибку показывает сама
+  // мутация (`error`), здесь её только гасим.
+  const submit = (sent: Promise<unknown>, onSuccess?: () => void) => {
+    sending.current = true;
+    void sent
+      .then(onSuccess, () => undefined)
+      .finally(() => {
+        sending.current = false;
+      });
   };
 
   const open = (direction: Direction) => {
@@ -945,15 +956,13 @@ export function Terminal({
     const existing = openTrades.find((x) => x.symbol === symbol && x.direction === direction);
     if (existing) {
       setHint(null);
-      sending.current = true;
-      addToTradeM.mutate(
-        {
+      submit(
+        addToTradeM.mutateAsync({
           tradeId: existing.id,
           entryTime: new Date(replay.moment()).toISOString(),
           entryPrice: replay.price,
           riskPct: risk,
-        },
-        { onSettled: release },
+        }),
       );
       return;
     }
@@ -962,24 +971,23 @@ export function Terminal({
     if (err) return;
     // Открытие в полёте — advance() придержан через `pending` (openM.isPending),
     // явную остановку автопрокрутки здесь не ставим.
-    sending.current = true;
     setOpenFrom('panel');
-    openM.mutate({
-      symbol,
-      direction,
-      entryTime: new Date(replay.moment()).toISOString(),
-      // Настоящая цена минутки, а не обратный пересчёт экранной: без округлений.
-      entryPrice: replay.price,
-      stopLoss: fromScreen(stopN, scale),
-      takeProfit: takeN != null ? fromScreen(takeN, scale) : undefined,
-      riskPct: risk,
-      leverage: draftLeverage,
-    }, {
+    submit(
+      openM.mutateAsync({
+        symbol,
+        direction,
+        entryTime: new Date(replay.moment()).toISOString(),
+        // Настоящая цена минутки, а не обратный пересчёт экранной: без округлений.
+        entryPrice: replay.price,
+        stopLoss: fromScreen(stopN, scale),
+        takeProfit: takeN != null ? fromScreen(takeN, scale) : undefined,
+        riskPct: risk,
+        leverage: draftLeverage,
+      }),
       // Ордер ушёл — его стоп и тейк теперь живут у сделки. Оставленный черновик лёг бы
       // линиями ровно поверх уровней новой позиции, и жест по ним тянул бы черновик.
-      onSuccess: () => setDraft((prev) => ({ ...prev, stop: '', take: '' })),
-      onSettled: release,
-    });
+      () => setDraft((prev) => ({ ...prev, stop: '', take: '' })),
+    );
   };
 
   /**
@@ -1012,9 +1020,8 @@ export function Terminal({
     const err = checkEntrySide(direction, [lEntryN], screenPrice) ?? checkGridLevels(direction, [lEntryN], stopScreen, lTakeN);
     setLimitHint(err ? t(err) : null);
     if (err) return;
-    sending.current = true;
-    createEntryOrdersM.mutate(
-      {
+    submit(
+      createEntryOrdersM.mutateAsync({
         symbol,
         direction,
         stopLoss: posStop ?? fromScreen(lStopN, scale),
@@ -1022,11 +1029,8 @@ export function Terminal({
         riskPct: risk,
         leverage: draftLeverage,
         prices: [fromScreen(lEntryN, scale)],
-      },
-      {
-        onSuccess: () => setLimitDraft((prev) => ({ ...prev, stop: '', take: '', entry: '' })),
-        onSettled: release,
-      },
+      }),
+      () => setLimitDraft((prev) => ({ ...prev, stop: '', take: '', entry: '' })),
     );
   };
 
@@ -1068,9 +1072,8 @@ export function Terminal({
       setScaledHint(t('gridStopBlocks'));
       return;
     }
-    sending.current = true;
-    createEntryOrdersM.mutate(
-      {
+    submit(
+      createEntryOrdersM.mutateAsync({
         symbol,
         direction,
         stopLoss: posStop ?? fromScreen(sStopN, scale),
@@ -1081,11 +1084,8 @@ export function Terminal({
         prices: table.prices,
         riskPcts: table.riskPcts,
         stopsAfter: table.stopsAfter,
-      },
-      {
-        onSuccess: () => setScaledDraft((prev) => ({ ...prev, stop: '', take: '', upper: '', lower: '', qtyPins: {}, stopPins: {} })),
-        onSettled: release,
-      },
+      }),
+      () => setScaledDraft((prev) => ({ ...prev, stop: '', take: '', upper: '', lower: '', qtyPins: {}, stopPins: {} })),
     );
   };
 
@@ -1135,15 +1135,17 @@ export function Terminal({
 
   // Свежие значения для onDragLevel: тот стабилен ради memo(ReplayChart) и читает их
   // отсюда. Пишется в эффекте, а не в рендере — жест случается уже после коммита.
-  const dragCtxRef = useRef({ draft: marketDraft, openTrades, screenPrice, applyLevels, orderTab, lockedSides, moveOrder, openCloseGrid });
+  const dragCtxRef = useRef({ draft: marketDraft, openTrades, screenPrice, applyLevels, orderTab, lockedSides, moveOrder, openCloseGrid, chartDecimals });
   useLayoutEffect(() => {
-    dragCtxRef.current = { draft: marketDraft, openTrades, screenPrice, applyLevels, orderTab, lockedSides, moveOrder, openCloseGrid };
+    dragCtxRef.current = { draft: marketDraft, openTrades, screenPrice, applyLevels, orderTab, lockedSides, moveOrder, openCloseGrid, chartDecimals };
   });
 
   const onDragLevel = useCallback((kind: LevelKind, raw: number, tradeId?: string, levelId?: string) => {
-    // Цена жеста — с точностью ползунков и полей (шесть значащих), а не хвостом
-    // float из пикселей: уровень уходил на сервер как 43289.95283968977.
-    const price = Number(toInputPrice(raw));
+    // Цена жеста — до знаков монеты (или шести значащих), а не хвостом float из
+    // пикселей; уровень, утянутый за ноль шкалы, не отпускается: 0 у стопа биржи
+    // значит «стопа нет».
+    const price = roundLevel(raw, dragCtxRef.current.chartDecimals);
+    if (!(price > 0)) return;
     if (kind === 'gridTake') {
       // Тянутся только первый и последний тейк сетки; промежуточные встанут
       // между ними сами. Сторону проверяет панель — как у введённого в поле.
@@ -1554,7 +1556,7 @@ export function Terminal({
                   }
                 />
                 <ErrorNote
-                  error={(openFrom === 'panel' ? openM.error : null) ?? addToTradeM.error ?? createEntryOrdersM.error ?? finishM.error}
+                  error={(openFrom === 'panel' || !tables ? openM.error : null) ?? addToTradeM.error ?? createEntryOrdersM.error ?? finishM.error}
                   fallback={t('actionFailed')}
                 />
               </>
