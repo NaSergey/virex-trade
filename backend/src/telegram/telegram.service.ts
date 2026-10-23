@@ -19,6 +19,18 @@ const UPLOAD_TIMEOUT_MS = 5 * 60_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+/** Нажатие кнопки, разобранное по `|`; первая часть — префикс обработчика. */
+export interface CallbackContext {
+  chatId: string;
+  messageId: number | null;
+  userId: string;
+  email: string;
+  parts: string[];
+}
+/** Ответ обработчика — короткий текст во всплывашке Telegram. */
+export type CallbackHandler = (ctx: CallbackContext) => Promise<string | undefined>;
+export type CommandHandler = (ctx: { chatId: string; userId: string; email: string; args: string }) => Promise<void>;
+
 export interface OpenedPositionInfo {
   symbol: string;
   direction: 'long' | 'short';
@@ -60,6 +72,12 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
   private offset = 0;
   private abortPoll?: AbortController;
   private botUsername: string | null = null;
+  /**
+   * Кнопки и команды разделов, которые живут вне этого сервиса (план дня в
+   * админке): раздел регистрирует свой префикс, транспорт о его смысле не знает.
+   */
+  private readonly callbacks = new Map<string, CallbackHandler>();
+  private readonly commands = new Map<string, CommandHandler>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -140,6 +158,43 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
     return res != null;
   }
 
+  /** Отправка с id сообщения — его потом правят кнопки. null — не ушло. */
+  async sendMessage(chatId: string, text: string, replyMarkup?: object): Promise<number | null> {
+    if (!this.enabled) return null;
+    const res = await this.api<{ message_id?: number }>('sendMessage', {
+      chat_id: chatId,
+      text,
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+    });
+    return res?.message_id ?? null;
+  }
+
+  /** Перерисовать отправленное сообщение. Пустые кнопки — `{ inline_keyboard: [] }`. */
+  async editMessage(chatId: string, messageId: number, text: string, replyMarkup?: object): Promise<boolean> {
+    if (!this.enabled) return false;
+    const res = await this.api('editMessageText', {
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+    });
+    return res != null;
+  }
+
+  /** Обработчик кнопок с `callback_data`, начинающимся с `<prefix>|`. */
+  onCallback(prefix: string, handler: CallbackHandler): void {
+    this.callbacks.set(prefix, handler);
+  }
+
+  /** Обработчик команды `/<name>` (без слэша). */
+  onCommand(name: string, handler: CommandHandler): void {
+    this.commands.set(name, handler);
+  }
+
   /** Файл в чат (бэкап базы). Лимит Bot API — 50 МБ на файл; режет вызывающий. */
   async sendDocument(chatId: string, file: Uint8Array, filename: string, caption?: string): Promise<boolean> {
     if (!this.enabled) return false;
@@ -207,6 +262,17 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
         chat_id: chatId,
         text: 'Уведомления настраиваются на странице «Настройки» в приложении — там можно включить нужные сигналы и задать пороги.',
       });
+      return;
+    }
+
+    const cmd = text.match(/^\/(\w+)(?:@\w+)?(?:\s+(.*))?$/s);
+    const command = cmd ? this.commands.get(cmd[1]) : undefined;
+    if (command) {
+      const owner = await this.prisma.user.findUnique({
+        where: { telegramChatId: chatId },
+        select: { id: true, email: true },
+      });
+      if (owner) await command({ chatId, userId: owner.id, email: owner.email, args: cmd?.[2]?.trim() ?? '' });
       return;
     }
 
@@ -286,7 +352,18 @@ export class TelegramService implements OnApplicationBootstrap, OnModuleDestroy 
     // Новые карточки закрытия таких кнопок больше не несут (см.
     // TradeAlertsService.tradesClosed); обработчик оставлен ради сообщений,
     // уже лежащих в чатах, — иначе их кнопки молча перестали бы работать.
-    const [ctKind, shortTrade, shortTag] = String(cb.data ?? '').split('|');
+    const parts = String(cb.data ?? '').split('|');
+    const custom = this.callbacks.get(parts[0]);
+    if (custom) {
+      await answer(
+        await custom({ chatId, messageId: messageId ?? null, userId: user.id, email: user.email, parts }).catch((e) => {
+          this.logger.warn(`callback ${parts[0]} failed: ${e}`);
+          return 'Не получилось — попробуйте ещё раз';
+        }),
+      );
+      return;
+    }
+    const [ctKind, shortTrade, shortTag] = parts;
     if (ctKind === 'ct') {
       const tradeId = unpackId(shortTrade ?? '');
       const tagId = unpackId(shortTag ?? '');
