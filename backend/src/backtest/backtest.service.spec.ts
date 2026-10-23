@@ -744,7 +744,7 @@ describe('BacktestService — сделки', () => {
     const res = await service.closeTrade('u1', 't1', { exitTime: new Date(T0 + DAY), exitPrice: 104, reason: 'take' });
 
     const casCall = prisma.backtestTrade.updateMany.mock.calls[0][0];
-    expect(casCall.where).toEqual({ id: 't1', closedQty: 0 });
+    expect(casCall.where).toEqual({ id: 't1', closedQty: { gte: -1e-8, lte: 1e-8 } });
     expect(casCall.data).toEqual({ closedQty: { increment: 50 } });
     expect(prisma.backtestTradeExit.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ tradeId: 't1', qty: 50, price: 104, reason: 'take' }),
@@ -768,12 +768,38 @@ describe('BacktestService — сделки', () => {
     await service.closeTrade('u1', 't1', { exitTime: new Date(T0 + DAY), exitPrice: 104, reason: 'manual', qty: 20 });
 
     const casCall = prisma.backtestTrade.updateMany.mock.calls[0][0];
-    expect(casCall.where).toEqual({ id: 't1', closedQty: 0 });
+    expect(casCall.where).toEqual({ id: 't1', closedQty: { gte: -1e-8, lte: 1e-8 } });
     expect(casCall.data).toEqual({ closedQty: { increment: 20 } });
     expect(prisma.backtestTrade.update).not.toHaveBeenCalled(); // 20 < 50 остатка — не финал
     const inc = prisma.backtestSession.update.mock.calls[0][0].data.balance.increment;
     // pnl на 20 монет вместо 50: (104-100)*20 - (100+104)*20*0.00055
     expect(inc).toBeCloseTo(77.756, 3);
+  });
+
+  it('closedQty, прочитанный Prisma на разряд короче, не ломает закрытие (CAS не по равенству float)', async () => {
+    // Сделка dc943d70 из QA 2026-10-23: в базе 0.37572420704455345, Prisma отдаёт
+    // 0.3757242070445534 — равенство в WHERE не находит строку, и каждое закрытие
+    // отвечало «сделка уже закрыта» при открытой позиции.
+    const STORED = 0.37572420704455345;
+    const READ = 0.3757242070445534;
+    const { service, prisma } = makeService();
+    const open = { ...TRADE, qty: 1, closedQty: READ };
+    prisma.backtestTrade.findUnique
+      .mockResolvedValueOnce(open)
+      .mockResolvedValueOnce(open)
+      .mockResolvedValueOnce({ ...open, closedQty: READ + 0.1, tags: [] });
+    // База сравнивает с тем, что хранит, а не с тем, что отдала.
+    prisma.backtestTrade.updateMany.mockImplementation(({ where }: any) => {
+      const c = where.closedQty;
+      const hit = typeof c === 'number' ? c === STORED : c.gte <= STORED && STORED <= c.lte;
+      return { count: hit ? 1 : 0 };
+    });
+
+    await service.closeTrade('u1', 't1', { exitTime: new Date(T0 + DAY), exitPrice: 104, reason: 'manual', qty: 0.1 });
+
+    expect(prisma.backtestTradeExit.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ tradeId: 't1', qty: 0.1, reason: 'manual' }),
+    });
   });
 
   it('закрытие больше остатка — отказ, ничего не пишет', async () => {
