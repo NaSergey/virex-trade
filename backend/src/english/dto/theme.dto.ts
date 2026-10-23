@@ -1,5 +1,8 @@
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
+  IsOptional,
   IsString,
   Matches,
   MaxLength,
@@ -13,6 +16,15 @@ export class ThemeDto {
   @MaxLength(60)
   @Matches(/\S/)
   title!: string;
+
+  /** Слова сразу — тема из рекомендаций «Разбора» создаётся одним запросом. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
+  @MaxLength(120, { each: true })
+  cards?: string[];
 }
 
 /** Тело `PUT /api/admin/english/themes/:id/words` — слово в тему или из неё. */

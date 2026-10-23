@@ -206,4 +206,19 @@ describe('EnglishService', () => {
       quiz: 1,
     });
   });
+
+  it('тема со словами — одной записью, повторы схлопываются', async () => {
+    const prisma = makePrisma();
+    const theme = await new EnglishService(prisma as never).addTheme(
+      ' Разбор ',
+      ['v:house', 'v:house', 'u01:hello'],
+    );
+    expect(prisma.englishTheme.create).toHaveBeenCalledWith({
+      data: {
+        title: 'Разбор',
+        words: { create: [{ cardId: 'v:house' }, { cardId: 'u01:hello' }] },
+      },
+    });
+    expect(theme.cards).toEqual(['v:house', 'u01:hello']);
+  });
 });

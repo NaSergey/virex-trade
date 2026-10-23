@@ -179,11 +179,17 @@ export class EnglishService {
     return { ok: true };
   }
 
-  async addTheme(title: string) {
+  async addTheme(title: string, cards: string[] = []) {
+    const unique = [...new Set(cards)];
     const theme = await this.prisma.englishTheme.create({
-      data: { title: title.trim() },
+      data: {
+        title: title.trim(),
+        ...(unique.length
+          ? { words: { create: unique.map((cardId) => ({ cardId })) } }
+          : {}),
+      },
     });
-    return { id: theme.id, title: theme.title, cards: [] as string[] };
+    return { id: theme.id, title: theme.title, cards: unique };
   }
 
   async deleteTheme(id: string) {

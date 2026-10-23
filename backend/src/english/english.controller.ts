@@ -83,10 +83,10 @@ export class EnglishController {
     return this.english.quiz(dto.day);
   }
 
-  /** POST /api/admin/english/themes — своя тема. */
+  /** POST /api/admin/english/themes — своя тема, можно сразу со словами (`cards`). */
   @Post('themes')
   addTheme(@Body() dto: ThemeDto) {
-    return this.english.addTheme(dto.title);
+    return this.english.addTheme(dto.title, dto.cards);
   }
 
   /** DELETE /api/admin/english/themes/<id> — удалить тему (слова остаются). */
