@@ -697,6 +697,70 @@
     .adm-brand,
     .adm-user { display: none; }
   }
+  /* Телефон: строка разделов не помещается — вместо неё раздел со стрелкой и
+     список разделов (`MobileNav` в `AdminChrome`). */
+  .adm-m { display: none; }
+  @media (max-width: 760px) {
+    .adm-top { display: none; }
+    .adm-m {
+      display: block;
+      position: sticky;
+      top: 0;
+      z-index: 45;
+      padding: env(safe-area-inset-top) var(--s4) 0;
+      border-bottom: 1px solid var(--rule);
+      background: var(--ground);
+    }
+    .adm-m-btn {
+      display: flex;
+      align-items: center;
+      gap: var(--s2);
+      min-height: 48px;
+      font-family: var(--font-mono);
+      font-size: var(--t-xs);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .adm-m-chev { color: var(--ink-3); transition: transform 0.16s; }
+    .adm-m-btn[aria-expanded="true"] .adm-m-chev { transform: rotate(180deg); }
+    .adm-m-menu {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: var(--s1) var(--s4) var(--s3);
+      border-bottom: 1px solid var(--rule);
+      background: var(--ground);
+      animation: adm-m-in 0.16s ease-out;
+    }
+    .adm-m-menu a {
+      display: flex;
+      align-items: center;
+      gap: var(--s3);
+      min-height: 48px;
+      border-bottom: 1px solid var(--hair);
+      color: var(--ink-2);
+      font-size: var(--t-m);
+      text-decoration: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .adm-m-menu a[aria-current="page"] { color: var(--ink); box-shadow: inset 2px 0 0 var(--ink); padding-left: var(--s2); }
+    .adm-m-foot {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--s3);
+      padding-top: var(--s3);
+      font-size: var(--t-xs);
+    }
+    .adm-m-foot .muted { flex: 1 1 100%; overflow: hidden; text-overflow: ellipsis; }
+  }
+  @keyframes adm-m-in {
+    from { opacity: 0; transform: translateY(-6px); }
+  }
   .top-r {
     display: flex;
     align-items: center;

@@ -30,21 +30,15 @@ const isTab = (path: string, href: string) => path === href || (href === '/engli
  * docs/superpowers/specs/2026-10-21-english-course-design.md). Весь раздел —
  * этот каталог; как его перенести или снести — README.md рядом.
  *
- * На телефоне раздел — приложение: вкладки внизу под большим пальцем, шапки
- * админки нет (`.en-app` в english.css), а сверху — своя строка с выходом в
- * админку. Добавленный на главный экран, он открывается без строки браузера
+ * На телефоне раздел — приложение: вкладки внизу под большим пальцем, а сверху —
+ * общая шапка админки с переходом между разделами (`MobileNav` в `AdminChrome`).
+ * Добавленный на главный экран, он открывается без строки браузера
  * (манифест — `app/admin/(in)/english/layout.tsx`).
  */
 export function EnglishLayout({ children }: { children: ReactNode }) {
   const path = adminPath(usePathname());
   return (
     <Wrap page className="en en-app">
-      <div className="en-mtop">
-        <span className="en-mtop-brand">English</span>
-        <Link href="/" className="en-mtop-out">
-          Админка
-        </Link>
-      </div>
       <nav className="en-tabs" aria-label="Разделы учебника">
         {TABS.map(({ href, label, icon: Icon }) => (
           <Link key={href} href={href} aria-current={isTab(path, href) ? 'page' : undefined}>

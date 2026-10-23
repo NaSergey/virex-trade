@@ -436,7 +436,6 @@
 
 /* ── оболочка приложения: вкладки и строка сверху ────────────────── */
 .en-tab-ic { display: none; }
-.en-mtop { display: none; }
 .en a,
 .en button {
   -webkit-tap-highlight-color: transparent;
@@ -445,32 +444,13 @@
 
 /*
  * Телефон — главное место занятий, и раздел на нём ведёт себя как приложение:
- * шапки админки нет, вкладки — панелью внизу под большим пальцем, кнопки
+ * сверху общая шапка админки, вкладки — панелью внизу под большим пальцем, кнопки
  * карточки — над ней. Отступы — с учётом выреза и полоски «домой» (safe-area,
  * `viewport-fit=cover` — в layout маршрута).
  */
 @media (max-width: 760px) {
-  body:has(.en-app) .adm-top { display: none; }
   .en.wrap {
-    padding-top: env(safe-area-inset-top);
     padding-bottom: calc(72px + env(safe-area-inset-bottom));
-  }
-  .en-mtop {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    height: 44px;
-  }
-  .en-mtop-brand {
-    font-family: var(--font-mono);
-    font-size: var(--t-xs);
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-  }
-  .en-mtop-out {
-    color: var(--ink-3);
-    font-size: var(--t-xs);
-    text-decoration: none;
   }
   .en-tabs {
     position: fixed;

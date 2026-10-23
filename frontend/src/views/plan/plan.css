@@ -36,7 +36,6 @@
   color: var(--ink);
 }
 .pl-tab-ic { display: none; }
-.pl-mtop { display: none; }
 .pl a,
 .pl button {
   -webkit-tap-highlight-color: transparent;
@@ -305,34 +304,12 @@
 
 /*
  * Телефон — главное место ответа на напоминание: раздел на нём — приложение,
- * как учебник. Шапки админки нет, вкладки — панелью внизу, кнопки ответа во
+ * как учебник. Сверху общая шапка админки, вкладки — панелью внизу, кнопки ответа во
  * всю ширину и не ниже 44 px. Отступы — от выреза и полоски «домой».
  */
 @media (max-width: 760px) {
-  body:has(.pl-app) .adm-top { display: none; }
   .pl.wrap {
-    padding-top: env(safe-area-inset-top);
     padding-bottom: calc(72px + env(safe-area-inset-bottom));
-  }
-  .pl-mtop {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    height: 44px;
-  }
-  .pl-mtop-brand {
-    font-family: var(--font-mono);
-    font-size: var(--t-xs);
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-  }
-  .pl-mtop-out {
-    display: flex;
-    align-items: center;
-    min-height: 44px;
-    color: var(--ink-3);
-    font-size: var(--t-xs);
-    text-decoration: none;
   }
   .pl-tabs {
     position: fixed;
