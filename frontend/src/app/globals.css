@@ -9662,4 +9662,15 @@
   }
   .ct-more { min-width: 44px; min-height: 44px; }
   .rc-stakes button { min-height: 44px; }
+  /* Бектест: ряд источника, поле депозита и «Начать» в той же колонке. */
+  .asym:has(.bt-col) .seg button,
+  .asym:has(.bt-col) .in,
+  .asym:has(.bt-col) .btn:not(.tight) { min-height: 44px; }
+  /* Джетпак: панель ставки и звук — в палец (панель при этом листается под
+     сценой, табов на экране игры нет). */
+  .jpg-check, .jpg-target { height: 44px; }
+  .jpg-amount { grid-template-columns: 44px minmax(0, 1fr) 44px; }
+  .jpg-step { height: 44px; }
+  .jpg-chip { height: 44px; }
+  .jpg-audio-set .audio-btn { width: 44px; height: 44px; }
 }
