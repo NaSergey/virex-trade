@@ -1210,7 +1210,7 @@
   },
   "backtest": {
     "startTitle": "New session",
-    "startLead": "A random stretch of BTC history. The future is hidden: candles open one by one, and you enter and exit trades yourself.",
+    "startLead": "A random stretch of BTC, ETH, BNB, XRP or SOL history. The future is hidden: candles open one by one, and you enter and exit trades yourself.",
     "deposit": "Deposit",
     "date": "Date",
     "price": "Price",
@@ -1244,6 +1244,7 @@
     "colPnl": "PnL",
     "colBlind": "Blind",
     "blindDate": "date",
+    "blindCoin": "coin",
     "blindPrice": "price",
     "status": {
       "active": "running",
@@ -1270,6 +1271,7 @@
     "loadFailed": "Couldn't load the session",
     "timeframe": "Timeframe",
     "coin": "Coin",
+    "coinRandom": "Random",
     "coinSearch": "Search coin",
     "coinNotFound": "Nothing found",
     "chartSettings": "Chart settings",
@@ -1442,6 +1444,7 @@
     "actionFailed": "The action failed",
     "summaryTitle": "Session summary",
     "revealed": "Stretch: {from} — {to}",
+    "revealedCoin": "Stretch {coin}: {from} — {to}",
     "balanceFromTo": "Deposit: {from} → {to} USDT",
     "marginLabel": "Margin",
     "liqLabel": "Liquidation",

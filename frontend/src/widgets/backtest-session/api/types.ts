@@ -24,6 +24,10 @@ export interface BacktestSession {
   hidePrice: boolean;
   priceScale: number;
   dataSource: DataSource;
+  /** Монета истории ('real'); у тренажёра и эфира — дефолтный BTC и ничего не значит. */
+  symbol: string;
+  /** Монету выбрал сервер случайно: интерфейс её не показывает до итога. */
+  hideSymbol: boolean;
   status: 'active' | 'finished';
   createdAt: string;
   finishedAt: string | null;
@@ -152,10 +156,15 @@ export interface LiveSymbol {
   symbol: string;
   base: string;
   decimals: number;
+  /** Есть — монета есть и в истории бектеста, минутки с этого момента (мс). */
+  historySince?: number;
 }
 
-/** Монета истории и тренажёра — единственная, и с неё же начинается график эфира. */
+/** Монета тренажёра, история без выбранной монеты и начало графика эфира. */
 export const DEFAULT_SYMBOL = 'BTCUSDT';
+
+/** Короткое имя монеты для подписи: BTCUSDT → BTC. */
+export const coinBase = (symbol: string) => symbol.replace(/USDT$/, '');
 
 export interface Summary {
   trades: number;

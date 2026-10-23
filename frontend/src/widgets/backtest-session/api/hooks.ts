@@ -155,7 +155,14 @@ const json = (method: string, body?: unknown): RequestInit => ({
 export const useCreateSession = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { startBalance: number; hideDate: boolean; hidePrice: boolean; dataSource: DataSource }) =>
+    mutationFn: (input: {
+      startBalance: number;
+      hideDate: boolean;
+      hidePrice: boolean;
+      dataSource: DataSource;
+      /** Монета истории или 'random'; у тренажёра и эфира не передаётся. */
+      symbol?: string;
+    }) =>
       apiJson<{ session: BacktestSession }>('/api/backtest/sessions', json('POST', input)),
     onSettled: () => refresh(qc),
   });

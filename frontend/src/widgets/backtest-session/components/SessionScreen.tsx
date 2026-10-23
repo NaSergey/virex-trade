@@ -283,14 +283,14 @@ export function Terminal({
   const openTrades = useMemo(() => trades.filter((x) => x.exitTime == null && !closingIds.has(x.id)), [trades, closingIds]);
 
   /**
-   * Монета графика. У истории и тренажёра она одна — BTC; в эфире монет
-   * несколько, и график, черновики и уровни на нём — одной монеты, а таблицы
-   * позиций, ордеров и истории — всех (спека 2026-09-26).
+   * Монета графика. У истории и тренажёра она одна — монета сессии (у тренажёра
+   * BTC); в эфире монет несколько, и график, черновики и уровни на нём — одной
+   * монеты, а таблицы позиций, ордеров и истории — всех (спека 2026-09-26).
    */
   // В живом режиме монета запоминается на устройстве (`useLiveSymbol`); остальные
-  // режимы держат BTC в памяти экрана и ничего не пишут.
+  // режимы держат монету сессии в памяти экрана и ничего не пишут.
   const [liveSymbol, setLiveSymbol] = useLiveSymbol();
-  const [localSymbol, setLocalSymbol] = useState(DEFAULT_SYMBOL);
+  const [localSymbol, setLocalSymbol] = useState(session.symbol);
   const symbol = isLive ? liveSymbol : localSymbol;
   const setSymbol = isLive ? setLiveSymbol : setLocalSymbol;
   // Своим useMemo — по той же причине, что и openTrades: levels сверяет по ссылке.
@@ -451,7 +451,10 @@ export function Terminal({
   // Рынок — свой у того, кто его передал (биржа); иначе монеты и цены эфира с сервера.
   const { data: symbolsData } = useLiveSymbols(isLive && !symbols);
   const coins = symbols ?? symbolsData?.symbols;
-  const liveDecimalsOf = useDecimalsOf(isLive && !decimalsOfProp);
+  // Знаки цены монеты — в эфире и у истории с видимой ценой; скрытую цену масштаб
+  // приводит к 100–1000, и ей хватает общего правила.
+  const coinDecimals = isLive || (session.dataSource === 'real' && !session.hidePrice);
+  const liveDecimalsOf = useDecimalsOf(coinDecimals && !decimalsOfProp);
   const decimalsOf = decimalsOfProp ?? liveDecimalsOf;
   const chartDecimals = decimalsOf(symbol);
   // Цены монет, по которым есть позиции, но которых нет на графике: отметка

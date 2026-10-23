@@ -9,7 +9,7 @@ import { SectionHead } from '@/shared/ui/SectionHead';
 import { formatPriceGrouped } from '@/shared/lib/utils/format';
 import { dateFormat } from '@/shared/lib/utils/intl';
 import { isLiveSession, useDecimalsOf, useSetBacktestTags } from '../api/hooks';
-import type { SessionDetail } from '../api/types';
+import { coinBase, type SessionDetail } from '../api/types';
 import { toScreen } from '../lib/money';
 import { SessionTrades } from './SessionTrades';
 import { SummaryCells } from './SummaryCells';
@@ -27,7 +27,8 @@ export function SessionSummary({ detail, onLeave }: { detail: SessionDetail; onL
   const { session, trades, summary } = detail;
   const setTags = useSetBacktestTags(session.id);
   const [taggingFor, setTaggingFor] = useState<string | null>(null);
-  const decimalsOf = useDecimalsOf(isLiveSession(detail));
+  // Цены итога — настоящие (масштаб 1), поэтому знаки монеты нужны и истории: XRP — 4.
+  const decimalsOf = useDecimalsOf(isLiveSession(detail) || session.dataSource === 'real');
 
   const full = (ms: number) =>
     dateFormat(intl, { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(ms);
@@ -44,7 +45,13 @@ export function SessionSummary({ detail, onLeave }: { detail: SessionDetail; onL
       <p>
         {session.dataSource === 'synthetic'
           ? t('syntheticRevealed')
-          : t('revealed', { from: full(Date.parse(session.startTime)), to: full(Date.parse(session.cursorTime)) })}
+          : session.dataSource === 'real'
+            ? t('revealedCoin', {
+                coin: coinBase(session.symbol),
+                from: full(Date.parse(session.startTime)),
+                to: full(Date.parse(session.cursorTime)),
+              })
+            : t('revealed', { from: full(Date.parse(session.startTime)), to: full(Date.parse(session.cursorTime)) })}
       </p>
       <p className="muted">
         {t('balanceFromTo', { from: formatPriceGrouped(session.startBalance), to: formatPriceGrouped(session.balance) })}

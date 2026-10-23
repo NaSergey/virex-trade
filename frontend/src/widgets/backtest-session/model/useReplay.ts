@@ -109,7 +109,9 @@ export function useReplay(
 ): Replay {
   const sessionId = detail.session.id;
   const dataSource = detail.session.dataSource;
-  const source = useMemo(() => ({ id: sessionId, dataSource }), [sessionId, dataSource]);
+  // Монета — только у истории: у тренажёра свечи строит генератор сессии.
+  const symbol = dataSource === 'real' ? detail.session.symbol : undefined;
+  const source = useMemo(() => ({ id: sessionId, dataSource, symbol }), [sessionId, dataSource, symbol]);
   const [cursor, setCursor] = useState(() => Date.parse(detail.session.cursorTime));
   const [tf, setTf] = useState<number>(DEFAULT_TIMEFRAME);
   const [minutes, setMinutes] = useState<Candle[]>([]);
@@ -162,7 +164,7 @@ export function useReplay(
       if (!loading.current) {
         loading.current = (async () => {
           const from = loadedUntil(minutesRef.current) ?? minutesFrom.current;
-          const chunk = await fetchCandles(source, 1, { from, limit: CHUNK });
+          const chunk = await fetchCandles(source, 1, { from, limit: CHUNK }, source.symbol);
           if (chunk.length < CHUNK) exhausted.current = true;
           if (chunk.length > 0) {
             minutesRef.current = [...minutesRef.current, ...chunk];
@@ -189,7 +191,7 @@ export function useReplay(
     if (requestedTf.current.has(t)) return;
     requestedTf.current.add(t);
     const anchor = currentBucket(cursorRef.current, t);
-    fetchCandles(source, t, { to: anchor - 1, limit: CLOSED_LIMIT })
+    fetchCandles(source, t, { to: anchor - 1, limit: CLOSED_LIMIT }, source.symbol)
       .then((candles) => setClosed((prev) => (prev[t] ? prev : { ...prev, [t]: { anchor, candles } })))
       .catch((e) => {
         // Снятая отметка — чтобы повторный выбор этого ТФ попробовал снова.
@@ -240,7 +242,7 @@ export function useReplay(
     historyLoadingRef.current[tf] = true;
     setHistoryLoading(true);
     try {
-      const chunk = await fetchCandles(source, tf, { to: earliest - 1, limit: HISTORY_CHUNK });
+      const chunk = await fetchCandles(source, tf, { to: earliest - 1, limit: HISTORY_CHUNK }, source.symbol);
       const filtered = chunk.filter((c) => c.t >= floor);
       if (chunk.length < HISTORY_CHUNK || filtered.length < chunk.length) historyExhausted.current[tf] = true;
       if (filtered.length > 0) {

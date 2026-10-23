@@ -444,6 +444,9 @@ export function toDetail(s: DemoState): SessionDetail {
       hideDate: false,
       hidePrice: false,
       priceScale: 1,
+      // Монета сессии — только у истории; у демо-счёта монеты у позиций.
+      symbol: 'BTCUSDT',
+      hideSymbol: false,
       dataSource: 'live',
       status: 'active',
       createdAt: s.createdAt,

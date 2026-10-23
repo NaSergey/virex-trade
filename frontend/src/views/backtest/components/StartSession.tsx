@@ -7,9 +7,12 @@ import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { FieldGroup, Input } from '@/shared/ui/Field';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { Seg, type SegOption } from '@/shared/ui/Seg';
-import { useCreateSession, type DataSource } from '@/widgets/backtest-session';
+import { useCreateSession, useLiveSymbols, type DataSource } from '@/widgets/backtest-session';
 
 type Visibility = 'show' | 'hide';
+
+/** Монета истории: символ из списка сервера или случайная — её выберет и скроет сервер. */
+const RANDOM = 'random';
 
 /**
  * Параметры новой сессии. Дата по умолчанию скрыта: «это март 2020» — и трейдер
@@ -18,6 +21,10 @@ type Visibility = 'show' | 'hide';
  * вымышленные, поэтому поля «Дата» у него нет — сервер скрывает её сам. У эфира
  * нет ни «Даты», ни «Цены»: прятать их незачем — у живого рынка будущего нет,
  * и вспоминать нечего.
+ *
+ * Монета истории по умолчанию случайная — по той же причине, что и дата:
+ * «это SOL» сужает, где искать знакомый отрезок. Список монет — с сервера
+ * (`historySince` у монет эфира), своей копии форма не держит.
  */
 export function StartSession({ onStarted }: { onStarted: (id: string) => void }) {
   const t = useTranslations('backtest');
@@ -25,7 +32,9 @@ export function StartSession({ onStarted }: { onStarted: (id: string) => void })
   const [deposit, setDeposit] = useState('10000');
   const [date, setDate] = useState<Visibility>('hide');
   const [price, setPrice] = useState<Visibility>('show');
+  const [coin, setCoin] = useState<string>(RANDOM);
   const create = useCreateSession();
+  const { data: symbolsData } = useLiveSymbols(market === 'real');
 
   const synthetic = market === 'synthetic';
   const live = market === 'live';
@@ -35,6 +44,10 @@ export function StartSession({ onStarted }: { onStarted: (id: string) => void })
     { value: 'live', label: t('marketLive') },
     { value: 'real', label: t('marketReal') },
     { value: 'synthetic', label: t('marketSynthetic') },
+  ];
+  const coins: SegOption<string>[] = [
+    { value: RANDOM, label: t('coinRandom') },
+    ...(symbolsData?.symbols ?? []).filter((s) => s.historySince != null).map((s) => ({ value: s.symbol, label: s.base })),
   ];
   const visibility: SegOption<Visibility>[] = [
     { value: 'show', label: t('show') },
@@ -62,6 +75,11 @@ export function StartSession({ onStarted }: { onStarted: (id: string) => void })
         style={{ marginTop: 'var(--s4)', marginBottom: 'var(--s3)' }}
       />
       {market === 'real' && (
+        <FieldGroup label={t('coin')}>
+          <Seg options={coins} value={coin} onChange={setCoin} ariaLabel={t('coin')} />
+        </FieldGroup>
+      )}
+      {market === 'real' && (
         <FieldGroup label={t('date')}>
           <Seg options={visibility} value={date} onChange={setDate} ariaLabel={t('date')} />
         </FieldGroup>
@@ -81,6 +99,7 @@ export function StartSession({ onStarted }: { onStarted: (id: string) => void })
               dataSource: market,
               hideDate: market === 'real' ? date === 'hide' : synthetic,
               hidePrice: !live && price === 'hide',
+              symbol: market === 'real' ? coin : undefined,
             },
             { onSuccess: (r) => onStarted(r.session.id) },
           )

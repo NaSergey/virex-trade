@@ -822,7 +822,7 @@
   },
   "backtest": {
     "startTitle": "Новая сессия",
-    "startLead": "Случайный отрезок истории BTC. Будущее скрыто: свечи открываются по одной, в сделку вы входите и выходите сами.",
+    "startLead": "Случайный отрезок истории BTC, ETH, BNB, XRP или SOL. Будущее скрыто: свечи открываются по одной, в сделку вы входите и выходите сами.",
     "deposit": "Депозит",
     "date": "Дата",
     "price": "Цена",
@@ -856,6 +856,7 @@
     "colPnl": "PnL",
     "colBlind": "Вслепую",
     "blindDate": "дата",
+    "blindCoin": "монета",
     "blindPrice": "цена",
     "status": {
       "active": "идёт",
@@ -882,6 +883,7 @@
     "loadFailed": "Не удалось загрузить сессию",
     "timeframe": "Таймфрейм",
     "coin": "Монета",
+    "coinRandom": "Случайная",
     "coinSearch": "Поиск монеты",
     "coinNotFound": "Ничего не найдено",
     "chartSettings": "Настройки графика",
@@ -1054,6 +1056,7 @@
     "actionFailed": "Не удалось выполнить действие",
     "summaryTitle": "Итог сессии",
     "revealed": "Отрезок: {from} — {to}",
+    "revealedCoin": "Отрезок {coin}: {from} — {to}",
     "balanceFromTo": "Депозит: {from} → {to} USDT",
     "marginLabel": "Маржа",
     "liqLabel": "Ликвидация",

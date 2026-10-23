@@ -7,7 +7,7 @@ import { EmptyState } from '@/shared/ui/EmptyState';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import { Money } from '@/shared/ui/Money';
 import { SectionHead } from '@/shared/ui/SectionHead';
-import type { SessionListItem } from '@/widgets/backtest-session';
+import { coinBase, type SessionListItem } from '@/widgets/backtest-session';
 import { formatR } from '@/widgets/backtest-session/lib/money';
 
 /** Подписи — те же, что у выбора «График» в форме новой сессии. */
@@ -52,7 +52,15 @@ export function SessionsList({
       header: t('colStarted'),
       render: (s) => new Date(s.createdAt).toLocaleDateString(intl, { day: 'numeric', month: 'short', year: 'numeric' }),
     },
-    { key: 'market', header: t('market'), render: (s) => t(MARKET_LABEL[s.dataSource]) },
+    {
+      key: 'market',
+      header: t('market'),
+      // Монета истории — рядом с рынком, если её выбрали; случайную не выдаём.
+      render: (s) =>
+        s.dataSource === 'real' && !s.hideSymbol
+          ? `${t(MARKET_LABEL.real)} · ${coinBase(s.symbol)}`
+          : t(MARKET_LABEL[s.dataSource]),
+    },
     { key: 'status', header: t('colStatus'), render: (s) => t(`status.${s.status}`) },
     { key: 'trades', header: t('colTrades'), align: 'right', cellClassName: 'n', render: (s) => s.summary.trades },
     {
@@ -76,7 +84,11 @@ export function SessionsList({
       // Дата вслепую — только у истории: тренажёр скрывает её всегда (эпоха вымышленная),
       // а у эфира её не скрыть — будущего нет. Это видно по колонке «График».
       render: (s) =>
-        [s.dataSource === 'real' && s.hideDate && t('blindDate'), s.hidePrice && t('blindPrice')]
+        [
+          s.dataSource === 'real' && s.hideSymbol && t('blindCoin'),
+          s.dataSource === 'real' && s.hideDate && t('blindDate'),
+          s.hidePrice && t('blindPrice'),
+        ]
           .filter(Boolean)
           .join(', ') || <span className="muted">—</span>,
     },
