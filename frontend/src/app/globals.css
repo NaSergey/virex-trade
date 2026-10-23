@@ -5738,7 +5738,7 @@
   .fg summary { padding: 11px 0 11px 16px; }
   /* Крупнее под палец, но горизонтальные поля держим — на них лежит подсветка
      выбранного тега. */
-  .pick { padding: 6px 8px 4px; }
+  .pick { padding: 12px 8px 10px; }
 
   /* Поля ввода — не мельче 16px: Safari на iOS приближает страницу, как
      только фокус попадает в контрол с мелким кеглем, и обратно её потом
@@ -5758,6 +5758,49 @@
   .dh { padding: var(--s3) var(--s3) 0; }
   .db { padding: var(--s3); }
   .df { padding: var(--s3); }
+
+  /* ── дневник и рынок: мерки приложения ───────────────────────── */
+  /* Вкладки дневника липнут под шапкой, как переключатель таблиц терминала:
+     прокрутив ленту сделок, на соседнюю страницу не нужно возвращаться наверх.
+     Высота нажатия — 44px при том же кегле. */
+  .subnav {
+    position: sticky;
+    top: var(--top-h);
+    z-index: 6;
+    background-color: var(--ground);
+  }
+  .subnav a { padding: 14px 0; }
+  /* Поле даты и пресеты периода — одна высота, под палец. */
+  .strip-rail input[type="date"] { min-height: 44px; }
+  .strip-rail .seg button { min-height: 44px; }
+  /* Рынок: переключатели монет и окон — те же 44px. */
+  .pair .seg button,
+  .to-ctl .seg button,
+  .to-days .seg button { min-height: 44px; }
+  /* Фильтры аналитики: строка — вся полоса нажатия, флажок крупнее. */
+  .opt { padding: 12px 0; align-items: center; }
+  .opt input { width: 18px; height: 18px; }
+  .fg summary { padding: 14px 0 14px 16px; }
+  /* Кнопки без рамки и закреп в таблицах дневника. */
+  .wrap .btn.bare:not(.tight) { min-height: 44px; }
+  .pin { min-height: 44px; min-width: 40px; }
+  /* Мелкая подчёркнутая метка («+ тег», цена с графиком) — рамка нажатия
+     растёт невидимым полем, вёрстка строки не меняется. */
+  .newrow .in,
+  .newrow select.in,
+  .fb .in,
+  .fb select.in { min-height: 44px; }
+  .wrap .btn.bare.tight { min-height: 44px; }
+  .tag-add,
+  .px-cue,
+  button.tag { position: relative; }
+  .tag-add::after,
+  .px-cue::after,
+  button.tag::after {
+    content: "";
+    position: absolute;
+    inset: -12px -8px;
+  }
 
   /* ── обучение ────────────────────────────────────────────────── */
   /* Карточка тура не летает у элемента, а прилипает листом к низу: рядом с
@@ -5935,6 +5978,11 @@
   .fills td,
   .fills th { display: revert; }
   .fills { min-width: 0; }
+  /* Исполнения в раскрытой строке не переносят числа по строкам: таблица
+     листается вбок внутри своего блока, страница остаётся на месте. */
+  .ledger .fills { display: block; max-width: 100%; overflow-x: auto; }
+  .ledger .fills th,
+  .ledger .fills td { white-space: nowrap; padding-right: var(--s3); }
   .fills td,
   .fills th { text-align: left; }
   .fills td::before { display: none; }
@@ -9551,4 +9599,67 @@
   .stg-grid { grid-template-columns: minmax(0, 1fr); }
   .stg-span2 { grid-column: auto; }
   .stg-me { grid-template-columns: 96px minmax(0, 1fr); }
+}
+
+/* Телефон: игры, список бектеста, профиль, окна — цели нажатия от 44px,
+   ряды делений листаются внутри себя, строки турниров — компактные карточки. */
+@media (max-width: 720px) {
+  .dlg .btn,
+  .dlg .seg button,
+  .dlg .in,
+  .games-page .btn,
+  .games-page .seg button,
+  .cbanner .btn,
+  .ptabs button,
+  .tfoot .btn,
+  .lists .btn,
+  .pagehead .btn,
+  .bt-col .btn:not(.tight),
+  .stg-foot .btn { min-height: 44px; }
+  /* Деления в окнах (длительность турнира и т. п.) не режутся краем окна —
+     ряд листается вбок, а не обрывается на «7 D». */
+  .dlg .seg { overflow-x: auto; max-width: 100%; }
+  .dlg .seg button { flex: 1 0 auto; }
+  /* Действия строки журнала бектеста — по 44px, иначе «Открыть»/«Удалить» —
+     две строки текста высотой в 17px, и в них не попасть пальцем. */
+  .row-actions { gap: var(--s1); }
+  .row-actions .btn.tight { min-height: 44px; padding: 0 var(--s2); }
+  /* Строка общей таблицы турниров — карточка на четыре ряда вместо шести
+     строк «подпись → значение»: подписи ячеек внутри строки не нужны, у
+     каждой ячейки и так свой текст («призовой фонд», «старт»). */
+  .tboard .ledger tbody tr:not(.exp) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: var(--s3);
+    row-gap: var(--s1);
+    align-items: center;
+    padding: var(--s3) 0;
+  }
+  .tboard .ledger td { display: block; width: auto; padding: 0; text-align: left; }
+  .tboard .ledger td::before { display: none; }
+  .tboard .ledger td:nth-child(1) { grid-area: 1 / 2; justify-self: end; }
+  .tboard .ledger td:nth-child(2) { grid-area: 1 / 1; }
+  .tboard .ledger td:nth-child(3) { grid-area: 2 / 1; }
+  .tboard .ledger td:nth-child(4) { grid-area: 2 / 2; justify-self: end; text-align: right; }
+  .tboard .ledger td:nth-child(5) { grid-area: 3 / 1; }
+  .tboard .ledger td:nth-child(6) { grid-area: 3 / 2; justify-self: end; }
+  .tboard .ledger td:nth-child(7) { grid-column: 1 / -1; }
+  .tboard .ledger td:nth-child(7):not(:has(*)) { display: none; }
+  .tboard .ledger td:nth-child(7) .btn { width: 100%; }
+  .tb-cell { align-items: inherit; }
+  .tboard .ledger td:nth-child(4) .tb-cell { align-items: flex-end; }
+  .tb-time { align-items: flex-end; }
+  .seats, .seats-n { width: 96px; }
+  /* Профиль: шестерёнка и вкладки — с зоной нажатия в палец, но без сдвига
+     вёрстки (лишние поля гасятся отрицательным отступом). */
+  .btn.pf-gear { min-width: 44px; min-height: 44px; margin: -13px -13px 0 auto; }
+  .pf-tabs .seg button { min-height: 44px; }
+  /* Столы и игры: «назад» и «⋯» — тоже кнопки. */
+  .ct-backlink, .jpg-back, .rc-back {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  .ct-more { min-width: 44px; min-height: 44px; }
+  .rc-stakes button { min-height: 44px; }
 }
