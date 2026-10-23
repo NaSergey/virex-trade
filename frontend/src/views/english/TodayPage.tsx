@@ -128,6 +128,10 @@ function Today({ data, error }: { data: EnglishState; error: unknown }) {
         />
       </ul>
 
+      <ul className="en-plan en-plan-ins">
+        <PlanRow href="/english/insights" title="Разбор и рекомендации" status="что получается, каких слов не хватает, как заговорить" />
+      </ul>
+
       <Summary
         items={[
           { label: 'Слов знаю', value: String(known) },

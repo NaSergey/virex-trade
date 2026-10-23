@@ -22,8 +22,11 @@ const TABS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: '/english/words', label: 'Темы', icon: Library },
 ];
 
-/** Тест по теме открывается из «Тем» — вкладка горит и на нём. */
-const isTab = (path: string, href: string) => path === href || (href === '/english/words' && path === '/english/test');
+/** Тест по теме открывается из «Тем», разбор — из «Сегодня»: вкладка горит и на них. */
+const isTab = (path: string, href: string) =>
+  path === href ||
+  (href === '/english/words' && path === '/english/test') ||
+  (href === '/english' && path === '/english/insights');
 
 /**
  * Учебник английского — раздел владельца на поддомене админки (спека

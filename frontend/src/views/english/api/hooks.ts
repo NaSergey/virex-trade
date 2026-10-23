@@ -216,11 +216,12 @@ export function useDeleteWord() {
   );
 }
 
-/** Своя тема: id выдаёт сервер — в кэш по ответу. */
+/** Своя тема, можно сразу со словами: id выдаёт сервер — в кэш по ответу. */
 export function useAddTheme() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (title: string) => apiJson<UserTheme>(`${BASE}/themes`, send('POST', { title })),
+    mutationFn: (v: string | { title: string; cards: string[] }) =>
+      apiJson<UserTheme>(`${BASE}/themes`, send('POST', typeof v === 'string' ? { title: v } : v)),
     onSuccess: (theme) =>
       qc.setQueryData<EnglishState>(KEY, (s) => (s ? { ...s, themes: [...s.themes, theme] } : s)),
   });
