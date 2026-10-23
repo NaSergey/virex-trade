@@ -14,6 +14,12 @@ Telegram с кнопками «Сажусь за работу / Иду гуля�
 - `*Page.tsx`, `Layout.tsx`, `components/`, `plan.css` — страницы и стили. На телефоне раздел —
   приложение (вкладки внизу, шапка админки скрыта через `body:has(.pl-app)`).
 
+## Шаблон владельца
+
+`backend/src/scripts/seed-plan.ts` — будни владельца (2026-10-23) одним прогоном; непустой шаблон
+не трогает без `--replace`. Прод: `docker compose --env-file .env.prod -f docker-compose.prod.yml
+exec api node dist/scripts/seed-plan.js`.
+
 ## Точки подключения
 
 1. `backend/src/app.module.ts` — `PlanModule` в `imports`.
