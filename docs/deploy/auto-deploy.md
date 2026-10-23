@@ -2,16 +2,20 @@
 
 Деплоев два входа, сборка одна — `deploy/deploy.sh` на сервере:
 
-- **Пуш в `main` на GitHub** (merge PR, пуш из облачной сессии, свой пуш) →
-  `.github/workflows/deploy.yml` заходит на сервер по SSH → `deploy.sh --pull`:
-  fetch `main` с GitHub, `git merge --ff-only`, `docker compose … up -d --build`.
-  Вручную — Actions → Deploy → Run workflow (пересоберёт то, что в `main`).
-- **Пуш прямо на сервер** (у локального `origin` второй push-адрес —
+- **Пуш в `main` на GitHub** (merge PR, пуш из облачной сессии, `git push origin
+  main`) → `.github/workflows/deploy.yml` заходит на сервер по SSH →
+  `deploy.sh --pull`: fetch `main` с GitHub, `git merge --ff-only`,
+  `docker compose … up -d --build`. Пуш, в котором только `*.md` и `docs/`, не
+  деплоится. Вручную — Actions → Deploy → Run workflow (пересоберёт `main`).
+- **Запасной путь — пуш прямо на сервер**: `git push server main` (remote
   `ssh://root@…:3333/opt/virex-trader`) → хук `post-receive` → `deploy.sh`.
+  Нужен, если GitHub или Actions лежат.
 
-`git push origin main` с рабочей машины попадает в оба входа сразу. Сборки не
-дерутся: `deploy.sh` держит замок `/run/lock/virex-deploy`, второй ждёт первого
-и находит образы уже собранными (сборка из кэша, контейнеры не пересоздаются).
+У `origin` один push-адрес — GitHub. Раньше вторым стоял сервер, и каждый пуш
+деплоился дважды: сборка из кэша всё равно пересоздаёт контейнеры, то есть стек
+(с раздачами в памяти `games`) перезапускался два раза подряд. Если оба входа
+всё же сойдутся, `deploy.sh` держит замок `/run/lock/virex-deploy`: второй ждёт
+первого, параллельной сборки нет.
 
 Сборка идёт на самом сервере. Упала — прогон Actions красный, лог сборки в нём.
 Для пуша прямо на сервер вывод хука виден в выводе `git push`, но код выхода
