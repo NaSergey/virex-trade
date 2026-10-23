@@ -319,6 +319,10 @@ export function useReplay(
               const sent = onExitRef.current(trade, exit);
               if (isPartialExit(trade, exit) && exit.closeOrderId) firedCloseOrders.track(exit.closeOrderId, sent);
               else closing.track(trade.id, sent);
+              // Закрытие не сохранилось и после повторов — автопрокрутка встаёт. Минута
+              // выхода уже пройдена, и без паузы позиция жила бы дальше с прибылью вместо
+              // стопа, пока человек не заметит «Повторить» внизу (QA 2026-10-23).
+              sent.catch(() => setSpeed(null));
             }
             if (entryFill) {
               const order = pendingEntryOrders.find((o) => o.id === entryFill.orderId);
