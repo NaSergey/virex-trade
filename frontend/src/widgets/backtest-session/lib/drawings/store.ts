@@ -1,4 +1,4 @@
-import { DRAWING_COLORS, DRAWING_KINDS, type DPoint, type Drawing } from './types';
+import { DRAWING_COLORS, DRAWING_KINDS, TEXT_MAX, type DPoint, type Drawing } from './types';
 
 /**
  * Хранение рисунков сессии — единственное место, которое знает про localStorage.
@@ -28,7 +28,10 @@ function isDrawing(v: unknown): v is Drawing {
     (d.width === 1 || d.width === 2 || d.width === 3) &&
     Array.isArray(d.points) &&
     d.points.length > 0 &&
-    d.points.every(isPoint)
+    d.points.every(isPoint) &&
+    (d.text === undefined || (typeof d.text === 'string' && d.text.length <= TEXT_MAX)) &&
+    (d.locked === undefined || typeof d.locked === 'boolean') &&
+    (d.kind !== 'channel' || d.points.length === 3)
   );
 }
 

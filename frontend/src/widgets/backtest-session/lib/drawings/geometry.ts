@@ -5,7 +5,10 @@ import type { DPoint, Drawing, DrawingKind } from './types';
 export function placement(kind: DrawingKind): 1 | 2 | 'drag' {
   switch (kind) {
     case 'hline':
+    case 'hray':
     case 'vline':
+    case 'cross':
+    case 'text':
     case 'arrowUp':
     case 'arrowDown':
     case 'long':
@@ -73,6 +76,16 @@ export function rulerStats(a: DPoint, b: DPoint, tfMs: number): { dp: number; pc
   };
 }
 
+/** Канал по основной линии: параллельная — на `offset` по цене над (под) ней. */
+export function makeChannel(a: DPoint, b: DPoint, offset: number): DPoint[] {
+  return [a, b, { t: a.t, p: a.p + offset }];
+}
+
+/** Цена на прямой через две точки в момент `t`; у вертикальной — цена первой точки. */
+export function priceOnLine(a: DPoint, b: DPoint, t: number): number {
+  return b.t === a.t ? a.p : a.p + ((b.p - a.p) * (t - a.t)) / (b.t - a.t);
+}
+
 /**
  * Якоря, за которые фигуру тянут. У позиции — не её точки: вход, стоп и тейк
  * тянутся с левого края, длина — за правый край на уровне входа.
@@ -81,6 +94,13 @@ export function anchorsOf(d: Drawing): DPoint[] {
   if (d.kind === 'long' || d.kind === 'short') {
     const [entry, stop, take] = d.points;
     return [entry, { t: entry.t, p: stop.p }, { t: entry.t, p: take.p }, { t: stop.t, p: entry.p }];
+  }
+  if (d.kind === 'channel') {
+    // Ширину канала тянут за середину параллельной линии — так делает TradingView.
+    const [a, b, c] = d.points;
+    const off = c.p - a.p;
+    const tm = (a.t + b.t) / 2;
+    return [a, b, { t: tm, p: priceOnLine(a, b, tm) + off }];
   }
   return d.points;
 }
@@ -109,6 +129,14 @@ export function moveAnchor(d: Drawing, i: number, pt: DPoint): Drawing {
         return { ...d, points: [entry, { ...stop, t }, { ...take, t }] };
       }
     }
+  }
+  if (d.kind === 'channel') {
+    const [a, b, c] = d.points;
+    const off = c.p - a.p;
+    if (i === 0) return { ...d, points: [pt, b, { t: pt.t, p: pt.p + off }] };
+    if (i === 1) return { ...d, points: [a, pt, c] };
+    const tm = (a.t + b.t) / 2;
+    return { ...d, points: [a, b, { t: a.t, p: a.p + (pt.p - priceOnLine(a, b, tm)) }] };
   }
   return { ...d, points: d.points.map((q, k) => (k === i ? pt : q)) };
 }

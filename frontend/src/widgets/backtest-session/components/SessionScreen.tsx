@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { Settings as SettingsIcon, Volume2, VolumeX } from 'lucide-react';
+import { Redo2, Settings as SettingsIcon, Undo2, Volume2, VolumeX } from 'lucide-react';
 import { TagsDialog } from '@/entities/tag';
 import { useAuth } from '@/features/auth';
 import { useLocaleControl } from '@/shared/i18n';
@@ -358,13 +358,6 @@ export function Terminal({
     closeM.mutateAsync({ tradeId: trade.id, exitTime: new Date(time).toISOString(), exitPrice: price, reason, qty, closeOrderId });
 
   const { user } = useAuth();
-  // Рисунки — у каждой монеты свои: линия по цене ETH на графике BTC ничего не
-  // значит. Ключ BTC прежний — рисунки, сделанные до монет, не теряются.
-  const drawings = useDrawingTools(
-    user?.id ?? 'anon',
-    symbol === DEFAULT_SYMBOL ? session.id : `${session.id}:${symbol}`,
-    scale,
-  );
 
   const replayFeed = useReplay(
     detail,
@@ -433,6 +426,14 @@ export function Terminal({
   );
   const liveFeed = useLiveFeed(detail, isLive, symbol, source, paused, entryAnchors);
   const replay = isLive ? liveFeed : replayFeed;
+  // Рисунки — у каждой монеты свои: линия по цене ETH на графике BTC ничего не
+  // значит. Ключ BTC прежний — рисунки, сделанные до монет, не теряются.
+  const drawings = useDrawingTools(
+    user?.id ?? 'anon',
+    symbol === DEFAULT_SYMBOL ? session.id : `${session.id}:${symbol}`,
+    scale,
+    replay.shownTf * 60_000,
+  );
 
   // Индикатор боковиков: свои закрытые 4ч-свечи до «сейчас» терминала (в
   // прокрутке — курсор), на любом таймфрейме графика.
@@ -1263,6 +1264,12 @@ export function Terminal({
                 {/* Отступ — свой: кнопки графика стоят вплотную друг к другу, а
                     действие страницы к ним не относится. */}
                 {chartActions && <div className="mr-3 flex items-center">{chartActions}</div>}
+                <Button variant="bare" tight aria-label={t('drawings.undo')} title={`${t('drawings.undo')} (Ctrl+Z)`} disabled={!drawings.canUndo} onClick={drawings.undo}>
+                  <Undo2 size={16} />
+                </Button>
+                <Button variant="bare" tight aria-label={t('drawings.redo')} title={`${t('drawings.redo')} (Ctrl+Y)`} disabled={!drawings.canRedo} onClick={drawings.redo}>
+                  <Redo2 size={16} />
+                </Button>
                 <Button
                   variant="bare"
                   tight
@@ -1310,7 +1317,12 @@ export function Terminal({
               />
               <div className="chart-tools-main">
                 {drawings.selected && !drawings.hidden && (
-                  <DrawingStyleBar drawing={drawings.selected} onStyle={drawings.restyle} onDelete={drawings.deleteSelected} />
+                  <DrawingStyleBar
+                    drawing={drawings.selected}
+                    onStyle={drawings.restyle}
+                    onDelete={drawings.deleteSelected}
+                    onCopy={() => drawings.copy() && drawings.paste()}
+                  />
                 )}
                 {replay.ready ? (
                   <ReplayChart

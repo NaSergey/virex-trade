@@ -11,6 +11,8 @@ import type { Ruler } from './useDrawingGestures';
 const HIT_PX = 10;
 const ANCHOR_PX = 4;
 const ANCHOR_HIT_PX = 10;
+/** Кегль надписи по толщине фигуры — толщина у текста и есть размер. */
+const TEXT_SIZE = { 1: 11, 2: 13, 3: 16 } as const;
 
 export interface LayerGeo {
   xOf: (t: number) => number;
@@ -93,6 +95,16 @@ export function DrawingLayer({
           </>
         );
       }
+      case 'hray': {
+        const x = xOf(a.t);
+        const y = yOf(a.p);
+        return (
+          <>
+            <line x1={x} x2={reach} y1={y} y2={y} {...line} />
+            {hitLine(d, x, y, reach, y)}
+          </>
+        );
+      }
       case 'vline': {
         const x = xOf(a.t);
         return (
@@ -102,15 +114,79 @@ export function DrawingLayer({
           </>
         );
       }
-      case 'trend':
-      case 'ray':
-      case 'arrow': {
+      case 'cross': {
+        const x = xOf(a.t);
+        const y = yOf(a.p);
+        return (
+          <>
+            <line x1={-reach} x2={reach} y1={y} y2={y} {...line} />
+            <line x1={x} x2={x} y1={top} y2={bottom} {...line} />
+            {hitLine(d, -reach, y, reach, y, 'h')}
+            {hitLine(d, x, top, x, bottom, 'v')}
+          </>
+        );
+      }
+      case 'channel': {
+        // Параллельный канал: основная линия, параллельная и пунктир середины, между ними — заливка.
+        const c = d.points[2];
+        const off = yOf(a.p + (c.p - a.p)) - yOf(a.p);
         const x1 = xOf(a.t);
         const y1 = yOf(a.p);
+        const x2 = xOf(b.t);
+        const y2 = yOf(b.p);
+        return (
+          <>
+            <polygon points={`${x1},${y1} ${x2},${y2} ${x2},${y2 + off} ${x1},${y1 + off}`} fill={color} fillOpacity={0.1} {...hitProps(d)} />
+            <line x1={x1} y1={y1} x2={x2} y2={y2} {...line} />
+            <line x1={x1} y1={y1 + off} x2={x2} y2={y2 + off} {...line} />
+            <line
+              x1={x1}
+              y1={y1 + off / 2}
+              x2={x2}
+              y2={y2 + off / 2}
+              stroke={color}
+              strokeWidth={px(1)}
+              strokeDasharray={`${px(4)} ${px(4)}`}
+              pointerEvents="none"
+            />
+            {hitLine(d, x1, y1, x2, y2, 'a')}
+            {hitLine(d, x1, y1 + off, x2, y2 + off, 'b')}
+          </>
+        );
+      }
+      case 'range':
+        return <RulerShape ruler={{ a, b }} geo={geo} hit={hitProps(d)} />;
+      case 'text': {
+        const size = px(TEXT_SIZE[d.width]);
+        const label = d.text?.trim() || t('textPlaceholder');
+        const lines = label.split('\n');
+        const x = xOf(a.t);
+        const y = yOf(a.p);
+        const w = Math.max(...lines.map((l) => l.length)) * size * 0.62;
+        return (
+          <>
+            <rect x={x - px(3)} y={y - size} width={w + px(6)} height={lines.length * size * 1.25 + px(3)} fill="transparent" {...hitProps(d)} />
+            <text x={x} y={y} fill={color} fillOpacity={d.text?.trim() ? 1 : 0.55} fontSize={size} fontFamily="var(--font-sans)" pointerEvents="none">
+              {lines.map((l, i) => (
+                <tspan key={i} x={x} dy={i === 0 ? 0 : size * 1.25}>
+                  {l}
+                </tspan>
+              ))}
+            </text>
+          </>
+        );
+      }
+      case 'trend':
+      case 'ray':
+      case 'extended':
+      case 'arrow': {
+        let x1 = xOf(a.t);
+        let y1 = yOf(a.p);
         let x2 = xOf(b.t);
         let y2 = yOf(b.p);
         let head: ReactNode = null;
-        if (d.kind === 'ray') [x2, y2] = extend(x1, y1, x2, y2, reach);
+        if (d.kind === 'ray' || d.kind === 'extended') [x2, y2] = extend(x1, y1, x2, y2, reach);
+        if (d.kind === 'extended') [x1, y1] = extend(x2, y2, x1, y1, reach * 2);
         if (d.kind === 'arrow') {
           head = <polygon points={arrowHead(x1, y1, x2, y2, px(9 + d.width * 2))} fill={color} pointerEvents="none" />;
         }
@@ -282,8 +358,10 @@ export function DrawingLayer({
         <g key={d.id}>{shape(d)}</g>
       ))}
 
+      {selected && interactive && selected.locked && <LockedFrame d={selected} geo={geo} />}
       {selected &&
         interactive &&
+        !selected.locked &&
         anchorsOf(selected).map((q, i) => {
           const x = selected.kind === 'hline' ? Math.min(Math.max(xOf(q.t), px(12)), PW - px(12)) : xOf(q.t);
           const y = selected.kind === 'vline' ? (top + bottom) / 2 : yOf(q.p);
@@ -307,7 +385,30 @@ export function DrawingLayer({
   );
 }
 
-function RulerShape({ ruler, geo }: { ruler: Ruler; geo: LayerGeo }) {
+/** Выделенная закреплённая фигура: вместо якорей — точки без ручек, тянуть нечего. */
+function LockedFrame({ d, geo }: { d: Drawing; geo: LayerGeo }) {
+  const { xOf, yOf, px, top, bottom } = geo;
+  return (
+    <g pointerEvents="none">
+      {anchorsOf(d).map((q, i) => (
+        <rect
+          key={i}
+          x={xOf(q.t) - px(2.5)}
+          y={(d.kind === 'vline' ? (top + bottom) / 2 : yOf(q.p)) - px(2.5)}
+          width={px(5)}
+          height={px(5)}
+          fill={COLOR_VAR[d.color]}
+        />
+      ))}
+    </g>
+  );
+}
+
+/**
+ * Линейка и «Диапазон цены и времени»: разница цены, процент, свечи и время.
+ * У линейки событий нет; у диапазона — `hit`, за заливку его хватают как фигуру.
+ */
+function RulerShape({ ruler, geo, hit }: { ruler: Ruler; geo: LayerGeo; hit?: object }) {
   const t = useTranslations('backtest.drawings');
   const { xOf, yOf, px, tfMs } = geo;
   const { a, b } = ruler;
@@ -332,7 +433,15 @@ function RulerShape({ ruler, geo }: { ruler: Ruler; geo: LayerGeo }) {
   const by = y2 < y1 ? y2 - boxH - px(6) : y2 + px(6);
   return (
     <g pointerEvents="none">
-      <rect x={Math.min(x1, x2)} y={Math.min(y1, y2)} width={Math.abs(x2 - x1)} height={Math.abs(y2 - y1)} fill={color} fillOpacity={0.12} />
+      <rect
+        x={Math.min(x1, x2)}
+        y={Math.min(y1, y2)}
+        width={Math.abs(x2 - x1)}
+        height={Math.abs(y2 - y1)}
+        fill={color}
+        fillOpacity={0.12}
+        {...(hit ? { ...hit, pointerEvents: 'all' } : {})}
+      />
       <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={color} strokeWidth={px(1)} />
       <rect x={bx} y={by} width={boxW} height={boxH} fill="var(--color-background)" stroke={color} strokeWidth={px(1)} />
       {lines.map((l, i) => (

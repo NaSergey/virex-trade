@@ -9,3 +9,23 @@ export function FibIcon({ size = 16 }: { size?: number }) {
     </svg>
   );
 }
+
+/** Параллельный канал: две параллельные с точками и пунктир середины. */
+export function ChannelIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" aria-hidden="true">
+      <path d="M3 14L15 4M9 20L21 10" />
+      <path d="M6 17L18 7" strokeDasharray="2 2.5" strokeWidth={1.25} />
+    </svg>
+  );
+}
+
+/** Горизонтальный луч: точка начала и линия вправо. */
+export function HRayIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" aria-hidden="true">
+      <path d="M7 12h15" />
+      <circle cx="5" cy="12" r="2" />
+    </svg>
+  );
+}

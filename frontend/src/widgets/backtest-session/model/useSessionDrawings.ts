@@ -40,7 +40,10 @@ export function useSessionDrawings(userId: string, sessionId: string) {
   const remove = useCallback((id: string) => commit(read(key).filter((x) => x.id !== id)), [key, commit]);
   const clear = useCallback(() => commit([]), [commit]);
 
-  return { drawings, upsert, remove, clear, saveFailed };
+  /** Текущий список в обход рендера — для истории правок, которая снимает его до записи. */
+  const snapshot = useCallback(() => read(key), [key]);
+
+  return { drawings, upsert, remove, clear, replace: commit, snapshot, saveFailed };
 }
 
 const EMPTY: Drawing[] = [];
