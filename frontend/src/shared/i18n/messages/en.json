@@ -1278,6 +1278,8 @@
     "indicators": "Indicators",
     "indicatorRsi": "RSI with divergences",
     "indicatorRanges": "Ranges after an impulse",
+    "revealHidden": "Show coin, prices and dates",
+    "revealHiddenHint": "Only in this session and until you leave it.",
     "tf": {
       "1": "1m",
       "5": "5m",

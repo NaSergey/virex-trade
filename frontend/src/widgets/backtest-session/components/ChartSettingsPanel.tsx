@@ -19,6 +19,8 @@ const fmtRisk = (v: number) => `${Number.isInteger(v) ? v : v.toFixed(1)}%`;
  * Значения пишутся сразу, без «Сохранить», как и сам переключатель RSI.
  */
 export function ChartSettingsPanel({
+  reveal,
+  onReveal,
   rsiOn,
   onRsi,
   rangesOn,
@@ -27,6 +29,9 @@ export function ChartSettingsPanel({
   onMaxRisk,
   onClose,
 }: {
+  /** Скрытое сессии истории показано (монета, настоящие цены и даты); не задано — переключателя нет. */
+  reveal?: boolean;
+  onReveal?: (on: boolean) => void;
   rsiOn: boolean;
   onRsi: (on: boolean) => void;
   rangesOn: boolean;
@@ -56,6 +61,16 @@ export function ChartSettingsPanel({
         <Button variant="none" className="cs-indicator" aria-pressed={rangesOn} onClick={() => onRanges(!rangesOn)}>
           {t('indicatorRanges')}
         </Button>
+      )}
+
+      {/* Подсмотреть скрытое — только у истории, где что-то скрыто, и до ухода из сессии. */}
+      {onReveal && (
+        <>
+          <Button variant="none" className="cs-indicator" aria-pressed={reveal} onClick={() => onReveal(!reveal)}>
+            {t('revealHidden')}
+          </Button>
+          <p className="muted">{t('revealHiddenHint')}</p>
+        </>
       )}
 
       <Field

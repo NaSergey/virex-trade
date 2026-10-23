@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { Redo2, Settings as SettingsIcon, Undo2, Volume2, VolumeX } from 'lucide-react';
+import { Settings as SettingsIcon, Volume2, VolumeX } from 'lucide-react';
 import { TagsDialog } from '@/entities/tag';
 import { useAuth } from '@/features/auth';
 import { useLocaleControl } from '@/shared/i18n';
@@ -16,6 +16,7 @@ import { formatPriceGrouped } from '@/shared/lib/utils/format';
 import { fetchCandles, useBacktestSession, isLiveSession, useDecimalsOf, useFinishSession, useLivePrices, useLiveSymbols } from '../api/hooks';
 import {
   DEFAULT_SYMBOL,
+  coinBase,
   type BacktestTrade,
   type Direction,
   type ExitReason,
@@ -254,7 +255,13 @@ export function Terminal({
   const { locale } = useLocaleControl();
   const intl = terminalIntl(locale);
   const { session, trades } = detail;
-  const scale = session.priceScale;
+  // Подсмотреть скрытое — монету, настоящие цены и даты — переключателем в
+  // настройках графика (владелец 2026-10-23, «чисто для интереса»). Только у
+  // истории, где что-то скрыто, и только до ухода из сессии: запомненный на
+  // устройстве, он раскрывал бы и все следующие сессии.
+  const revealable = session.dataSource === 'real' && (session.hideSymbol || session.hidePrice || session.hideDate);
+  const [reveal, setReveal] = useState(false);
+  const scale = reveal ? 1 : session.priceScale;
   const startMs = Date.parse(session.startTime);
   /**
    * Сессия в прямом эфире — своя или турнирная. Здесь браузер не ведёт время и
@@ -294,7 +301,7 @@ export function Terminal({
   const [localSymbol, setLocalSymbol] = useState(session.symbol);
   // Случайную монету истории сервер скрыл до итога: ни колонки монеты в таблицах,
   // ни символа в подзаголовках окон. Раскрывает её итог завершённой сессии.
-  const symbolShown = !session.hideSymbol;
+  const symbolShown = !session.hideSymbol || reveal;
   const coinPrefix = (sym: string) => (symbolShown ? `${sym} · ` : '');
   const symbol = isLive ? liveSymbol : localSymbol;
   const setSymbol = isLive ? setLiveSymbol : setLocalSymbol;
@@ -467,7 +474,7 @@ export function Terminal({
   const coins = symbols ?? symbolsData?.symbols;
   // Знаки цены монеты — в эфире и у истории с видимой ценой; скрытую цену масштаб
   // приводит к 100–1000, и ей хватает общего правила.
-  const coinDecimals = isLive || (session.dataSource === 'real' && !session.hidePrice);
+  const coinDecimals = isLive || (session.dataSource === 'real' && (!session.hidePrice || reveal));
   const liveDecimalsOf = useDecimalsOf(coinDecimals && !decimalsOfProp);
   const decimalsOf = decimalsOfProp ?? liveDecimalsOf;
   const chartDecimals = decimalsOf(symbol);
@@ -527,6 +534,15 @@ export function Terminal({
   // Черновик сетки фиксации: пока он есть, на месте панели ордера стоит панель
   // сетки, а её уровни — на графике (спека 2026-10-04-close-grid-panel-design.md).
   const [closeGrid, setCloseGrid] = useState<CloseGridDraft | null>(null);
+  // Черновики панели — в экранных ценах: со сменой масштаба они встали бы не туда.
+  const toggleReveal = (on: boolean) => {
+    setReveal(on);
+    setDraft((p) => ({ ...p, stop: '', take: '' }));
+    setLimitDraft((p) => ({ ...p, stop: '', take: '', entry: '' }));
+    setScaledDraft((p) => ({ ...p, stop: '', take: '', upper: '', lower: '', qtyPins: {}, stopPins: {} }));
+    setBotDraft((p) => ({ ...p, stop: '', upper: '', lower: '', qtyPins: {}, stopPins: {} }));
+    setCloseGrid(null);
+  };
   // Верхняя граница ползунка риска — настройка меню шестерёнки над графиком.
   const [maxRisk, setMaxRisk] = useMaxRisk();
   // Панели меняются анимацией (`.panel-swap`), но не на первой отрисовке
@@ -815,11 +831,11 @@ export function Terminal({
     (ms: number) => {
       const d = new Date(ms);
       const time = dateFmt.time.format(d);
-      return session.hideDate
+      return session.hideDate && !reveal
         ? `${dateFmt.weekday.format(d)} ${time} · ${t('dayN', { n: dayNumber(ms, startMs) })}`
         : `${dateFmt.day.format(d)} ${time}`;
     },
-    [dateFmt, session.hideDate, startMs, t],
+    [dateFmt, session.hideDate, reveal, startMs, t],
   );
   // Тем же поводом, что и labelFor выше — стабильная ссылка для memo(ReplayChart).
   const levelLabel = useCallback((kind: LevelKind) => t(`level.${kind}`), [t]);
@@ -1336,18 +1352,14 @@ export function Terminal({
                   ) : (
                     <CoinSkeleton />
                   ))}
+                {/* Раскрытая история называет свою монету — иначе её не видно нигде. */}
+                {reveal && <span className="muted">{coinBase(symbol)}</span>}
                 <Seg options={tfOptions} value={replay.tf} onChange={replay.setTf} ariaLabel={t('timeframe')} />
               </div>
               <div className="flex items-center gap-1">
                 {/* Отступ — свой: кнопки графика стоят вплотную друг к другу, а
                     действие страницы к ним не относится. */}
                 {chartActions && <div className="mr-3 flex items-center">{chartActions}</div>}
-                <Button variant="bare" tight aria-label={t('drawings.undo')} title={`${t('drawings.undo')} (Ctrl+Z)`} disabled={!drawings.canUndo} onClick={drawings.undo}>
-                  <Undo2 size={16} />
-                </Button>
-                <Button variant="bare" tight aria-label={t('drawings.redo')} title={`${t('drawings.redo')} (Ctrl+Y)`} disabled={!drawings.canRedo} onClick={drawings.redo}>
-                  <Redo2 size={16} />
-                </Button>
                 <Button
                   variant="bare"
                   tight
@@ -1487,6 +1499,8 @@ export function Terminal({
           >
             {chartSettingsOpen ? (
               <ChartSettingsPanel
+                reveal={revealable ? reveal : undefined}
+                onReveal={revealable ? toggleReveal : undefined}
                 rsiOn={rsiOn}
                 onRsi={setRsiOn}
                 rangesOn={rangesOn}
