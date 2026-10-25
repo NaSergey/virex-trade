@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { derivValueText, freshDivergence, FRESH_BARS } from './odds-plaque';
+import { freshDivergence, FRESH_BARS } from './odds-plaque';
 import { RSI_DEFAULTS, type Divergence } from './rsi';
 
 const div = (kind: 'bull' | 'bear', to: number): Divergence => ({
@@ -28,14 +28,5 @@ describe('freshDivergence', () => {
   });
   it('берёт последнюю', () => {
     expect(freshDivergence([div('bull', 40), div('bear', 60)], 60 + R)).toEqual({ kind: 'bear', ago: 0 });
-  });
-});
-
-describe('derivValueText', () => {
-  it('фандинг, доля лонгов, изменение открытого интереса', () => {
-    expect(derivValueText('funding', 0.00031)).toBe('0.0310 %');
-    expect(derivValueText('ratio', 0.6421)).toBe('64 %');
-    expect(derivValueText('oi', 0.0604)).toBe('+6.0 %');
-    expect(derivValueText('oi', -0.012)).toBe('−1.2 %');
   });
 });

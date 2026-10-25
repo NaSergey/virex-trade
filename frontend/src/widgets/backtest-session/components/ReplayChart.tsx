@@ -1869,6 +1869,8 @@ export const ReplayChart = memo(function ReplayChart({
                         className={bodyDrag ? 'lvl-hit' : undefined}
                         onPointerDown={bodyDrag ? startDrag(l) : undefined}
                       >
+                        {/* Что значит процент у тейка — при наведении на плашку. */}
+                        {odds != null && <title>{t('exp.takeHint')}</title>}
                         <rect x={x0} y={top} width={w1} height={h} {...edge} />
                         <text x={x0 + pad} y={textY} fill={tone} fontSize={fs} fontFamily="var(--font-mono)">
                           {first}

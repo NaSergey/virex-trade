@@ -13,6 +13,7 @@ import { PositionsTable } from '@/widgets/positions-table';
 import { durationUnitLabels } from '@/shared/lib/utils/format';
 import type { BacktestTrade } from '../api/types';
 import { liquidationPrice, openPnl, toScreen } from '../lib/money';
+import { takeOdds } from '../lib/odds';
 
 /** В полтора раза крупнее прежних 14: по этим кнопкам целятся в терминале. */
 const ICON_SIZE = 21;
@@ -60,6 +61,7 @@ export function OpenPositionsPanel({
   onTags,
   onSymbol,
   showSymbol,
+  oddsOn = false,
 }: {
   trades: BacktestTrade[];
   scale: number;
@@ -83,6 +85,8 @@ export function OpenPositionsPanel({
   onSymbol?: (symbol: string) => void;
   /** Колонка монеты; снимается у истории со случайной монетой — она скрыта до итога. */
   showSymbol?: boolean;
+  /** Индикатор «Шанс тейка» включён — колонка с ним (экспериментальный, спека 2026-10-25). */
+  oddsOn?: boolean;
 }) {
   const t = useTranslations('backtest');
   const { locale } = useLocaleControl();
@@ -125,7 +129,34 @@ export function OpenPositionsPanel({
   const pnls = trades.map((x) => openPnl(x, priceOf(x.symbol)));
   const totalPnl = pnls.every((v) => v != null) ? pnls.reduce<number>((s, v) => s + v!, 0) : null;
 
+  // Шанс — от текущей цены монеты: тот же, что на подписи тейка на графике. Без
+  // стопа или тейка позиции его нет (у биржи стоп бывает 0 — «стопа нет»).
+  const oddsColumn: LedgerColumn<ExchangePosition> = {
+    key: 'takeOdds',
+    header: (
+      <Tooltip text={t('exp.takeHint')}>
+        <span className="hint-dotted">{t('exp.takeCol')}</span>
+      </Tooltip>
+    ),
+    label: t('exp.takeCol'),
+    align: 'right',
+    cellClassName: 'n',
+    render: (p) => {
+      const trade = tradeOf(p);
+      const price = priceOf(trade.symbol);
+      const odds = price != null && trade.takeProfit != null ? takeOdds(price, trade.stopLoss, trade.takeProfit) : null;
+      return odds != null ? (
+        <Tooltip text={t('exp.takeHint')}>
+          <span className="hint-dotted">{Math.round(odds)} %</span>
+        </Tooltip>
+      ) : (
+        <span className="muted">—</span>
+      );
+    },
+  };
+
   const actions: LedgerColumn<ExchangePosition>[] = [
+    ...(oddsOn ? [oddsColumn] : []),
     {
       key: 'actions',
       render: (p) => {

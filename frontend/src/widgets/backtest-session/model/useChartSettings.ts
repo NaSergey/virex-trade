@@ -33,7 +33,7 @@ export const useRangesOn = (): [boolean, (on: boolean) => void] => {
  * их не включили в настройках графика; выбор на устройстве и общий для всех
  * терминалов, как у RSI.
  */
-export const EXP_IDS = ['take', 'tags', 'signals', 'derivs'] as const;
+export const EXP_IDS = ['take', 'tags', 'signals'] as const;
 export type ExpId = (typeof EXP_IDS)[number];
 
 const decodeOff = (raw: string | null) => raw === '1';
@@ -45,7 +45,6 @@ export function useExpSettings() {
   const [take, setTake] = useExpOn('take');
   const [tags, setTags] = useExpOn('tags');
   const [signals, setSignals] = useExpOn('signals');
-  const [derivs, setDerivs] = useExpOn('derivs');
-  const setters: Record<ExpId, (on: boolean) => void> = { take: setTake, tags: setTags, signals: setSignals, derivs: setDerivs };
-  return { on: { take, tags, signals, derivs }, set: (id: ExpId, on: boolean) => setters[id](on) };
+  const setters: Record<ExpId, (on: boolean) => void> = { take: setTake, tags: setTags, signals: setSignals };
+  return { on: { take, tags, signals }, set: (id: ExpId, on: boolean) => setters[id](on) };
 }

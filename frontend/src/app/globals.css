@@ -1063,6 +1063,8 @@
     pointer-events: none;
   }
   .odds-plaque p { margin: 0; }
+  /* Число или подпись с подсказкой при наведении: пунктир говорит, что её можно навести. */
+  .hint-dotted { border-bottom: 1px dotted currentColor; cursor: help; }
   .odds-plaque-head { color: var(--ink-2); }
   .draw-bar { position: relative; display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--hair); padding-right: var(--s1); }
   .draw-group { position: relative; display: flex; align-items: center; }

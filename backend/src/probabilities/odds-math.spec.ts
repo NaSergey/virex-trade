@@ -4,8 +4,6 @@ import {
   firstBarrier,
   statOf,
   wilson,
-  zoneEvents,
-  zonesOf,
   type Bar,
   type Outcome,
 } from './odds-math';
@@ -100,15 +98,6 @@ describe('statOf', () => {
     const s = statOf([o(1, 'down'), o(2, 'down'), o(3, 'up')], 'down', SPLIT)!;
     expect(s.train).toMatchObject({ n: 3, hits: 2 });
   });
-  it('auto берёт сторону, чаще шедшую первой в истории', () => {
-    const s = statOf(
-      [o(1, 'down'), o(2, 'down'), o(3, 'up'), o(SPLIT, 'down')],
-      'auto',
-      SPLIT,
-    )!;
-    expect(s.side).toBe('down');
-    expect(s.test).toMatchObject({ n: 1, hits: 1 });
-  });
   it('без проверки или со слабой — не держится', () => {
     expect(statOf([o(1, 'up'), o(2, 'up')], 'up', SPLIT)!.holds).toBe(false);
     const weak = statOf(
@@ -144,58 +133,5 @@ describe('statOf', () => {
       ...Array.from({ length: 10 }, (_, i) => o(SPLIT + i, 'up')),
     ];
     expect(statOf(outs, 'up', SPLIT)!.holds).toBe(false);
-  });
-});
-
-describe('zonesOf', () => {
-  it('до заполнения окна — null; выброс вверх — high, вниз — low', () => {
-    const values: (number | null)[] = [
-      ...Array.from({ length: 10 }, (_, i) => i),
-      100,
-      -5,
-      5,
-    ];
-    const z = zonesOf(values, 10, 0.1, 10);
-    for (let i = 0; i < 10; i++) expect(z[i]).toBeNull();
-    expect(z[10]).toBe('high');
-    expect(z[11]).toBe('low');
-    expect(z[12]).toBe('normal');
-  });
-  it('повторы обычного значения крайними не делают', () => {
-    // Фандинг месяцами на одной ставке: точка, равная почти всем, — обычная.
-    const values = [...Array.from({ length: 20 }, () => 1), 1];
-    expect(zonesOf(values, 20, 0.1, 20)[20]).toBe('normal');
-  });
-  it('пропуск значения — null', () => {
-    const values: (number | null)[] = [
-      ...Array.from({ length: 10 }, (_, i) => i),
-      null,
-    ];
-    expect(zonesOf(values, 10, 0.1, 10)[10]).toBeNull();
-  });
-});
-
-describe('zoneEvents', () => {
-  it('вход в зону — событие, стояние в ней — нет', () => {
-    expect(zoneEvents(['normal', 'high', 'high', 'normal'], 20)).toEqual([
-      { i: 1, zone: 'high' },
-    ]);
-  });
-  it('повторный вход раньше паузы не считается, после — считается', () => {
-    const z: ('high' | 'normal')[] = [
-      'normal',
-      'high',
-      'normal',
-      'high',
-      ...Array.from({ length: 20 }, () => 'normal' as const),
-      'high',
-    ];
-    expect(zoneEvents(z, 20).map((e) => e.i)).toEqual([1, 24]);
-  });
-  it('у разных зон паузы свои', () => {
-    expect(zoneEvents(['normal', 'high', 'low'], 20)).toEqual([
-      { i: 1, zone: 'high' },
-      { i: 2, zone: 'low' },
-    ]);
   });
 });

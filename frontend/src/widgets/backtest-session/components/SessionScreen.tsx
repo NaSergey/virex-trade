@@ -369,7 +369,6 @@ export function Terminal({
   const expIds = serverStats ? EXP_IDS : LANDING_EXP;
   const takeOddsOn = exp.on.take;
   const signalsOn = serverStats && exp.on.signals;
-  const derivsOn = serverStats && exp.on.derivs;
   const tagOdds = useTagOdds(
     tagStatsFrom ?? (session.dataSource === 'synthetic' ? 'synthetic' : 'real'),
     tags && serverStats && exp.on.tags,
@@ -1481,11 +1480,9 @@ export function Terminal({
                 ) : (
                   <ChartSkeleton />
                 )}
-                {/* Пункты 3–4 эксперимента — только живой рынок: в истории плашка выдала бы
+                {/* Дивергенции в истории — только живой рынок: в истории плашка выдала бы
                     скрытую монету, у тренажёра статистика BTC ни о чём. */}
-                {replay.ready && isLive && (signalsOn || derivsOn) && (
-                  <OddsPlaque tf={replay.shownTf} candles={screenCandles} symbol={symbol} signals={signalsOn} derivs={derivsOn} />
-                )}
+                {replay.ready && isLive && signalsOn && <OddsPlaque tf={replay.shownTf} candles={screenCandles} symbol={symbol} />}
               </div>
             </div>
             {drawings.saveFailed && <p className="neg">{t('drawings.saveFailed')}</p>}
@@ -1670,6 +1667,7 @@ export function Terminal({
               onTags={tags ? (trade) => setTagsModalFor(trade.id) : undefined}
               onSymbol={pickSymbol}
               showSymbol={symbolShown}
+              oddsOn={takeOddsOn}
             />
           )}
           {tab === 'orders' && (
