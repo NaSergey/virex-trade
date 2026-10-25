@@ -1667,6 +1667,7 @@ export function Terminal({
               onTags={tags ? (trade) => setTagsModalFor(trade.id) : undefined}
               onSymbol={pickSymbol}
               showSymbol={symbolShown}
+              oddsOn={takeOddsOn}
             />
           )}
           {tab === 'orders' && (

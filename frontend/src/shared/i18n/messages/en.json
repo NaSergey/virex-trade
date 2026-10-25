@@ -1289,6 +1289,8 @@
     "exp": {
       "section": "Experimental",
       "hint": "Historical frequencies, not a forecast.",
+      "takeCol": "TP odds",
+      "takeHint": "Chance to reach the take-profit before the stop if the market has no up or down bias: distance to stop / (to stop + to take) from the current price. A baseline, not a forecast: a setup that does not beat it loses over time.",
       "toggle": {
         "take": "Take-profit odds",
         "tags": "Tag statistics",
