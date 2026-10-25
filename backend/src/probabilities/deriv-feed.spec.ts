@@ -67,21 +67,64 @@ describe('DerivFeed.pull', () => {
   const prisma = {
     derivPoint: {
       findFirst: jest.fn(),
+      deleteMany: jest.fn(
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        (_: { where: { kind: string; time: { gte: Date; lte: Date } } }) =>
+          Promise.resolve({ count: 0 }),
+      ),
       createMany: jest.fn(
         ({ data }: { data: unknown[]; skipDuplicates?: boolean }) =>
           Promise.resolve({ count: data.length }),
       ),
     },
+    $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
   };
   const feed = new DerivFeed(prisma as never);
 
   beforeEach(() => {
     fetchMock.mockReset();
     prisma.derivPoint.findFirst.mockReset();
+    prisma.derivPoint.deleteMany.mockClear();
     prisma.derivPoint.createMany.mockClear();
+    prisma.$transaction.mockClear();
   });
 
-  it('доливает от последней точки и пишет точки каждого ряда', async () => {
+  it('окно с точками заменяется целиком одной транзакцией', async () => {
+    const last = Date.UTC(2026, 9, 25, 0);
+    prisma.derivPoint.findFirst.mockResolvedValue({ time: new Date(last) });
+    fetchMock.mockResolvedValue(
+      ok({
+        retCode: 0,
+        result: {
+          list: [
+            {
+              buyRatio: '0.6',
+              openInterest: '1',
+              fundingRate: '0.0001',
+              fundingRateTimestamp: String(last),
+              timestamp: String(last),
+            },
+          ],
+        },
+      }),
+    );
+    await feed.pull(last + H);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(3);
+    const where = prisma.derivPoint.deleteMany.mock.calls[0][0].where;
+    expect(where.time.gte.getTime()).toBe(last);
+    expect(where.time.lte.getTime()).toBe(last + H);
+  });
+
+  it('пустой ответ ничего не удаляет', async () => {
+    prisma.derivPoint.findFirst.mockResolvedValue({
+      time: new Date(Date.UTC(2026, 9, 25)),
+    });
+    fetchMock.mockResolvedValue(ok({ retCode: 0, result: { list: [] } }));
+    await feed.pull(Date.UTC(2026, 9, 25, 1));
+    expect(prisma.derivPoint.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('доливает с последней точки и пишет точки каждого ряда', async () => {
     const last = Date.UTC(2026, 9, 25, 0);
     prisma.derivPoint.findFirst.mockResolvedValue({ time: new Date(last) });
     fetchMock.mockImplementation((url: string) => {
@@ -121,7 +164,7 @@ describe('DerivFeed.pull', () => {
     expect(written).toBe(3);
     expect(fetchMock).toHaveBeenCalledTimes(3);
     for (const [url] of fetchMock.mock.calls as [string][])
-      expect(url).toContain(`startTime=${last + 1}`);
+      expect(url).toContain(`startTime=${last}&`);
     const calls = prisma.derivPoint.createMany.mock.calls;
     const kinds = calls.map(([arg]) => (arg.data[0] as { kind: string }).kind);
     expect(kinds.sort()).toEqual(['funding', 'oi', 'ratio']);

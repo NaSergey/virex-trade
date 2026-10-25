@@ -118,9 +118,28 @@ describe('statOf', () => {
     )!;
     expect(weak.holds).toBe(false);
   });
-  it('в истории сторона не перевешивает — не держится, как бы ни шла проверка', () => {
+  it('проверка по другую сторону от 50 % — не держится', () => {
     const outs = [
       o(1, 'down'),
+      o(2, 'down'),
+      ...Array.from({ length: 10 }, (_, i) => o(SPLIT + i, 'up')),
+    ];
+    expect(statOf(outs, 'up', SPLIT)!.holds).toBe(false);
+  });
+  it('заданная сторона ниже 50 % в истории и на проверке — держится', () => {
+    // Бычья дивергенция, после которой цена устойчиво шла вниз.
+    const outs = [
+      ...Array.from({ length: 10 }, (_, i) => o(i, i < 2 ? 'up' : 'down')),
+      ...Array.from({ length: 10 }, (_, i) => o(SPLIT + i, 'down')),
+    ];
+    const s = statOf(outs, 'up', SPLIT)!;
+    expect(s.train.share).toBe(20);
+    expect(s.test.high).toBeLessThan(50);
+    expect(s.holds).toBe(true);
+  });
+  it('ровно 50 % в истории — стороны нет, не держится', () => {
+    const outs = [
+      o(1, 'up'),
       o(2, 'down'),
       ...Array.from({ length: 10 }, (_, i) => o(SPLIT + i, 'up')),
     ];

@@ -94,7 +94,8 @@ export function windowsOf(
 /**
  * Доливка рядов деривативов BTC в `deriv_points`. Первый прогон — с 2020 года,
  * около 140 запросов через шлюз Bybit; дальше — несколько в час. Окна пишутся
- * по порядку, поэтому сорванная доливка продолжается с последней точки.
+ * по порядку и заменяются целиком (удаление и запись одной транзакцией), поэтому
+ * сорванная доливка продолжается с последней точки, а она сама перечитывается.
  */
 @Injectable()
 export class DerivFeed {
@@ -124,7 +125,10 @@ export class DerivFeed {
       orderBy: { time: 'desc' },
       select: { time: true },
     });
-    const from = last ? last.time.getTime() + 1 : SERIES_START;
+    // С самой последней точки, а не после неё: метка Bybit может быть началом
+    // периода, и последняя точка тогда — ещё не закончившийся интервал. Окно
+    // заменяется целиком, поэтому её значение дописывается следующим тиком.
+    const from = last ? last.time.getTime() : SERIES_START;
     let written = 0;
     for (const [a, b] of windowsOf(from, now, spec.step, spec.limit)) {
       const res = await bybitFetch(spec.url(a, b));
@@ -133,15 +137,23 @@ export class DerivFeed {
         .parse(await res.json())
         .filter((p) => Number.isFinite(p.time) && Number.isFinite(p.value));
       if (points.length === 0) continue;
-      const r = await this.prisma.derivPoint.createMany({
-        data: points.map((p) => ({
-          symbol: DERIV_SYMBOL,
-          kind,
-          time: new Date(p.time),
-          value: p.value,
-        })),
-        skipDuplicates: true,
-      });
+      const window = {
+        symbol: DERIV_SYMBOL,
+        kind,
+        time: { gte: new Date(a), lte: new Date(b) },
+      };
+      const [, r] = await this.prisma.$transaction([
+        this.prisma.derivPoint.deleteMany({ where: window }),
+        this.prisma.derivPoint.createMany({
+          data: points.map((p) => ({
+            symbol: DERIV_SYMBOL,
+            kind,
+            time: new Date(p.time),
+            value: p.value,
+          })),
+          skipDuplicates: true,
+        }),
+      ]);
       written += r.count;
     }
     return written;

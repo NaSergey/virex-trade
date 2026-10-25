@@ -115,8 +115,10 @@ export function firstBarrier(
 
 /**
  * Частота стороны: `side` задана (дивергенция — по своему смыслу) или 'auto' —
- * та, что чаще шла первой в истории. «Держится» — в истории сторона выше 50 %, а
- * на проверке нижняя граница интервала выше 50 %. Исходов нет — null.
+ * та, что чаще шла первой в истории (при ничьей — 'up', выбор произвольный).
+ * «Держится» — доля на проверке по ту же сторону от 50 %, что в истории, и её
+ * интервал 50 % не задевает: у заданной стороны это бывает и ниже 50 % —
+ * бычья дивергенция, после которой цена устойчиво шла вниз. Исходов нет — null.
  */
 export function statOf(
   outcomes: readonly Outcome[],
@@ -141,12 +143,12 @@ export function statOf(
     s === 'up' ? x.up : x.n - x.up;
   const train = countOf(hitsOf(tr), tr.n);
   const test = countOf(hitsOf(te), te.n);
-  return {
-    side: s,
-    train,
-    test,
-    holds: train.n > 0 && train.share > 50 && test.n > 0 && test.low > 50,
-  };
+  const holds =
+    train.n > 0 &&
+    test.n > 0 &&
+    train.share !== 50 &&
+    (train.share > 50 ? test.low > 50 : test.high < 50);
+  return { side: s, train, test, holds };
 }
 
 /**

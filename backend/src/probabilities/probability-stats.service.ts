@@ -27,6 +27,13 @@ const TICK_MS = 60 * 60_000;
 const DAY = 86_400_000;
 const YEAR = 365 * DAY;
 
+/**
+ * Отдать цикл событий между тяжёлыми шагами пересчёта: в том же `worker` живут
+ * синк сделок и опрос Telegram, и счёт по всем таймфреймам подряд держал бы их
+ * секундами.
+ */
+const breathe = () => new Promise<void>((r) => setImmediate(r));
+
 /** Частоты пересчитываются раз в сутки; срок — от `computedAt` в базе, не от памяти процесса. */
 export const isStale = (computedAt: Date | null, now: number) =>
   computedAt == null || now - computedAt.getTime() >= DAY;
@@ -90,8 +97,10 @@ export class ProbabilityStatsService
 
   async recompute(now: number): Promise<void> {
     const divergence: Record<string, DivergenceOdds> = {};
-    for (const tf of DIVERGENCE_TFS)
+    for (const tf of DIVERGENCE_TFS) {
       divergence[tf] = divergenceOdds(await this.bars(tf, START_MS, now));
+      await breathe();
+    }
     const derivs = derivOdds(
       await this.bars(240, SERIES_START, now),
       await this.points(SERIES_START),
