@@ -10,7 +10,24 @@ import {
   summarize,
   takeOnRightSide,
   tradeResult,
+  winLossR,
 } from './backtest-math';
+
+describe('winLossR', () => {
+  it('средний R прибыльных и средний |R| убыточных', () => {
+    expect(
+      winLossR([
+        { pnl: 10, r: 2 },
+        { pnl: 20, r: 4 },
+        { pnl: -5, r: -1 },
+        { pnl: 0, r: 0 },
+      ]),
+    ).toEqual({ avgWinR: 3, avgLossR: 1 });
+  });
+  it('без прибыльных или убыточных — ноль', () => {
+    expect(winLossR([])).toEqual({ avgWinR: 0, avgLossR: 0 });
+  });
+});
 
 const T0 = Date.UTC(2018, 0, 1);
 
