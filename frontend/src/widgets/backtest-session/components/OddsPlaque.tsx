@@ -4,28 +4,16 @@ import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { useProbabilities, type OddsStat } from '@/entities/probabilities';
 import type { Candle } from '../lib/candles';
-import { derivValueText, freshDivergence } from '../lib/odds-plaque';
+import { freshDivergence } from '../lib/odds-plaque';
 import { rsiSeries } from '../lib/rsi';
 
 /**
- * Плашка экспериментальных индикаторов над графиком (спека 2026-10-25):
- * последняя дивергенция RSI и зоны деривативов BTC — с частотой из истории и
- * проверкой вперёд. HTML поверх графика, а не узел его SVG: она не двигается с
- * графиком и перерисовываться с каждым кадром жеста незачем. Нажатий не ловит.
+ * Плашка экспериментального индикатора над графиком (спека 2026-10-25):
+ * последняя дивергенция RSI — с частотой из истории и проверкой вперёд. HTML
+ * поверх графика, а не узел его SVG: она не двигается с графиком и
+ * перерисовываться с каждым кадром жеста незачем. Нажатий не ловит.
  */
-export function OddsPlaque({
-  tf,
-  candles,
-  symbol,
-  signals,
-  derivs,
-}: {
-  tf: number;
-  candles: readonly Candle[];
-  symbol: string;
-  signals: boolean;
-  derivs: boolean;
-}) {
+export function OddsPlaque({ tf, candles, symbol }: { tf: number; candles: readonly Candle[]; symbol: string }) {
   const t = useTranslations('backtest');
   const btc = symbol === 'BTCUSDT';
   const { data, isLoading } = useProbabilities(btc);
@@ -33,7 +21,7 @@ export function OddsPlaque({
   // на живом рынке, там последняя свеча ещё формируется, а сервер считал события по
   // закрытым. С ней дивергенция мелькала бы на плашке раньше подтверждения.
   const closed = useMemo(() => candles.slice(0, -1), [candles]);
-  const divs = useMemo(() => (signals && btc ? rsiSeries(closed).divergences : []), [signals, btc, closed]);
+  const divs = useMemo(() => (btc ? rsiSeries(closed).divergences : []), [btc, closed]);
 
   const stat = (s: OddsStat | null | undefined) =>
     s ? (
@@ -56,34 +44,13 @@ export function OddsPlaque({
     if (!data) return <p className="muted">{isLoading ? t('exp.plaque.loading') : t('exp.plaque.notYet')}</p>;
     const tfName = t(`tf.${tf}`);
     const byTf = data.divergence[String(tf)];
+    if (!byTf) return <p className="muted">{t('exp.plaque.noTf', { tf: tfName })}</p>;
     const fresh = freshDivergence(divs, closed.length - 1);
+    if (!fresh) return <p className="muted">{t('exp.plaque.noFresh')}</p>;
     return (
       <>
-        {signals &&
-          (!byTf ? (
-            <p className="muted">{t('exp.plaque.noTf', { tf: tfName })}</p>
-          ) : fresh ? (
-            <>
-              <p>{t(`exp.plaque.div.${fresh.kind}`, { tf: tfName, ago: fresh.ago })}</p>
-              {stat(byTf[fresh.kind])}
-            </>
-          ) : (
-            <p className="muted">{t('exp.plaque.noFresh')}</p>
-          ))}
-        {derivs &&
-          (data.now.length === 0 ? (
-            <p className="muted">{t('exp.plaque.notYet')}</p>
-          ) : (
-            data.now.map((d) => (
-              <div key={d.kind}>
-                <p>
-                  {t(`exp.plaque.kind.${d.kind}`)} {d.value != null ? derivValueText(d.kind, d.value) : '—'} —{' '}
-                  {t(`exp.plaque.zone.${d.zone ?? 'none'}`)}
-                </p>
-                {(d.zone === 'high' || d.zone === 'low') && stat(data.derivs[`${d.kind}:${d.zone}`])}
-              </div>
-            ))
-          ))}
+        <p>{t(`exp.plaque.div.${fresh.kind}`, { tf: tfName, ago: fresh.ago })}</p>
+        {stat(byTf[fresh.kind])}
       </>
     );
   };

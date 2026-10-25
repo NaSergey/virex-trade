@@ -1292,8 +1292,7 @@
       "toggle": {
         "take": "Take-profit odds",
         "tags": "Tag statistics",
-        "signals": "RSI divergences in history",
-        "derivs": "BTC derivatives"
+        "signals": "RSI divergences in history"
       },
       "plaque": {
         "title": "Experiment · BTC",
@@ -1310,9 +1309,7 @@
         "side": { "up": "up", "down": "down" },
         "holds": "holds",
         "fails": "does not hold",
-        "fewCases": "no such cases in history",
-        "kind": { "funding": "Funding", "ratio": "Long accounts", "oi": "Open interest, 24h" },
-        "zone": { "high": "high", "low": "low", "normal": "normal range", "none": "no data" }
+        "fewCases": "no such cases in history"
       }
     },
     "tf": {

@@ -22,18 +22,14 @@ describe('ProbabilityStatsService.tick', () => {
           .mockResolvedValue(computedAt ? { computedAt } : null),
       },
     };
-    const feed = { pull: jest.fn().mockResolvedValue(0) };
-    const svc = new ProbabilityStatsService(prisma as never, feed as never);
-    const writeNow = jest.spyOn(svc, 'writeNow').mockResolvedValue(undefined);
+    const svc = new ProbabilityStatsService(prisma as never);
     const recompute = jest.spyOn(svc, 'recompute').mockResolvedValue(undefined);
-    return { svc, feed, writeNow, recompute };
+    return { svc, prisma, recompute };
   };
 
-  it('доливает, пишет «сейчас» и пересчитывает просроченное', async () => {
-    const { svc, feed, writeNow, recompute } = make(null);
+  it('просроченное пересчитывает', async () => {
+    const { svc, recompute } = make(null);
     await svc.tick(Date.UTC(2026, 9, 25));
-    expect(feed.pull).toHaveBeenCalled();
-    expect(writeNow).toHaveBeenCalled();
     expect(recompute).toHaveBeenCalled();
   });
 
@@ -45,14 +41,14 @@ describe('ProbabilityStatsService.tick', () => {
   });
 
   it('второй тик поверх идущего — пропуск', async () => {
-    const { svc, feed } = make(null);
+    const { svc, recompute } = make(null);
     let release!: () => void;
-    feed.pull.mockImplementation(
-      () => new Promise<number>((r) => (release = () => r(0))),
+    recompute.mockImplementation(
+      () => new Promise<void>((r) => (release = () => r())),
     );
     const first = svc.tick(1);
     await svc.tick(2);
-    expect(feed.pull).toHaveBeenCalledTimes(1);
+    expect(recompute).toHaveBeenCalledTimes(1);
     release();
     await first;
   });

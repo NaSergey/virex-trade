@@ -8,14 +8,6 @@ import { Prisma } from '@prisma/client';
 import { START_MS } from '../market-data/timeframes';
 import { PrismaService } from '../prisma/prisma.service';
 import { runsBackgroundJobs } from '../role';
-import { DerivFeed, DERIV_SYMBOL, SERIES_START } from './deriv-feed';
-import {
-  derivNow,
-  derivOdds,
-  ZONE_DAYS,
-  type DerivKind,
-  type DerivPointLike,
-} from './deriv-stats';
 import {
   DIVERGENCE_TFS,
   divergenceOdds,
@@ -23,6 +15,7 @@ import {
 } from './divergence-stats';
 import type { Bar } from './odds-math';
 
+const SYMBOL = 'BTCUSDT';
 const TICK_MS = 60 * 60_000;
 const DAY = 86_400_000;
 const YEAR = 365 * DAY;
@@ -39,10 +32,10 @@ export const isStale = (computedAt: Date | null, now: number) =>
   computedAt == null || now - computedAt.getTime() >= DAY;
 
 /**
- * Экспериментальные вероятности терминала (спека 2026-10-25), роль `worker`.
- * Раз в час доливает ряды Bybit и пишет «сейчас» (значение и зона каждого ряда),
- * раз в сутки пересчитывает частоты дивергенций RSI (свечи BTC с 2018 года) и
- * зон деривативов. `api` читает готовые строки `probability_stats`.
+ * Экспериментальные вероятности терминала (спека 2026-10-25), роль `worker`:
+ * раз в сутки пересчитывает частоты после дивергенций RSI по свечам BTC с 2018
+ * года. Проверка — раз в час, срок — по `computedAt` строки в базе. `api` читает
+ * готовую строку `probability_stats`.
  */
 @Injectable()
 export class ProbabilityStatsService
@@ -52,10 +45,7 @@ export class ProbabilityStatsService
   private timer?: NodeJS.Timeout;
   private running = false;
 
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly feed: DerivFeed,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   onApplicationBootstrap() {
     if (!runsBackgroundJobs()) return;
@@ -73,10 +63,8 @@ export class ProbabilityStatsService
     if (this.running) return;
     this.running = true;
     try {
-      await this.feed.pull(now);
-      await this.writeNow(now);
       const last = await this.prisma.probabilityStat.findUnique({
-        where: { key: 'derivs' },
+        where: { key: 'divergence' },
         select: { computedAt: true },
       });
       if (isStale(last?.computedAt ?? null, now)) await this.recompute(now);
@@ -85,30 +73,19 @@ export class ProbabilityStatsService
     }
   }
 
-  async writeNow(now: number): Promise<void> {
-    const from = now - (ZONE_DAYS + 2) * DAY;
-    const data = derivNow(
-      await this.bars(240, from, now),
-      await this.points(from),
-      now,
-    );
-    await this.save('now', data, new Date(now));
-  }
-
   async recompute(now: number): Promise<void> {
     const divergence: Record<string, DivergenceOdds> = {};
     for (const tf of DIVERGENCE_TFS) {
       divergence[tf] = divergenceOdds(await this.bars(tf, START_MS, now));
       await breathe();
     }
-    const derivs = derivOdds(
-      await this.bars(240, SERIES_START, now),
-      await this.points(SERIES_START),
-    );
-    const at = new Date(now);
-    await this.save('divergence', divergence, at);
-    // Последней: по её `computedAt` тик решает, пора ли пересчитывать.
-    await this.save('derivs', derivs, at);
+    const json = divergence as unknown as Prisma.InputJsonValue;
+    const computedAt = new Date(now);
+    await this.prisma.probabilityStat.upsert({
+      where: { key: 'divergence' },
+      create: { key: 'divergence', data: json, computedAt },
+      update: { data: json, computedAt },
+    });
     this.logger.log('частоты вероятностей пересчитаны');
   }
 
@@ -122,33 +99,11 @@ export class ProbabilityStatsService
       const rows = await this.prisma.$queryRaw<Bar[]>`
         SELECT (extract(epoch from "time") * 1000)::float8 AS t, "high" AS h, "low" AS l, "close" AS c
         FROM price_candles
-        WHERE symbol = ${DERIV_SYMBOL} AND timeframe = ${tf}
+        WHERE symbol = ${SYMBOL} AND timeframe = ${tf}
           AND "time" >= ${new Date(a)} AND "time" < ${new Date(Math.min(a + YEAR, to))}
         ORDER BY "time"`;
       for (const r of rows) out.push(r);
     }
     return out;
-  }
-
-  private async points(from: number): Promise<DerivPointLike[]> {
-    const rows = await this.prisma.derivPoint.findMany({
-      where: { symbol: DERIV_SYMBOL, time: { gte: new Date(from) } },
-      orderBy: { time: 'asc' },
-      select: { kind: true, time: true, value: true },
-    });
-    return rows.map((r) => ({
-      kind: r.kind as DerivKind,
-      time: r.time.getTime(),
-      value: r.value,
-    }));
-  }
-
-  private save(key: string, data: unknown, computedAt: Date) {
-    const json = data as Prisma.InputJsonValue;
-    return this.prisma.probabilityStat.upsert({
-      where: { key },
-      create: { key, data: json, computedAt },
-      update: { data: json, computedAt },
-    });
   }
 }
