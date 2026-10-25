@@ -107,6 +107,15 @@ export function summarize(rows: { pnl: number; r: number }[]): Summary {
   };
 }
 
+/**
+ * Средний R прибыльных и средний |R| убыточных — из них терминал выводит
+ * винрейт безубыточности тега (спека 2026-10-25). Ноль — таких сделок нет.
+ */
+export function winLossR(rows: { pnl: number; r: number }[]): { avgWinR: number; avgLossR: number } {
+  const mean = (xs: { r: number }[]) => (xs.length ? xs.reduce((s, x) => s + Math.abs(x.r), 0) / xs.length : 0);
+  return { avgWinR: mean(rows.filter((x) => x.pnl > 0)), avgLossR: mean(rows.filter((x) => x.pnl < 0)) };
+}
+
 /** Наибольшая просадка депозита от пика, в процентах; pnls — в порядке закрытия сделок. */
 export function maxDrawdownPct(startBalance: number, pnls: number[]): number {
   let balance = startBalance;

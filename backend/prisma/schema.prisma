@@ -1585,6 +1585,7 @@ model EnglishThemeWord {
   @@id([themeId, cardId])
   @@map("english_theme_words")
 }
+
 // ═══ /english ═══
 
 // ═══ plan ═══ План дня владельца в админке (backend/src/plan; спека
@@ -1669,4 +1670,28 @@ model PlanItem {
   @@index([day])
   @@map("plan_items")
 }
+
 // ═══ /plan ═══
+
+/// Ряды деривативов Bybit для экспериментальных вероятностей терминала (спека
+/// 2026-10-25): фандинг, доля лонг-аккаунтов, открытый интерес. История есть у
+/// биржи с 2020 года — ProbabilityStatsService доливает её от последней точки.
+model DerivPoint {
+  symbol String
+  kind   String // 'funding' | 'ratio' | 'oi'
+  time   DateTime
+  value  Float
+
+  @@id([symbol, kind, time])
+  @@map("deriv_points")
+}
+
+/// Готовые числа экспериментальных вероятностей: 'divergence', 'derivs', 'now'.
+/// Пишет worker, читает api — пересчёт по всей истории в запросе не делается.
+model ProbabilityStat {
+  key        String   @id
+  data       Json
+  computedAt DateTime
+
+  @@map("probability_stats")
+}

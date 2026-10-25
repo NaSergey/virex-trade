@@ -57,10 +57,11 @@ export const useDeleteTag = () => {
 
 // keepPreviousData: switching the period keeps showing the old buckets while
 // the new ones load, instead of flashing the empty state.
-export const useTagStats = (days: number) =>
+export const useTagStats = (days: number, enabled = true) =>
   useQuery({
     queryKey: ['tagStats', days],
     queryFn: () => apiJson<TagStatsResponse>(`/api/trades/stats-by-tag?days=${days}`),
+    enabled,
     staleTime: 30_000,
     placeholderData: keepPreviousData,
   });

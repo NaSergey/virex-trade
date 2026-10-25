@@ -122,6 +122,7 @@ function DemoTerminal({ paused }: { paused: boolean }) {
         priceOf={priceOf}
         badge={false}
         tags={false}
+        serverStats={false}
         tables={false}
         paused={paused}
       />

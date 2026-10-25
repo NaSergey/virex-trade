@@ -2,6 +2,7 @@ export * from './api/types';
 export * from './api/hooks';
 export * from './api/combo-hooks';
 export * from './api/tagging-hooks';
+export * from './lib/odds';
 export * from './ui/Tag';
 export * from './ui/NewTagRow';
 export * from './ui/TagPicker';

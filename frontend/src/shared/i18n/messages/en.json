@@ -183,6 +183,12 @@
     "edgeScoreHint": "System stability score (SQN, Van Tharp) — not profitability, but the ratio of average result to variance. Needs ≥30 trades in the period."
   },
   "tags": {
+    "odds": {
+      "line": "{win}% · need {need}% · {n} tr.",
+      "plus": "in profit",
+      "minus": "losing",
+      "unclear": "unclear"
+    },
     "typeSetup": "Setup",
     "typeEmotion": "Emotion",
     "typeMistake": "Mistake",
@@ -1280,6 +1286,35 @@
     "indicatorRanges": "Ranges after an impulse",
     "revealHidden": "Show coin, prices and dates",
     "revealHiddenHint": "Only in this session and until you leave it.",
+    "exp": {
+      "section": "Experimental",
+      "hint": "Historical frequencies, not a forecast.",
+      "toggle": {
+        "take": "Take-profit odds",
+        "tags": "Tag statistics",
+        "signals": "RSI divergences in history",
+        "derivs": "BTC derivatives"
+      },
+      "plaque": {
+        "title": "Experiment · BTC",
+        "onlyBtc": "The experiment covers BTC only",
+        "loading": "Loading…",
+        "notYet": "Statistics are still being computed",
+        "noTf": "Divergences: no statistics for {tf}",
+        "noFresh": "No fresh RSI divergences",
+        "div": {
+          "bull": "Bullish RSI divergence {tf} · {ago, plural, =0 {on this candle} one {# candle ago} other {# candles ago}}",
+          "bear": "Bearish RSI divergence {tf} · {ago, plural, =0 {on this candle} one {# candle ago} other {# candles ago}}"
+        },
+        "stat": "{side} first {share}% · {n} cases · forward test {test}% of {testN}",
+        "side": { "up": "up", "down": "down" },
+        "holds": "holds",
+        "fails": "does not hold",
+        "fewCases": "no such cases in history",
+        "kind": { "funding": "Funding", "ratio": "Long accounts", "oi": "Open interest, 24h" },
+        "zone": { "high": "high", "low": "low", "normal": "normal range", "none": "no data" }
+      }
+    },
     "tf": {
       "1": "1m",
       "5": "5m",

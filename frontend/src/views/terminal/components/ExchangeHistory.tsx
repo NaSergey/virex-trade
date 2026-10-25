@@ -9,6 +9,7 @@ import { formatMoney } from '@/shared/lib/utils/format';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { Pagination } from '@/shared/ui/Pagination';
 import { SectionHead } from '@/shared/ui/SectionHead';
+import { useExpOn, useTagOdds } from '@/widgets/backtest-session';
 import { TradesTable } from '@/widgets/trades-table';
 
 /** Столько же записей на лист, сколько в истории сессии и в журнале обзора. */
@@ -32,6 +33,9 @@ export function ExchangeHistory({ onSymbol }: { onSymbol?: (symbol: string) => v
   const [tagging, setTagging] = useState<Trade | null>(null);
   const { data, isLoading } = useTrades({ page, pageSize: PAGE_SIZE });
   const setTags = useSetTradeTags();
+  // Статистика тегов в окне разметки — экспериментальный индикатор терминала (спека 2026-10-25).
+  const [tagsOn] = useExpOn('tags');
+  const tagOdds = useTagOdds('journal', tagsOn);
 
   const closedLabel = (trade: Trade) =>
     new Date(trade.closedAt)
@@ -67,6 +71,7 @@ export function ExchangeHistory({ onSymbol }: { onSymbol?: (symbol: string) => v
           error={setTags.error}
           onSave={(tagIds) => setTags.mutate({ tradeId: tagging.id, tagIds }, { onSuccess: () => setTagging(null) })}
           onClose={() => setTagging(null)}
+          odds={tagOdds}
         />
       )}
     </section>

@@ -3,6 +3,8 @@
 import { useTranslations } from 'next-intl';
 import { TAG_TYPES, type TagItem, type TagType } from '@/entities/tag/api/types';
 import { useTagTypeLabels } from './useTagTypeLabels';
+import { TagOddsLine } from './TagOddsLine';
+import type { TagOdds } from '../lib/odds';
 import { Button } from '@/shared/ui/Button';
 import { FieldGroup } from '@/shared/ui/Field';
 
@@ -18,16 +20,19 @@ export function TagPicker({
   tags,
   selected,
   onToggle,
+  odds,
 }: {
   tags: TagItem[];
   selected: Set<string>;
   onToggle: (id: string) => void;
+  /** Статистика тегов по id (экспериментальный индикатор терминала); нет — только названия. */
+  odds?: Record<string, TagOdds>;
 }) {
   const t = useTranslations('tags');
   return (
     <>
       {TAG_TYPES.map((type) => (
-        <TagPickerGroup key={type} type={type} tags={tags} selected={selected} onToggle={onToggle} />
+        <TagPickerGroup key={type} type={type} tags={tags} selected={selected} onToggle={onToggle} odds={odds} />
       ))}
       {tags.length === 0 && <p className="muted">{t('noTagsYet')}</p>}
     </>
@@ -55,11 +60,13 @@ function TagPickerGroup({
   tags,
   selected,
   onToggle,
+  odds,
 }: {
   type: TagType;
   tags: TagItem[];
   selected: Set<string>;
   onToggle: (id: string) => void;
+  odds?: Record<string, TagOdds>;
 }) {
   const typeLabels = useTagTypeLabels();
   const group = tags.filter((t) => (t.type ?? 'setup') === type);
@@ -83,6 +90,7 @@ function TagPickerGroup({
               onClick={() => onToggle(t.id)}
             >
               {t.name}
+              {odds?.[t.id] && <TagOddsLine odds={odds[t.id]} />}
             </Button>
           );
         })}
