@@ -3,6 +3,7 @@ import type { Level } from '../components/ReplayChart';
 import type { Direction } from './fills';
 import { draftTakeFits, fromScreen, gridPrices, impliedDirection, levelMove, previewSize } from './money';
 import { entryGridTable, gridOrderCount } from './level-table';
+import { takeOdds } from './odds';
 
 /** Черновики панели ордера числами: то, что уже разобрано из её полей. */
 export interface DraftLevelsInput {
@@ -31,6 +32,8 @@ export interface DraftLevelsInput {
   balance: number;
   leverage: number;
   scale: number;
+  /** Индикатор «Шанс тейка» включён — у тейков «Маркета» и «Лимита» есть `oddsAt`. */
+  oddsOn?: boolean;
 }
 
 /**
@@ -46,7 +49,7 @@ export interface DraftLevelsInput {
  * тейк, и линии закрытых вкладок висели бы на графике уровнями ордера,
  * которого никто не собирается отправлять.
  */
-export function draftLevels({ tab, market, limit, scaled, bot, livePrice, screenPrice, balance, leverage, scale }: DraftLevelsInput): Level[] {
+export function draftLevels({ tab, market, limit, scaled, bot, livePrice, screenPrice, balance, leverage, scale, oddsOn }: DraftLevelsInput): Level[] {
   const list: Level[] = [];
 
   if (tab === 'market' && market.stop > 0 && livePrice != null && screenPrice != null) {
@@ -89,6 +92,7 @@ export function draftLevels({ tab, market, limit, scaled, bot, livePrice, screen
         const dir = impliedDirection(null, stop, p, screenPrice);
         return dir != null && qty != null ? levelMove(dir, livePrice, fromScreen(p, scale), qty) : null;
       },
+      oddsAt: oddsOn && stop > 0 ? (p) => takeOdds(screenPrice, stop, p) : undefined,
     });
   }
 
@@ -124,7 +128,16 @@ export function draftLevels({ tab, market, limit, scaled, bot, livePrice, screen
         const dir = impliedDirection(null, limit.stop, p, lAnchor);
         return dir != null && entryReal != null && limitQty != null ? levelMove(dir, entryReal, fromScreen(p, scale), limitQty) : null;
       };
-      list.push({ id: 'draft-limit-take', kind: 'take', price: limit.take, draggable: true, qty: limitQty, impactAt: takeAt });
+      list.push({
+        id: 'draft-limit-take',
+        kind: 'take',
+        price: limit.take,
+        draggable: true,
+        qty: limitQty,
+        impactAt: takeAt,
+        // От цены лимита: сделка откроется по ней.
+        oddsAt: oddsOn && limit.stop > 0 ? (p) => takeOdds(lAnchor, limit.stop, p) : undefined,
+      });
     }
   }
   // Черновик сетки на вход (Scaled) — до отправки просто верх/низ диапазона,

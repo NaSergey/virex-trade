@@ -32,6 +32,21 @@ describe('draftLevels', () => {
     expect(levels[1].impactAt!(61_000)).toBeCloseTo(200, 6);
   });
 
+  it('шанс тейка — только при включённом индикаторе и от цены «Маркета»', () => {
+    const market = { stop: 59_500, take: 61_000, risk: 1 };
+    const off = draftLevels({ ...base, market }).find((l) => l.id === 'draft-take')!;
+    expect(off.oddsAt).toBeUndefined();
+    const on = draftLevels({ ...base, market, oddsOn: true }).find((l) => l.id === 'draft-take')!;
+    // До стопа 500, до тейка 1000: 500 / 1500.
+    expect(on.oddsAt!(61_000)).toBeCloseTo(33.333, 2);
+  });
+
+  it('шанс тейка «Лимита» — от цены лимита', () => {
+    const limit = { entry: 59_000, stop: 58_000, take: 62_000, risk: 1 };
+    const take = draftLevels({ ...base, tab: 'limit', limit, oddsOn: true }).find((l) => l.id === 'draft-limit-take')!;
+    expect(take.oddsAt!(62_000)).toBeCloseTo(25, 10);
+  });
+
   it('тейк не по ту сторону от стопа не рисуется', () => {
     // Стоп ниже цены — лонг, и тейк ниже цены ему не цель.
     expect(ids({ market: { stop: 59_500, take: 59_800, risk: 1 } })).toEqual(['draft-stop']);

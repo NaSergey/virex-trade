@@ -162,6 +162,9 @@ export interface Level {
    * Функцией, а не числом: пока уровень тащат, подпись считается на цене под
    * курсором внутри графика, без рендера родителя на каждый кадр. */
   impactAt?: (price: number) => number | null;
+  /** Шанс дойти до тейка раньше стопа, 0..100 (`lib/odds.ts`) — только у тейка с включённым индикатором.
+   * Функцией, как `impactAt`: пока тейк тащат, число считается на цене под курсором. */
+  oddsAt?: (price: number) => number | null;
   /** Чья это сделка — только у уровней открытой позиции (stop/take/entry/liq того трейда). */
   tradeId?: string;
   /** Объём в монете: позиции, которую закроет/защитит уровень, или размер по черновику. */
@@ -1823,11 +1826,12 @@ export const ReplayChart = memo(function ReplayChart({
                   const fs = px(9);
                   const charW = charRatio * fs;
                   const isEntry = l.kind === 'entry';
+                  const odds = l.kind === 'take' ? (l.oddsAt?.(price) ?? null) : null;
                   const first = isEntry
                     ? `P&L ${l.pnl != null ? formatMoney(l.pnl) : '—'}`
                     : isLimit(l.kind)
                       ? `${levelLabel(l.kind)} ${formatPriceGrouped(price, priceDecimals)}`
-                      : `${levelLabel(l.kind)}${impact != null ? ` ${formatMoney(impact)}` : ''}`;
+                      : `${levelLabel(l.kind)}${impact != null ? ` ${formatMoney(impact)}` : ''}${odds != null ? ` · ${Math.round(odds)} %` : ''}`;
                   const qtyText = l.qty != null ? formatQty(Number(l.qty.toFixed(4))) : '';
                   const onX: (() => void) | null =
                     (l.kind === 'pendingEntry' || l.kind === 'limitClose') && onCancelOrder

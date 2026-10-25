@@ -27,6 +27,7 @@ import { TIMEFRAMES, dayNumber, scaleCandle } from '../lib/candles';
 import { terminalIntl, timeLabelFormats } from '../lib/time-labels';
 import { CLOSE_GRID_FIRST_ID, CLOSE_GRID_LAST_ID, closeGridLevels, initCloseGrid, type CloseGridDraft } from '../lib/close-grid';
 import { draftLevels } from '../lib/draft-levels';
+import { takeOdds } from '../lib/odds';
 import { atrOf, findRanges, toChartRanges, type ChartRange } from '../lib/ranges';
 import { entryGridTable, gridOrderCount } from '../lib/level-table';
 import { BOT_ENABLED, BOT_MAX_LEVELS } from '../lib/bot-grid';
@@ -360,6 +361,7 @@ export function Terminal({
   const exp = useExpSettings();
   const expIds: readonly ExpId[] = serverStats ? EXP_IDS : ['take'];
   const expOn = (id: ExpId) => exp.on[id] && expIds.includes(id);
+  const takeOddsOn = expOn('take');
   const [chartSettingsOpen, setChartSettingsOpen] = useState(false);
   useSnapshotSound(
     detail,
@@ -668,6 +670,7 @@ export function Terminal({
           balance,
           leverage: draftLeverage,
           scale,
+          oddsOn: takeOddsOn,
         });
 
     // Уровни уже открытых сделок монеты графика — от их собственных
@@ -706,7 +709,18 @@ export function Terminal({
       }
       const take = pending?.kind === 'take' ? pending.price : trade.takeProfit != null ? toScreen(trade.takeProfit, scale) : null;
       if (take != null) {
-        list.push({ id: `take-${trade.id}`, kind: 'take', tradeId: trade.id, price: take, draggable: true, qty: remaining, impactAt: impactAt(remaining) });
+        // Шанс — от текущей цены и стопа, каким он стоит (или его тянут): меняется вместе с ценой.
+        const stopNow = pending?.kind === 'stop' ? pending.price : trade.stopLoss > 0 ? toScreen(trade.stopLoss, scale) : null;
+        list.push({
+          id: `take-${trade.id}`,
+          kind: 'take',
+          tradeId: trade.id,
+          price: take,
+          draggable: true,
+          qty: remaining,
+          impactAt: impactAt(remaining),
+          oddsAt: takeOddsOn && stopNow != null && screenPrice != null ? (p) => takeOdds(screenPrice, stopNow, p) : undefined,
+        });
       }
       for (const o of detail.closeOrders) {
         if (o.tradeId !== trade.id) continue;
@@ -790,6 +804,7 @@ export function Terminal({
     detail.closeOrders,
     detail.entryOrders,
     pendingLevel,
+    takeOddsOn,
   ]);
 
   // Отметки сделок на графике: где вошли и где вышли. Своим useMemo — по той
