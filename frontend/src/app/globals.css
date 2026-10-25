@@ -1052,6 +1052,18 @@
      (align-items по умолчанию), чтобы и сам график мог её заполнить. */
   .chart-tools { display: flex; gap: var(--s2); flex: 1; min-height: 0; }
   .chart-tools-main { flex: 1; min-width: 0; min-height: 0; position: relative; display: flex; flex-direction: column; }
+  /* Плашка экспериментальных индикаторов (спека 2026-10-25): поверх графика в
+     левом верхнем углу, глухой фон без блюра, нажатия уходят графику. */
+  .odds-plaque {
+    position: absolute; top: var(--s2); left: var(--s2); z-index: 2;
+    max-width: min(380px, calc(100% - 2 * var(--s2)));
+    padding: var(--s2) var(--s3);
+    background: var(--ground); border: 1px solid var(--hair);
+    font-family: var(--font-mono); font-size: 11px; line-height: 1.45;
+    pointer-events: none;
+  }
+  .odds-plaque p { margin: 0; }
+  .odds-plaque-head { color: var(--ink-2); }
   .draw-bar { position: relative; display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--hair); padding-right: var(--s1); }
   .draw-group { position: relative; display: flex; align-items: center; }
   .draw-btn,

@@ -75,6 +75,7 @@ import { OrdersPanel } from './OrdersPanel';
 import { BotPanel, botFromDraft, type BotDraft } from './BotPanel';
 import { OrderPanel, type Draft, type LimitDraft, type OrderTab, type ScaledDraft } from './OrderPanel';
 import { ChartSettingsPanel } from './ChartSettingsPanel';
+import { OddsPlaque } from './OddsPlaque';
 import { ReplayChart, type Level, type LevelKind, type Marker } from './ReplayChart';
 import { SessionSummary } from './SessionSummary';
 import { SessionTrades } from './SessionTrades';
@@ -240,6 +241,9 @@ export interface TerminalProps {
   tagStatsFrom?: 'journal';
 }
 
+/** Экспериментальные индикаторы терминала без нашего сервера (главная): только шанс тейка. */
+const LANDING_EXP: readonly ExpId[] = ['take'];
+
 /**
  * Терминал — один на бектест, турнир и биржу. Состояние приходит снимком счёта
  * в форме сессии (`detail`), действия — набором `actions`; сам экран не знает,
@@ -359,13 +363,16 @@ export function Terminal({
   // графиком): индикаторы и верхняя граница ползунка риска.
   const [rsiOn, setRsiOn] = useRsiOn();
   // Экспериментальные индикаторы (спека 2026-10-25): без нашего сервера — только шанс тейка.
+  // Готовыми булевыми, а не функцией `expOn(id)`: зависимость из вызова такой
+  // функции React Compiler считает изменчивой и снимает оптимизацию всего экрана.
   const exp = useExpSettings();
-  const expIds: readonly ExpId[] = serverStats ? EXP_IDS : ['take'];
-  const expOn = (id: ExpId) => exp.on[id] && expIds.includes(id);
-  const takeOddsOn = expOn('take');
+  const expIds = serverStats ? EXP_IDS : LANDING_EXP;
+  const takeOddsOn = exp.on.take;
+  const signalsOn = serverStats && exp.on.signals;
+  const derivsOn = serverStats && exp.on.derivs;
   const tagOdds = useTagOdds(
     tagStatsFrom ?? (session.dataSource === 'synthetic' ? 'synthetic' : 'real'),
-    tags && expOn('tags'),
+    tags && serverStats && exp.on.tags,
   );
   const [chartSettingsOpen, setChartSettingsOpen] = useState(false);
   useSnapshotSound(
@@ -1473,6 +1480,11 @@ export function Terminal({
                   />
                 ) : (
                   <ChartSkeleton />
+                )}
+                {/* Пункты 3–4 эксперимента — только живой рынок: в истории плашка выдала бы
+                    скрытую монету, у тренажёра статистика BTC ни о чём. */}
+                {replay.ready && isLive && (signalsOn || derivsOn) && (
+                  <OddsPlaque tf={replay.shownTf} candles={screenCandles} symbol={symbol} signals={signalsOn} derivs={derivsOn} />
                 )}
               </div>
             </div>
