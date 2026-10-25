@@ -14,6 +14,10 @@
  *
  * Считается по всем загруженным свечам таймфрейма, как у TradingView по всем
  * барам графика: первые `length` свечей RSI не имеют.
+ *
+ * Файл живёт в двух местах: копия — `backend/src/probabilities/rsi.ts`
+ * (частоты дивергенций в истории считает сервер), `rsi-copy.spec.ts` сверяет
+ * их побайтно. Правка — в обоих; формат — prettier бэкенда.
  */
 
 export interface RsiOptions {
@@ -82,7 +86,8 @@ export function rsiOf(closes: readonly number[], length: number): number[] {
   }
   up /= length;
   down /= length;
-  const value = () => (down === 0 ? 100 : up === 0 ? 0 : 100 - 100 / (1 + up / down));
+  const value = () =>
+    down === 0 ? 100 : up === 0 ? 0 : 100 - 100 / (1 + up / down);
   out[length] = value();
   for (let i = length + 1; i < closes.length; i++) {
     const ch = closes[i] - closes[i - 1];
@@ -108,16 +113,24 @@ export function emaOf(values: readonly number[], length: number): number[] {
 }
 
 /** Вершина (`high`) или впадина (`low`) в точке `p`: см. правило в шапке файла. */
-function isPivot(values: readonly number[], p: number, left: number, right: number, kind: 'high' | 'low'): boolean {
+function isPivot(
+  values: readonly number[],
+  p: number,
+  left: number,
+  right: number,
+  kind: 'high' | 'low',
+): boolean {
   const v = values[p];
-  if (Number.isNaN(v) || p - left < 0 || p + right >= values.length) return false;
+  if (Number.isNaN(v) || p - left < 0 || p + right >= values.length)
+    return false;
   const beats = (other: number, strict: boolean) => {
     if (Number.isNaN(other)) return false;
     if (kind === 'high') return strict ? v > other : v >= other;
     return strict ? v < other : v <= other;
   };
   for (let k = 1; k <= left; k++) if (!beats(values[p - k], true)) return false;
-  for (let k = 1; k <= right; k++) if (!beats(values[p + k], false)) return false;
+  for (let k = 1; k <= right; k++)
+    if (!beats(values[p + k], false)) return false;
   return true;
 }
 
@@ -166,15 +179,32 @@ function divergencesOfSide(
   rsi: readonly number[],
   price: readonly number[],
   o: RsiOptions,
+  /** Сюда — каждое подтверждение по порядку, и то, что потом заменит продолжение. */
+  seen?: Divergence[],
 ): Divergence[] {
   // Знак стороны: «выше» у медвежьей — больше, у бычьей — меньше.
   const s = kind === 'bear' ? 1 : -1;
   const zone = kind === 'bear' ? o.overbought : o.oversold;
   const beyond = (a: number, b: number) => s * (a - b) > 0;
-  const crosses = (values: readonly number[], a: number, va: number, b: number, vb: number) => {
+  const crosses = (
+    values: readonly number[],
+    a: number,
+    va: number,
+    b: number,
+    vb: number,
+  ) => {
     for (let i = a + 1; i < b; i++) {
       const line = va + ((vb - va) * (i - a)) / (b - a);
-      const limit = i <= a + o.rightBars ? (beyond(va, line) ? va : line) : i >= b - o.leftBars ? (beyond(vb, line) ? vb : line) : line;
+      const limit =
+        i <= a + o.rightBars
+          ? beyond(va, line)
+            ? va
+            : line
+          : i >= b - o.leftBars
+            ? beyond(vb, line)
+              ? vb
+              : line
+            : line;
       if (beyond(values[i], limit)) return true;
     }
     return false;
@@ -185,22 +215,46 @@ function divergencesOfSide(
   const started = new Map<number, number>();
   const swings: Swing[] = [];
   for (let p = o.leftBars; p + o.rightBars < price.length; p++) {
-    if (!isPivot(price, p, o.leftBars, o.rightBars, kind === 'bear' ? 'high' : 'low')) continue;
+    if (
+      !isPivot(
+        price,
+        p,
+        o.leftBars,
+        o.rightBars,
+        kind === 'bear' ? 'high' : 'low',
+      )
+    )
+      continue;
     let rb = -1;
-    for (let k = Math.max(0, p - o.lag); k <= Math.min(rsi.length - 1, p + o.lag); k++) {
+    for (
+      let k = Math.max(0, p - o.lag);
+      k <= Math.min(rsi.length - 1, p + o.lag);
+      k++
+    ) {
       if (!Number.isNaN(rsi[k]) && (rb < 0 || beyond(rsi[k], rsi[rb]))) rb = k;
     }
     if (rb < 0) continue;
-    const here: Swing = { bar: p, price: price[p], rsiBar: rb, value: rsi[rb], chained: false };
+    const here: Swing = {
+      bar: p,
+      price: price[p],
+      rsiBar: rb,
+      value: rsi[rb],
+      chained: false,
+    };
     if (beyond(here.value, 50)) {
       for (let j = swings.length - 1; j >= 0; j--) {
         const a = swings[j];
         if (p - a.bar < o.minRange) continue;
         if (p - a.bar > o.maxRange) break;
-        if (!beyond(here.price, a.price) || !beyond(a.value, here.value)) continue;
+        if (!beyond(here.price, a.price) || !beyond(a.value, here.value))
+          continue;
         if (!a.chained && beyond(zone, a.value)) continue;
         if (a.rsiBar >= rb) continue;
-        if (crosses(price, a.bar, a.price, p, here.price) || crosses(rsi, a.rsiBar, a.value, rb, here.value)) continue;
+        if (
+          crosses(price, a.bar, a.price, p, here.price) ||
+          crosses(rsi, a.rsiBar, a.value, rb, here.value)
+        )
+          continue;
         const dv: Divergence = {
           kind,
           from: a.bar,
@@ -212,6 +266,7 @@ function divergencesOfSide(
           fromValue: a.value,
           toValue: here.value,
         };
+        seen?.push(dv);
         const was = started.get(a.bar);
         if (was === undefined) {
           started.set(a.bar, out.length);
@@ -235,11 +290,49 @@ export function divergencesOf(
   lows: readonly number[],
   o: RsiOptions,
 ): Divergence[] {
-  return [...divergencesOfSide('bear', rsi, highs, o), ...divergencesOfSide('bull', rsi, lows, o)].sort((a, b) => a.to - b.to);
+  return [
+    ...divergencesOfSide('bear', rsi, highs, o),
+    ...divergencesOfSide('bull', rsi, lows, o),
+  ].sort((a, b) => a.to - b.to);
+}
+
+/**
+ * Каждое подтверждение дивергенции, как его видели в свою свечу: и те, что
+ * потом удлинились (на графике продолжение заменяет их линию). Для частот «что
+ * было после» (спека 2026-10-25): по `divergencesOf` удлинённые выпали бы из
+ * выборки, хотя в свою свечу их было видно. Подтверждение — свеча `to + rightBars`.
+ */
+export function divergenceEventsOf(
+  candles: readonly { h: number; l: number; c: number }[],
+  o: RsiOptions = RSI_DEFAULTS,
+): Divergence[] {
+  const rsi = rsiOf(
+    candles.map((c) => c.c),
+    o.length,
+  );
+  const seen: Divergence[] = [];
+  divergencesOfSide(
+    'bear',
+    rsi,
+    candles.map((c) => c.h),
+    o,
+    seen,
+  );
+  divergencesOfSide(
+    'bull',
+    rsi,
+    candles.map((c) => c.l),
+    o,
+    seen,
+  );
+  return seen.sort((a, b) => a.to - b.to);
 }
 
 /** Всё, что рисует панель RSI, по свечам графика. */
-export function rsiSeries(candles: readonly { h: number; l: number; c: number }[], o: RsiOptions = RSI_DEFAULTS): RsiSeries {
+export function rsiSeries(
+  candles: readonly { h: number; l: number; c: number }[],
+  o: RsiOptions = RSI_DEFAULTS,
+): RsiSeries {
   const rsi = rsiOf(
     candles.map((c) => c.c),
     o.length,

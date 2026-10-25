@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { RSI_DEFAULTS, divergencesOf, emaOf, rsiOf, rsiSeries } from './rsi';
+import btc from './__fixtures__/btc-4h-2024.json';
+import { RSI_DEFAULTS, divergenceEventsOf, divergencesOf, emaOf, rsiOf, rsiSeries } from './rsi';
 
 // Пример Уайлдера из таблицы StockCharts: RSI(14) по этим закрытиям — 70.46, 66.25, 66.48, 69.35, 66.29, 57.92.
 const WILDER = [
@@ -184,5 +185,26 @@ describe('rsiSeries', () => {
     expect(s.avg).toHaveLength(candles.length);
     expect(s.avg[14]).toBeCloseTo(s.rsi[14], 10);
     expect(Array.isArray(s.divergences)).toBe(true);
+  });
+});
+
+describe('divergenceEventsOf', () => {
+  const bars = (btc as number[][]).map(([t, o, h, l, c]) => ({ t, o, h, l, c }));
+  const key = (d: { kind: string; from: number; to: number }) => `${d.kind}:${d.from}:${d.to}`;
+
+  it('содержит всё, что рисует график, и удлинённые раньше продолжения', () => {
+    const drawn = rsiSeries(bars).divergences.map(key);
+    const events = divergenceEventsOf(bars).map(key);
+    expect(events.length).toBeGreaterThanOrEqual(drawn.length);
+    for (const k of drawn) expect(events).toContain(k);
+  });
+
+  it('событие видно на свечах до своего подтверждения включительно', () => {
+    const events = divergenceEventsOf(bars);
+    expect(events.length).toBeGreaterThan(0);
+    for (const e of events) {
+      const cut = bars.slice(0, e.to + RSI_DEFAULTS.rightBars + 1);
+      expect(divergenceEventsOf(cut).map(key)).toContain(key(e));
+    }
   });
 });
