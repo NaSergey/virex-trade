@@ -69,7 +69,7 @@ describe('DerivFeed.pull', () => {
       findFirst: jest.fn(),
       deleteMany: jest.fn(
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        (_: { where: { kind: string; time: { gte: Date; lte: Date } } }) =>
+        (_: { where: { kind: string; time: { in: Date[] } } }) =>
           Promise.resolve({ count: 0 }),
       ),
       createMany: jest.fn(
@@ -89,7 +89,7 @@ describe('DerivFeed.pull', () => {
     prisma.$transaction.mockClear();
   });
 
-  it('окно с точками заменяется целиком одной транзакцией', async () => {
+  it('пришедшие точки перезаписываются одной транзакцией, остальные не трогаются', async () => {
     const last = Date.UTC(2026, 9, 25, 0);
     prisma.derivPoint.findFirst.mockResolvedValue({ time: new Date(last) });
     fetchMock.mockResolvedValue(
@@ -111,8 +111,7 @@ describe('DerivFeed.pull', () => {
     await feed.pull(last + H);
     expect(prisma.$transaction).toHaveBeenCalledTimes(3);
     const where = prisma.derivPoint.deleteMany.mock.calls[0][0].where;
-    expect(where.time.gte.getTime()).toBe(last);
-    expect(where.time.lte.getTime()).toBe(last + H);
+    expect(where.time.in.map((d) => d.getTime())).toEqual([last]);
   });
 
   it('пустой ответ ничего не удаляет', async () => {
