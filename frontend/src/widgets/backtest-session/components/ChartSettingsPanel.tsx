@@ -6,7 +6,7 @@ import { Field } from '@/shared/ui/Field';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { Slider } from '@/shared/ui/Slider';
 import { DEFAULT_MAX_RISK } from '../model/useRiskSettings';
-import { RANGES_ENABLED } from '../model/useChartSettings';
+import { RANGES_ENABLED, type ExpId } from '../model/useChartSettings';
 
 /** Проценты без хвоста: 10%, 2.5%. */
 const fmtRisk = (v: number) => `${Number.isInteger(v) ? v : v.toFixed(1)}%`;
@@ -25,6 +25,9 @@ export function ChartSettingsPanel({
   onRsi,
   rangesOn,
   onRanges,
+  expIds,
+  exp,
+  onExp,
   maxRisk,
   onMaxRisk,
   onClose,
@@ -36,6 +39,10 @@ export function ChartSettingsPanel({
   onRsi: (on: boolean) => void;
   rangesOn: boolean;
   onRanges: (on: boolean) => void;
+  /** Экспериментальные индикаторы: какие показать (на главной — только шанс тейка) и что включено. */
+  expIds: readonly ExpId[];
+  exp: Record<ExpId, boolean>;
+  onExp: (id: ExpId, on: boolean) => void;
   maxRisk: number;
   onMaxRisk: (value: number) => void;
   onClose: () => void;
@@ -62,6 +69,14 @@ export function ChartSettingsPanel({
           {t('indicatorRanges')}
         </Button>
       )}
+
+      <p className="cs-group muted">{t('exp.section')}</p>
+      {expIds.map((id) => (
+        <Button key={id} variant="none" className="cs-indicator" aria-pressed={exp[id]} onClick={() => onExp(id, !exp[id])}>
+          {t(`exp.toggle.${id}`)}
+        </Button>
+      ))}
+      <p className="muted">{t('exp.hint')}</p>
 
       {/* Подсмотреть скрытое — только у истории, где что-то скрыто, и до ухода из сессии. */}
       {onReveal && (

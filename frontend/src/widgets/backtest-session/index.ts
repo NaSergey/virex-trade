@@ -24,6 +24,7 @@ export {
   useLiveSymbols,
 } from './api/hooks';
 export { readLiveSymbol } from './model/useLiveSymbol';
+export { useExpOn } from './model/useChartSettings';
 export { prefetchLiveFeed } from './model/useLiveFeed';
 export {
   DEFAULT_SYMBOL,

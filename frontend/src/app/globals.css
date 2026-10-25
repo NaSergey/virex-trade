@@ -1236,6 +1236,8 @@
   .cs-indicator { display: block; width: 100%; text-align: left; padding: var(--s2) var(--s3); font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); cursor: pointer; }
   .cs-indicator:hover { color: var(--ink); }
   .cs-indicator[aria-pressed="true"] { background: var(--ink); color: var(--ground); }
+  /* Подпись группы выключателей — «Экспериментальные» (спека 2026-10-25). */
+  .cs-group { margin-top: var(--s3); font-size: 11px; }
   /* Диалог тегов: «+ Новый тег» прижат вправо; строка создания — на всю ширину,
      поле растягивается, «Отмена» и «Создать» стоят в конце строки. */
   .tags-new-toggle { display: flex; justify-content: flex-end; margin-top: var(--s2); }

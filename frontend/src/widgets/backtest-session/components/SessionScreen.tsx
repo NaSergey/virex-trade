@@ -53,7 +53,7 @@ import {
 } from '../lib/money';
 import type { TerminalSound } from '../lib/sounds';
 import { useSessionActions, type TerminalActions } from '../model/actions';
-import { useRangesOn, useRsiOn } from '../model/useChartSettings';
+import { EXP_IDS, useExpSettings, useRangesOn, useRsiOn, type ExpId } from '../model/useChartSettings';
 import { useRangeCandles, type Load4h } from '../model/useRangeCandles';
 import { useMaxRisk } from '../model/useRiskSettings';
 import { useLiveSymbol } from '../model/useLiveSymbol';
@@ -228,6 +228,14 @@ export interface TerminalProps {
    * настройки). Терминал на демо-счёте ставит сюда «Подключить биржу».
    */
   chartActions?: ReactNode;
+  /**
+   * Числа нашего сервера у экспериментальных индикаторов (теги, сигналы,
+   * деривативы); по умолчанию есть. На главной гость не вошёл — там только
+   * «Шанс тейка»: остальное получило бы 401.
+   */
+  serverStats?: boolean;
+  /** Откуда статистика тегов: журнал (биржевой терминал); не задано — бектест по источнику сессии. */
+  tagStatsFrom?: 'journal';
 }
 
 /**
@@ -250,6 +258,8 @@ export function Terminal({
   tables = true,
   paused = false,
   chartActions,
+  serverStats = true,
+  tagStatsFrom,
 }: TerminalProps) {
   const t = useTranslations('backtest');
   const { locale } = useLocaleControl();
@@ -346,6 +356,10 @@ export function Terminal({
   // Настройки графика — правая панель на месте панели ордера (шестерёнка над
   // графиком): индикаторы и верхняя граница ползунка риска.
   const [rsiOn, setRsiOn] = useRsiOn();
+  // Экспериментальные индикаторы (спека 2026-10-25): без нашего сервера — только шанс тейка.
+  const exp = useExpSettings();
+  const expIds: readonly ExpId[] = serverStats ? EXP_IDS : ['take'];
+  const expOn = (id: ExpId) => exp.on[id] && expIds.includes(id);
   const [chartSettingsOpen, setChartSettingsOpen] = useState(false);
   useSnapshotSound(
     detail,
@@ -1505,6 +1519,9 @@ export function Terminal({
                 onRsi={setRsiOn}
                 rangesOn={rangesOn}
                 onRanges={setRangesOn}
+                expIds={expIds}
+                exp={exp.on}
+                onExp={exp.set}
                 maxRisk={maxRisk}
                 onMaxRisk={setMaxRisk}
                 onClose={() => setChartSettingsOpen(false)}
