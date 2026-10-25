@@ -32,13 +32,7 @@ describe('alignTo', () => {
     expect(alignTo(bars, points).slice(0, 3)).toEqual([1, 1, 2]);
   });
   it('точка старше 12 часов — значения нет', () => {
-    expect(alignTo(bars, [{ time: T0, value: 1 }])).toEqual([
-      1,
-      1,
-      1,
-      1,
-      null,
-    ]);
+    expect(alignTo(bars, [{ time: T0, value: 1 }])).toEqual([1, 1, 1, 1, null]);
   });
 });
 
