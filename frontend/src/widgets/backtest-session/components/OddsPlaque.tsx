@@ -29,8 +29,11 @@ export function OddsPlaque({
   const t = useTranslations('backtest');
   const btc = symbol === 'BTCUSDT';
   const { data, isLoading } = useProbabilities(btc);
-  // Те же дивергенции, что рисует панель RSI: тот же rsiSeries по тем же свечам.
-  const divs = useMemo(() => (signals && btc ? rsiSeries(candles).divergences : []), [signals, btc, candles]);
+  // Тот же rsiSeries, что у панели RSI, но без последней свечи: плашка стоит только
+  // на живом рынке, там последняя свеча ещё формируется, а сервер считал события по
+  // закрытым. С ней дивергенция мелькала бы на плашке раньше подтверждения.
+  const closed = useMemo(() => candles.slice(0, -1), [candles]);
+  const divs = useMemo(() => (signals && btc ? rsiSeries(closed).divergences : []), [signals, btc, closed]);
 
   const stat = (s: OddsStat | null | undefined) =>
     s ? (
@@ -53,7 +56,7 @@ export function OddsPlaque({
     if (!data) return <p className="muted">{isLoading ? t('exp.plaque.loading') : t('exp.plaque.notYet')}</p>;
     const tfName = t(`tf.${tf}`);
     const byTf = data.divergence[String(tf)];
-    const fresh = freshDivergence(divs, candles.length - 1);
+    const fresh = freshDivergence(divs, closed.length - 1);
     return (
       <>
         {signals &&
