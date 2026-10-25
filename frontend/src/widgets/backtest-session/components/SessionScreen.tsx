@@ -55,6 +55,7 @@ import {
 import type { TerminalSound } from '../lib/sounds';
 import { useSessionActions, type TerminalActions } from '../model/actions';
 import { EXP_IDS, useExpSettings, useRangesOn, useRsiOn, type ExpId } from '../model/useChartSettings';
+import { useTagOdds } from '../model/useTagOdds';
 import { useRangeCandles, type Load4h } from '../model/useRangeCandles';
 import { useMaxRisk } from '../model/useRiskSettings';
 import { useLiveSymbol } from '../model/useLiveSymbol';
@@ -362,6 +363,10 @@ export function Terminal({
   const expIds: readonly ExpId[] = serverStats ? EXP_IDS : ['take'];
   const expOn = (id: ExpId) => exp.on[id] && expIds.includes(id);
   const takeOddsOn = expOn('take');
+  const tagOdds = useTagOdds(
+    tagStatsFrom ?? (session.dataSource === 'synthetic' ? 'synthetic' : 'real'),
+    tags && expOn('tags'),
+  );
   const [chartSettingsOpen, setChartSettingsOpen] = useState(false);
   useSnapshotSound(
     detail,
@@ -1756,6 +1761,7 @@ export function Terminal({
             error={tagsM.error}
             onSave={(tagIds) => tagsM.mutate({ tradeId: trade.id, tagIds }, { onSuccess: () => setTagsModalFor(null) })}
             onClose={() => setTagsModalFor(null)}
+            odds={tagOdds}
           />
         ) : null;
       })()}
@@ -1770,6 +1776,7 @@ export function Terminal({
             error={tagsM.error}
             onSave={(tagIds) => tagsM.mutate({ tradeId: trade.id, tagIds }, { onSuccess: () => setHistoryTagsFor(null) })}
             onClose={() => setHistoryTagsFor(null)}
+            odds={tagOdds}
           />
         ) : null;
       })()}

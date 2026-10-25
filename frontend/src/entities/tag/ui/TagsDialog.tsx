@@ -9,6 +9,7 @@ import { useIdSet } from '@/shared/lib/hooks/useIdSet';
 import { useTags } from '../api/hooks';
 import { NewTagRow } from './NewTagRow';
 import { TagPicker } from './TagPicker';
+import type { TagOdds } from '../lib/odds';
 
 /**
  * Разметка тегами — один диалог на любую привязку (закрытая сделка обзора,
@@ -25,6 +26,7 @@ export function TagsDialog({
   error,
   onSave,
   onClose,
+  odds,
 }: {
   title: string;
   subtitle: ReactNode;
@@ -36,6 +38,8 @@ export function TagsDialog({
   error?: unknown;
   onSave: (tagIds: string[]) => void;
   onClose: () => void;
+  /** Статистика тегов (экспериментальный индикатор терминала) — по id тега; не задана — окно прежнее. */
+  odds?: Record<string, TagOdds>;
 }) {
   const t = useTranslations('tags');
   const tc = useTranslations('common');
@@ -49,7 +53,7 @@ export function TagsDialog({
       <DialogContent>
         <DialogHeader title={title} subtitle={subtitle} />
         <DialogBody>
-          <TagPicker tags={tagsData?.tags ?? []} selected={selected} onToggle={toggle} />
+          <TagPicker tags={tagsData?.tags ?? []} selected={selected} onToggle={toggle} odds={odds} />
           {/* Новый тег сразу отмечается у сделки: создавать его ради того, чтобы
               потом искать в списке и отмечать второй раз, — лишний шаг. */}
           {creating ? (

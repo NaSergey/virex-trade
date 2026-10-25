@@ -6,3 +6,20 @@
  * противоречие интерфейса самому себе.
  */
 export const MIN_N = 20;
+
+const Z = 1.96;
+
+/**
+ * 95 % интервал Вильсона доли `hits` из `n`, в процентах; без наблюдений — весь
+ * отрезок. Он и говорит, что пять сделок с винрейтом 60 % — ещё не закономерность:
+ * их интервал шире 60 пунктов.
+ */
+export function wilson(hits: number, n: number): { low: number; high: number } {
+  if (n === 0) return { low: 0, high: 100 };
+  const p = hits / n;
+  const z2 = Z * Z;
+  const den = 1 + z2 / n;
+  const mid = (p + z2 / (2 * n)) / den;
+  const half = (Z * Math.sqrt((p * (1 - p)) / n + z2 / (4 * n * n))) / den;
+  return { low: Math.max(0, mid - half) * 100, high: Math.min(1, mid + half) * 100 };
+}
