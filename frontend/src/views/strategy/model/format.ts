@@ -72,9 +72,8 @@ const VALUE_LABELS: Record<string, string> = {
   'stopAtr:<0.5': '< 0,5 ATR',
   'stopAtr:0.5-1.5': '0,5–1,5 ATR',
   'stopAtr:>1.5': '> 1,5 ATR',
-  'plannedR:1-2': '1–2R',
-  'plannedR:2-3': '2–3R',
-  'plannedR:>3': '> 3R',
+  'plannedR:3-4': '3–4R',
+  'plannedR:4-5': '4–5R',
   'pierce:<0.25': '< 0,25 ATR',
   'pierce:>=0.25': '≥ 0,25 ATR',
 };
@@ -84,4 +83,9 @@ export const valueText = (feature: FeatureKey, value: string): string =>
 
 export const ruleText = (r: Rule): string => `${FEATURE_LABELS[r.feature]}: ${valueText(r.feature, r.value)}`;
 
-export const OUTCOME_LABELS: Record<Outcome, string> = { target: 'цель', stop: 'стоп', time: 'срок' };
+export const OUTCOME_LABELS: Record<Outcome, string> = {
+  target: 'все тейки',
+  stop: 'стоп',
+  trail: 'стоп за тейками',
+  time: 'срок',
+};

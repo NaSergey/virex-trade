@@ -13,6 +13,7 @@ import { fmtDateTime } from './model/format';
 import { RulesSection } from './components/RulesSection';
 import { BacktestSection } from './components/BacktestSection';
 import { AuthorSection } from './components/AuthorSection';
+import { OddsSection } from './components/OddsSection';
 import { LearningSection } from './components/LearningSection';
 import { TheorySection } from './components/TheorySection';
 import './strategy.css';
@@ -36,6 +37,7 @@ export function StrategyPage() {
     ? [
         ['rules', 'Стратегия'],
         ['backtest', 'Бектест'],
+        ['odds', 'Фильтр'],
         ['author', 'Цифры автора'],
         ['learning', 'Обучение'],
         ...(theory ? ([['theory', 'Теория']] as [string, string][]) : []),
@@ -77,7 +79,8 @@ export function StrategyPage() {
         <SkeletonLines />
       ) : report ? (
         <>
-          <BacktestSection report={report} />
+          <BacktestSection report={report} theory={theory} />
+          <OddsSection block={report.odds} expectancy={report.main.variant.summary.expectancy} />
           <AuthorSection rows={report.author} />
           <LearningSection block={report.learning} />
           {theory && <TheorySection t={report.theory} />}

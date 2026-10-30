@@ -1,5 +1,11 @@
 import type { TheoryBlock } from './report.types';
-import { maxDrawdown, maxLossStreak, mulberry32, summarize } from './stats';
+import {
+  maxDrawdown,
+  maxLossStreak,
+  mulberry32,
+  summarize,
+  thin,
+} from './stats';
 
 export interface TheoryTrade {
   rGross: number;
@@ -13,12 +19,6 @@ const RUIN_TRADES = 300;
 const RISKS = [0.005, 0.01, 0.02, 0.05];
 const MAX_POINTS = 200;
 const KEEP_FIRST = 120;
-
-function thin(xs: number[]): number[] {
-  if (xs.length <= MAX_POINTS) return xs;
-  const step = (xs.length - 1) / (MAX_POINTS - 1);
-  return Array.from({ length: MAX_POINTS }, (_, i) => xs[Math.round(i * step)]);
-}
 
 function cumulative(rs: number[]): number[] {
   let s = 0;

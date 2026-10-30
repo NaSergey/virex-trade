@@ -117,3 +117,10 @@ export function mulberry32(seed: number): () => number {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+/** Не больше `max` точек равным шагом, края сохраняются — для графиков отчёта. */
+export function thin<T>(xs: T[], max = 200): T[] {
+  if (xs.length <= max) return xs;
+  const step = (xs.length - 1) / (max - 1);
+  return Array.from({ length: max }, (_, i) => xs[Math.round(i * step)]);
+}

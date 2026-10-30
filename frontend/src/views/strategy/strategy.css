@@ -154,3 +154,7 @@
     grid-template-columns: 1fr;
   }
 }
+.st-lvl-trail {
+  stroke: var(--loss);
+  stroke-dasharray: 4 3;
+}

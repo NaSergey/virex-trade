@@ -38,11 +38,13 @@ import {
   topMistakes,
   walkForward,
 } from './learning';
+import { filterByOdds, OddsResult } from './odds';
+import { plainNotional, withTheory, withoutTheory } from './money';
 import { theoryOf } from './theory';
 import { maxDrawdown, summarize } from './stats';
 
 /** Поднимать при любой правке правил, обучения или формы отчёта. */
-export const STRATEGY_VERSION = 1;
+export const STRATEGY_VERSION = 2;
 export const REPORT_ID = 'smc-intraday';
 
 export interface ReportInput {
@@ -95,6 +97,15 @@ export function sequential<T extends { fillMs: number; exitMs: number }>(
   return out;
 }
 
+/** Риск сделки в долях цены: средняя дистанция уровней входа до стопа к средней цене уровней. */
+export function stopPctOf(t: Pick<TradeRow, 'entries' | 'stop'>): number {
+  const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  return (
+    mean(t.entries.map((e) => Math.abs(e - t.stop))) /
+    mean(t.entries.map(Math.abs))
+  );
+}
+
 function toRow(p: Prepared, st: Setup, f: Filled): TradeRow {
   const { s } = p;
   return {
@@ -107,18 +118,23 @@ function toRow(p: Prepared, st: Setup, f: Filled): TradeRow {
     bosMs: st.bosI >= 0 ? s.t[st.bosI] : null,
     confirmMs: closeMs(s, st.e),
     level: st.level,
-    entry: st.entry,
+    entries: st.entries,
+    filled: f.filled,
+    avgEntry: f.avgEntry,
     stop: st.stop,
+    finalStop: f.finalStop,
     target: st.target,
+    takes: st.takes,
+    takesHit: f.takesHit,
     plannedR: st.plannedR,
     fillMs: f.fillMs,
-    fill: f.fill,
     exitMs: f.exitMs,
     exit: f.exit,
     outcome: f.outcome,
     rGross: f.rGross,
     rNet: f.rNet,
     features: st.features,
+    odds: null,
   };
 }
 
@@ -153,28 +169,30 @@ async function runVariant(
 ) {
   const setups = findSetups(p.s, p.ctx, v);
   const resolved = await simulateAll(p.s, setups, fetch, cache);
-  const filled: TradeRow[] = [];
+  const all: TradeRow[] = [];
   let missed = 0;
   let expired = 0;
   for (const r of resolved) {
-    if (r.result.status === 'filled') filled.push(toRow(p, r.setup, r.result));
+    if (r.result.status === 'filled') all.push(toRow(p, r.setup, r.result));
     else if (r.result.status === 'missed') missed++;
     else if (r.result.status === 'expired') expired++;
   }
+  const odds: OddsResult | null = v.odds ? filterByOdds(all) : null;
+  const filled = odds ? odds.kept : all;
   const system = sequential(filled);
   const sys = systemOf(system);
   const row: VariantRow = {
     id: v.id,
     label: v.label,
     setups: setups.length,
-    filled: filled.length,
+    filled: all.length,
     missed,
     expired,
     summary: sys.summary,
     grossExpectancy: summarize(system.map((t) => t.rGross)).expectancy,
     maxDd1: sys.maxDd1,
   };
-  return { v, row, filled, system, sys };
+  return { v, row, filled, system, sys, odds };
 }
 
 function learningOf(filled: TradeRow[], nowMs: number): LearningBlock {
@@ -186,8 +204,8 @@ function learningOf(filled: TradeRow[], nowMs: number): LearningBlock {
     features: t.features,
   }));
   const quarters = walkForward(all, LEARN_FROM_MS, nowMs);
-  // Правила решают на выставлении лимита (confirmMs), а не на исполнении:
-  // лимит, выставленный в конце квартала, живёт по правилам того квартала.
+  // Правила решают на выставлении сетки (confirmMs), а не на исполнении:
+  // сетка, выставленная в конце квартала, живёт по правилам того квартала.
   const forward = filled.filter((t) => t.confirmMs >= LEARN_FROM_MS);
   const isKept = (t: TradeRow) => kept(t, rulesAt(quarters, t.confirmMs) ?? []);
   const learned = forward.filter(isKept);
@@ -248,11 +266,18 @@ export async function buildReport(
   await yieldFn();
   const learning = learningOf(main.filled, nowMs);
   await yieldFn();
+  const mt = main.system.map((t) => ({ rNet: t.rNet, stopPct: stopPctOf(t) }));
+  const notional = plainNotional(mt);
+  const money = {
+    theory: withTheory(mt),
+    plain: withoutTheory(mt, notional),
+    plainNotional: notional,
+  };
   const theory = theoryOf(
     main.system.map((t) => ({
       rGross: t.rGross,
       rNet: t.rNet,
-      stopPct: Math.abs(t.entry - t.stop) / t.entry,
+      stopPct: stopPctOf(t),
     })),
   );
 
@@ -267,7 +292,9 @@ export async function buildReport(
       equity: main.sys.equity,
       byYear: byYear(main.system),
       trades: main.system,
+      money,
     },
+    odds: main.odds.block,
     author,
     learning,
     theory,
