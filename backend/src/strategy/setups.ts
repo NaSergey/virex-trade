@@ -192,7 +192,7 @@ export function findSetups(s: Series, ctx: SetupContext, v: Variant): Setup[] {
     if (v.target === 'liquidity' && plannedR < 1) continue; // вход не в дискаунте
 
     out.push({
-      id: `${v.id}:${sw.i}`,
+      id: `${v.id}:${sw.i}:${d}`,
       dir: d,
       sweepI: sw.i,
       fvgI: v.fvg ? conf.fvg : -1,

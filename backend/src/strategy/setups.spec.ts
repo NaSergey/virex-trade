@@ -19,6 +19,8 @@ describe('setups', () => {
     const s = bars(SCENARIO);
     const [st] = findSetups(s, ctxOf(s, 1), MAIN);
     expect(st).toMatchObject({
+      // Направление в id: внешняя свеча может дать свипы в обе стороны.
+      id: 'main:25:1',
       dir: 1,
       sweepI: 25,
       fvgI: 27,

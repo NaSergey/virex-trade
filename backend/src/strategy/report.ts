@@ -186,15 +186,17 @@ function learningOf(filled: TradeRow[], nowMs: number): LearningBlock {
     features: t.features,
   }));
   const quarters = walkForward(all, LEARN_FROM_MS, nowMs);
-  const forward = filled.filter((t) => t.fillMs >= LEARN_FROM_MS);
-  const isKept = (t: TradeRow) => kept(t, rulesAt(quarters, t.fillMs) ?? []);
+  // Правила решают на выставлении лимита (confirmMs), а не на исполнении:
+  // лимит, выставленный в конце квартала, живёт по правилам того квартала.
+  const forward = filled.filter((t) => t.confirmMs >= LEARN_FROM_MS);
+  const isKept = (t: TradeRow) => kept(t, rulesAt(quarters, t.confirmMs) ?? []);
   const learned = forward.filter(isKept);
   const excluded = forward.filter((t) => !isKept(t)).map((t) => t.rNet);
   return {
     fromMs: LEARN_FROM_MS,
     quarters: quarters.map((q) => {
       const inQ = forward.filter(
-        (t) => t.fillMs >= q.startMs && t.fillMs < q.endMs,
+        (t) => t.confirmMs >= q.startMs && t.confirmMs < q.endMs,
       );
       return {
         key: q.key,

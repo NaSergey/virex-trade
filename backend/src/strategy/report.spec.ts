@@ -31,6 +31,10 @@ describe('report', () => {
     expect(report.author).toHaveLength(8);
     expect(report.learning.quarters.length).toBeGreaterThanOrEqual(2);
     expect(report.theory.ruin.rows).toHaveLength(4);
+    // Сделки на блуждании есть — иначе проверки ниже прошли бы вхолостую.
+    const noContext = report.variants.find((v) => v.id === 'no-context');
+    expect(noContext.filled).toBeGreaterThan(0);
+    expect(report.main.trades.length).toBeGreaterThan(0);
     for (const t of report.main.trades) {
       expect(t.exitMs).toBeGreaterThan(t.fillMs);
     }

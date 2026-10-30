@@ -201,6 +201,8 @@ export async function simulateAll(
     }
     if (need.size) {
       for (const [k, v] of await fetch([...need.values()])) cache.set(k, v);
+      // Дыра в истории: не вернулось — пусто, без повторных запросов.
+      for (const k of need.keys()) if (!cache.has(k)) cache.set(k, []);
     }
     todo = next;
   }

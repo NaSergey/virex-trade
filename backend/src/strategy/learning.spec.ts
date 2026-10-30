@@ -106,6 +106,8 @@ describe('learning', () => {
     expect(effectOf(helped).verdict).toBe('helped');
     expect(effectOf(hurt).verdict).toBe('hurt');
     expect(effectOf([]).verdict).toBe('unproven');
+    // На паре сделок интервал врёт — вердикта нет, хотя обе в минусе.
+    expect(effectOf([-1, -1.1, -0.9]).verdict).toBe('unproven');
     expect(effectOf([-1, 1, -1, 1, 0.5, -0.5]).verdict).toBe('unproven');
   });
 

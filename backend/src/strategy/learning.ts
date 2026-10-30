@@ -7,6 +7,8 @@ export const LEARN_FROM_MS = Date.UTC(2020, 0, 1);
 export const MIN_TRAIN = 60;
 export const MIN_RULE_N = 20;
 export const MAX_RULES = 3;
+/** Меньше отсечённых сделок — вердикта нет: t-интервал на 2–9 точках обманчив. */
+export const MIN_EFFECT_N = 10;
 
 export interface LearnTrade {
   id: string;
@@ -119,7 +121,7 @@ export function rulesAt(quarters: Quarter[], ms: number): Rule[] | null {
  * ниже нуля — правила помогли, выше — вредят, иначе эффект не доказан.
  */
 export function effectOf(excluded: number[]): Effect {
-  if (excluded.length < 2) {
+  if (excluded.length < MIN_EFFECT_N) {
     return {
       n: excluded.length,
       mean: null,
