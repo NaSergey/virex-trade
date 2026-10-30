@@ -7733,11 +7733,11 @@
   }
 
   /* Сцена и сукно. Места стоят в процентах сцены (lib/layout.ts), поэтому
-     сцена держит пропорцию сама: широкая на столе, вытянутая на телефоне.
-     Пропорция продублирована в `STAGE_WIDE`/`STAGE_TALL`.
-     Коробка сцены — контейнер размеров: сцена берёт меньшее из её ширины и
-     высоты × пропорцию, то есть вписывается в место, оставшееся от панели
-     хода. Полей у сцены нет — вся высота уходит в стол. */
+     сцена держит пропорцию сама. Пропорция — по коробке (`--ct-aspect` ставит
+     `TableShell` замером, `fitAspect`: от `STAGE_TALL` до `STAGE_WIDE`), а не
+     по ширине окна: на телефоне сцена 3:4 в почти квадратной коробке стояла
+     узкой колонкой. Коробка — контейнер размеров: сцена берёт меньшее из её
+     ширины и высоты × пропорцию. Полей у сцены нет — вся высота уходит в стол. */
   .ct-stage-box {
     --ct-aspect: 2;
     flex: 1;
@@ -7752,9 +7752,6 @@
     position: relative;
     width: min(100cqw, 100cqh * var(--ct-aspect));
     aspect-ratio: var(--ct-aspect);
-  }
-  @media (max-width: 720px) {
-    .ct-stage-box { --ct-aspect: 0.75; }
   }
   .ct-felt {
     position: absolute;
@@ -8049,9 +8046,23 @@
   .ct-act:hover:not(:disabled) { border-color: var(--g-ink-3); }
   .ct-act:disabled { opacity: 0.4; cursor: default; }
   @media (max-width: 720px) {
-    .ct-plate { padding-right: 10px; gap: 6px; }
-    .ct-avatar { width: 34px; height: 34px; }
-    .ct-stack { font-size: 13px; }
+    .ct-page { padding: 10px 12px; gap: 8px; }
+    .ct-main { gap: 8px; }
+    .ct-more { width: 44px; height: 36px; }
+    .ct-felt { border-width: 8px; }
+    /* Центр сукна уже, чем сукно: места по бокам садятся на бортик, и
+       надписи центра не должны уходить под них. */
+    .ct-center { padding: 0 12%; gap: 6px; }
+    .ct-sit { width: 52px; height: 52px; }
+    /* Плашка места у края сцены не должна выходить за экран: на телефоне
+       сцена — ширина окна, и места по бокам стоят у самого края. */
+    .ct-plate { padding: 2px 10px 2px 2px; gap: 6px; }
+    .ct-avatar { width: 30px; height: 30px; border-width: 1px; }
+    .ct-initials { font-size: 11px; }
+    .ct-info { min-width: 0; }
+    .ct-stack { font-size: 12px; }
+    .ct-md { --w: 36px; }
+    .ct-sm { --w: 26px; }
     .ct-name { display: none; }
     .ct-act { font-size: 13px; }
     .pk-slider { width: 100%; order: 5; }
@@ -8487,8 +8498,15 @@
     max-width: 600px;
   }
   @media (max-width: 720px) {
-    .bj-page .ct-bottom { min-height: 200px; }
-    .bj-buttons { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    /* Резерв — панель ставок (полоса, фишки, строка суммы) с переключателем;
+       ход — одной строкой кнопок, а не сеткой 2×2: сетка отнимала у стола
+       ещё строку. */
+    .bj-page .ct-bottom { min-height: 168px; }
+    .bj-rules { font-size: 9px; letter-spacing: 0.08em; line-height: 1.5; }
+    /* В раунде центр сукна занят руками — правила там ложились под карты. */
+    .ct-center:has(.bj-dealer .ct-card) .bj-rules { display: none; }
+    .bj-buttons { gap: 6px; }
+    .bj-buttons .ct-act { padding: 0 4px; font-size: 12px; letter-spacing: 0; }
     .bj-bet-row .ct-act { min-width: 96px; }
   }
 }

@@ -19,9 +19,19 @@ export interface SeatPoint {
   y: number;
 }
 
-/** Пропорция сцены: широкая на компьютере, вытянутая вверх на телефоне (globals.css). */
+/** Пределы пропорции сцены: шире — на широком экране, уже — на высоком узком (`fitAspect`). */
 export const STAGE_WIDE = 2;
 export const STAGE_TALL = 3 / 4;
+
+/**
+ * Пропорция сцены под коробку `w × h`: сцена занимает её целиком, но не уже
+ * `STAGE_TALL` и не шире `STAGE_WIDE`. Шаг 0.05 — чтобы ресайз окна не
+ * пересчитывал раскладку на каждый пиксель.
+ */
+export function fitAspect(w: number, h: number): number {
+  const r = Math.round((w / h) * 20) / 20;
+  return Math.min(STAGE_WIDE, Math.max(STAGE_TALL, r));
+}
 
 /**
  * Ряд мест — эллипс вокруг сукна: по горизонтали — полуось сукна (35% сцены,

@@ -1,10 +1,11 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { cn } from '@/shared/lib/utils/css';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
+import { useStageAspect, useStageBox } from '../model/useStageAspect';
 import { TableDefs } from './TableDefs';
 
 /**
@@ -54,6 +55,8 @@ export function TableShell({
   bottom: ReactNode;
 }) {
   const t = useTranslations('cardTable');
+  const boxRef = useStageBox();
+  const aspect = useStageAspect();
   return (
     <>
       <TableDefs />
@@ -67,7 +70,9 @@ export function TableShell({
       <div className="ct-body">
         {side}
         <div className="ct-main">
-          <div className="ct-stage-box">{stage}</div>
+          <div ref={boxRef} className="ct-stage-box" style={{ '--ct-aspect': aspect } as CSSProperties}>
+            {stage}
+          </div>
           <div className="ct-bottom">{bottom}</div>
         </div>
       </div>
