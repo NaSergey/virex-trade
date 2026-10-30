@@ -55,7 +55,6 @@ export const FEATURE_LABELS: Record<FeatureKey, string> = {
   stopAtr: 'Стоп',
   plannedR: 'Плановый R',
   pierce: 'Прокол свипа',
-  deep: 'Глубокий дисконт',
 };
 
 const VALUE_LABELS: Record<string, string> = {
@@ -78,8 +77,6 @@ const VALUE_LABELS: Record<string, string> = {
   'plannedR:>3': '> 3R',
   'pierce:<0.25': '< 0,25 ATR',
   'pierce:>=0.25': '≥ 0,25 ATR',
-  'deep:yes': 'да',
-  'deep:no': 'нет',
 };
 
 export const valueText = (feature: FeatureKey, value: string): string =>

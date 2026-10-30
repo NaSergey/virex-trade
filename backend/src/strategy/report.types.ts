@@ -14,8 +14,7 @@ export type FeatureKey =
   | 'vol'
   | 'stopAtr'
   | 'plannedR'
-  | 'pierce'
-  | 'deep';
+  | 'pierce';
 export type Features = Record<FeatureKey, string>;
 
 export interface Summary {

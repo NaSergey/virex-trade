@@ -17,7 +17,6 @@ const FEAT: Features = {
   stopAtr: '0.5-1.5',
   plannedR: '2-3',
   pierce: '<0.25',
-  deep: 'no',
 };
 let seq = 0;
 const trade = (

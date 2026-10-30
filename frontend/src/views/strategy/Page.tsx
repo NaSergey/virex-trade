@@ -31,13 +31,16 @@ export function StrategyPage() {
   const q = useStrategyReport(!!user?.isAdmin);
   const [theory, setTheory] = usePersistentValue(THEORY_KEY, decodeTheory, true, encodeTheory);
   const report = q.data?.report ?? null;
-  const anchors: [string, string][] = [
-    ['rules', 'Стратегия'],
-    ['backtest', 'Бектест'],
-    ['author', 'Цифры автора'],
-    ['learning', 'Обучение'],
-    ...(theory ? ([['theory', 'Теория']] as [string, string][]) : []),
-  ];
+  // Без отчёта на странице только правила — якоря на пустые разделы не ставим.
+  const anchors: [string, string][] = report
+    ? [
+        ['rules', 'Стратегия'],
+        ['backtest', 'Бектест'],
+        ['author', 'Цифры автора'],
+        ['learning', 'Обучение'],
+        ...(theory ? ([['theory', 'Теория']] as [string, string][]) : []),
+      ]
+    : [];
 
   return (
     <Wrap page>
@@ -59,13 +62,15 @@ export function StrategyPage() {
           onChange={(v) => setTheory(v === 'on')}
         />
       </PageHead>
-      <nav className="st-anchors" aria-label="Разделы">
-        {anchors.map(([id, label]) => (
-          <a key={id} href={`#${id}`}>
-            {label}
-          </a>
-        ))}
-      </nav>
+      {anchors.length > 0 && (
+        <nav className="st-anchors" aria-label="Разделы">
+          {anchors.map(([id, label]) => (
+            <a key={id} href={`#${id}`}>
+              {label}
+            </a>
+          ))}
+        </nav>
+      )}
       <RulesSection />
       <ErrorNote error={q.error} fallback="Отчёт не загрузился" />
       {loading || q.isLoading ? (
@@ -77,7 +82,7 @@ export function StrategyPage() {
           <LearningSection block={report.learning} />
           {theory && <TheorySection t={report.theory} />}
         </>
-      ) : (
+      ) : q.isError ? null : (
         <EmptyState title="Отчёт считается">
           {q.data?.computedAt
             ? `Правила изменились — отчёт пересчитывается. Прошлый расчёт — ${fmtDateTime(Date.parse(q.data.computedAt))} UTC.`

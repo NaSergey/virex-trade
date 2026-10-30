@@ -84,7 +84,6 @@ describe('setups', () => {
     expect(st.features.plannedR).toBe('2-3');
     expect(Object.keys(st.features).sort()).toEqual([
       'daily',
-      'deep',
       'pierce',
       'plannedR',
       'session',

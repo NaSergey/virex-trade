@@ -10,7 +10,6 @@ export const FEATURE_KEYS: FeatureKey[] = [
   'stopAtr',
   'plannedR',
   'pierce',
-  'deep',
 ];
 
 export interface Variant {
@@ -117,7 +116,6 @@ interface FeatureInput {
   stopAtr: number;
   plannedR: number;
   pierce: number;
-  deep: number;
 }
 
 function featuresOf(x: FeatureInput): Features {
@@ -130,7 +128,8 @@ function featuresOf(x: FeatureInput): Features {
     stopAtr: x.stopAtr < 0.5 ? '<0.5' : x.stopAtr <= 1.5 ? '0.5-1.5' : '>1.5',
     plannedR: x.plannedR < 2 ? '1-2' : x.plannedR <= 3 ? '2-3' : '>3',
     pierce: x.pierce < 0.25 ? '<0.25' : '>=0.25',
-    deep: x.deep < 0.25 ? 'yes' : 'no',
+    // «Глубокий дисконт» (вход в нижней четверти «стоп → цель») — ровно
+    // плановый R > 3, отдельным признаком он только дублировал бы корзину.
   };
 }
 
@@ -212,7 +211,6 @@ export function findSetups(s: Series, ctx: SetupContext, v: Variant): Setup[] {
         stopAtr: risk / ctx.atr[e],
         plannedR,
         pierce: sw.pierceAtr,
-        deep: (d * (entry - stop)) / (d * (target - stop)),
       }),
     });
   }
