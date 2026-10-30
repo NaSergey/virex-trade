@@ -28,6 +28,7 @@ import { BackupModule } from './backup/backup.module';
 import { HlScoutModule } from './hl-scout/hl-scout.module';
 import { EnglishModule } from './english/english.module';
 import { PlanModule } from './plan/plan.module';
+import { StrategyModule } from './strategy/strategy.module';
 import { ProbabilitiesModule } from './probabilities/probabilities.module';
 import { GAME_MODULES } from './games-app.module';
 import { runsGames } from './role';
@@ -72,6 +73,7 @@ import { runsGames } from './role';
     HlScoutModule,
     EnglishModule,
     PlanModule,
+    StrategyModule,
     ProbabilitiesModule,
   ],
   controllers: [AppController],
