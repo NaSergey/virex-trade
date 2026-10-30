@@ -10,7 +10,8 @@ const ACTIONS: BjActionType[] = ['hit', 'stand', 'double', 'split'];
  * Панель хода: «Ещё», «Хватит» и «Дабл» стоят всегда — недоступное неактивно,
  * а не пропадает. «Сплит» показывается, только когда руку можно разделить:
  * пара выпадает редко, и неактивная кнопка почти всю игру была бы лишней
- * (решение владельца). Оставшиеся кнопки делят ширину поровну.
+ * (решение владельца). Оставшиеся кнопки делят ширину поровну; у каждого
+ * действия свой цвет (`.bj-hit`, `.bj-stand`, … в globals.css).
  */
 export function ActionBar({
   legal,
@@ -25,7 +26,7 @@ export function ActionBar({
   return (
     <div className="bj-buttons">
       {ACTIONS.filter((a) => a !== 'split' || legal.split).map((a) => (
-        <Button key={a} variant="none" className="ct-act" disabled={!legal[a] || pending} onClick={() => onAct(a)}>
+        <Button key={a} variant="none" className={`ct-act bj-${a}`} disabled={!legal[a] || pending} onClick={() => onAct(a)}>
           {t(a)}
         </Button>
       ))}

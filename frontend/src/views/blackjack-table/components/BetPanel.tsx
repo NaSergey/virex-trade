@@ -65,7 +65,7 @@ export function BetPanel({
           {t('clear')}
         </Button>
         <span className="bj-draft n">{draft.toLocaleString()}</span>
-        <Button variant="none" className="ct-act" disabled={!ok || pending} onClick={() => onBet(draft)}>
+        <Button variant="none" className="ct-act bj-place" disabled={!ok || pending} onClick={() => onBet(draft)}>
           {placed ? t('rebet') : t('placeBet')}
         </Button>
       </div>

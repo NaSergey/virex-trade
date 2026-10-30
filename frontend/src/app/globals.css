@@ -7614,6 +7614,13 @@
     --ct-rail: #2a2b31;
     --ct-plate: #1b1c21;
     --ct-green: var(--g-a-green);
+    /* Цвета действий — каналами, кнопка берёт свой в `--act`: заливка, кромка
+       и текст одного тона с разной прозрачностью. */
+    --act-green: 101 201 150;
+    --act-red: 236 98 90;
+    --act-amber: 222 168 86;
+    --act-blue: 98 166 255;
+    --act-purple: 164 116 255;
     position: relative;
     z-index: 1;
     color: var(--g-ink);
@@ -7988,24 +7995,24 @@
   .ct-toggle {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 5px 12px 5px 6px;
+    gap: 6px;
+    padding: 4px 10px 4px 5px;
     background: rgb(0 0 0 / 0.4);
     border: 1px solid var(--g-line);
     color: var(--g-ink-2);
-    font-size: 12px;
+    font-size: 11px;
     white-space: nowrap;
     cursor: pointer;
   }
-  .ct-dot { width: 14px; height: 14px; background: #3a3b42; }
+  .ct-dot { width: 12px; height: 12px; background: #3a3b42; }
   .ct-toggle.on { color: var(--g-ink); }
   .ct-toggle.on .ct-dot { background: var(--ct-green); }
 
   .pk-actions { display: flex; flex-direction: column; align-items: center; gap: 8px; }
   .pk-sizing { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
   .pk-chip {
-    padding: 6px 14px;
-    background: #26272d;
+    padding: 5px 12px;
+    background: rgb(255 255 255 / 0.06);
     border: 1px solid transparent;
     color: var(--g-ink);
     font-size: 12px;
@@ -8019,32 +8026,42 @@
   .pk-buttons {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
+    gap: 8px;
     width: 100%;
-    max-width: 600px;
+    max-width: 480px;
   }
+  /* Кнопка действия — тихая плашка цвета своего действия, а не тяжёлый
+     брусок: заливка и кромка тоном `--act`, текст им же. Без цвета — тон
+     текста (нейтральные «Очистить» и т. п.). */
   .ct-act {
+    --act: var(--ink-rgb);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    min-height: 44px;
-    background: linear-gradient(180deg, #1d1e23, #141519);
-    border: 1px solid var(--g-line-2);
-    color: var(--g-ink);
+    gap: 8px;
+    min-height: 38px;
+    padding: 0 14px;
+    background: rgb(var(--act) / 0.1);
+    border: 1px solid rgb(var(--act) / 0.3);
+    color: rgb(var(--act));
+    font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.06em;
     cursor: pointer;
+    transition: background-color 150ms, border-color 150ms, opacity 150ms;
   }
-  .ct-act > span { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
-  .ct-act small { font-size: 12px; font-weight: 500; color: var(--g-ink-2); letter-spacing: 0; }
-  .ct-act svg { width: 20px; height: 20px; stroke-width: 3; }
-  .pk-fold svg { color: #ff5a36; }
-  .pk-call svg { color: #3aa0ff; }
-  .pk-raise svg { color: var(--ct-green); }
-  .ct-act:hover:not(:disabled) { border-color: var(--g-ink-3); }
-  .ct-act:disabled { opacity: 0.4; cursor: default; }
+  .ct-act > span { display: flex; align-items: baseline; gap: 6px; }
+  .ct-act small { font-size: 12px; font-weight: 600; color: rgb(var(--act) / 0.7); letter-spacing: 0; }
+  .ct-act svg { width: 15px; height: 15px; stroke-width: 2.5; flex: none; }
+  .pk-fold, .bj-stand { --act: var(--act-red); }
+  .pk-call { --act: var(--act-blue); }
+  .pk-raise, .bj-hit, .bj-place { --act: var(--act-green); }
+  .bj-double { --act: var(--act-amber); }
+  .bj-split { --act: var(--act-purple); }
+  .ct-act:hover:not(:disabled) { background: rgb(var(--act) / 0.18); border-color: rgb(var(--act) / 0.55); }
+  .ct-act:active:not(:disabled) { background: rgb(var(--act) / 0.26); }
+  .ct-act:disabled { opacity: 0.35; cursor: default; }
   @media (max-width: 720px) {
     .ct-page { padding: 10px 12px; gap: 8px; }
     .ct-main { gap: 8px; }
@@ -8064,10 +8081,15 @@
     .ct-md { --w: 36px; }
     .ct-sm { --w: 26px; }
     .ct-name { display: none; }
-    .ct-act { font-size: 13px; }
+    /* Пальцу — не меньше 44 px по высоте (мерки приложения). */
+    .ct-act { min-height: 44px; padding: 0 8px; }
+    /* Доли банка и сумма — одной строкой, ползунок — своей, под ними. */
+    .pk-sizing { gap: 6px; }
+    .pk-chip { padding: 0 10px; height: 32px; font-size: 11px; }
+    .pk-amount { width: 72px; height: 32px; padding: 0 6px; }
     .pk-slider { width: 100%; order: 5; }
-    /* Ползунок уходит отдельной строкой, переключатели переносятся. */
-    .ct-bottom { min-height: 190px; }
+    .ct-bottom { min-height: 160px; gap: 6px; padding-top: 8px; }
+    .ct-controls { gap: 6px; }
   }
 }
 
@@ -8485,7 +8507,7 @@
   /* Строка суммы ниже панели хода: кнопки здесь второстепенны рядом с
      фишками, и высота панели ставок отнимается у стола. */
   .bj-bet-row { display: flex; align-items: center; gap: 10px; }
-  .bj-bet-row .ct-act { min-width: 112px; min-height: 34px; padding: 0 12px; font-size: 12px; }
+  .bj-bet-row .ct-act { min-width: 104px; }
   .bj-bet .fhint { margin: 0; }
   .bj-draft { min-width: 64px; text-align: center; font-size: 16px; font-weight: 700; }
   /* Колонок столько, сколько кнопок: «Сплит» есть не всегда. */
@@ -8493,20 +8515,19 @@
     display: grid;
     grid-auto-flow: column;
     grid-auto-columns: minmax(0, 1fr);
-    gap: 10px;
+    gap: 8px;
     width: 100%;
-    max-width: 600px;
+    max-width: 460px;
   }
   @media (max-width: 720px) {
     /* Резерв — панель ставок (полоса, фишки, строка суммы) с переключателем;
        ход — одной строкой кнопок, а не сеткой 2×2: сетка отнимала у стола
        ещё строку. */
-    .bj-page .ct-bottom { min-height: 168px; }
+    .bj-page .ct-bottom { min-height: 148px; }
     .bj-rules { font-size: 9px; letter-spacing: 0.08em; line-height: 1.5; }
     /* В раунде центр сукна занят руками — правила там ложились под карты. */
     .ct-center:has(.bj-dealer .ct-card) .bj-rules { display: none; }
-    .bj-buttons { gap: 6px; }
-    .bj-buttons .ct-act { padding: 0 4px; font-size: 12px; letter-spacing: 0; }
+    .bj-buttons .ct-act { padding: 0 4px; letter-spacing: 0.02em; }
     .bj-bet-row .ct-act { min-width: 96px; }
   }
 }
