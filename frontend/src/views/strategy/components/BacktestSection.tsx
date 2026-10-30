@@ -27,6 +27,7 @@ const variantColumns: LedgerColumn<VariantRow>[] = [
   { key: 'label', header: 'Вариант', render: (v) => v.label },
   { key: 'setups', header: 'Сетапов', align: 'right', cellClassName: 'n', render: (v) => fmtInt(v.setups) },
   { key: 'n', header: 'Сделок', align: 'right', cellClassName: 'n', render: (v) => fmtInt(v.summary.n) },
+  { key: 'long', header: 'Лонгов', align: 'right', cellClassName: 'n', render: (v) => fmtPct(v.longShare, 0) },
   { key: 'wr', header: 'Винрейт', align: 'right', cellClassName: 'n', render: (v) => fmtPct(v.summary.winrate) },
   {
     key: 'be',
@@ -104,6 +105,8 @@ const tradeColumns: LedgerColumn<TradeRow>[] = [
 export function BacktestSection({ report, theory }: { report: StrategyReport; theory: boolean }) {
   const { variant, equity, byYear, trades } = report.main;
   const s = variant.summary;
+  const longs = report.odds.long.summary;
+  const shorts = report.odds.short.summary;
   const [page, setPage] = useState(1);
   const newestFirst = [...trades].reverse();
   const money = theory ? report.main.money.theory : report.main.money.plain;
@@ -113,14 +116,24 @@ export function BacktestSection({ report, theory }: { report: StrategyReport; th
       <SectionHead title="Бектест" />
       <p className="muted">
         BTCUSDT, {fmtDate(report.dataFrom)} — {fmtDate(report.dataTo)}. Основной вариант: сетап на 15m, контекст 4H,
-        свип + имбаланс + слом, сетка из 4 лимитов в ордерблоке, план 3–5R, 3 тейка со стопом за ними, слабые по
-        вероятности сделки пропускаются. Одна позиция за раз, R — от риска всей сетки, после комиссии Bybit.
+        свип + имбаланс + слом, сетка из 4 лимитов в ордерблоке, план 3–5R, 3 тейка со стопом за ними, лонгов 70 % и
+        шортов 30 %, правила обучения — с 2020 года. Одна позиция за раз, R — от риска всей сетки, после комиссии Bybit.
       </p>
       <div className="st-metrics">
         <MetricCell
           label="Сделок"
           value={fmtInt(s.n)}
-          sub={`сетапов ${fmtInt(variant.setups)}, исполнено до фильтра ${fmtInt(variant.filled)}`}
+          sub={`сетапов ${fmtInt(variant.setups)}, исполнено до отбора ${fmtInt(variant.filled)}`}
+        />
+        <MetricCell
+          label="Лонги"
+          value={fmtInt(longs.n)}
+          sub={`винрейт ${fmtPct(longs.winrate)}, доля ${fmtPct(report.odds.longShare, 0)}`}
+        />
+        <MetricCell
+          label="Шорты"
+          value={fmtInt(shorts.n)}
+          sub={`винрейт ${fmtPct(shorts.winrate)}, доля ${fmtPct(1 - report.odds.longShare, 0)}`}
         />
         <MetricCell label="Винрейт" value={fmtPct(s.winrate)} sub={`безубыточный ${fmtPct(s.breakeven)}`} />
         <MetricCell
@@ -155,10 +168,10 @@ export function BacktestSection({ report, theory }: { report: StrategyReport; th
 
       <h3 className="st-sub">Варианты</h3>
       <p className="muted">
-        Каждый отличается от основного одним правилом. «Сетапов» — сколько нашлось; сводка — по сделкам после фильтра
-        вероятности и одной позиции за раз.
+        Каждый отличается от основного одним правилом. «Сетапов» — сколько нашлось; сводка — по сделкам после обучения,
+        отбора сторон и одной позиции за раз.
       </p>
-      <LedgerTable columns={variantColumns} rows={report.variants} rowKey={(v) => v.id} minWidth={980} />
+      <LedgerTable columns={variantColumns} rows={report.variants} rowKey={(v) => v.id} minWidth={1060} />
 
       <h3 className="st-sub">По годам</h3>
       <LedgerTable columns={yearColumns} rows={byYear} rowKey={(y) => String(y.year)} />
