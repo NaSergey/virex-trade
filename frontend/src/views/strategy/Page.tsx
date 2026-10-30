@@ -37,7 +37,7 @@ export function StrategyPage() {
     ? [
         ['rules', 'Стратегия'],
         ['backtest', 'Бектест'],
-        ['odds', 'Фильтр'],
+        ['odds', 'Лонги и шорты'],
         ['author', 'Цифры автора'],
         ['learning', 'Обучение'],
         ...(theory ? ([['theory', 'Теория']] as [string, string][]) : []),

@@ -3,7 +3,7 @@
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import type { OddsBlock, OddsSide } from '../api/types';
-import { fmtInt, fmtPct, fmtR } from '../model/format';
+import { fmtInt, fmtPct, fmtR, tone } from '../model/format';
 
 interface SideRow {
   key: string;
@@ -11,7 +11,9 @@ interface SideRow {
   s: OddsSide;
 }
 
-const num = (key: keyof OddsSide, header: string): LedgerColumn<SideRow> => ({
+type Count = 'considered' | 'taken' | 'skipped' | 'unjudged';
+
+const num = (key: Count, header: string): LedgerColumn<SideRow> => ({
   key,
   header,
   align: 'right',
@@ -25,30 +27,46 @@ const columns: LedgerColumn<SideRow>[] = [
   num('taken', 'Взято'),
   num('skipped', 'Пропущено'),
   num('unjudged', 'Без оценки'),
+  { key: 'wr', header: 'Винрейт', align: 'right', cellClassName: 'n', render: (r) => fmtPct(r.s.summary.winrate) },
+  {
+    key: 'exp',
+    header: 'Мат ожидание',
+    align: 'right',
+    cellClassName: 'n',
+    render: (r) => <span className={tone(r.s.summary.expectancy)}>{fmtR(r.s.summary.expectancy)}</span>,
+  },
+  {
+    key: 'sum',
+    header: 'Итог',
+    align: 'right',
+    cellClassName: 'n',
+    render: (r) => <span className={tone(r.s.summary.sumR)}>{fmtR(r.s.summary.sumR)}</span>,
+  },
 ];
 
 function verdict(b: OddsBlock, expectancy: number): string {
   const e = b.effect;
-  if (e.n === 0) return 'Фильтр ещё не пропустил ни одной сделки.';
-  if (e.mean == null) return `Пропущено ${e.n} сделок — для вывода мало.`;
-  const range = `${e.n} сделок, средний R ${fmtR(e.mean)}, 95 % интервал ${fmtR(e.lo)} … ${fmtR(e.hi)}`;
+  if (e.n === 0) return 'Ни один шорт ещё не пропущен.';
+  if (e.mean == null) return `Пропущено ${e.n} шортов — для вывода мало.`;
+  const range = `${e.n} шортов, средний R ${fmtR(e.mean)}, 95 % интервал ${fmtR(e.lo)} … ${fmtR(e.hi)}`;
   if (e.verdict === 'helped') {
-    const still = expectancy < 0 ? ' Но и взятые сделки в минусе: у стратегии нет стороны с перевесом.' : '';
-    return `Фильтр помог: пропущенные сделки в среднем теряли (${range}).${still}`;
+    const still = expectancy < 0 ? ' Но и взятые сделки в минусе: перевеса нет ни у одной стороны.' : '';
+    return `Отбор помог: пропущенные шорты в среднем теряли (${range}).${still}`;
   }
-  if (e.verdict === 'hurt') return `Фильтр вредит: пропущенные сделки были прибыльными (${range}).`;
-  return `Эффект не доказан: пропущенные сделки в пределах шума (${range}).`;
+  if (e.verdict === 'hurt') return `Отбор вредит: пропущенные шорты были прибыльными (${range}).`;
+  return `Эффект не доказан: пропущенные шорты в пределах шума (${range}).`;
 }
 
-/** Фильтр по вероятности успеха: правило одно для лонгов и шортов, перекос даёт сама оценка. */
+/** Лонги и шорты: сделки и винрейт каждой стороны, отбор шортов по вероятности и квоте. */
 export function OddsSection({ block, expectancy }: { block: OddsBlock; expectancy: number }) {
   return (
     <section id="odds" className="st-section">
-      <SectionHead title="Фильтр по вероятности" />
+      <SectionHead title="Лонги и шорты" />
       <p className="muted">
-        У каждой сделки на свече подтверждения — доля прибыльных среди прошлых сделок той же стороны с той же дневной
-        структурой, закрытых до решения (меньше 30 — все прошлые этой стороны), против их безубыточного винрейта. Ниже —
-        сделка пропускается. Пока прошлых сделок меньше 30, сделка берётся без оценки.
+        Лонги берутся все. Шорт — только если шортов среди взятых сделок не станет больше 30 % и его вероятность не
+        ниже, чем у всех прошлых шортов. Вероятность есть у каждой сделки: доля прибыльных среди прошлых сделок той же
+        стороны с той же дневной структурой, закрытых до решения (меньше 30 — все прошлые этой стороны). Пока прошлых
+        сделок стороны меньше 30, оценки нет.
       </p>
       <p className="st-verdict">
         {verdict(block, expectancy)} Доля лонгов среди взятых — {fmtPct(block.longShare, 0)}.
@@ -60,6 +78,7 @@ export function OddsSection({ block, expectancy }: { block: OddsBlock; expectanc
           { key: 'short', label: 'Шорты', s: block.short },
         ]}
         rowKey={(r) => r.key}
+        minWidth={760}
       />
     </section>
   );

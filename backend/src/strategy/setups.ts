@@ -30,8 +30,10 @@ export interface Variant {
   context: boolean;
   /** Сетка входа и тейков со стопом за тейками; false — один лимит и один тейк. */
   grid: boolean;
-  /** Пропуск сделок со слабой вероятностью успеха. */
+  /** Отбор сторон: лонги все, шорты по вероятности и не больше 30 %. */
   odds: boolean;
+  /** Правила обучения на ошибках (с 2020-Q1, вперёд по кварталам). */
+  learn: boolean;
 }
 
 export const MAIN: Variant = {
@@ -43,6 +45,7 @@ export const MAIN: Variant = {
   context: true,
   grid: true,
   odds: true,
+  learn: true,
 };
 
 /** Варианты отчёта: каждый отличается от основного одним правилом. */
@@ -52,7 +55,8 @@ export const VARIANTS: Variant[] = [
   { ...MAIN, id: 'sweep-fvg', label: 'Свип + FVG', bos: false },
   { ...MAIN, id: 'sweep-bos', label: 'Свип + BOS', fvg: false },
   { ...MAIN, id: 'no-context', label: 'Без контекста 4H', context: false },
-  { ...MAIN, id: 'no-odds', label: 'Без фильтра вероятности', odds: false },
+  { ...MAIN, id: 'no-odds', label: 'Без отбора сторон', odds: false },
+  { ...MAIN, id: 'no-learning', label: 'Без обучения', learn: false },
   { ...MAIN, id: 'single', label: 'Одиночный вход и выход', grid: false },
   { ...MAIN, id: 'h1', label: 'ТФ сетапа 1H', tf: 60 },
 ];

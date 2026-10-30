@@ -30,18 +30,21 @@ describe('report', () => {
       async () => undefined,
     );
     expect(report.version).toBe(STRATEGY_VERSION);
-    expect(report.variants).toHaveLength(8);
+    expect(report.variants).toHaveLength(9);
     expect(report.variants[0].id).toBe('main');
     expect(report.author).toHaveLength(8);
     expect(report.learning.quarters.length).toBeGreaterThanOrEqual(2);
     expect(report.theory.ruin.rows).toHaveLength(4);
     // Сделки на блуждании есть — иначе проверки ниже прошли бы вхолостую.
-    // Основной вариант фильтр вероятности может обнулить — смотрим вариант без него.
     const noOdds = report.variants.find((v) => v.id === 'no-odds');
     expect(noOdds.filled).toBeGreaterThan(0);
-    expect(report.odds.long.considered + report.odds.short.considered).toBe(
-      report.variants[0].filled,
+    expect(report.odds.long.taken + report.odds.short.taken).toBe(
+      report.main.trades.length,
     );
+    expect(
+      report.odds.short.taken / report.main.trades.length,
+    ).toBeLessThanOrEqual(0.3);
+    expect(report.main.trades.length).toBeGreaterThan(0);
     expect(report.main.money.theory.start).toBe(1000);
     expect(report.main.money.plain.equity.length).toBeGreaterThanOrEqual(1);
     for (const t of report.main.trades) {

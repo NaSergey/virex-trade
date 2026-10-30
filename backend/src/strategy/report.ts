@@ -38,13 +38,13 @@ import {
   topMistakes,
   walkForward,
 } from './learning';
-import { filterByOdds, OddsResult } from './odds';
+import { OddsResult, selectSystem } from './odds';
 import { plainNotional, withTheory, withoutTheory } from './money';
 import { theoryOf } from './theory';
 import { maxDrawdown, summarize } from './stats';
 
 /** Поднимать при любой правке правил, обучения или формы отчёта. */
-export const STRATEGY_VERSION = 2;
+export const STRATEGY_VERSION = 3;
 export const REPORT_ID = 'smc-intraday';
 
 export interface ReportInput {
@@ -161,11 +161,21 @@ function byYear(trades: TradeRow[]): YearRow[] {
     .map(([year, rs]) => ({ year, summary: summarize(rs) }));
 }
 
+const toLearn = (trades: TradeRow[]): LearnTrade[] =>
+  trades.map((t) => ({
+    id: t.id,
+    fillMs: t.fillMs,
+    exitMs: t.exitMs,
+    rNet: t.rNet,
+    features: t.features,
+  }));
+
 async function runVariant(
   v: Variant,
   p: Prepared,
   fetch: FetchMinutes,
   cache: Map<string, Bar[]>,
+  nowMs: number,
 ) {
   const setups = findSetups(p.s, p.ctx, v);
   const resolved = await simulateAll(p.s, setups, fetch, cache);
@@ -177,9 +187,16 @@ async function runVariant(
     else if (r.result.status === 'missed') missed++;
     else if (r.result.status === 'expired') expired++;
   }
-  const odds: OddsResult | null = v.odds ? filterByOdds(all) : null;
-  const filled = odds ? odds.kept : all;
-  const system = sequential(filled);
+  // Обучение влияет на сделки: сетап квартала проходит его правила, выведенные
+  // из сделок, закрытых до начала квартала. Оценка сторон — по всем исходам.
+  const quarters = v.learn
+    ? walkForward(toLearn(all), LEARN_FROM_MS, nowMs)
+    : [];
+  const candidates = all.filter((t) =>
+    kept(t, rulesAt(quarters, t.confirmMs) ?? []),
+  );
+  const odds: OddsResult | null = v.odds ? selectSystem(candidates, all) : null;
+  const system = odds ? odds.system : sequential(candidates);
   const sys = systemOf(system);
   const row: VariantRow = {
     id: v.id,
@@ -191,18 +208,15 @@ async function runVariant(
     summary: sys.summary,
     grossExpectancy: summarize(system.map((t) => t.rGross)).expectancy,
     maxDd1: sys.maxDd1,
+    longShare: system.length
+      ? system.filter((t) => t.dir === 1).length / system.length
+      : 0,
   };
-  return { v, row, filled, system, sys, odds };
+  return { v, row, all, system, sys, odds };
 }
 
 function learningOf(filled: TradeRow[], nowMs: number): LearningBlock {
-  const all: LearnTrade[] = filled.map((t) => ({
-    id: t.id,
-    fillMs: t.fillMs,
-    exitMs: t.exitMs,
-    rNet: t.rNet,
-    features: t.features,
-  }));
+  const all = toLearn(filled);
   const quarters = walkForward(all, LEARN_FROM_MS, nowMs);
   // Правила решают на выставлении сетки (confirmMs), а не на исполнении:
   // сетка, выставленная в конце квартала, живёт по правилам того квартала.
@@ -226,8 +240,8 @@ function learningOf(filled: TradeRow[], nowMs: number): LearningBlock {
         excluded: inQ.filter((t) => !kept(t, q.rules)).length,
       };
     }),
-    base: systemOf(sequential(forward)),
-    learned: systemOf(sequential(learned)),
+    base: systemOf(selectSystem(forward, filled).system),
+    learned: systemOf(selectSystem(learned, filled).system),
     effect: effectOf(excluded),
     mistakes: topMistakes(all),
     next: {
@@ -257,14 +271,16 @@ export async function buildReport(
   const cache = new Map<string, Bar[]>();
   const runs = [];
   for (const v of VARIANTS) {
-    runs.push(await runVariant(v, v.tf === 60 ? p60 : p15, fetch, cache));
+    runs.push(
+      await runVariant(v, v.tf === 60 ? p60 : p15, fetch, cache, nowMs),
+    );
     await yieldFn();
   }
   const main = runs.find((r) => r.v.id === MAIN.id);
 
   const author = authorCheck(h1, p60.ctx.atr, p60.ctx.scan);
   await yieldFn();
-  const learning = learningOf(main.filled, nowMs);
+  const learning = learningOf(main.all, nowMs);
   await yieldFn();
   const mt = main.system.map((t) => ({ rNet: t.rNet, stopPct: stopPctOf(t) }));
   const notional = plainNotional(mt);

@@ -51,6 +51,8 @@ export interface VariantRow {
   grossExpectancy: number;
   /** Макс. просадка при риске 1 % на сделку, доля. */
   maxDd1: number;
+  /** Доля лонгов среди сделок системы. */
+  longShare: number;
 }
 
 export interface OddsCheck {
@@ -59,6 +61,8 @@ export interface OddsCheck {
   /** Безубыточный винрейт той же выборки. */
   needed: number;
   n: number;
+  /** Доля прибыльных всех прошлых сделок стороны: шорт слабее неё пропускается. */
+  sideP: number;
 }
 
 export interface TradeRow {
@@ -190,6 +194,8 @@ export interface OddsSide {
   skipped: number;
   /** Взято без оценки — истории ещё не было. */
   unjudged: number;
+  /** Сводка взятых сделок стороны: число, винрейт, мат ожидание. */
+  summary: Summary;
 }
 
 export interface OddsBlock {
@@ -197,7 +203,7 @@ export interface OddsBlock {
   short: OddsSide;
   /** Доля лонгов среди взятых. */
   longShare: number;
-  /** Вердикт по пропущенным сделкам. */
+  /** Вердикт по пропущенным шортам. */
   effect: Effect;
 }
 
