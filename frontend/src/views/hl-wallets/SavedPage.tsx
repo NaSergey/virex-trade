@@ -14,6 +14,7 @@ import { dateFormat } from '@/shared/lib/utils/intl';
 import { useHlPositions, useHlSaved, useSaveWallet, useStarWallet, type HlWalletRow } from './api/hooks';
 import { pct } from './model/format';
 import { walletColumns } from './components/walletColumns';
+import { useDetailsColumn } from './components/useDetailsColumn';
 import { groupByCoin } from './model/coins';
 import { CoinsTable } from './components/CoinsTable';
 import { WalletDetail } from './components/WalletDetail';
@@ -37,6 +38,7 @@ export function HlSavedPage() {
   const positions = useHlPositions(enabled);
   const { unsave } = useSaveWallet();
   const star = useStarWallet();
+  const details = useDetailsColumn();
 
   // Причина выпадения важнее «не торгует»: она говорит, почему кошелёк больше
   // не годится, а мёртвый кошелёк в отборе — уже следствие.
@@ -124,7 +126,8 @@ export function HlSavedPage() {
       <ErrorNote error={saved.error ?? unsave.error ?? star.error} fallback={t('loadFailed')} />
       <div className="hlw">
         <LedgerTable
-          columns={walletColumns(t, [starCol, remove], [status])}
+          columns={walletColumns(t, [starCol, remove], [status, details.column])}
+          rowClassName={details.rowClass}
           rows={saved.data?.rows ?? []}
           rowKey={(r) => r.address}
           minWidth={1400}

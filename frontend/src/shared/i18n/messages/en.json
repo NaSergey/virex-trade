@@ -2322,6 +2322,8 @@
     "fUpShare": "Weeks in profit",
     "fBestWeek": "Best week",
     "fDrawdown": "Drawdown",
+    "details": "More",
+    "detailsHide": "Less",
     "tabsAria": "Wallet data",
     "tabPositions": "Open positions",
     "tabOrders": "Orders",

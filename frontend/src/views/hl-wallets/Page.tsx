@@ -14,6 +14,7 @@ import { useHideWallet, useHlWallets, useSaveWallet, type HlWalletRow } from './
 import { applyFilters, EMPTY_FILTERS, type WalletFilters as Filters } from './model/filter';
 import { sortRows } from './model/sort';
 import { walletColumns } from './components/walletColumns';
+import { useDetailsColumn } from './components/useDetailsColumn';
 import { WalletFilters } from './components/WalletFilters';
 
 const PAGE = 50;
@@ -34,6 +35,7 @@ export function HlWalletsPage() {
   const { data, isLoading, error } = useHlWallets(!!user?.isAdmin);
   const { save } = useSaveWallet();
   const hide = useHideWallet();
+  const details = useDetailsColumn();
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [sort, setSort] = useState<{ key: keyof HlWalletRow; dir: 1 | -1 }>({ key: 'pnlMonth', dir: -1 });
   const [page, setPage] = useState(1);
@@ -107,8 +109,10 @@ export function HlWalletsPage() {
       <ErrorNote error={error ?? save.error ?? hide.error} fallback={t('loadFailed')} />
       <div className="hlw">
         <LedgerTable
-          columns={walletColumns(t, [], [saveCol, hideCol])}
-          rowClassName={(r) => (r.viewedAt ? 'seen' : undefined)}
+          columns={walletColumns(t, [], [details.column, saveCol, hideCol])}
+          rowClassName={(r) =>
+            [r.viewedAt ? 'seen' : null, details.rowClass(r)].filter(Boolean).join(' ') || undefined
+          }
           rows={rows.slice((page - 1) * PAGE, page * PAGE)}
           rowKey={(r) => r.address}
           minWidth={1280}

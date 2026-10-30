@@ -30,6 +30,12 @@ export interface LedgerColumn<T> {
    * сама, когда появится строка.
    */
   noSkeleton?: boolean;
+  /**
+   * Класс колонки целиком — и ячейки шапки, и ячеек строк. Нужен, чтобы спрятать
+   * колонку на одной ширине экрана: класс только на ячейках строк сдвинул бы
+   * подписи шапки на соседнюю колонку.
+   */
+  colClassName?: string;
   render: (row: T) => ReactNode;
 }
 
@@ -176,7 +182,7 @@ export function LedgerTable<T>({
   const cols = renderExpanded ? [caret, ...columns] : columns;
 
   const cellClass = (c: LedgerColumn<T>) =>
-    [c.align === 'right' ? 'r' : null, c.cellClassName].filter(Boolean).join(' ') || undefined;
+    [c.align === 'right' ? 'r' : null, c.cellClassName, c.colClassName].filter(Boolean).join(' ') || undefined;
 
   const labelOf = (c: LedgerColumn<T>) => c.label ?? (typeof c.header === 'string' ? c.header : '');
 
@@ -208,7 +214,7 @@ export function LedgerTable<T>({
               return (
                 <th
                   key={c.key}
-                  className={[c.align === 'right' ? 'r' : null, c.sortKey ? 'sortable' : null]
+                  className={[c.align === 'right' ? 'r' : null, c.sortKey ? 'sortable' : null, c.colClassName]
                     .filter(Boolean)
                     .join(' ')}
                   style={c.width ? { width: c.width } : undefined}

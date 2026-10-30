@@ -2884,6 +2884,9 @@
     background: var(--hair);
   }
   .hl-share-bar i { display: block; height: 100%; background: var(--ink-3); }
+  /* Колонка только для узкого экрана (карточки кошельков): на широком в
+     строке и так видно всё. Шапка прячется вместе с ячейками — `colClassName`. */
+  .ledger .narrow-only { display: none; }
 
   /* ═══════════════ ЛАБОРАТОРИЯ ═══════════════ */
   /* Условия слева, результат справа. Линейку и отбивку от неё (--s4) колонки
@@ -9780,11 +9783,13 @@
   .hl-page .ledger tbody tr:not(.exp) > td.caret-cell { top: var(--s3); }
   .hl-page .hl-ratio { min-width: 0; }
 
-  /* Строка кошелька — своя сетка в четыре колонки: адрес; баланс и ROI крупно;
-     PnL по окнам два на два; четыре коротких числа риска в ряд; экспозиция;
-     отбор и кнопки внизу. Место — по классу `hlw-<колонка>` (walletColumns),
-     явно по рядам, а не именованными областями: на двух страницах набор
-     кнопок разный, и пустой ряд областей всё равно держал бы промежуток.
+  /* Строка кошелька — своя сетка в четыре колонки. Видно главное: адрес,
+     баланс и ROI крупно, PnL за 7 и 30 дней. Остальное (PnL 90 дней и за всё
+     время, риск, экспозиция, отбор) — по «Подробнее» (`useDetailsColumn`,
+     класс `hlw-open` у строки), внизу — кнопки. Место — по классу
+     `hlw-<колонка>` (walletColumns): ширина пролётом, порядок — `order`, ряды
+     раскладывает сама сетка. Явные ряды не годятся: спрятанная ячейка
+     оставляла бы пустой ряд, а промежуток вокруг него — оставался.
      Только прямые потомки — таблицы в раскрытой строке живут по общей сетке. */
   .hlw > .scroll > .ledger > tbody > tr:not(.exp):not(:has(> td[colspan])) {
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -9797,8 +9802,7 @@
   }
   .hlw > .scroll > .ledger > tbody > tr > td.hlw-star .pin { font-size: 18px; line-height: 22px; padding: 0; }
   .hlw > .scroll > .ledger > tbody > tr > td.hlw-address {
-    grid-column: 1 / -1;
-    grid-row: 1;
+    grid-area: 1 / 1 / 2 / -1;
     flex-direction: row;
     align-items: baseline;
     justify-content: flex-start;
@@ -9806,26 +9810,47 @@
     font-size: var(--t-m);
   }
   .hlw > .scroll > .ledger > tbody > tr:has(> .hlw-star) > td.hlw-address { padding-left: 28px; }
-  .hlw > .scroll > .ledger > tbody > tr > td:is(.hlw-star, .hlw-address, .hlw-remove, .hlw-save, .hlw-hide)::before {
+  .hlw > .scroll > .ledger > tbody > tr > td:is(.hlw-star, .hlw-address, .hlw-details, .hlw-remove, .hlw-save, .hlw-hide)::before {
     display: none;
   }
   .hlw > .scroll > .ledger > tbody > tr > td:is(.hlw-accountValue, .hlw-roiMonth) { font-size: var(--t-m); }
-  .hlw > .scroll > .ledger > tbody > tr > td.hlw-accountValue { grid-area: 2 / 1 / 3 / 3; }
-  .hlw > .scroll > .ledger > tbody > tr > td.hlw-roiMonth { grid-area: 2 / 3 / 3 / 5; }
-  .hlw > .scroll > .ledger > tbody > tr > td.hlw-pnlWeek { grid-area: 3 / 1 / 4 / 3; }
-  .hlw > .scroll > .ledger > tbody > tr > td.hlw-pnlMonth { grid-area: 3 / 3 / 4 / 5; }
-  .hlw > .scroll > .ledger > tbody > tr > td.hlw-pnl90 { grid-area: 4 / 1 / 5 / 3; }
-  .hlw > .scroll > .ledger > tbody > tr > td.hlw-pnlAllTime { grid-area: 4 / 3 / 5 / 5; }
-  .hlw > .scroll > .ledger > tbody > tr > td.hlw-weeksUp { grid-area: 5 / 1; }
-  .hlw > .scroll > .ledger > tbody > tr > td.hlw-bestWeekShare { grid-area: 5 / 2; }
-  .hlw > .scroll > .ledger > tbody > tr > td.hlw-maxDrawdown { grid-area: 5 / 3; }
-  .hlw > .scroll > .ledger > tbody > tr > td.hlw-weeklyT { grid-area: 5 / 4; }
-  .hlw > .scroll > .ledger > tbody > tr > td.hlw-netExposure { grid-area: 6 / 1 / 7 / -1; }
-  .hlw > .scroll > .ledger > tbody > tr > td.hlw-status { grid-area: 7 / 1 / 8 / 4; }
-  .hlw > .scroll > .ledger > tbody > tr > td.hlw-remove { grid-area: 7 / 4; align-items: flex-end; justify-content: center; }
-  .hlw > .scroll > .ledger > tbody > tr > td.hlw-save { grid-area: 7 / 1 / 8 / 3; }
-  .hlw > .scroll > .ledger > tbody > tr > td.hlw-hide { grid-area: 7 / 3 / 8 / 5; align-items: flex-end; }
-  .hlw > .scroll > .ledger > tbody > tr > td:is(.hlw-remove, .hlw-save, .hlw-hide) .btn { min-height: 44px; }
+  .hlw > .scroll > .ledger > tbody > tr > td:is(.hlw-accountValue, .hlw-roiMonth, .hlw-pnlWeek, .hlw-pnlMonth, .hlw-pnl90, .hlw-pnlAllTime, .hlw-save, .hlw-hide) {
+    grid-column: span 2;
+  }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-accountValue { order: 1; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-roiMonth { order: 2; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-pnlWeek { order: 3; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-pnlMonth { order: 4; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-pnl90 { order: 5; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-pnlAllTime { order: 6; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-weeksUp { order: 7; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-bestWeekShare { order: 8; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-maxDrawdown { order: 9; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-weeklyT { order: 10; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-netExposure { order: 11; grid-column: 1 / -1; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-status { order: 12; grid-column: 1 / -1; }
+  /* «Подробнее» — во всю ширину карточки, чертой отделена от чисел над ней. */
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-details {
+    display: flex;
+    order: 13;
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--hair);
+  }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-details .btn { width: 100%; justify-content: flex-start; }
+  .hlw > .scroll > .ledger > tbody > tr > td:is(.hlw-remove, .hlw-save, .hlw-hide) { order: 14; }
+  /* У «Сохранённых» кнопка одна — «Убрать» встаёт в строку «Подробнее». */
+  .hlw > .scroll > .ledger > tbody > tr:has(> .hlw-remove) > td.hlw-details { grid-column: 1 / 4; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-remove {
+    grid-column: 4 / 5;
+    align-items: flex-end;
+    justify-content: center;
+    border-top: 1px solid var(--hair);
+  }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-hide { align-items: flex-end; }
+  .hlw > .scroll > .ledger > tbody > tr > td:is(.hlw-details, .hlw-remove, .hlw-save, .hlw-hide) .btn { min-height: 44px; }
+  .hlw > .scroll > .ledger > tbody > tr:not(.hlw-open) > td:is(.hlw-pnl90, .hlw-pnlAllTime, .hlw-weeksUp, .hlw-bestWeekShare, .hlw-maxDrawdown, .hlw-weeklyT, .hlw-netExposure, .hlw-status) {
+    display: none;
+  }
   /* Профиль: шестерёнка и вкладки — с зоной нажатия в палец, но без сдвига
      вёрстки (лишние поля гасятся отрицательным отступом). */
   .btn.pf-gear { min-width: 44px; min-height: 44px; margin: -13px -13px 0 auto; }
