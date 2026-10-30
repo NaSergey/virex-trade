@@ -1,0 +1,156 @@
+/* Стратегия в админке (views/strategy). Префикс st-. */
+
+.st-anchors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s3);
+  margin: var(--s2) 0 var(--s4);
+}
+.st-anchors a {
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid var(--hair);
+}
+.st-section {
+  margin-top: var(--s5);
+  scroll-margin-top: calc(var(--top-h) + var(--s3));
+}
+.st-sub {
+  margin: var(--s4) 0 var(--s2);
+  font-size: inherit;
+}
+.st-steps {
+  padding-left: 1.2em;
+}
+.st-steps li {
+  margin-bottom: var(--s4);
+}
+.st-steps h3 {
+  margin: 0 0 var(--s1);
+  font-size: inherit;
+}
+.st-at {
+  margin-left: var(--s2);
+  font-weight: normal;
+  color: var(--ink-2);
+}
+.st-step-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s4);
+}
+.st-step-cols p {
+  margin: 0;
+}
+.st-step-cols .lbl {
+  display: block;
+  margin-bottom: var(--s1);
+}
+.st-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--s3);
+  margin: var(--s3) 0;
+}
+.st-chart {
+  margin: var(--s2) 0;
+}
+.st-chart svg {
+  display: block;
+}
+.st-zero,
+.st-mark {
+  stroke: var(--hair);
+  stroke-width: 1;
+}
+.st-mark {
+  stroke-dasharray: 3 3;
+}
+.st-line {
+  fill: none;
+  stroke-width: 1.5;
+}
+.st-line-ink {
+  stroke: var(--ink);
+  color: var(--ink);
+}
+.st-line-muted {
+  stroke: var(--ink-2);
+  color: var(--ink-2);
+}
+.st-line-pos {
+  stroke: var(--profit);
+  color: var(--profit);
+}
+.st-line-neg {
+  stroke: var(--loss);
+  color: var(--loss);
+}
+.st-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s3);
+  margin-top: var(--s1);
+  font-size: 0.85em;
+}
+.st-key::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 2px;
+  margin-right: 6px;
+  vertical-align: middle;
+  background: currentColor;
+}
+.st-verdict {
+  margin: var(--s3) 0;
+  padding: var(--s2) var(--s3);
+  border-left: 2px solid var(--ink);
+}
+.st-trade {
+  padding: var(--s2) 0;
+}
+.st-trade svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.st-candle-up {
+  fill: var(--profit);
+  stroke: var(--profit);
+}
+.st-candle-down {
+  fill: var(--loss);
+  stroke: var(--loss);
+}
+.st-lvl {
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.st-lvl-entry {
+  stroke: var(--ink);
+  stroke-dasharray: 4 3;
+}
+.st-lvl-stop {
+  stroke: var(--loss);
+}
+.st-lvl-target {
+  stroke: var(--profit);
+}
+.st-lvl-pool {
+  stroke: var(--ink-2);
+  stroke-dasharray: 2 3;
+}
+.st-ob {
+  fill: var(--ink);
+  opacity: 0.08;
+}
+.st-tag {
+  fill: var(--ink-2);
+}
+
+@media (max-width: 760px) {
+  .st-step-cols {
+    grid-template-columns: 1fr;
+  }
+}
