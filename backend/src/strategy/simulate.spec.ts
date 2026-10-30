@@ -167,6 +167,77 @@ describe('simulate v2', () => {
     expect(r.rGross).toBeCloseTo(0.8);
   });
 
+  it('тейк и касание подтянутого стопа в одной свече — спорная', () => {
+    const s = bars([E, FILL_TOP, [100.6, 104.5, 99.9, 104]]);
+    expect(simulate(s, setup(), none).status).toBe('needs');
+  });
+
+  it('тейк и исполнение нижнего уровня в одной свече — спорная', () => {
+    const s = bars([E, FILL_TOP, [100.6, 104.5, 98.9, 104]]);
+    expect(simulate(s, setup({ trail: false }), none).status).toBe('needs');
+  });
+
+  it('гэп через два тейка — оба по цене открытия', () => {
+    const s = bars([
+      E,
+      FILL_TOP,
+      [108.5, 109, 108.2, 108.6],
+      [108.6, 112.5, 108.4, 112],
+    ]);
+    const r = simulate(s, setup(), none);
+    expect(r).toMatchObject({ outcome: 'target', takesHit: 3, finalStop: 108 });
+    if (r.status !== 'filled') throw new Error(r.status);
+    expect(r.rGross).toBeCloseTo(
+      (-25 + (0.25 / 3) * (108.5 + 108.5 + 112)) / 2.5,
+    );
+  });
+
+  it('после второго тейка стоп — на первый тейк', () => {
+    const s = bars([
+      E,
+      FILL_TOP,
+      TP1,
+      [104.5, 108.5, 104.5, 108],
+      [108, 108.2, 103.5, 104],
+    ]);
+    const r = simulate(s, setup(), none);
+    expect(r).toMatchObject({
+      outcome: 'trail',
+      takesHit: 2,
+      finalStop: 104,
+      exit: 104,
+    });
+    if (r.status !== 'filled') throw new Error(r.status);
+    expect(r.rGross).toBeCloseTo(((0.25 / 3) * (4 + 8 + 4)) / 2.5);
+  });
+
+  it('шорт: стоп за тейками — зеркально', () => {
+    const s = mirror(bars([E, FILL_TOP, TP1, [104, 104.2, 97.5, 98]]));
+    const neg = (xs: number[]) => xs.map((x) => -x);
+    const short = setup({
+      dir: -1,
+      entries: neg([100, 99, 98, 97]),
+      stop: -96,
+      target: -112,
+      takes: neg([104, 108, 112]),
+    });
+    expect(simulate(s, short, none)).toMatchObject({
+      outcome: 'trail',
+      takesHit: 1,
+      finalStop: -100,
+      exit: -100,
+    });
+  });
+
+  it('срок после первого тейка закрывает остаток', () => {
+    const hold: Ohlc = [104, 104.5, 101, 102];
+    const s = bars([E, FILL_TOP, TP1, ...Array<Ohlc>(300).fill(hold)]);
+    const r = simulate(s, setup(), none);
+    expect(r).toMatchObject({ outcome: 'time', takesHit: 1, exit: 102 });
+    if (r.status !== 'filled') throw new Error(r.status);
+    expect(r.rGross).toBeCloseTo(((0.25 / 3) * 4 + 0.25 * (2 / 3) * 2) / 2.5);
+  });
+
   it('simulateAll доразбирает спорную свечу минутками', async () => {
     const s = bars([E, FILL_TOP, [100.2, 104.5, 95.5, 101]]);
     const mins: Bar[] = [

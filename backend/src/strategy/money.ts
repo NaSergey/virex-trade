@@ -24,7 +24,8 @@ function run(
   for (const t of trades) {
     if (eq <= 0) break;
     const pnl = pnlOf(t, eq);
-    worst = Math.min(worst, pnl / eq);
+    // Счёт не уходит ниже нуля — и худшая сделка не хуже −100 %.
+    worst = Math.min(worst, Math.max(-1, pnl / eq));
     eq = Math.max(0, eq + pnl);
     peak = Math.max(peak, eq);
     maxDd = Math.max(maxDd, 1 - eq / peak);

@@ -41,6 +41,7 @@ describe('money', () => {
     );
     expect(m.final).toBe(0);
     expect(m.maxDd).toBe(1);
+    expect(m.worstTrade).toBe(-1); // хуже всего счёта потерять нельзя
     expect(m.equity).toEqual([1000, 0]);
   });
 
