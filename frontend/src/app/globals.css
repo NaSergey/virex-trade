@@ -9745,6 +9745,87 @@
   .tboard .ledger td:nth-child(4) .tb-cell { align-items: flex-end; }
   .tb-time { align-items: flex-end; }
   .seats, .seats-n { width: 96px; }
+  /* Кошельки Hyperliquid (админка): запись — сетка, а не столбик пар
+     «подпись → значение» во всю ширину. Подпись слева и число у правого края
+     разносили пару на весь экран — глаз терял, какое число чьё, а карточка
+     кошелька из пятнадцати строк занимала экран целиком. Здесь подпись стоит
+     над числом, и пары идут по две в ряд; первая ячейка — заголовок записи
+     (монета, кошелёк) во всю ширину. */
+  .hl-page .ledger tbody tr:not(.exp):not(:has(> td[colspan])) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: var(--s3);
+    row-gap: var(--s2);
+    padding: var(--s3) 0;
+  }
+  .hl-page .ledger tbody tr:not(.exp):has(> .caret-cell) { padding-right: var(--s4); }
+  .hl-page .ledger tbody tr:not(.exp) > td {
+    width: auto;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 2px;
+    padding: 0;
+    text-align: left;
+  }
+  .hl-page .ledger tbody tr:not(.exp) > td:nth-child(1 of :not(.caret-cell)) {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: flex-start;
+    gap: var(--s2);
+    font-size: var(--t-m);
+  }
+  .hl-page .ledger tbody tr:not(.exp) > td:nth-child(1 of :not(.caret-cell))::before { display: none; }
+  .hl-page .ledger tbody tr:not(.exp) > td.caret-cell { top: var(--s3); }
+  .hl-page .hl-ratio { min-width: 0; }
+
+  /* Строка кошелька — своя сетка в четыре колонки: адрес; баланс и ROI крупно;
+     PnL по окнам два на два; четыре коротких числа риска в ряд; экспозиция;
+     отбор и кнопки внизу. Место — по классу `hlw-<колонка>` (walletColumns),
+     явно по рядам, а не именованными областями: на двух страницах набор
+     кнопок разный, и пустой ряд областей всё равно держал бы промежуток.
+     Только прямые потомки — таблицы в раскрытой строке живут по общей сетке. */
+  .hlw > .scroll > .ledger > tbody > tr:not(.exp):not(:has(> td[colspan])) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    column-gap: var(--s2);
+  }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-star {
+    grid-area: 1 / 1;
+    z-index: 1;
+    align-self: start;
+  }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-star .pin { font-size: 18px; line-height: 22px; padding: 0; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-address {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: flex-start;
+    gap: var(--s2);
+    font-size: var(--t-m);
+  }
+  .hlw > .scroll > .ledger > tbody > tr:has(> .hlw-star) > td.hlw-address { padding-left: 28px; }
+  .hlw > .scroll > .ledger > tbody > tr > td:is(.hlw-star, .hlw-address, .hlw-remove, .hlw-save, .hlw-hide)::before {
+    display: none;
+  }
+  .hlw > .scroll > .ledger > tbody > tr > td:is(.hlw-accountValue, .hlw-roiMonth) { font-size: var(--t-m); }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-accountValue { grid-area: 2 / 1 / 3 / 3; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-roiMonth { grid-area: 2 / 3 / 3 / 5; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-pnlWeek { grid-area: 3 / 1 / 4 / 3; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-pnlMonth { grid-area: 3 / 3 / 4 / 5; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-pnl90 { grid-area: 4 / 1 / 5 / 3; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-pnlAllTime { grid-area: 4 / 3 / 5 / 5; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-weeksUp { grid-area: 5 / 1; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-bestWeekShare { grid-area: 5 / 2; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-maxDrawdown { grid-area: 5 / 3; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-weeklyT { grid-area: 5 / 4; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-netExposure { grid-area: 6 / 1 / 7 / -1; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-status { grid-area: 7 / 1 / 8 / 4; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-remove { grid-area: 7 / 4; align-items: flex-end; justify-content: center; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-save { grid-area: 7 / 1 / 8 / 3; }
+  .hlw > .scroll > .ledger > tbody > tr > td.hlw-hide { grid-area: 7 / 3 / 8 / 5; align-items: flex-end; }
+  .hlw > .scroll > .ledger > tbody > tr > td:is(.hlw-remove, .hlw-save, .hlw-hide) .btn { min-height: 44px; }
   /* Профиль: шестерёнка и вкладки — с зоной нажатия в палец, но без сдвига
      вёрстки (лишние поля гасятся отрицательным отступом). */
   .btn.pf-gear { min-width: 44px; min-height: 44px; margin: -13px -13px 0 auto; }

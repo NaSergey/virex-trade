@@ -118,23 +118,25 @@ export function HlSavedPage() {
   const posLoading = authLoading || positions.isLoading;
 
   return (
-    <Wrap page>
+    <Wrap page className="hl-page">
       <PageHead title={t('savedTitle')} lede={t('savedLede')} />
       <AddWalletForm />
       <ErrorNote error={saved.error ?? unsave.error ?? star.error} fallback={t('loadFailed')} />
-      <LedgerTable
-        columns={walletColumns(t, [starCol, remove], [status])}
-        rows={saved.data?.rows ?? []}
-        rowKey={(r) => r.address}
-        minWidth={1400}
-        // Пока восстанавливается сессия, запрос ещё выключен — без authLoading
-        // таблица на перезагрузке мигала бы «ничего не сохранено».
-        isLoading={authLoading || saved.isLoading}
-        empty={t('savedEmpty')}
-        renderExpanded={(r) => (
-          <WalletDetail row={r} positions={snap?.positions ?? []} positionsLoading={posLoading} />
-        )}
-      />
+      <div className="hlw">
+        <LedgerTable
+          columns={walletColumns(t, [starCol, remove], [status])}
+          rows={saved.data?.rows ?? []}
+          rowKey={(r) => r.address}
+          minWidth={1400}
+          // Пока восстанавливается сессия, запрос ещё выключен — без authLoading
+          // таблица на перезагрузке мигала бы «ничего не сохранено».
+          isLoading={authLoading || saved.isLoading}
+          empty={t('savedEmpty')}
+          renderExpanded={(r) => (
+            <WalletDetail row={r} positions={snap?.positions ?? []} positionsLoading={posLoading} />
+          )}
+        />
+      </div>
 
       <SectionHead title={t('positions')} style={{ marginTop: 'var(--s5)' }}>
         {snap ? (

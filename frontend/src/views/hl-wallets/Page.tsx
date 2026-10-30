@@ -81,7 +81,7 @@ export function HlWalletsPage() {
     : '—';
 
   return (
-    <Wrap page>
+    <Wrap page className="hl-page">
       <PageHead
         title={t('title')}
         lede={
@@ -105,27 +105,29 @@ export function HlWalletsPage() {
         total={all.length}
       />
       <ErrorNote error={error ?? save.error ?? hide.error} fallback={t('loadFailed')} />
-      <LedgerTable
-        columns={walletColumns(t, [], [saveCol, hideCol])}
-        rowClassName={(r) => (r.viewedAt ? 'seen' : undefined)}
-        rows={rows.slice((page - 1) * PAGE, page * PAGE)}
-        rowKey={(r) => r.address}
-        minWidth={1280}
-        // Пока восстанавливается сессия, запрос ещё выключен и isLoading ложен —
-        // без authLoading таблица на перезагрузке мигала бы «бот ничего не нашёл».
-        isLoading={authLoading || isLoading}
-        skeletonRows={10}
-        empty={all.length ? t('emptyFiltered') : t('empty')}
-        sort={{ key: String(sort.key), dir: sort.dir }}
-        onSort={(key) => {
-          setPage(1);
-          setSort((s) =>
-            s.key === key
-              ? { key: s.key, dir: (s.dir * -1) as 1 | -1 }
-              : { key: key as keyof HlWalletRow, dir: -1 },
-          );
-        }}
-      />
+      <div className="hlw">
+        <LedgerTable
+          columns={walletColumns(t, [], [saveCol, hideCol])}
+          rowClassName={(r) => (r.viewedAt ? 'seen' : undefined)}
+          rows={rows.slice((page - 1) * PAGE, page * PAGE)}
+          rowKey={(r) => r.address}
+          minWidth={1280}
+          // Пока восстанавливается сессия, запрос ещё выключен и isLoading ложен —
+          // без authLoading таблица на перезагрузке мигала бы «бот ничего не нашёл».
+          isLoading={authLoading || isLoading}
+          skeletonRows={10}
+          empty={all.length ? t('emptyFiltered') : t('empty')}
+          sort={{ key: String(sort.key), dir: sort.dir }}
+          onSort={(key) => {
+            setPage(1);
+            setSort((s) =>
+              s.key === key
+                ? { key: s.key, dir: (s.dir * -1) as 1 | -1 }
+                : { key: key as keyof HlWalletRow, dir: -1 },
+            );
+          }}
+        />
+      </div>
       <Pagination
         page={page}
         pageSize={PAGE}

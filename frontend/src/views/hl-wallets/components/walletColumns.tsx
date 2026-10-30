@@ -17,6 +17,10 @@ const money = (v: number | null) =>
  * Колонки кошелька — одни на «Кошельки» и «Сохранённые»: одно и то же число
  * не должно читаться на двух страницах по-разному. `lead` — действие в начале
  * строки, `extra` — колонки в конце (отбор, «Убрать»).
+ *
+ * Каждая ячейка несёт класс `hlw-<ключ>`: на телефоне строка — не столбик из
+ * пятнадцати пар «подпись → значение», а карточка-сетка (`.hlw` в globals.css),
+ * и место ячейки в ней задаётся этим классом.
  */
 export function walletColumns(
   t: T,
@@ -31,7 +35,7 @@ export function walletColumns(
     sortKey: key,
     render,
   });
-  return [
+  const cols: LedgerColumn<HlWalletRow>[] = [
     ...lead,
     { key: 'address', header: t('colWallet'), render: (r) => <WalletCell address={r.address} /> },
     num('accountValue', t('colBalance'), (r) => usd(r.accountValue)),
@@ -53,4 +57,5 @@ export function walletColumns(
     num('netExposure', t('colExposure'), (r) => <Exposure row={r} t={t} />),
     ...extra,
   ];
+  return cols.map((c) => ({ ...c, cellClassName: [c.cellClassName, `hlw-${c.key}`].filter(Boolean).join(' ') }));
 }
