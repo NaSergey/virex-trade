@@ -2,7 +2,16 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { Bookmark, BookOpen, CalendarCheck, ChevronDown, Users, Wallet, type LucideIcon } from 'lucide-react';
+import {
+  Bookmark,
+  BookOpen,
+  CalendarCheck,
+  ChevronDown,
+  FlaskConical,
+  Users,
+  Wallet,
+  type LucideIcon,
+} from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { AuthGuard, useAuth } from '@/features/auth';
@@ -12,7 +21,11 @@ import { LocaleSwitch } from '@/shared/ui/LocaleSwitch';
 import { Wrap } from '@/shared/ui/Wrap';
 import { adminPath } from '@/shared/lib/utils/admin-host';
 
-const ITEMS: { href: string; key: 'wallets' | 'saved' | 'users' | 'english' | 'plan'; icon: LucideIcon }[] = [
+const ITEMS: {
+  href: string;
+  key: 'wallets' | 'saved' | 'users' | 'english' | 'plan' | 'strategy';
+  icon: LucideIcon;
+}[] = [
   { href: '/', key: 'wallets', icon: Wallet },
   { href: '/saved', key: 'saved', icon: Bookmark },
   { href: '/users', key: 'users', icon: Users },
@@ -20,6 +33,8 @@ const ITEMS: { href: string; key: 'wallets' | 'saved' | 'users' | 'english' | 'p
   { href: '/english', key: 'english', icon: BookOpen },
   // План дня — свои вкладки внутри (views/plan).
   { href: '/plan', key: 'plan', icon: CalendarCheck },
+  // Стратегия — отчёт бектеста и обучения (views/strategy).
+  { href: '/strategy', key: 'strategy', icon: FlaskConical },
 ];
 
 const isCurrent = (path: string, href: string) => path === href || (href !== '/' && path.startsWith(`${href}/`));

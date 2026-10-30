@@ -1673,6 +1673,23 @@ model PlanItem {
 
 // ═══ /plan ═══
 
+// ═══ strategy ═══ Стратегия в админке (backend/src/strategy; спека
+// docs/superpowers/specs/2026-10-30-strategy-lab-design.md). Отчёт считает
+// worker раз в сутки; связей с таблицами продукта нет — блок сносится целиком.
+
+/// Готовый отчёт стратегии: одна строка на стратегию.
+model StrategyReport {
+  /// 'smc-intraday'
+  id         String   @id
+  /// STRATEGY_VERSION кода, которым посчитан: другая — отчёт пересчитывается.
+  version    Int
+  computedAt DateTime
+  data       Json
+
+  @@map("strategy_reports")
+}
+// ═══ /strategy ═══
+
 /// Готовые числа экспериментальных вероятностей: строка 'divergence' (частоты после дивергенций RSI).
 /// Пишет worker, читает api — пересчёт по всей истории в запросе не делается.
 model ProbabilityStat {
