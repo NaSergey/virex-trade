@@ -5,7 +5,8 @@
  */
 
 export type Dir = 1 | -1;
-export type Outcome = 'target' | 'stop' | 'time';
+/** Чем закончилась сделка: все тейки, исходный стоп, подтянутый стоп, срок. */
+export type Outcome = 'target' | 'stop' | 'trail' | 'time';
 
 export type FeatureKey =
   | 'session'
@@ -53,6 +54,14 @@ export interface VariantRow {
   maxDd1: number;
 }
 
+export interface OddsCheck {
+  /** Доля сделок с R > 0 среди прошлых сделок той же стороны. */
+  p: number;
+  /** Безубыточный винрейт той же выборки. */
+  needed: number;
+  n: number;
+}
+
 export interface TradeRow {
   id: string;
   dir: Dir;
@@ -61,21 +70,34 @@ export interface TradeRow {
   obMs: number;
   fvgMs: number | null;
   bosMs: number | null;
-  /** Закрытие свечи подтверждения — момент, когда выставлен лимит. */
+  /** Закрытие свечи подтверждения — момент, когда выставлена сетка. */
   confirmMs: number;
   level: number;
-  entry: number;
+  /** Уровни сетки входа, от верха блока к стопу. */
+  entries: number[];
+  /** Сколько уровней исполнилось. */
+  filled: number;
+  avgEntry: number;
+  /** Исходный стоп. */
   stop: number;
+  /** Стоп на выходе — после подтягивания за тейками. */
+  finalStop: number;
   target: number;
+  takes: number[];
+  takesHit: number;
+  /** План от первого ордера, 3–5R. */
   plannedR: number;
+  /** Первое исполнение входа. */
   fillMs: number;
-  fill: number;
   exitMs: number;
+  /** Цена последнего выхода. */
   exit: number;
   outcome: Outcome;
   rGross: number;
   rNet: number;
   features: Features;
+  /** Оценка вероятности на момент решения; null — фильтра нет или истории мало. */
+  odds: OddsCheck | null;
 }
 
 export interface YearRow {
@@ -153,6 +175,33 @@ export interface LearningBlock {
   next: { key: string; rules: Rule[] };
 }
 
+export interface MoneyBlock {
+  start: number;
+  final: number;
+  maxDd: number;
+  /** Худшая сделка, доля счёта перед ней. */
+  worstTrade: number;
+  /** Счёт после каждой сделки (не больше 200 точек). */
+  equity: number[];
+}
+
+export interface OddsSide {
+  considered: number;
+  taken: number;
+  skipped: number;
+  /** Взято без оценки — истории ещё не было. */
+  unjudged: number;
+}
+
+export interface OddsBlock {
+  long: OddsSide;
+  short: OddsSide;
+  /** Доля лонгов среди взятых. */
+  longShare: number;
+  /** Вердикт по пропущенным сделкам. */
+  effect: Effect;
+}
+
 export interface TheoryBlock {
   expectancy: {
     winrate: number;
@@ -202,7 +251,10 @@ export interface StrategyReport {
     equity: Point[];
     byYear: YearRow[];
     trades: TradeRow[];
+    /** Деньги основного варианта: с управлением риском и без. */
+    money: { theory: MoneyBlock; plain: MoneyBlock; plainNotional: number };
   };
+  odds: OddsBlock;
   author: AuthorRow[];
   learning: LearningBlock;
   theory: TheoryBlock;

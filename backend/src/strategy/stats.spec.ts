@@ -4,12 +4,22 @@ import {
   meanCi,
   mulberry32,
   summarize,
+  thin,
   tQuantile,
   upper95,
   wilson,
 } from './stats';
 
 describe('stats', () => {
+  it('thin — не больше max точек, края сохраняются', () => {
+    const xs = Array.from({ length: 1000 }, (_, i) => i);
+    const t = thin(xs, 10);
+    expect(t).toHaveLength(10);
+    expect(t[0]).toBe(0);
+    expect(t[9]).toBe(999);
+    expect(thin([1, 2], 10)).toEqual([1, 2]);
+  });
+
   it('wilson — известный интервал 5 из 10', () => {
     const [lo, hi] = wilson(5, 10);
     expect(lo).toBeCloseTo(0.2366, 3);

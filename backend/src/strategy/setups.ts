@@ -12,6 +12,14 @@ export const FEATURE_KEYS: FeatureKey[] = [
   'pierce',
 ];
 
+/** План сделки — от первого ордера сетки, строго 3–5R. */
+export const MIN_R = 3;
+export const MAX_R = 5;
+/** Уровни сетки входа — доли высоты блока от его верха. */
+export const GRID_STEPS = [0, 0.25, 0.5, 0.75];
+/** Тейки — доли пути от верха блока до цели. */
+export const TAKE_STEPS = [1 / 3, 2 / 3, 1];
+
 export interface Variant {
   id: string;
   label: string;
@@ -20,9 +28,10 @@ export interface Variant {
   fvg: boolean;
   bos: boolean;
   context: boolean;
-  entry: 'top' | 'mid';
-  /** 'liquidity' — ближайший нетронутый свинг; число — фиксированная цель в R. */
-  target: 'liquidity' | 2 | 3;
+  /** Сетка входа и тейков со стопом за тейками; false — один лимит и один тейк. */
+  grid: boolean;
+  /** Пропуск сделок со слабой вероятностью успеха. */
+  odds: boolean;
 }
 
 export const MAIN: Variant = {
@@ -32,8 +41,8 @@ export const MAIN: Variant = {
   fvg: true,
   bos: true,
   context: true,
-  entry: 'top',
-  target: 'liquidity',
+  grid: true,
+  odds: true,
 };
 
 /** Варианты отчёта: каждый отличается от основного одним правилом. */
@@ -43,27 +52,31 @@ export const VARIANTS: Variant[] = [
   { ...MAIN, id: 'sweep-fvg', label: 'Свип + FVG', bos: false },
   { ...MAIN, id: 'sweep-bos', label: 'Свип + BOS', fvg: false },
   { ...MAIN, id: 'no-context', label: 'Без контекста 4H', context: false },
-  { ...MAIN, id: 'mid', label: 'Вход от 50 % блока', entry: 'mid' },
-  { ...MAIN, id: 'r2', label: 'Цель 2R', target: 2 },
-  { ...MAIN, id: 'r3', label: 'Цель 3R', target: 3 },
+  { ...MAIN, id: 'no-odds', label: 'Без фильтра вероятности', odds: false },
+  { ...MAIN, id: 'single', label: 'Одиночный вход и выход', grid: false },
   { ...MAIN, id: 'h1', label: 'ТФ сетапа 1H', tf: 60 },
 ];
 
 export interface Setup {
-  /** `${вариант}:${свеча свипа}` — уникален внутри варианта. */
+  /** `${вариант}:${свеча свипа}:${сторона}` — уникален внутри варианта. */
   id: string;
   dir: Dir;
   sweepI: number;
   /** −1 — вариант условия не требует. */
   fvgI: number;
   bosI: number;
-  /** Свеча подтверждения: на её закрытии выставляется лимит. */
+  /** Свеча подтверждения: на её закрытии выставляется сетка. */
   e: number;
   obI: number;
   level: number;
-  entry: number;
+  /** Уровни входа, от верха блока к стопу. */
+  entries: number[];
   stop: number;
+  /** Последний тейк. */
   target: number;
+  takes: number[];
+  /** Стоп за тейками и снятие входа после первого тейка. */
+  trail: boolean;
   plannedR: number;
   features: Features;
 }
@@ -126,16 +139,15 @@ function featuresOf(x: FeatureInput): Features {
     daily: x.daily === -x.dir ? 'against' : 'with',
     vol: x.volRank < 1 / 3 ? 'low' : x.volRank < 2 / 3 ? 'mid' : 'high',
     stopAtr: x.stopAtr < 0.5 ? '<0.5' : x.stopAtr <= 1.5 ? '0.5-1.5' : '>1.5',
-    plannedR: x.plannedR < 2 ? '1-2' : x.plannedR <= 3 ? '2-3' : '>3',
+    plannedR: x.plannedR < 4 ? '3-4' : '4-5',
     pierce: x.pierce < 0.25 ? '<0.25' : '>=0.25',
-    // «Глубокий дисконт» (вход в нижней четверти «стоп → цель») — ровно
-    // плановый R > 3, отдельным признаком он только дублировал бы корзину.
   };
 }
 
 /**
- * Сетапы варианта: свип → (FVG, BOS в окне) → контекст → ордерблок → вход,
- * стоп, цель. Всё решается на закрытии свечи подтверждения `e`.
+ * Сетапы варианта: свип → (FVG, BOS в окне) → контекст → ордерблок → сетка
+ * входа, стоп, цель 3–5R и сетка тейков. Всё решается на закрытии свечи
+ * подтверждения `e`.
  */
 export function findSetups(s: Series, ctx: SetupContext, v: Variant): Setup[] {
   const out: Setup[] = [];
@@ -174,21 +186,20 @@ export function findSetups(s: Series, ctx: SetupContext, v: Variant): Setup[] {
       bottom = d === 1 ? Math.min(bottom, s.l[k]) : Math.max(bottom, s.h[k]);
     }
 
-    const entry = v.entry === 'top' ? top : (top + bottom) / 2;
     const stop = bottom;
-    const risk = d * (entry - stop);
-    if (!(risk > 0)) continue;
-    if (d * (s.c[e] - entry) <= 0) continue; // цена уже в блоке
-
-    let target: number;
-    if (v.target === 'liquidity') {
-      target = d === 1 ? ctx.scan.nearHigh[e] : ctx.scan.nearLow[e];
-      if (!Number.isFinite(target)) continue;
-    } else {
-      target = entry + d * v.target * risk;
-    }
-    const plannedR = (d * (target - entry)) / risk;
-    if (v.target === 'liquidity' && plannedR < 1) continue; // вход не в дискаунте
+    const h = d * (top - stop);
+    if (!(h > 0)) continue;
+    if (d * (s.c[e] - top) <= 0) continue; // цена уже в блоке
+    const liq = d === 1 ? ctx.scan.nearHigh[e] : ctx.scan.nearLow[e];
+    if (!Number.isFinite(liq)) continue;
+    const rLiq = (d * (liq - top)) / h;
+    if (rLiq < MIN_R) continue; // ликвидность ближе 3R
+    const plannedR = Math.min(rLiq, MAX_R);
+    const target = top + d * plannedR * h;
+    const entries = v.grid ? GRID_STEPS.map((k) => top - d * k * h) : [top];
+    const takes = v.grid
+      ? TAKE_STEPS.map((k) => top + (target - top) * k)
+      : [target];
 
     out.push({
       id: `${v.id}:${sw.i}:${d}`,
@@ -199,16 +210,18 @@ export function findSetups(s: Series, ctx: SetupContext, v: Variant): Setup[] {
       e,
       obI,
       level: sw.level,
-      entry,
+      entries,
       stop,
       target,
+      takes,
+      trail: v.grid,
       plannedR,
       features: featuresOf({
         at: closeMs(s, e),
         dir: d,
         daily: ctx.daily[e],
         volRank: volRank(e),
-        stopAtr: risk / ctx.atr[e],
+        stopAtr: h / ctx.atr[e],
         plannedR,
         pierce: sw.pierceAtr,
       }),
