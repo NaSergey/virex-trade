@@ -8066,7 +8066,10 @@
     .ct-page { padding: 10px 12px; gap: 8px; }
     .ct-main { gap: 8px; }
     .ct-more { width: 44px; height: 36px; }
-    .ct-felt { border-width: 8px; }
+    /* Круглый стол: сцена квадратная (`STAGE_ROUND`), сукно — круг с
+       одинаковыми полями; места — по окружности (`ROUND_R` в lib/layout.ts). */
+    .ct-felt { inset: 10%; border-width: 8px; }
+    .ct-felt-line { inset: 6%; }
     /* Центр сукна уже, чем сукно: места по бокам садятся на бортик, и
        надписи центра не должны уходить под них. */
     .ct-center { padding: 0 12%; gap: 6px; }

@@ -20,6 +20,8 @@ export interface SeatPoint {
 /** Пределы пропорции сцены: шире — на широком экране, уже — на высоком узком (`fitAspect`). */
 export const STAGE_WIDE = 2;
 export const STAGE_TALL = 3 / 4;
+/** Телефон: сцена квадратная, стол круглый (владелец 2026-10-30). */
+export const STAGE_ROUND = 1;
 
 /**
  * Пропорция сцены под коробку `w × h`: сцена занимает её целиком, но не уже
@@ -45,18 +47,27 @@ const FELT_RX = 35;
 const SEAT_RY = 39;
 const RIM = 2; // % ширины сцены
 
-function ring(aspect: number) {
+/**
+ * Круглый стол телефона: сукно — круг с полями 10% (`.ct-felt` в globals.css),
+ * места — по окружности чуть внутри бортика: дальше плашки боковых мест
+ * выходили бы за край экрана.
+ */
+const ROUND_R = 37;
+
+function ring(aspect: number, round: boolean) {
+  if (round) return { rx: ROUND_R, ry: ROUND_R };
   return { rx: FELT_RX + RIM, ry: SEAT_RY + RIM * aspect };
 }
 
 const SAMPLES = 720;
-const arcCache = new Map<number, { t: number[]; s: number[] }>();
+const arcCache = new Map<string, { t: number[]; s: number[] }>();
 
 /** Длина дуги ряда от верха по часовой стрелке — в пикселях сцены, а не в процентах. */
-function arcTable(aspect: number) {
-  let table = arcCache.get(aspect);
+function arcTable(aspect: number, round: boolean) {
+  const key = `${aspect}|${round}`;
+  let table = arcCache.get(key);
   if (table) return table;
-  const { rx, ry } = ring(aspect);
+  const { rx, ry } = ring(aspect, round);
   const a = (rx / 100) * aspect;
   const b = ry / 100;
   const t: number[] = [];
@@ -72,19 +83,19 @@ function arcTable(aspect: number) {
     s.push(acc);
   }
   table = { t, s };
-  arcCache.set(aspect, table);
+  arcCache.set(key, table);
   return table;
 }
 
 /** Точка ряда на доле `f` длины овала от верха по часовой стрелке. */
-function pointAt(f: number, aspect: number): SeatPoint {
-  const { t, s } = arcTable(aspect);
+function pointAt(f: number, aspect: number, round: boolean): SeatPoint {
+  const { t, s } = arcTable(aspect, round);
   const target = f * s[SAMPLES];
   let i = 1;
   while (i < SAMPLES && s[i] < target) i++;
   const k = s[i] === s[i - 1] ? 0 : (target - s[i - 1]) / (s[i] - s[i - 1]);
   const angle = t[i - 1] + (t[i] - t[i - 1]) * k;
-  const { rx, ry } = ring(aspect);
+  const { rx, ry } = ring(aspect, round);
   return { x: 50 + rx * Math.cos(angle), y: 50 + ry * Math.sin(angle) };
 }
 
@@ -107,8 +118,14 @@ export function slotOf(seatIndex: number, maxSeats: number, mySeat: number | nul
   return (0.5 * (k - left)) / (right + 1);
 }
 
-export function seatPoint(seatIndex: number, maxSeats: number, mySeat: number | null, aspect = STAGE_WIDE): SeatPoint {
-  return pointAt(slotOf(seatIndex, maxSeats, mySeat), aspect);
+export function seatPoint(
+  seatIndex: number,
+  maxSeats: number,
+  mySeat: number | null,
+  aspect = STAGE_WIDE,
+  round = false,
+): SeatPoint {
+  return pointAt(slotOf(seatIndex, maxSeats, mySeat), round ? STAGE_ROUND : aspect, round);
 }
 
 /** Где стоит ставка места: на пути от места к центру стола. */

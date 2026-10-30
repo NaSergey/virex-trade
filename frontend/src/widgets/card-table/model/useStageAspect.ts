@@ -1,15 +1,15 @@
 'use client';
 
 import { useCallback, useRef, useSyncExternalStore } from 'react';
-import { fitAspect, STAGE_TALL, STAGE_WIDE } from '../lib/layout';
+import { fitAspect, STAGE_ROUND, STAGE_WIDE } from '../lib/layout';
 
-/** До первого замера коробки — прежняя развилка по ширине окна. */
-const TALL_QUERY = '(max-width: 720px)';
+/** Телефон: стол круглый, сцена квадратная (та же граница, что в globals.css). */
+const ROUND_QUERY = '(max-width: 720px)';
 
 /**
  * Пропорция сцены — по месту, которое ей осталось (`.ct-stage-box`), а не по
- * ширине окна: на телефоне сцена 3:4 в почти квадратной коробке стояла узкой
- * колонкой с пустыми полями по бокам, места садились на бортик. Стол на
+ * ширине окна. На телефоне стол круглый и сцена квадратная — замер там не
+ * нужен (3:4 в почти квадратной коробке стояла узкой колонкой). Стол на
  * странице один, поэтому пропорция — общая на модуль: коробку меряет
  * `TableShell`, места читают раскладкой (`useSeatPoints`).
  */
@@ -24,7 +24,7 @@ function setMeasured(next: number | null) {
 
 const subscribe = (onChange: () => void) => {
   listeners.add(onChange);
-  const mq = window.matchMedia(TALL_QUERY);
+  const mq = window.matchMedia(ROUND_QUERY);
   mq.addEventListener('change', onChange);
   return () => {
     listeners.delete(onChange);
@@ -32,7 +32,8 @@ const subscribe = (onChange: () => void) => {
   };
 };
 
-const snapshot = () => measured ?? (window.matchMedia(TALL_QUERY).matches ? STAGE_TALL : STAGE_WIDE);
+const isRound = () => window.matchMedia(ROUND_QUERY).matches;
+const snapshot = () => (isRound() ? STAGE_ROUND : (measured ?? STAGE_WIDE));
 
 /**
  * Пропорция сцены стола. Места стоят на равном расстоянии по длине овала, а
@@ -40,6 +41,11 @@ const snapshot = () => measured ?? (window.matchMedia(TALL_QUERY).matches ? STAG
  */
 export function useStageAspect(): number {
   return useSyncExternalStore(subscribe, snapshot, () => STAGE_WIDE);
+}
+
+/** Круглый ли стол — на телефоне да, там места стоят по окружности. */
+export function useStageRound(): boolean {
+  return useSyncExternalStore(subscribe, isRound, () => false);
 }
 
 /** Ref коробки сцены: меряет её и отдаёт пропорцию сцене и раскладке мест. */

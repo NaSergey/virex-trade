@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { initials, seatPoint, slotOf, STAGE_TALL, STAGE_WIDE } from './layout';
+import { initials, seatPoint, slotOf, STAGE_ROUND, STAGE_TALL, STAGE_WIDE } from './layout';
 
 /** Расстояние в пикселях сцены (ширина = aspect, высота = 1), а не в процентах. */
 const dist = (a: { x: number; y: number }, b: { x: number; y: number }, aspect: number) =>
@@ -59,6 +59,16 @@ describe('card table layout', () => {
       const xs = Array.from({ length: n }, (_, i) => seatPoint(i, n, 0).x - 50).sort((a, b) => a - b);
       const mirrored = xs.map((x) => -x).sort((a, b) => a - b);
       xs.forEach((x, i) => expect(x, `n=${n}`).toBeCloseTo(mirrored[i], 1));
+    }
+  });
+
+  it('на круглом столе все места на одной окружности, своё внизу', () => {
+    for (let n = 2; n <= 9; n++) {
+      const rs = Array.from({ length: n }, (_, i) => seatPoint(i, n, 0, STAGE_TALL, true)).map((p) =>
+        dist(p, { x: 50, y: 50 }, STAGE_ROUND),
+      );
+      rs.forEach((r) => expect(r, `n=${n}`).toBeCloseTo(rs[0], 3));
+      expect(seatPoint(0, n, 0, STAGE_TALL, true).x).toBeCloseTo(50);
     }
   });
 
