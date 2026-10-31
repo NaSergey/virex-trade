@@ -140,7 +140,7 @@ export function BacktestSection({ report, theory }: { report: StrategyReport; th
       <p className="muted">
         BTCUSDT, {fmtDate(report.dataFrom)} — {fmtDate(report.dataTo)}. Контекст — 4H, сетап и стоп — 1H (свип, имбаланс, слом, ордерблок). 15m только
         подтверждает вход: цена вернулась в часовой блок и свеча 15m дала слом. Тогда первый вход по рынку и 3 лимита ниже,
-        цель 5R, 3 тейка со стопом за ними, лонгов 70 % и шортов 30 %. Одна позиция за раз, R — от риска всей сетки, после комиссии Bybit.
+        3 тейка со стопом за ними, лонгов 70 % и шортов 30 %. Одна позиция за раз, R — от риска всей сетки, после комиссии Bybit.
       </p>
       <div className="st-metrics">
         <MetricCell

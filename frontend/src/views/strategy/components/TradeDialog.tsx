@@ -245,6 +245,18 @@ export function TradeDialog({ trade, onClose }: { trade: TradeRow; onClose: () =
             <KeyValue label="Свип на 1H">{fmtDateTime(trade.sweepMs)}</KeyValue>
             {trade.fvgMs != null && <KeyValue label="FVG на 1H">{fmtDateTime(trade.fvgMs)}</KeyValue>}
             <KeyValue label="Снятый уровень">{fmtPrice(trade.level)}</KeyValue>
+            {trade.rangeLo != null && trade.rangeHi != null && (
+              <>
+                <KeyValue label="Диапазон 30 свечей 4H">{`${fmtPrice(trade.rangeLo)} – ${fmtPrice(trade.rangeHi)}`}</KeyValue>
+                <KeyValue label="Вход в диапазоне, от низа">
+                  {fmtPct((trade.entries[0] - trade.rangeLo) / (trade.rangeHi - trade.rangeLo), 0)}
+                </KeyValue>
+              </>
+            )}
+            {trade.atr4 != null && (
+              <KeyValue label="ATR 4H">{`${fmtPrice(trade.atr4)} · ${fmtPct(trade.atr4 / Math.abs(trade.entries[0]), 2)}`}</KeyValue>
+            )}
+            <KeyValue label="План, стоп к цели">{fmtR(trade.plannedR)}</KeyValue>
             <KeyValue label="Ордерблок 1H">{`${fmtPrice(Math.min(trade.blockTop, trade.stop))} – ${fmtPrice(Math.max(trade.blockTop, trade.stop))}`}</KeyValue>
             {trade.bosMs != null && <KeyValue label="Слом на 15m">{fmtDateTime(trade.bosMs)}</KeyValue>}
             <KeyValue label="Вход">{fmtDateTime(trade.fillMs)}</KeyValue>

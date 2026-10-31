@@ -69,6 +69,8 @@ describe('report', () => {
     for (let i = 1; i < trades.length; i++) {
       expect(trades[i].fillMs).toBeGreaterThanOrEqual(trades[i - 1].exitMs);
     }
+    expect(report.saved.main.stats.setups).toBeGreaterThanOrEqual(stats.setups);
+    expect(report.saved.main.money.theory.start).toBe(1000);
     expect(() => JSON.stringify(report)).not.toThrow();
   });
 });
