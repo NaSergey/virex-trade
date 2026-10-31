@@ -27,6 +27,7 @@ const row = (
   bosMs: null,
   confirmMs,
   level: 0,
+  blockTop: 1,
   entries: [1],
   filled: 1,
   avgEntry: 1,
