@@ -18,14 +18,7 @@ import {
   swings,
 } from './series';
 import { scanLevels } from './events';
-import {
-  findSetups,
-  RULES,
-  SAVED_RULES,
-  Setup,
-  SetupContext,
-  StrategyRules,
-} from './setups';
+import { findSetups, Setup, SetupContext } from './setups';
 import { Bar, FetchMinutes, Filled, simulateAll } from './simulate';
 import { authorCheck } from './author-check';
 import {
@@ -47,7 +40,7 @@ import { theoryOf } from './theory';
 import { maxDrawdown, summarize } from './stats';
 
 /** Поднимать при любой правке правил, обучения или формы отчёта. */
-export const STRATEGY_VERSION = 8;
+export const STRATEGY_VERSION = 9;
 export const REPORT_ID = 'smc-intraday';
 /** Сделки и статистика отчёта — за столько последних лет (решение владельца). */
 export const STATS_YEARS = 2;
@@ -203,11 +196,14 @@ async function runStrategy(
   p: Prepared,
   fetch: FetchMinutes,
   fromMs: number,
-  rules: StrategyRules,
-  cache: Map<string, Bar[]>,
 ) {
-  const setups = findSetups(m15, p.s, p.ctx, rules);
-  const resolved = await simulateAll(m15, setups, fetch, cache);
+  const setups = findSetups(m15, p.s, p.ctx);
+  const resolved = await simulateAll(
+    m15,
+    setups,
+    fetch,
+    new Map<string, Bar[]>(),
+  );
   const all: TradeRow[] = [];
   const counts = { setups: 0, missed: 0, expired: 0 };
   for (const r of resolved) {
@@ -280,55 +276,47 @@ export async function buildReport(
   await yieldFn();
 
   const fromMs = Math.max(statsFrom(nowMs), m15.t[0]);
-  const cache = new Map<string, Bar[]>();
-  const viewOf = async (rules: StrategyRules) => {
-    const run = await runStrategy(m15, p60, fetch, fromMs, rules, cache);
-    await yieldFn();
-    const system = run.odds.system;
-    const mt = system.map((t) => ({ rNet: t.rNet, stopPct: stopPctOf(t) }));
-    const notional = plainNotional(mt);
-    const view = {
-      main: {
-        stats: run.stats,
-        sides: {
-          all: sideOf(system),
-          long: sideOf(system.filter((t) => t.dir === 1)),
-          short: sideOf(system.filter((t) => t.dir === -1)),
-        },
-        equity: systemOf(system).equity,
-        byYear: byYear(system),
-        trades: system,
-        money: {
-          theory: withTheory(mt),
-          plain: withoutTheory(mt, notional),
-          plainNotional: notional,
-        },
-      },
-      odds: run.odds.block,
-      learning: learningOf(run.all, nowMs),
-      theory: theoryOf(
-        system.map((t) => ({
-          rGross: t.rGross,
-          rNet: t.rNet,
-          stopPct: stopPctOf(t),
-        })),
-      ),
-    };
-    await yieldFn();
-    return view;
-  };
-  const view = await viewOf(RULES);
-  const saved = await viewOf(SAVED_RULES);
+  const run = await runStrategy(m15, p60, fetch, fromMs);
+  await yieldFn();
+  const system = run.odds.system;
   const author = authorCheck(h1, p60.ctx.atr, p60.ctx.scan);
   await yieldFn();
+  const learning = learningOf(run.all, nowMs);
+  await yieldFn();
+  const mt = system.map((t) => ({ rNet: t.rNet, stopPct: stopPctOf(t) }));
+  const notional = plainNotional(mt);
+  const theory = theoryOf(
+    system.map((t) => ({
+      rGross: t.rGross,
+      rNet: t.rNet,
+      stopPct: stopPctOf(t),
+    })),
+  );
 
   return {
     version: STRATEGY_VERSION,
     computedAt: new Date(nowMs).toISOString(),
     dataFrom: fromMs,
     dataTo: closeMs(m15, m15.n - 1),
-    ...view,
-    saved,
+    main: {
+      stats: run.stats,
+      sides: {
+        all: sideOf(system),
+        long: sideOf(system.filter((t) => t.dir === 1)),
+        short: sideOf(system.filter((t) => t.dir === -1)),
+      },
+      equity: systemOf(system).equity,
+      byYear: byYear(system),
+      trades: system,
+      money: {
+        theory: withTheory(mt),
+        plain: withoutTheory(mt, notional),
+        plainNotional: notional,
+      },
+    },
+    odds: run.odds.block,
     author,
+    learning,
+    theory,
   };
 }

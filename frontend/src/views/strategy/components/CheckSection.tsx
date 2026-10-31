@@ -3,7 +3,7 @@
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import { fmtInt, fmtPct, fmtR, tone } from '../model/format';
-import { COINS, PLACEBO, SAVED_COINS, type CoinRow } from '../model/check';
+import { COINS, PLACEBO, type CoinRow } from '../model/check';
 
 const columns: LedgerColumn<CoinRow>[] = [
   { key: 'coin', header: 'Монета', render: (c) => c.coin },
@@ -38,16 +38,16 @@ const columns: LedgerColumn<CoinRow>[] = [
 ];
 
 /** Повторяется ли результат BTC: то же правило без правок на других монетах. */
-export function CheckSection({ saved }: { saved: boolean }) {
+export function CheckSection() {
   return (
     <section id="check" className="st-section">
       <SectionHead title="Проверка на других монетах" />
       <p className="muted">
         Снимок от 31.10.2026, правила те же, без единой правки. Случайный вход с теми же сторонами и стопами был не хуже стратегии
-        в {saved ? PLACEBO.savedAbove : PLACEBO.above} из {PLACEBO.runs} прогонов и на BTC, и на ETH. Это не доказательство: монеты движутся вместе, сделок мало, а
+        в {PLACEBO.above} из {PLACEBO.runs} прогонов и на BTC, и на ETH. Это не доказательство: монеты движутся вместе, сделок мало, а
         проскальзывание не учтено.
       </p>
-      <LedgerTable columns={columns} rows={saved ? SAVED_COINS : COINS} rowKey={(c) => c.coin} minWidth={640} />
+      <LedgerTable columns={columns} rows={COINS} rowKey={(c) => c.coin} minWidth={640} />
     </section>
   );
 }

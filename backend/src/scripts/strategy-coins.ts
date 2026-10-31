@@ -1,7 +1,7 @@
 /*
  * Стратегия на других монетах: тот же код, что считает отчёт, свечи — Binance (кэш в каталоге).
  * Из него снимок `views/strategy/model/check.ts`. Запуск из backend/:
- * TS_NODE_TRANSPILE_ONLY=1 node -r ts-node/register src/scripts/strategy-coins.ts <каталог> BTC ETH XRP SOL BNB [--saved]
+ * TS_NODE_TRANSPILE_ONLY=1 node -r ts-node/register src/scripts/strategy-coins.ts <каталог> BTC ETH XRP SOL BNB
  */
 import * as fs from 'fs';
 import * as path from 'path';
@@ -15,7 +15,7 @@ import {
   toSeries,
 } from '../strategy/series';
 import { scanLevels } from '../strategy/events';
-import { findSetups, RULES, SAVED_RULES } from '../strategy/setups';
+import { findSetups } from '../strategy/setups';
 import { Bar, minuteKey, simulateAll } from '../strategy/simulate';
 import { selectSystem } from '../strategy/odds';
 import { summarize } from '../strategy/stats';
@@ -30,8 +30,7 @@ const INTERVAL: Record<number, string> = {
   1440: '1d',
 };
 const START = Date.UTC(2018, 0, 1);
-const SAVED = process.argv.includes('--saved');
-const [DIR, ...COINS] = process.argv.slice(2).filter((a) => a !== '--saved');
+const [DIR, ...COINS] = process.argv.slice(2);
 
 async function klines(
   coin: string,
@@ -97,7 +96,7 @@ async function run(coin: string) {
   const cache = new Map<string, Bar[]>();
   const resolved = await simulateAll(
     m15,
-    findSetups(m15, h1, ctx, SAVED ? SAVED_RULES : RULES),
+    findSetups(m15, h1, ctx),
     async (ranges) => {
       const out = new Map<string, Bar[]>();
       for (const [from, to] of ranges) {
