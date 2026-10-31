@@ -77,6 +77,11 @@ export interface TradeRow {
   level: number;
   /** Верх часового ордерблока; низ — стоп. */
   blockTop: number;
+  /** Диапазон 4H на момент решения; null — истории ещё не было. */
+  rangeLo: number | null;
+  rangeHi: number | null;
+  /** ATR(14) закрытой 4H-свечи на момент решения. */
+  atr4: number | null;
   /** Уровни сетки входа, от первого к стопу. */
   entries: number[];
   /** Сколько уровней исполнилось. */
@@ -267,6 +272,8 @@ export interface StrategyReport {
   author: AuthorRow[];
   learning: LearningBlock;
   theory: TheoryBlock;
+  /** Сохранённый вариант: цель ровно 5R от входа, без фильтра положения. */
+  saved: Pick<StrategyReport, 'main' | 'odds' | 'learning' | 'theory'>;
 }
 
 export interface ReportResponse {

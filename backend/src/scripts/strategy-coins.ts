@@ -1,7 +1,7 @@
 /*
  * Стратегия на других монетах: тот же код, что считает отчёт, свечи — Binance (кэш в каталоге).
  * Из него снимок `views/strategy/model/check.ts`. Запуск из backend/:
- * TS_NODE_TRANSPILE_ONLY=1 node -r ts-node/register src/scripts/strategy-coins.ts <каталог> BTC ETH XRP SOL BNB
+ * TS_NODE_TRANSPILE_ONLY=1 node -r ts-node/register src/scripts/strategy-coins.ts <каталог> BTC ETH XRP SOL BNB [--saved]
  */
 import * as fs from 'fs';
 import * as path from 'path';
@@ -15,7 +15,7 @@ import {
   toSeries,
 } from '../strategy/series';
 import { scanLevels } from '../strategy/events';
-import { findSetups } from '../strategy/setups';
+import { findSetups, RULES, SAVED_RULES } from '../strategy/setups';
 import { Bar, minuteKey, simulateAll } from '../strategy/simulate';
 import { selectSystem } from '../strategy/odds';
 import { summarize } from '../strategy/stats';
@@ -30,7 +30,8 @@ const INTERVAL: Record<number, string> = {
   1440: '1d',
 };
 const START = Date.UTC(2018, 0, 1);
-const [DIR, ...COINS] = process.argv.slice(2);
+const SAVED = process.argv.includes('--saved');
+const [DIR, ...COINS] = process.argv.slice(2).filter((a) => a !== '--saved');
 
 async function klines(
   coin: string,
@@ -90,11 +91,13 @@ async function run(coin: string) {
     scan: scanLevels(h1, a, swings(h1)),
     htf: alignToClose(h1, h4, structure(h4)),
     daily: alignToClose(h1, d1, structure(d1)),
+    h4,
+    atr4: atr(h4),
   };
   const cache = new Map<string, Bar[]>();
   const resolved = await simulateAll(
     m15,
-    findSetups(m15, h1, ctx),
+    findSetups(m15, h1, ctx, SAVED ? SAVED_RULES : RULES),
     async (ranges) => {
       const out = new Map<string, Bar[]>();
       for (const [from, to] of ranges) {

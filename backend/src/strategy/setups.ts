@@ -11,8 +11,26 @@ export const FEATURE_KEYS: FeatureKey[] = [
   'pierce',
 ];
 
-/** Цель — ровно столько R от входа до стопа. */
+/** Цель сохранённого варианта — ровно столько R от входа до стопа. */
 export const TARGET_R = 5;
+/** Последний тейк основного варианта — столько ATR(14) закрытой 4H-свечи от входа. */
+export const TARGET_ATR = 4;
+/** Цель ближе стопа — сделки нет. */
+export const MIN_PLAN_R = 1;
+/** Диапазон для положения входа — столько последних закрытых 4H-свечей. */
+export const RANGE_BARS = 30;
+
+export interface StrategyRules {
+  /** Цели от ATR 4H; false — ровно 5R от входа. */
+  atrTarget: boolean;
+  /** Вход не в средней трети диапазона 4H. */
+  notMiddle: boolean;
+}
+export const RULES: StrategyRules = { atrTarget: true, notMiddle: true };
+export const SAVED_RULES: StrategyRules = {
+  atrTarget: false,
+  notMiddle: false,
+};
 /** Сколько свечей 15m сетап ждёт возврата в блок и слома: 48 часов. */
 export const CONFIRM_LIFE = 192;
 /** Уровни сетки входа — доли расстояния от входа до стопа; первый — по рынку. */
@@ -34,6 +52,11 @@ export interface Setup {
   level: number;
   /** Верх часового ордерблока; низ — стоп. */
   blockTop: number;
+  /** Диапазон 4H на момент решения; null — истории ещё нет. */
+  rangeLo: number | null;
+  rangeHi: number | null;
+  /** ATR(14) закрытой 4H-свечи на момент решения; null — истории ещё нет. */
+  atr4: number | null;
   /** Уровни входа, от первого к стопу. */
   entries: number[];
   stop: number;
@@ -56,6 +79,9 @@ export interface SetupContext {
   daily: Int8Array;
   atr: Float64Array;
   scan: Scan;
+  h4: Series;
+  /** ATR(14) ряда 4H. */
+  atr4: Float64Array;
 }
 
 const OB_LOOKBACK = 5;
@@ -109,6 +135,20 @@ function featuresOf(x: FeatureInput): Features {
   };
 }
 
+const H4_MS = 240 * 60_000;
+
+/** Границы диапазона из RANGE_BARS закрытых 4H-свечей по свечу i4; null — столько ещё нет. */
+function rangeAt(h4: Series, i4: number): { lo: number; hi: number } | null {
+  if (i4 + 1 < RANGE_BARS) return null;
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let k = i4 - RANGE_BARS + 1; k <= i4; k++) {
+    lo = Math.min(lo, h4.l[k]);
+    hi = Math.max(hi, h4.h[k]);
+  }
+  return hi > lo ? { lo, hi } : null;
+}
+
 /**
  * Подтверждение входа: цена вернулась в часовой блок, затем свеча 15m закрылась за
  * последним свингом 15m, известным на момент касания. Пробой стопа раньше слома или
@@ -146,10 +186,15 @@ function confirmOn15m(
 
 /**
  * Сетапы стратегии: контекст 4H → на 1H свип, FVG и слом в окне, ордерблок и стоп →
- * на 15m возврат в блок и слом, от него вход, сетка, цель 5R и сетка тейков. Решение —
+ * на 15m возврат в блок и слом, от него вход и сетка; на 4H положение входа и цель. Решение —
  * на закрытии свечи слома 15m; будущих свечей оно не видит.
  */
-export function findSetups(m15: Series, s: Series, ctx: SetupContext): Setup[] {
+export function findSetups(
+  m15: Series,
+  s: Series,
+  ctx: SetupContext,
+  rules: StrategyRules = RULES,
+): Setup[] {
   const out: Setup[] = [];
   const volRank = volatilityRanker(s, ctx.atr);
   const firstOf = (i: number) => lowerBound(m15.t, s.t[i]);
@@ -192,7 +237,23 @@ export function findSetups(m15: Series, s: Series, ctx: SetupContext): Setup[] {
     const entry = m15.c[e15];
     const h = d * (entry - stop);
     if (!(h > 0)) continue;
-    const target = entry + d * TARGET_R * h;
+
+    // 4H — только закрытые свечи на момент решения.
+    const i4 = lowerBound(ctx.h4.t, closeMs(m15, e15) - H4_MS + 1) - 1;
+    const atr4 = i4 >= 0 && Number.isFinite(ctx.atr4[i4]) ? ctx.atr4[i4] : null;
+    const range = rangeAt(ctx.h4, i4);
+    if (rules.notMiddle) {
+      if (!range) continue;
+      const pos = (entry - range.lo) / (range.hi - range.lo);
+      if (pos > 1 / 3 && pos < 2 / 3) continue;
+    }
+    let plannedR = TARGET_R;
+    if (rules.atrTarget) {
+      if (atr4 == null) continue;
+      plannedR = (TARGET_ATR * atr4) / h;
+      if (plannedR < MIN_PLAN_R) continue;
+    }
+    const target = entry + d * plannedR * h;
 
     out.push({
       id: `${sw.i}:${d}`,
@@ -204,13 +265,16 @@ export function findSetups(m15: Series, s: Series, ctx: SetupContext): Setup[] {
       obI: firstOf(obI),
       level: sw.level,
       blockTop: top,
+      rangeLo: range?.lo ?? null,
+      rangeHi: range?.hi ?? null,
+      atr4,
       entries: GRID_STEPS.map((k) => entry - d * k * h),
       stop,
       target,
       takes: TAKE_STEPS.map((k) => entry + (target - entry) * k),
       trail: true,
       market: true,
-      plannedR: TARGET_R,
+      plannedR,
       features: featuresOf({
         at: closeMs(s, e),
         dir: d,
