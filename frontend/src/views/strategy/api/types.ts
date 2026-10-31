@@ -13,7 +13,6 @@ export type FeatureKey =
   | 'daily'
   | 'vol'
   | 'stopAtr'
-  | 'plannedR'
   | 'pierce';
 export type Features = Record<FeatureKey, string>;
 
@@ -88,7 +87,7 @@ export interface TradeRow {
   target: number;
   takes: number[];
   takesHit: number;
-  /** План от первого ордера, 3–5R. */
+  /** Цель от входа, R. */
   plannedR: number;
   /** Первое исполнение входа. */
   fillMs: number;

@@ -266,4 +266,26 @@ describe('simulate v2', () => {
     );
     expect(worst.result).toMatchObject({ outcome: 'stop' });
   });
+
+  it('вход по рынку — открытие следующей свечи, комиссия тейкера', () => {
+    const s = bars([E, [102, 105, 101.5, 104.5]]);
+    const st = setup({
+      entries: [101],
+      takes: [104],
+      target: 104,
+      trail: false,
+      market: true,
+    });
+    const r = simulate(s, st, none);
+    expect(r).toMatchObject({
+      outcome: 'target',
+      filled: 1,
+      avgEntry: 102,
+      fillMs: STEP,
+      exit: 104,
+    });
+    if (r.status !== 'filled') throw new Error(r.status);
+    expect(r.rGross).toBeCloseTo(2 / 5);
+    expect(r.rNet).toBeCloseTo((2 - FEES.taker * 102 - FEES.maker * 104) / 5);
+  });
 });
