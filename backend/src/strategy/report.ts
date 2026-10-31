@@ -10,6 +10,7 @@ import {
   alignToClose,
   atr,
   closeMs,
+  maRegime,
   Series,
   structure,
   swings,
@@ -44,8 +45,10 @@ import { theoryOf } from './theory';
 import { maxDrawdown, summarize } from './stats';
 
 /** Поднимать при любой правке правил, обучения или формы отчёта. */
-export const STRATEGY_VERSION = 3;
+export const STRATEGY_VERSION = 4;
 export const REPORT_ID = 'smc-intraday';
+/** Граница подбора и проверки: улучшения подбирались только по сделкам до неё. */
+export const HOLDOUT_MS = Date.UTC(2023, 0, 1);
 
 export interface ReportInput {
   m15: Series;
@@ -68,6 +71,7 @@ function prepare(
   d1: Series,
   trendHtf: Int8Array,
   trendD: Int8Array,
+  regD: Int8Array,
 ): Prepared {
   const a = atr(s);
   return {
@@ -77,6 +81,7 @@ function prepare(
       scan: scanLevels(s, a, swings(s)),
       htf: alignToClose(s, htf, trendHtf),
       daily: alignToClose(s, d1, trendD),
+      regime: alignToClose(s, d1, regD),
     },
   };
 }
@@ -211,6 +216,12 @@ async function runVariant(
     longShare: system.length
       ? system.filter((t) => t.dir === 1).length / system.length
       : 0,
+    dev: summarize(
+      system.filter((t) => t.confirmMs < HOLDOUT_MS).map((t) => t.rNet),
+    ),
+    test: summarize(
+      system.filter((t) => t.confirmMs >= HOLDOUT_MS).map((t) => t.rNet),
+    ),
   };
   return { v, row, all, system, sys, odds };
 }
@@ -263,24 +274,28 @@ export async function buildReport(
   const { m15, h1, h4, d1, nowMs } = input;
   const trend4h = structure(h4);
   const trendD = structure(d1);
-  const p15 = prepare(m15, h4, d1, trend4h, trendD);
+  const regD = maRegime(d1);
+  const p15 = prepare(m15, h4, d1, trend4h, trendD, regD);
   await yieldFn();
-  const p60 = prepare(h1, d1, d1, trendD, trendD);
+  const p60 = prepare(h1, d1, d1, trendD, trendD, regD);
   await yieldFn();
+  const p240 = prepare(h4, d1, d1, trendD, trendD, regD);
+  await yieldFn();
+  const prepared = { 15: p15, 60: p60, 240: p240 };
 
   const cache = new Map<string, Bar[]>();
   const runs = [];
   for (const v of VARIANTS) {
-    runs.push(
-      await runVariant(v, v.tf === 60 ? p60 : p15, fetch, cache, nowMs),
-    );
+    runs.push(await runVariant(v, prepared[v.tf], fetch, cache, nowMs));
     await yieldFn();
   }
   const main = runs.find((r) => r.v.id === MAIN.id);
 
   const author = authorCheck(h1, p60.ctx.atr, p60.ctx.scan);
   await yieldFn();
-  const learning = learningOf(main.all, nowMs);
+  // Основной вариант без обучения: на 4H сделок для правил мало. Обучение
+  // показывается на 15m, где оно действовало и было проверено вперёд.
+  const learning = learningOf(runs.find((r) => r.v.id === 'v3').all, nowMs);
   await yieldFn();
   const mt = main.system.map((t) => ({ rNet: t.rNet, stopPct: stopPctOf(t) }));
   const notional = plainNotional(mt);

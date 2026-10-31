@@ -18,6 +18,7 @@ import {
   OUTCOME_LABELS,
   tone,
 } from '../model/format';
+import { isSearch } from '../model/research';
 import { LineChart } from './LineChart';
 import { TradeChart } from './TradeChart';
 
@@ -44,6 +45,20 @@ const variantColumns: LedgerColumn<VariantRow>[] = [
     render: (v) => <span className={tone(v.summary.expectancy)}>{fmtR(v.summary.expectancy)}</span>,
   },
   { key: 'gross', header: 'До комиссии', align: 'right', cellClassName: 'n', render: (v) => fmtR(v.grossExpectancy) },
+  {
+    key: 'dev',
+    header: '2018–2022',
+    align: 'right',
+    cellClassName: 'n',
+    render: (v) => <span className={tone(v.dev.expectancy)}>{fmtR(v.dev.expectancy)}</span>,
+  },
+  {
+    key: 'test',
+    header: '2023+',
+    align: 'right',
+    cellClassName: 'n',
+    render: (v) => <span className={tone(v.test.expectancy)}>{fmtR(v.test.expectancy)}</span>,
+  },
   { key: 'pf', header: 'PF', align: 'right', cellClassName: 'n', render: (v) => fmtNum(v.summary.pf) },
   { key: 'dd', header: 'Просадка 1 %', align: 'right', cellClassName: 'n', render: (v) => fmtPct(v.maxDd1) },
   {
@@ -115,9 +130,9 @@ export function BacktestSection({ report, theory }: { report: StrategyReport; th
     <section id="backtest" className="st-section">
       <SectionHead title="Бектест" />
       <p className="muted">
-        BTCUSDT, {fmtDate(report.dataFrom)} — {fmtDate(report.dataTo)}. Основной вариант: сетап на 15m, контекст 4H,
+        BTCUSDT, {fmtDate(report.dataFrom)} — {fmtDate(report.dataTo)}. Основной вариант: сетап на 4H, контекст 1D,
         свип + имбаланс + слом, сетка из 4 лимитов в ордерблоке, план 3–5R, 3 тейка со стопом за ними, лонгов 70 % и
-        шортов 30 %, правила обучения — с 2020 года. Одна позиция за раз, R — от риска всей сетки, после комиссии Bybit.
+        шортов 30 %, без обучения. Одна позиция за раз, R — от риска всей сетки, после комиссии Bybit.
       </p>
       <div className="st-metrics">
         <MetricCell
@@ -168,10 +183,10 @@ export function BacktestSection({ report, theory }: { report: StrategyReport; th
 
       <h3 className="st-sub">Варианты</h3>
       <p className="muted">
-        Каждый отличается от основного одним правилом. «Сетапов» — сколько нашлось; сводка — по сделкам после обучения,
-        отбора сторон и одной позиции за раз.
+        Варианты на 4H отличаются от основного одним правилом; ниже — прошлый основной на 15m. «Сетапов» — сколько нашлось;
+        сводка — по сделкам после отбора сторон и одной позиции за раз.
       </p>
-      <LedgerTable columns={variantColumns} rows={report.variants} rowKey={(v) => v.id} minWidth={1060} />
+      <LedgerTable columns={variantColumns} rows={report.variants.filter((v) => !isSearch(v.id))} rowKey={(v) => v.id} minWidth={1240} />
 
       <h3 className="st-sub">По годам</h3>
       <LedgerTable columns={yearColumns} rows={byYear} rowKey={(y) => String(y.year)} />

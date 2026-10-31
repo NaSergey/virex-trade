@@ -1,5 +1,6 @@
 import { bars, flat, SCENARIO, walk } from './fixtures';
 import {
+  maRegime,
   alignToClose,
   atr,
   closeMs,
@@ -80,5 +81,22 @@ describe('series', () => {
     expect(lowerBound(arr, 3)).toBe(1);
     expect(lowerBound(arr, 4)).toBe(3);
     expect(lowerBound(arr, 9)).toBe(4);
+  });
+
+  it('maRegime — нет истории 0, выше средней 1, ниже −1', () => {
+    const line = (at: (i: number) => number) =>
+      bars(
+        Array.from(
+          { length: 210 },
+          (_, i): [number, number, number, number] => {
+            const x = at(i);
+            return [x, x, x, x];
+          },
+        ),
+      );
+    const up = maRegime(line((i) => 100 + i));
+    expect(up[198]).toBe(0);
+    expect(up[199]).toBe(1);
+    expect(maRegime(line((i) => 1000 - i))[209]).toBe(-1);
   });
 });

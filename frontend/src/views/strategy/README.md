@@ -28,3 +28,5 @@
 1. Удалить `frontend/src/views/strategy/`, `frontend/src/app/admin/(in)/strategy/`, `backend/src/strategy/`.
 2. Убрать точки подключения 1, 2 и блок схемы (4).
 3. На базе: `DROP TABLE strategy_reports;`
+
+Поиск улучшений — `backend/src/scripts/strategy-research.ts`: сносится вместе с разделом.

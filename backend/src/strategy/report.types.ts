@@ -54,6 +54,10 @@ export interface VariantRow {
   maxDd1: number;
   /** Доля лонгов среди сделок системы. */
   longShare: number;
+  /** Сделки подбора: подтверждение до 2023 года. */
+  dev: Summary;
+  /** Сделки проверки: подтверждение с 2023 года, при подборе не использовались. */
+  test: Summary;
 }
 
 export interface OddsCheck {
