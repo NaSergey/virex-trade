@@ -13,6 +13,7 @@ import { fmtDateTime } from './model/format';
 import { RulesSection } from './components/RulesSection';
 import { BacktestSection } from './components/BacktestSection';
 import { AuthorSection } from './components/AuthorSection';
+import { CheckSection } from './components/CheckSection';
 import { OddsSection } from './components/OddsSection';
 import { LearningSection } from './components/LearningSection';
 import { TheorySection } from './components/TheorySection';
@@ -37,6 +38,7 @@ export function StrategyPage() {
     ? [
         ['rules', 'Стратегия'],
         ['backtest', 'Бектест'],
+        ['check', 'Другие монеты'],
         ['odds', 'Отбор сторон'],
         ['author', 'Цифры автора'],
         ['learning', 'Обучение'],
@@ -80,6 +82,7 @@ export function StrategyPage() {
       ) : report ? (
         <>
           <BacktestSection report={report} theory={theory} />
+          <CheckSection />
           <OddsSection block={report.odds} expectancy={report.main.stats.summary.expectancy} />
           <AuthorSection rows={report.author} />
           <LearningSection block={report.learning} />

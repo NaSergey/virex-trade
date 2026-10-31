@@ -15,7 +15,6 @@ const FEAT: Features = {
   daily: 'with',
   vol: 'mid',
   stopAtr: '0.5-1.5',
-  plannedR: '2-3',
   pierce: '<0.25',
 };
 let seq = 0;

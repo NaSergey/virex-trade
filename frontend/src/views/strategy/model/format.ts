@@ -53,7 +53,6 @@ export const FEATURE_LABELS: Record<FeatureKey, string> = {
   daily: 'Дневная структура',
   vol: 'Волатильность',
   stopAtr: 'Стоп',
-  plannedR: 'Плановый R',
   pierce: 'Прокол свипа',
 };
 
@@ -72,8 +71,6 @@ const VALUE_LABELS: Record<string, string> = {
   'stopAtr:<0.5': '< 0,5 ATR',
   'stopAtr:0.5-1.5': '0,5–1,5 ATR',
   'stopAtr:>1.5': '> 1,5 ATR',
-  'plannedR:3-4': '3–4R',
-  'plannedR:4-5': '4–5R',
   'pierce:<0.25': '< 0,25 ATR',
   'pierce:>=0.25': '≥ 0,25 ATR',
 };

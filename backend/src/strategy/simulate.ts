@@ -157,14 +157,19 @@ class Position {
     }
   }
 
-  private fill(k: number, price: number, ms: number): void {
+  /** Вход по рынку: открытие свечи, комиссия тейкера. */
+  enterMarket(b: Bar): void {
+    this.fill(0, b.o, b.t0, true);
+  }
+
+  private fill(k: number, price: number, ms: number, taker = false): void {
     const { q, fees } = this.p;
     this.filled[k] = true;
     this.fills++;
     this.qty += q;
     this.cost += q * price;
     this.cash -= q * price;
-    this.fee += fees.maker * q * Math.abs(price);
+    this.fee += (taker ? fees.taker : fees.maker) * q * Math.abs(price);
     if (Number.isNaN(this.firstMs)) this.firstMs = ms;
   }
 
@@ -274,6 +279,7 @@ export function simulate(
       },
       d,
     );
+    if (st.market && pos.fills === 0) pos.enterMarket(bar);
     let r = step(pos, plan, bar, false);
     if (r === 'ambiguous') {
       const mins = minutes(bar.t0, bar.t1);

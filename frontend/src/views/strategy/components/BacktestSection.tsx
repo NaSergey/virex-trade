@@ -92,7 +92,6 @@ const tradeColumns: LedgerColumn<TradeRow>[] = [
   { key: 'filled', header: 'Исполнено', align: 'right', cellClassName: 'n', render: (t) => `${t.filled}/${t.entries.length}` },
   { key: 'stop', header: 'Стоп', align: 'right', cellClassName: 'n', render: (t) => fmtPrice(t.stop) },
   { key: 'target', header: 'Цель', align: 'right', cellClassName: 'n', render: (t) => fmtPrice(t.target) },
-  { key: 'plan', header: 'План', align: 'right', cellClassName: 'n', render: (t) => fmtR(t.plannedR) },
   { key: 'takes', header: 'Тейков', align: 'right', cellClassName: 'n', render: (t) => `${t.takesHit}/${t.takes.length}` },
   { key: 'outcome', header: 'Выход', render: (t) => OUTCOME_LABELS[t.outcome] },
   {
@@ -123,9 +122,9 @@ export function BacktestSection({ report, theory }: { report: StrategyReport; th
     <section id="backtest" className="st-section">
       <SectionHead title="Бектест за последние 2 года" />
       <p className="muted">
-        BTCUSDT, {fmtDate(report.dataFrom)} — {fmtDate(report.dataTo)}. Контекст — 4H, сетап — 1H (свип, имбаланс, слом,
-        ордерблок), вход — по имбалансу 15m внутри блока: сетка из 4 лимитов, план 3–5R, 3 тейка со стопом за ними, лонгов
-        70 % и шортов 30 %. Одна позиция за раз, R — от риска всей сетки, после комиссии Bybit.
+        BTCUSDT, {fmtDate(report.dataFrom)} — {fmtDate(report.dataTo)}. Контекст — 4H, сетап и стоп — 1H (свип, имбаланс, слом, ордерблок). 15m только
+        подтверждает вход: цена вернулась в часовой блок и свеча 15m дала слом. Тогда первый вход по рынку и 3 лимита ниже,
+        цель 5R, 3 тейка со стопом за ними, лонгов 70 % и шортов 30 %. Одна позиция за раз, R — от риска всей сетки, после комиссии Bybit.
       </p>
       <div className="st-metrics">
         <MetricCell

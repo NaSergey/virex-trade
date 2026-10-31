@@ -1,6 +1,6 @@
 import type { Dir, FeatureKey, Features } from './report.types';
-import { closeMs, lowerBound, Series } from './series';
-import { confirmAfter, fvgAt, Scan } from './events';
+import { closeMs, lowerBound, Series, Swing, swings } from './series';
+import { confirmAfter, Scan } from './events';
 
 export const FEATURE_KEYS: FeatureKey[] = [
   'session',
@@ -8,16 +8,16 @@ export const FEATURE_KEYS: FeatureKey[] = [
   'daily',
   'vol',
   'stopAtr',
-  'plannedR',
   'pierce',
 ];
 
-/** План сделки — от первого ордера сетки, строго 3–5R. */
-export const MIN_R = 3;
-export const MAX_R = 5;
-/** Уровни сетки входа — доли расстояния от первого ордера до стопа. */
+/** Цель — ровно столько R от входа до стопа. */
+export const TARGET_R = 5;
+/** Сколько свечей 15m сетап ждёт возврата в блок и слома: 48 часов. */
+export const CONFIRM_LIFE = 192;
+/** Уровни сетки входа — доли расстояния от входа до стопа; первый — по рынку. */
 export const GRID_STEPS = [0, 0.25, 0.5, 0.75];
-/** Тейки — доли пути от первого ордера до цели. */
+/** Тейки — доли пути от входа до цели. */
 export const TAKE_STEPS = [1 / 3, 2 / 3, 1];
 
 export interface Setup {
@@ -28,11 +28,11 @@ export interface Setup {
   sweepI: number;
   fvgI: number;
   bosI: number;
-  /** Последняя свеча 15m часа подтверждения: на её закрытии выставляется сетка. */
+  /** Свеча 15m со сломом: первый вход — по открытию следующей. */
   e: number;
   obI: number;
   level: number;
-  /** Уровни входа, от первого ордера к стопу. */
+  /** Уровни входа, от первого к стопу. */
   entries: number[];
   stop: number;
   /** Последний тейк. */
@@ -40,6 +40,8 @@ export interface Setup {
   takes: number[];
   /** Стоп за тейками и снятие входа после первого тейка. */
   trail: boolean;
+  /** Первый уровень исполняется по рынку на открытии следующей свечи. */
+  market?: boolean;
   plannedR: number;
   features: Features;
 }
@@ -90,7 +92,6 @@ interface FeatureInput {
   daily: number;
   volRank: number;
   stopAtr: number;
-  plannedR: number;
   pierce: number;
 }
 
@@ -102,45 +103,56 @@ function featuresOf(x: FeatureInput): Features {
     daily: x.daily === -x.dir ? 'against' : 'with',
     vol: x.volRank < 1 / 3 ? 'low' : x.volRank < 2 / 3 ? 'mid' : 'high',
     stopAtr: x.stopAtr < 0.5 ? '<0.5' : x.stopAtr <= 1.5 ? '0.5-1.5' : '>1.5',
-    plannedR: x.plannedR < 4 ? '3-4' : '4-5',
     pierce: x.pierce < 0.25 ? '<0.25' : '>=0.25',
   };
 }
 
 /**
- * Подтверждение входа: имбаланс 15m в сторону сделки внутри часового ордерблока
- * [stop, top]. Из нескольких — тот, чей ближний край цена встретит первым на
- * откате. −1 — такого нет, и сделки нет.
+ * Подтверждение входа: цена вернулась в часовой блок, затем свеча 15m закрылась за
+ * последним свингом 15m, известным на момент касания. Пробой стопа раньше слома или
+ * истечение срока — сделки нет; −1. Часовой сетап этим не меняется: стоп и цель от него.
  */
-function entryGap(
+function confirmOn15m(
   m15: Series,
+  list: Swing[],
   from: number,
-  to: number,
   d: Dir,
   top: number,
   stop: number,
 ): number {
-  const nearOf = (k: number) => (d === 1 ? m15.l[k] : m15.h[k]);
-  let best = -1;
-  for (let k = from + 2; k <= to; k++) {
-    if (!fvgAt(m15, k, d)) continue;
-    const far = d === 1 ? m15.h[k - 2] : m15.l[k - 2];
-    if (d * (top - nearOf(k)) < 0 || d * (far - stop) < 0) continue;
-    if (best < 0 || d * (nearOf(k) - nearOf(best)) > 0) best = k;
+  let ref = NaN;
+  const end = Math.min(m15.n - 1, from + CONFIRM_LIFE);
+  for (let j = from + 1; j <= end; j++) {
+    if (d === 1 ? m15.l[j] <= stop : m15.h[j] >= stop) return -1;
+    if (Number.isNaN(ref)) {
+      if (d === 1 ? m15.l[j] > top : m15.h[j] < top) continue;
+      let lo = 0;
+      let hi = list.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (list[mid].known <= j) lo = mid + 1;
+        else hi = mid;
+      }
+      if (!lo) return -1;
+      ref = list[lo - 1].price;
+      continue;
+    }
+    if (d === 1 ? m15.c[j] > ref : m15.c[j] < ref) return j;
   }
-  return best;
+  return -1;
 }
 
 /**
- * Сетапы стратегии: контекст 4H → на 1H свип, FVG и слом в окне, ордерблок и
- * ликвидность → на 15m имбаланс внутри блока, от него сетка входа, стоп, цель
- * 3–5R и сетка тейков. Всё решается на закрытии часа подтверждения `e`.
+ * Сетапы стратегии: контекст 4H → на 1H свип, FVG и слом в окне, ордерблок и стоп →
+ * на 15m возврат в блок и слом, от него вход, сетка, цель 5R и сетка тейков. Решение —
+ * на закрытии свечи слома 15m; будущих свечей оно не видит.
  */
 export function findSetups(m15: Series, s: Series, ctx: SetupContext): Setup[] {
   const out: Setup[] = [];
   const volRank = volatilityRanker(s, ctx.atr);
   const firstOf = (i: number) => lowerBound(m15.t, s.t[i]);
   const lastOf = (i: number) => lowerBound(m15.t, closeMs(s, i)) - 1;
+  const sw15 = swings(m15);
   for (const sw of ctx.scan.sweeps) {
     const d = sw.dir;
     const conf = confirmAfter(s, sw);
@@ -172,26 +184,20 @@ export function findSetups(m15: Series, s: Series, ctx: SetupContext): Setup[] {
     if (!(d * (top - stop) > 0)) continue;
     if (d * (s.c[e] - top) <= 0) continue; // цена уже в блоке
 
-    const e15 = lastOf(e);
-    const gap = entryGap(m15, firstOf(obI), e15, d, top, stop);
-    if (gap < 0) continue;
-    const entry = d === 1 ? m15.l[gap] : m15.h[gap];
+    const list = d === 1 ? sw15.highs : sw15.lows;
+    const e15 = confirmOn15m(m15, list, lastOf(e), d, top, stop);
+    if (e15 < 0) continue;
+    const entry = m15.c[e15];
     const h = d * (entry - stop);
     if (!(h > 0)) continue;
-
-    const liq = d === 1 ? ctx.scan.nearHigh[e] : ctx.scan.nearLow[e];
-    if (!Number.isFinite(liq)) continue;
-    const rLiq = (d * (liq - entry)) / h;
-    if (rLiq < MIN_R) continue; // ликвидность ближе 3R
-    const plannedR = Math.min(rLiq, MAX_R);
-    const target = entry + d * plannedR * h;
+    const target = entry + d * TARGET_R * h;
 
     out.push({
       id: `${sw.i}:${d}`,
       dir: d,
       sweepI: firstOf(sw.i),
-      fvgI: gap,
-      bosI: lastOf(conf.bos),
+      fvgI: lastOf(conf.fvg),
+      bosI: e15,
       e: e15,
       obI: firstOf(obI),
       level: sw.level,
@@ -200,14 +206,14 @@ export function findSetups(m15: Series, s: Series, ctx: SetupContext): Setup[] {
       target,
       takes: TAKE_STEPS.map((k) => entry + (target - entry) * k),
       trail: true,
-      plannedR,
+      market: true,
+      plannedR: TARGET_R,
       features: featuresOf({
         at: closeMs(s, e),
         dir: d,
         daily: ctx.daily[e],
         volRank: volRank(e),
         stopAtr: h / ctx.atr[e],
-        plannedR,
         pierce: sw.pierceAtr,
       }),
     });
