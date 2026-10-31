@@ -30,7 +30,10 @@ describe('report', () => {
       async () => undefined,
     );
     expect(report.version).toBe(STRATEGY_VERSION);
-    expect(report.variants).toHaveLength(9);
+    expect(report.variants).toHaveLength(17);
+    for (const v of report.variants) {
+      expect(v.dev.n + v.test.n).toBe(v.summary.n);
+    }
     expect(report.variants[0].id).toBe('main');
     expect(report.author).toHaveLength(8);
     expect(report.learning.quarters.length).toBeGreaterThanOrEqual(2);

@@ -101,4 +101,36 @@ describe('setups v2', () => {
       'weekend',
     ]);
   });
+
+  it('запас к стопу — стоп дальше блока на долю ATR', () => {
+    const s = bars(SCENARIO);
+    const ctx = ctxOf(s, 1, 130);
+    const [st] = findSetups(s, ctx, { ...MAIN, stopBufAtr: 0.5 });
+    expect(st.stop).toBeCloseTo(96 - 0.5 * ctx.atr[28]);
+  });
+
+  it('стоп тоньше заданной доли цены — сетап пропускается', () => {
+    const s = bars(SCENARIO); // стоп 2,6 от 98,6 — 2,6 %
+    const ctx = ctxOf(s, 1, 110);
+    expect(findSetups(s, ctx, { ...MAIN, minStopPct: 0.05 })).toHaveLength(0);
+    expect(findSetups(s, ctx, { ...MAIN, minStopPct: 0.02 })).toHaveLength(1);
+  });
+
+  it('режим рынка — лонг только над MA200', () => {
+    const s = bars(SCENARIO);
+    const ctx = ctxOf(s, 1, 110);
+    const v = { ...MAIN, regime: true };
+    ctx.regime = new Int8Array(s.n).fill(-1);
+    expect(findSetups(s, ctx, v)).toHaveLength(0);
+    ctx.regime = new Int8Array(s.n).fill(1);
+    expect(findSetups(s, ctx, v)).toHaveLength(1);
+  });
+
+  it('вход по рынку — один вход от закрытия подтверждения', () => {
+    const s = bars(SCENARIO);
+    const [st] = findSetups(s, ctxOf(s, 1, 130), { ...MAIN, market: true });
+    expect(st.market).toBe(true);
+    expect(st.entries).toEqual([s.c[28]]);
+    expect(st.stop).toBe(96);
+  });
 });

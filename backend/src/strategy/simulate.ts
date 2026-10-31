@@ -65,6 +65,7 @@ interface Plan {
   q: number;
   trail: boolean;
   fees: Fees;
+  holdMs: number;
 }
 
 /** Позиция по сетке: исполнения входа, тейки, стоп за тейками, деньги и комиссия. */
@@ -152,19 +153,24 @@ class Position {
   }
 
   timeExit(b: Bar): void {
-    if (!this.done && this.qty > 0 && b.t1 >= this.firstMs + MAX_HOLD_MS) {
+    if (!this.done && this.qty > 0 && b.t1 >= this.firstMs + this.p.holdMs) {
       this.close(this.qty, b.c, b.t1, false, 'time');
     }
   }
 
-  private fill(k: number, price: number, ms: number): void {
+  /** Вход по рынку: открытие свечи, комиссия тейкера. */
+  enterMarket(b: Bar): void {
+    this.fill(0, b.o, b.t0, true);
+  }
+
+  private fill(k: number, price: number, ms: number, taker = false): void {
     const { q, fees } = this.p;
     this.filled[k] = true;
     this.fills++;
     this.qty += q;
     this.cost += q * price;
     this.cash -= q * price;
-    this.fee += fees.maker * q * Math.abs(price);
+    this.fee += (taker ? fees.taker : fees.maker) * q * Math.abs(price);
     if (Number.isNaN(this.firstMs)) this.firstMs = ms;
   }
 
@@ -258,6 +264,7 @@ export function simulate(
     q: 1 / st.entries.length,
     trail: st.trail,
     fees,
+    holdMs: st.holdMs ?? MAX_HOLD_MS,
   };
   const risk = plan.levels.reduce((a, x) => a + (x - plan.stop0), 0) * plan.q;
   const pos = new Position(plan);
@@ -274,6 +281,7 @@ export function simulate(
       },
       d,
     );
+    if (st.market && pos.fills === 0) pos.enterMarket(bar);
     let r = step(pos, plan, bar, false);
     if (r === 'ambiguous') {
       const mins = minutes(bar.t0, bar.t1);

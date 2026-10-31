@@ -161,3 +161,18 @@ export function alignToClose(
   }
   return out;
 }
+
+/** Цена относительно скользящей средней: 1, −1; 0 — истории ещё нет. */
+export function maRegime(d1: Series, period = 200): Int8Array {
+  const out = new Int8Array(d1.n);
+  let sum = 0;
+  for (let i = 0; i < d1.n; i++) {
+    sum += d1.c[i];
+    if (i >= period) sum -= d1.c[i - period];
+    if (i >= period - 1) {
+      const ma = sum / period;
+      out[i] = d1.c[i] > ma ? 1 : d1.c[i] < ma ? -1 : 0;
+    }
+  }
+  return out;
+}

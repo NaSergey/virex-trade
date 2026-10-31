@@ -24,7 +24,7 @@ export interface Variant {
   id: string;
   label: string;
   /** ТФ сетапа, минут. */
-  tf: 15 | 60;
+  tf: 15 | 60 | 240;
   fvg: boolean;
   bos: boolean;
   context: boolean;
@@ -34,31 +34,72 @@ export interface Variant {
   odds: boolean;
   /** Правила обучения на ошибках (с 2020-Q1, вперёд по кварталам). */
   learn: boolean;
+  /** Запас к стопу за блоком, в ATR ТФ сетапа. */
+  stopBufAtr?: number;
+  /** Стоп тоньше этой доли цены — пропуск: комиссия съедает R. */
+  minStopPct?: number;
+  /** Вход по рынку на открытии следующей свечи вместо лимитов в блоке. */
+  market?: boolean;
+  /** Режим рынка: лонг только над MA200 дня, шорт только под ней. */
+  regime?: boolean;
+  /** Срок удержания, мс; нет — MAX_HOLD_MS. */
+  holdMs?: number;
 }
 
 export const MAIN: Variant = {
   id: 'main',
-  label: 'Основной',
-  tf: 15,
+  label: 'Основной (4H)',
+  tf: 240,
   fvg: true,
   bos: true,
   context: true,
   grid: true,
   odds: true,
-  learn: true,
+  learn: false,
 };
+const M15: Variant = { ...MAIN, tf: 15 };
+const H1: Variant = { ...MAIN, tf: 60 };
 
-/** Варианты отчёта: каждый отличается от основного одним правилом. */
+/**
+ * Варианты отчёта: сначала отличающиеся от основного одним правилом, затем прошлый
+ * основной на 15m и поиск улучшений (`src/scripts/strategy-research.ts`).
+ */
 export const VARIANTS: Variant[] = [
   MAIN,
-  { ...MAIN, id: 'sweep', label: 'Только свип', fvg: false, bos: false },
-  { ...MAIN, id: 'sweep-fvg', label: 'Свип + FVG', bos: false },
-  { ...MAIN, id: 'sweep-bos', label: 'Свип + BOS', fvg: false },
-  { ...MAIN, id: 'no-context', label: 'Без контекста 4H', context: false },
-  { ...MAIN, id: 'no-odds', label: 'Без отбора сторон', odds: false },
-  { ...MAIN, id: 'no-learning', label: 'Без обучения', learn: false },
-  { ...MAIN, id: 'single', label: 'Одиночный вход и выход', grid: false },
-  { ...MAIN, id: 'h1', label: 'ТФ сетапа 1H', tf: 60 },
+  { ...MAIN, id: 'sweep', label: '4H, только свип', fvg: false, bos: false },
+  { ...MAIN, id: 'sweep-fvg', label: '4H, свип + FVG', bos: false },
+  { ...MAIN, id: 'sweep-bos', label: '4H, свип + BOS', fvg: false },
+  { ...MAIN, id: 'no-context', label: '4H, без контекста 1D', context: false },
+  { ...MAIN, id: 'no-odds', label: '4H, без отбора сторон', odds: false },
+  { ...MAIN, id: 'single', label: '4H, одиночный вход и выход', grid: false },
+  {
+    ...M15,
+    id: 'v3',
+    label: '15m с обучением (прошлый основной)',
+    learn: true,
+  },
+  { ...M15, id: 'base15', label: '15m без обучения' },
+  { ...M15, id: 'minstop', label: '15m, стоп от 0,5 %', minStopPct: 0.005 },
+  { ...H1, id: 'h1', label: '1H' },
+  { ...M15, id: 'reg15', label: '15m, MA200', regime: true },
+  { ...H1, id: 'reg1h', label: '1H, MA200', regime: true },
+  {
+    ...H1,
+    id: 'reg1h-fvg',
+    label: '1H, MA200, свип + FVG',
+    regime: true,
+    bos: false,
+  },
+  {
+    ...M15,
+    id: 'reg15-buf',
+    label: '15m, MA200, запас 0,5 ATR, стоп от 0,5 %',
+    regime: true,
+    stopBufAtr: 0.5,
+    minStopPct: 0.005,
+  },
+  { ...M15, id: 'buf5', label: '15m, запас 0,5 ATR', stopBufAtr: 0.5 },
+  { ...M15, id: 'mkt15', label: '15m, вход по рынку', market: true },
 ];
 
 export interface Setup {
@@ -82,6 +123,9 @@ export interface Setup {
   /** Стоп за тейками и снятие входа после первого тейка. */
   trail: boolean;
   plannedR: number;
+  /** Вход по рынку на открытии свечи после подтверждения. */
+  market?: boolean;
+  holdMs?: number;
   features: Features;
 }
 
@@ -93,6 +137,8 @@ export interface SetupContext {
   daily: Int8Array;
   atr: Float64Array;
   scan: Scan;
+  /** Цена относительно MA200 дня: 1, −1, 0 (истории ещё нет). */
+  regime?: Int8Array;
 }
 
 const OB_LOOKBACK = 5;
@@ -169,6 +215,7 @@ export function findSetups(s: Series, ctx: SetupContext, v: Variant): Setup[] {
       e = Math.max(e, conf.bos);
     }
     if (v.context && ctx.htf[e] !== d) continue;
+    if (v.regime && ctx.regime?.[e] !== d) continue;
 
     // Самая дальняя точка движения [свип, e] — от неё ищется ордерблок.
     let low = sw.i;
@@ -190,19 +237,22 @@ export function findSetups(s: Series, ctx: SetupContext, v: Variant): Setup[] {
       bottom = d === 1 ? Math.min(bottom, s.l[k]) : Math.max(bottom, s.h[k]);
     }
 
-    const stop = bottom;
-    const h = d * (top - stop);
+    const entry = v.market ? s.c[e] : top;
+    const stop = bottom - d * (v.stopBufAtr ?? 0) * ctx.atr[e];
+    const h = d * (entry - stop);
     if (!(h > 0)) continue;
-    if (d * (s.c[e] - top) <= 0) continue; // цена уже в блоке
+    if (!v.market && d * (s.c[e] - top) <= 0) continue; // цена уже в блоке
+    if (v.minStopPct && h / Math.abs(entry) < v.minStopPct) continue;
     const liq = d === 1 ? ctx.scan.nearHigh[e] : ctx.scan.nearLow[e];
     if (!Number.isFinite(liq)) continue;
-    const rLiq = (d * (liq - top)) / h;
+    const rLiq = (d * (liq - entry)) / h;
     if (rLiq < MIN_R) continue; // ликвидность ближе 3R
     const plannedR = Math.min(rLiq, MAX_R);
-    const target = top + d * plannedR * h;
-    const entries = v.grid ? GRID_STEPS.map((k) => top - d * k * h) : [top];
+    const target = entry + d * plannedR * h;
+    const entries =
+      v.grid && !v.market ? GRID_STEPS.map((k) => entry - d * k * h) : [entry];
     const takes = v.grid
-      ? TAKE_STEPS.map((k) => top + (target - top) * k)
+      ? TAKE_STEPS.map((k) => entry + (target - entry) * k)
       : [target];
 
     out.push({
@@ -220,6 +270,8 @@ export function findSetups(s: Series, ctx: SetupContext, v: Variant): Setup[] {
       takes,
       trail: v.grid,
       plannedR,
+      market: v.market,
+      holdMs: v.holdMs,
       features: featuresOf({
         at: closeMs(s, e),
         dir: d,
