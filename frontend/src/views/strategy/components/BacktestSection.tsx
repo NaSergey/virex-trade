@@ -5,7 +5,7 @@ import { SectionHead } from '@/shared/ui/SectionHead';
 import { MetricCell } from '@/shared/ui/MetricCell';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import { Pagination } from '@/shared/ui/Pagination';
-import type { StrategyReport, TradeRow, VariantRow, YearRow } from '../api/types';
+import type { SideRow, StrategyReport, TradeRow, YearRow } from '../api/types';
 import {
   fmtDate,
   fmtDateTime,
@@ -18,55 +18,50 @@ import {
   OUTCOME_LABELS,
   tone,
 } from '../model/format';
-import { isSearch } from '../model/research';
 import { LineChart } from './LineChart';
 import { TradeChart } from './TradeChart';
 
 const PAGE = 25;
 
-const variantColumns: LedgerColumn<VariantRow>[] = [
-  { key: 'label', header: 'Вариант', render: (v) => v.label },
-  { key: 'setups', header: 'Сетапов', align: 'right', cellClassName: 'n', render: (v) => fmtInt(v.setups) },
-  { key: 'n', header: 'Сделок', align: 'right', cellClassName: 'n', render: (v) => fmtInt(v.summary.n) },
-  { key: 'long', header: 'Лонгов', align: 'right', cellClassName: 'n', render: (v) => fmtPct(v.longShare, 0) },
-  { key: 'wr', header: 'Винрейт', align: 'right', cellClassName: 'n', render: (v) => fmtPct(v.summary.winrate) },
+interface SideLine {
+  key: string;
+  label: string;
+  s: SideRow;
+}
+
+const sideColumns: LedgerColumn<SideLine>[] = [
+  { key: 'label', header: 'Сделки', render: (r) => r.label },
+  { key: 'n', header: 'Сделок', align: 'right', cellClassName: 'n', render: (r) => fmtInt(r.s.summary.n) },
+  {
+    key: 'wr',
+    header: 'Винрейт',
+    align: 'right',
+    cellClassName: 'n',
+    render: (r) => (r.s.summary.n ? fmtPct(r.s.summary.winrate) : '—'),
+  },
   {
     key: 'be',
     header: 'Безубыточный',
     align: 'right',
     cellClassName: 'n',
-    render: (v) => fmtPct(v.summary.breakeven),
+    render: (r) => (r.s.summary.n ? fmtPct(r.s.summary.breakeven) : '—'),
   },
   {
     key: 'exp',
     header: 'Мат ожидание',
     align: 'right',
     cellClassName: 'n',
-    render: (v) => <span className={tone(v.summary.expectancy)}>{fmtR(v.summary.expectancy)}</span>,
+    render: (r) => <span className={tone(r.s.summary.expectancy)}>{fmtR(r.s.summary.expectancy)}</span>,
   },
-  { key: 'gross', header: 'До комиссии', align: 'right', cellClassName: 'n', render: (v) => fmtR(v.grossExpectancy) },
-  {
-    key: 'dev',
-    header: '2018–2022',
-    align: 'right',
-    cellClassName: 'n',
-    render: (v) => <span className={tone(v.dev.expectancy)}>{fmtR(v.dev.expectancy)}</span>,
-  },
-  {
-    key: 'test',
-    header: '2023+',
-    align: 'right',
-    cellClassName: 'n',
-    render: (v) => <span className={tone(v.test.expectancy)}>{fmtR(v.test.expectancy)}</span>,
-  },
-  { key: 'pf', header: 'PF', align: 'right', cellClassName: 'n', render: (v) => fmtNum(v.summary.pf) },
-  { key: 'dd', header: 'Просадка 1 %', align: 'right', cellClassName: 'n', render: (v) => fmtPct(v.maxDd1) },
+  { key: 'gross', header: 'До комиссии', align: 'right', cellClassName: 'n', render: (r) => fmtR(r.s.grossExpectancy) },
+  { key: 'pf', header: 'PF', align: 'right', cellClassName: 'n', render: (r) => fmtNum(r.s.summary.pf) },
+  { key: 'dd', header: 'Просадка 1 %', align: 'right', cellClassName: 'n', render: (r) => fmtPct(r.s.maxDd1) },
   {
     key: 'sum',
     header: 'Итог',
     align: 'right',
     cellClassName: 'n',
-    render: (v) => <span className={tone(v.summary.sumR)}>{fmtR(v.summary.sumR)}</span>,
+    render: (r) => <span className={tone(r.s.summary.sumR)}>{fmtR(r.s.summary.sumR)}</span>,
   },
 ];
 
@@ -116,51 +111,51 @@ const tradeColumns: LedgerColumn<TradeRow>[] = [
   },
 ];
 
-/** Сводка основного варианта, варианты рядом, кривая, годы и сделки с графиком. */
+/** Итоги стратегии за последние 2 года: лонги и шорты, деньги, кривая, годы и сделки с графиком. */
 export function BacktestSection({ report, theory }: { report: StrategyReport; theory: boolean }) {
-  const { variant, equity, byYear, trades } = report.main;
-  const s = variant.summary;
-  const longs = report.odds.long.summary;
-  const shorts = report.odds.short.summary;
+  const { stats, sides, equity, byYear, trades } = report.main;
+  const s = stats.summary;
   const [page, setPage] = useState(1);
   const newestFirst = [...trades].reverse();
   const money = theory ? report.main.money.theory : report.main.money.plain;
 
   return (
     <section id="backtest" className="st-section">
-      <SectionHead title="Бектест" />
+      <SectionHead title="Бектест за последние 2 года" />
       <p className="muted">
-        BTCUSDT, {fmtDate(report.dataFrom)} — {fmtDate(report.dataTo)}. Основной вариант: сетап на 4H, контекст 1D,
-        свип + имбаланс + слом, сетка из 4 лимитов в ордерблоке, план 3–5R, 3 тейка со стопом за ними, лонгов 70 % и
-        шортов 30 %, без обучения. Одна позиция за раз, R — от риска всей сетки, после комиссии Bybit.
+        BTCUSDT, {fmtDate(report.dataFrom)} — {fmtDate(report.dataTo)}. Контекст — 4H, сетап — 1H (свип, имбаланс, слом,
+        ордерблок), вход — по имбалансу 15m внутри блока: сетка из 4 лимитов, план 3–5R, 3 тейка со стопом за ними, лонгов
+        70 % и шортов 30 %. Одна позиция за раз, R — от риска всей сетки, после комиссии Bybit.
       </p>
       <div className="st-metrics">
         <MetricCell
           label="Сделок"
           value={fmtInt(s.n)}
-          sub={`сетапов ${fmtInt(variant.setups)}, исполнено до отбора ${fmtInt(variant.filled)}`}
-        />
-        <MetricCell
-          label="Лонги"
-          value={fmtInt(longs.n)}
-          sub={`винрейт ${fmtPct(longs.winrate)}, доля ${fmtPct(report.odds.longShare, 0)}`}
-        />
-        <MetricCell
-          label="Шорты"
-          value={fmtInt(shorts.n)}
-          sub={`винрейт ${fmtPct(shorts.winrate)}, доля ${fmtPct(1 - report.odds.longShare, 0)}`}
+          sub={`сетапов ${fmtInt(stats.setups)}, исполнено до отбора ${fmtInt(stats.filled)}`}
         />
         <MetricCell label="Винрейт" value={fmtPct(s.winrate)} sub={`безубыточный ${fmtPct(s.breakeven)}`} />
         <MetricCell
           label="Мат ожидание"
           value={fmtR(s.expectancy)}
           tone={tone(s.expectancy)}
-          sub={`до комиссии ${fmtR(variant.grossExpectancy)}`}
+          sub={`до комиссии ${fmtR(stats.grossExpectancy)}`}
         />
         <MetricCell label="Профит-фактор" value={fmtNum(s.pf)} />
-        <MetricCell label="Просадка при риске 1 %" value={fmtPct(variant.maxDd1)} />
+        <MetricCell label="Просадка при риске 1 %" value={fmtPct(stats.maxDd1)} />
         <MetricCell label="Итог" value={fmtR(s.sumR)} tone={tone(s.sumR)} />
       </div>
+
+      <h3 className="st-sub">Лонги и шорты</h3>
+      <LedgerTable
+        columns={sideColumns}
+        rows={[
+          { key: 'all', label: 'Все', s: sides.all },
+          { key: 'long', label: 'Лонги', s: sides.long },
+          { key: 'short', label: 'Шорты', s: sides.short },
+        ]}
+        rowKey={(r) => r.key}
+        minWidth={820}
+      />
 
       <h3 className="st-sub">
         Счёт {fmtUsd(money.start)} — {theory ? 'с управлением риском: 1 % текущего счёта' : 'без управления риском: одинаковый объём'}
@@ -181,12 +176,6 @@ export function BacktestSection({ report, theory }: { report: StrategyReport; th
       <h3 className="st-sub">Кривая счёта — накопленный R по номеру сделки</h3>
       <LineChart lines={[{ label: 'Основной', values: equity.map((p) => p.r) }]} />
 
-      <h3 className="st-sub">Варианты</h3>
-      <p className="muted">
-        Варианты на 4H отличаются от основного одним правилом; ниже — прошлый основной на 15m. «Сетапов» — сколько нашлось;
-        сводка — по сделкам после отбора сторон и одной позиции за раз.
-      </p>
-      <LedgerTable columns={variantColumns} rows={report.variants.filter((v) => !isSearch(v.id))} rowKey={(v) => v.id} minWidth={1240} />
 
       <h3 className="st-sub">По годам</h3>
       <LedgerTable columns={yearColumns} rows={byYear} rowKey={(y) => String(y.year)} />

@@ -94,7 +94,7 @@ export class StrategyReportService
       update: { version: STRATEGY_VERSION, computedAt, data },
     });
     this.logger.log(
-      `отчёт стратегии: ${report.main.variant.summary.n} сделок, ${Math.round((Date.now() - started) / 1000)} с`,
+      `отчёт стратегии: ${report.main.stats.summary.n} сделок, ${Math.round((Date.now() - started) / 1000)} с`,
     );
   }
 

@@ -66,10 +66,10 @@ describe('simulate v2', () => {
     );
   });
 
-  it('цель раньше входа — пропущен; лимиты живут 48 свечей', () => {
+  it('цель раньше входа — пропущен; лимиты живут 192 свечи', () => {
     const missed = bars([E, [101, 112.5, 100.5, 112]]);
     expect(simulate(missed, setup(), none).status).toBe('missed');
-    const idle = bars([E, ...Array<Ohlc>(60).fill(E)]);
+    const idle = bars([E, ...Array<Ohlc>(200).fill(E)]);
     expect(simulate(idle, setup(), none).status).toBe('expired');
   });
 
@@ -265,21 +265,5 @@ describe('simulate v2', () => {
       new Map(),
     );
     expect(worst.result).toMatchObject({ outcome: 'stop' });
-  });
-
-  it('вход по рынку — открытие следующей свечи, комиссия тейкера; свой срок', () => {
-    const s = bars([E, [102, 102.5, 101.5, 102]]);
-    const st = setup({ entries: [101], market: true, holdMs: STEP });
-    const r = simulate(s, st, none);
-    expect(r).toMatchObject({
-      outcome: 'time',
-      filled: 1,
-      avgEntry: 102,
-      fillMs: STEP,
-      exit: 102,
-    });
-    if (r.status !== 'filled') throw new Error(r.status);
-    expect(r.rGross).toBeCloseTo(0);
-    expect(r.rNet).toBeCloseTo((-2 * FEES.taker * 102) / 5);
   });
 });

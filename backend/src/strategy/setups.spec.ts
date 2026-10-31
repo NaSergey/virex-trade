@@ -1,9 +1,10 @@
-import { bars, mirror, SCENARIO } from './fixtures';
+import { bars, mirror, Ohlc, SCENARIO } from './fixtures';
 import { atr, Series, swings } from './series';
 import { scanLevels } from './events';
-import { findSetups, MAIN, SetupContext, VARIANTS } from './setups';
+import { findSetups, SetupContext } from './setups';
 
-/** Ликвидность сверху (снизу у зеркала) на свече подтверждения 28 подменяется. */
+/** SCENARIO как часовой ряд: свип 25 (ордерблок, 96…98,6), подтверждение 28. */
+const hours = () => bars(SCENARIO, 60);
 const ctxOf = (s: Series, htf: number, liq?: number): SetupContext => {
   const a = atr(s);
   const scan = scanLevels(s, a, swings(s));
@@ -18,73 +19,108 @@ const ctxOf = (s: Series, htf: number, liq?: number): SetupContext => {
     daily: new Int8Array(s.n),
   };
 };
-const variant = (id: string) => VARIANTS.find((v) => v.id === id);
+/** Ряд 15m: четыре копии каждого часа, кроме заданных свечей. */
+const quarters = (over: Record<number, Ohlc> = {}) =>
+  bars(
+    SCENARIO.flatMap((c, i) => [0, 1, 2, 3].map((j) => over[i * 4 + j] ?? c)),
+    15,
+  );
+/** Имбаланс 15m на свече 103 внутри блока: 96,8…97,4. */
+const GAP: Record<number, Ohlc> = {
+  101: [96.4, 96.8, 96.2, 96.7],
+  102: [96.7, 98.1, 96.6, 97.9],
+  103: [97.9, 98.4, 97.4, 98.2],
+};
 const close = (xs: number[], ys: number[]) => {
   expect(xs).toHaveLength(ys.length);
   xs.forEach((x, i) => expect(x).toBeCloseTo(ys[i]));
 };
 
-describe('setups v2', () => {
-  it('сетка входа, тейки и план 3–5R', () => {
-    const s = bars(SCENARIO);
-    const [st] = findSetups(s, ctxOf(s, 1, 110), MAIN);
+describe('setups: контекст 4H, сетап 1H, вход 15m', () => {
+  it('сетка входа от имбаланса 15m, стоп под блоком, план 3–5R', () => {
+    const s = hours();
+    const [st] = findSetups(quarters(GAP), s, ctxOf(s, 1, 103));
     expect(st).toMatchObject({
-      id: 'main:25:1',
+      id: '25:1',
       dir: 1,
-      sweepI: 25,
-      e: 28,
-      obI: 25,
+      sweepI: 100,
+      fvgI: 103,
+      bosI: 115,
+      e: 115,
+      obI: 100,
       stop: 96,
-      target: 110,
+      target: 103,
       trail: true,
     });
-    close(st.entries, [98.6, 97.95, 97.3, 96.65]);
-    close(st.takes, [102.4, 106.2, 110]);
-    expect(st.plannedR).toBeCloseTo(11.4 / 2.6);
+    close(st.entries, [97.4, 97.05, 96.7, 96.35]);
+    close(st.takes, [97.4 + 5.6 / 3, 97.4 + (2 * 5.6) / 3, 103]);
+    expect(st.plannedR).toBeCloseTo(4);
+  });
+
+  it('нет имбаланса 15m в блоке — сделки нет', () => {
+    const s = hours();
+    expect(findSetups(quarters(), s, ctxOf(s, 1, 110))).toHaveLength(0);
+  });
+
+  it('имбаланс выше блока подтверждением не считается', () => {
+    const s = hours();
+    const above: Record<number, Ohlc> = {
+      106: [98.2, 98.9, 98.1, 98.8],
+      107: [98.8, 99.6, 98.7, 99.5],
+      108: [99.5, 100, 99.2, 99.8],
+    };
+    expect(findSetups(quarters(above), s, ctxOf(s, 1, 110))).toHaveLength(0);
+  });
+
+  it('из двух имбалансов — тот, что цена встретит первым', () => {
+    const s = hours();
+    const two = { ...GAP, 102: [96.7, 97.6, 96.6, 97.5] as Ohlc };
+    const [st] = findSetups(quarters(two), s, ctxOf(s, 1, 110));
+    expect(st.entries[0]).toBeCloseTo(98); // лоу свечи 104 выше хая 102
+    expect(st.fvgI).toBe(104);
+  });
+
+  it('имбаланс после часа подтверждения не виден', () => {
+    const s = hours();
+    const late: Record<number, Ohlc> = {
+      116: [96.4, 96.8, 96.2, 96.7],
+      117: [96.7, 98.1, 96.6, 97.9],
+      118: [97.9, 98.4, 97.4, 98.2],
+    };
+    const rows = SCENARIO.flatMap((c) => [c, c, c, c]);
+    rows.push(late[116], late[117], late[118]);
+    const m15 = bars(rows, 15);
+    expect(findSetups(m15, s, ctxOf(s, 1, 110))).toHaveLength(0);
   });
 
   it('ликвидность дальше 5R — цель на 5R', () => {
-    const s = bars(SCENARIO);
-    const [st] = findSetups(s, ctxOf(s, 1, 120), MAIN);
-    expect(st.target).toBeCloseTo(98.6 + 5 * 2.6);
+    const s = hours();
+    const [st] = findSetups(quarters(GAP), s, ctxOf(s, 1, 120));
+    expect(st.target).toBeCloseTo(97.4 + 5 * 1.4);
     expect(st.plannedR).toBe(5);
   });
 
   it('ликвидность ближе 3R — сетап пропускается', () => {
-    const s = bars(SCENARIO); // ближайший хай 106 — 2,85R
-    expect(findSetups(s, ctxOf(s, 1), MAIN)).toHaveLength(0);
+    const s = hours();
+    expect(findSetups(quarters(GAP), s, ctxOf(s, 1, 101))).toHaveLength(0);
   });
 
-  it('контекст против — сетапа нет; без контекста — есть', () => {
-    const s = bars(SCENARIO);
-    expect(findSetups(s, ctxOf(s, -1, 110), MAIN)).toHaveLength(0);
-    expect(
-      findSetups(s, ctxOf(s, -1, 110), variant('no-context')),
-    ).toHaveLength(1);
-  });
-
-  it('одиночный вход и выход', () => {
-    const s = bars(SCENARIO);
-    const [st] = findSetups(s, ctxOf(s, 1, 110), variant('single'));
-    expect(st).toMatchObject({ entries: [98.6], takes: [110], trail: false });
-  });
-
-  it('цена уже в блоке на подтверждении — сетап пропускается', () => {
-    const s = bars(SCENARIO);
-    expect(findSetups(s, ctxOf(s, 1, 110), variant('sweep'))).toHaveLength(0);
+  it('контекст 4H против — сетапа нет', () => {
+    const s = hours();
+    expect(findSetups(quarters(GAP), s, ctxOf(s, -1, 110))).toHaveLength(0);
   });
 
   it('шорт — зеркало лонга', () => {
-    const s = mirror(bars(SCENARIO));
-    const [st] = findSetups(s, ctxOf(s, -1, 110), MAIN);
-    expect(st).toMatchObject({ dir: -1, stop: -96, target: -110 });
-    close(st.entries, [-98.6, -97.95, -97.3, -96.65]);
+    const s = mirror(hours());
+    const [st] = findSetups(mirror(quarters(GAP)), s, ctxOf(s, -1, 103));
+    expect(st).toMatchObject({ dir: -1, stop: -96, target: -103 });
+    close(st.entries, [-97.4, -97.05, -96.7, -96.35]);
   });
 
   it('признаки сетапа', () => {
-    const s = bars(SCENARIO);
-    const [st] = findSetups(s, ctxOf(s, 1, 110), MAIN);
-    // Закрытие свечи 28 — 07:15 UTC четверга 1 января 1970.
+    const s = hours();
+    const [st] = findSetups(quarters(GAP), s, ctxOf(s, 1, 110));
+    // Закрытие часа 28 — 05:00 UTC пятницы 2 января 1970.
     expect(st.features).toMatchObject({
       session: 'asia',
       weekend: 'no',
@@ -100,37 +136,5 @@ describe('setups v2', () => {
       'vol',
       'weekend',
     ]);
-  });
-
-  it('запас к стопу — стоп дальше блока на долю ATR', () => {
-    const s = bars(SCENARIO);
-    const ctx = ctxOf(s, 1, 130);
-    const [st] = findSetups(s, ctx, { ...MAIN, stopBufAtr: 0.5 });
-    expect(st.stop).toBeCloseTo(96 - 0.5 * ctx.atr[28]);
-  });
-
-  it('стоп тоньше заданной доли цены — сетап пропускается', () => {
-    const s = bars(SCENARIO); // стоп 2,6 от 98,6 — 2,6 %
-    const ctx = ctxOf(s, 1, 110);
-    expect(findSetups(s, ctx, { ...MAIN, minStopPct: 0.05 })).toHaveLength(0);
-    expect(findSetups(s, ctx, { ...MAIN, minStopPct: 0.02 })).toHaveLength(1);
-  });
-
-  it('режим рынка — лонг только над MA200', () => {
-    const s = bars(SCENARIO);
-    const ctx = ctxOf(s, 1, 110);
-    const v = { ...MAIN, regime: true };
-    ctx.regime = new Int8Array(s.n).fill(-1);
-    expect(findSetups(s, ctx, v)).toHaveLength(0);
-    ctx.regime = new Int8Array(s.n).fill(1);
-    expect(findSetups(s, ctx, v)).toHaveLength(1);
-  });
-
-  it('вход по рынку — один вход от закрытия подтверждения', () => {
-    const s = bars(SCENARIO);
-    const [st] = findSetups(s, ctxOf(s, 1, 130), { ...MAIN, market: true });
-    expect(st.market).toBe(true);
-    expect(st.entries).toEqual([s.c[28]]);
-    expect(st.stop).toBe(96);
   });
 });

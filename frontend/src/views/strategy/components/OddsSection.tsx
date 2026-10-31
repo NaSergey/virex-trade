@@ -3,7 +3,7 @@
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import type { OddsBlock, OddsSide } from '../api/types';
-import { fmtInt, fmtPct, fmtR, tone } from '../model/format';
+import { fmtInt, fmtPct, fmtR } from '../model/format';
 
 interface SideRow {
   key: string;
@@ -27,21 +27,6 @@ const columns: LedgerColumn<SideRow>[] = [
   num('taken', 'Взято'),
   num('skipped', 'Пропущено'),
   num('unjudged', 'Без оценки'),
-  { key: 'wr', header: 'Винрейт', align: 'right', cellClassName: 'n', render: (r) => fmtPct(r.s.summary.winrate) },
-  {
-    key: 'exp',
-    header: 'Мат ожидание',
-    align: 'right',
-    cellClassName: 'n',
-    render: (r) => <span className={tone(r.s.summary.expectancy)}>{fmtR(r.s.summary.expectancy)}</span>,
-  },
-  {
-    key: 'sum',
-    header: 'Итог',
-    align: 'right',
-    cellClassName: 'n',
-    render: (r) => <span className={tone(r.s.summary.sumR)}>{fmtR(r.s.summary.sumR)}</span>,
-  },
 ];
 
 function verdict(b: OddsBlock, expectancy: number): string {
@@ -57,11 +42,11 @@ function verdict(b: OddsBlock, expectancy: number): string {
   return `Эффект не доказан: пропущенные шорты в пределах шума (${range}).`;
 }
 
-/** Лонги и шорты: сделки и винрейт каждой стороны, отбор шортов по вероятности и квоте. */
+/** Отбор сторон: лонги все, шорты по вероятности и квоте; итоги сторон — в бектесте. */
 export function OddsSection({ block, expectancy }: { block: OddsBlock; expectancy: number }) {
   return (
     <section id="odds" className="st-section">
-      <SectionHead title="Лонги и шорты" />
+      <SectionHead title="Отбор сторон" />
       <p className="muted">
         Лонги берутся все. Шорт — только если шортов среди взятых сделок не станет больше 30 % и его вероятность не
         ниже, чем у всех прошлых шортов. Вероятность есть у каждой сделки: доля прибыльных среди прошлых сделок той же

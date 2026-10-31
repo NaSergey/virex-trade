@@ -14,7 +14,6 @@ import { RulesSection } from './components/RulesSection';
 import { BacktestSection } from './components/BacktestSection';
 import { AuthorSection } from './components/AuthorSection';
 import { OddsSection } from './components/OddsSection';
-import { ResearchSection } from './components/ResearchSection';
 import { LearningSection } from './components/LearningSection';
 import { TheorySection } from './components/TheorySection';
 import './strategy.css';
@@ -38,8 +37,7 @@ export function StrategyPage() {
     ? [
         ['rules', 'Стратегия'],
         ['backtest', 'Бектест'],
-        ['research', 'Поиск улучшений'],
-        ['odds', 'Лонги и шорты'],
+        ['odds', 'Отбор сторон'],
         ['author', 'Цифры автора'],
         ['learning', 'Обучение'],
         ...(theory ? ([['theory', 'Теория']] as [string, string][]) : []),
@@ -82,8 +80,7 @@ export function StrategyPage() {
       ) : report ? (
         <>
           <BacktestSection report={report} theory={theory} />
-          <ResearchSection report={report} />
-          <OddsSection block={report.odds} expectancy={report.main.variant.summary.expectancy} />
+          <OddsSection block={report.odds} expectancy={report.main.stats.summary.expectancy} />
           <AuthorSection rows={report.author} />
           <LearningSection block={report.learning} />
           {theory && <TheorySection t={report.theory} />}
