@@ -11,6 +11,11 @@
  * счёта и действия биржи сам и рендерит тот же `Terminal`.
  */
 export { SessionScreen, Terminal, type TerminalProps } from './components/SessionScreen';
+export { ReplayChart, type Level, type LevelKind, type Marker } from './components/ReplayChart';
+export { DrawingStyleBar } from './components/drawings/DrawingStyleBar';
+export { DrawingToolbar } from './components/drawings/DrawingToolbar';
+export { useDrawingTools } from './model/useDrawingTools';
+export type { ChartRange } from './lib/ranges';
 export { SummaryCells } from './components/SummaryCells';
 export { TerminalSkeleton } from './components/TerminalSkeleton';
 export {

@@ -40,6 +40,8 @@ const row = (
   fillMs: confirmMs,
   exitMs,
   exit: 1,
+  maxUp: 0,
+  maxDown: 0,
   outcome: 'stop',
   rGross: rNet,
   rNet,

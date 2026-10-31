@@ -19,7 +19,8 @@ import {
   tone,
 } from '../model/format';
 import { LineChart } from './LineChart';
-import { TradeChart } from './TradeChart';
+import { fmtMove, moveOf, planMoveOf } from '../model/trade';
+import { TradeDialog } from './TradeDialog';
 
 const PAGE = 25;
 
@@ -91,9 +92,23 @@ const tradeColumns: LedgerColumn<TradeRow>[] = [
   { key: 'avg', header: 'Средний вход', align: 'right', cellClassName: 'n', render: (t) => fmtPrice(t.avgEntry) },
   { key: 'filled', header: 'Исполнено', align: 'right', cellClassName: 'n', render: (t) => `${t.filled}/${t.entries.length}` },
   { key: 'stop', header: 'Стоп', align: 'right', cellClassName: 'n', render: (t) => fmtPrice(t.stop) },
+  {
+    key: 'stopPct',
+    header: 'Стоп, %',
+    align: 'right',
+    cellClassName: 'n',
+    render: (t) => fmtMove(planMoveOf(t, t.stop)),
+  },
   { key: 'target', header: 'Цель', align: 'right', cellClassName: 'n', render: (t) => fmtPrice(t.target) },
   { key: 'takes', header: 'Тейков', align: 'right', cellClassName: 'n', render: (t) => `${t.takesHit}/${t.takes.length}` },
   { key: 'outcome', header: 'Выход', render: (t) => OUTCOME_LABELS[t.outcome] },
+  {
+    key: 'move',
+    header: 'Ход цены, %',
+    align: 'right',
+    cellClassName: 'n',
+    render: (t) => <span className={tone(moveOf(t, t.exit))}>{fmtMove(moveOf(t, t.exit))}</span>,
+  },
   {
     key: 'r',
     header: 'R',
@@ -115,6 +130,7 @@ export function BacktestSection({ report, theory }: { report: StrategyReport; th
   const { stats, sides, equity, byYear, trades } = report.main;
   const s = stats.summary;
   const [page, setPage] = useState(1);
+  const [opened, setOpened] = useState<TradeRow | null>(null);
   const newestFirst = [...trades].reverse();
   const money = theory ? report.main.money.theory : report.main.money.plain;
 
@@ -179,13 +195,13 @@ export function BacktestSection({ report, theory }: { report: StrategyReport; th
       <h3 className="st-sub">По годам</h3>
       <LedgerTable columns={yearColumns} rows={byYear} rowKey={(y) => String(y.year)} />
 
-      <h3 className="st-sub">Сделки — строка открывает график</h3>
+      <h3 className="st-sub">Сделки — нажмите на строку, чтобы открыть разбор</h3>
       <LedgerTable
         columns={tradeColumns}
         rows={newestFirst.slice((page - 1) * PAGE, page * PAGE)}
         rowKey={(t) => t.id}
-        renderExpanded={(t) => <TradeChart trade={t} />}
-        minWidth={1100}
+        onRowClick={setOpened}
+        minWidth={1300}
         empty="Сделок нет"
       />
       <Pagination
@@ -195,6 +211,7 @@ export function BacktestSection({ report, theory }: { report: StrategyReport; th
         onPrev={() => setPage((p) => Math.max(1, p - 1))}
         onNext={() => setPage((p) => p + 1)}
       />
+      {opened && <TradeDialog trade={opened} onClose={() => setOpened(null)} />}
     </section>
   );
 }
