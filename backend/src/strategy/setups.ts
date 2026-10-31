@@ -32,6 +32,8 @@ export interface Setup {
   e: number;
   obI: number;
   level: number;
+  /** Верх часового ордерблока; низ — стоп. */
+  blockTop: number;
   /** Уровни входа, от первого к стопу. */
   entries: number[];
   stop: number;
@@ -201,6 +203,7 @@ export function findSetups(m15: Series, s: Series, ctx: SetupContext): Setup[] {
       e: e15,
       obI: firstOf(obI),
       level: sw.level,
+      blockTop: top,
       entries: GRID_STEPS.map((k) => entry - d * k * h),
       stop,
       target,

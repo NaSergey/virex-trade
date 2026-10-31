@@ -10,8 +10,8 @@ const CW = 6;
 const H = 260;
 
 /**
- * Сделка на свечах ТФ сетапа: ликвидность, свип, FVG, BOS, блок, уровни сетки
- * входа, тейки, исходный и подтянутый стоп, первое исполнение и выход.
+ * Сделка на свечах 15m: ликвидность, свип и FVG часа, часовой блок, слом 15m, уровни
+ * сетки входа, тейки, исходный и подтянутый стоп, первое исполнение и выход.
  */
 export function TradeChart({ trade }: { trade: TradeRow }) {
   const q = useTradeCandles(trade);
@@ -58,8 +58,8 @@ export function TradeChart({ trade }: { trade: TradeRow }) {
           className="st-ob"
           x={cx(ob) - CW / 2}
           width={cx(exit) - cx(ob) + CW}
-          y={y(Math.max(trade.entries[0], trade.stop))}
-          height={Math.abs(y(trade.stop) - y(trade.entries[0]))}
+          y={y(Math.max(trade.blockTop, trade.stop))}
+          height={Math.abs(y(trade.stop) - y(trade.blockTop))}
         />
         <line className="st-lvl st-lvl-pool" x1={0} x2={cx(sweep)} y1={y(trade.level)} y2={y(trade.level)} />
         {cs.map((c, k) => {

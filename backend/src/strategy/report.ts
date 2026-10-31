@@ -97,6 +97,7 @@ function toRow(s: Series, st: Setup, f: Filled): TradeRow {
     bosMs: st.bosI >= 0 ? s.t[st.bosI] : null,
     confirmMs: closeMs(s, st.e),
     level: st.level,
+    blockTop: st.blockTop,
     entries: st.entries,
     filled: f.filled,
     avgEntry: f.avgEntry,

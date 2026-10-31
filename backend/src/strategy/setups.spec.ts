@@ -45,6 +45,7 @@ describe('setups: контекст 4H, сетап 1H, подтверждение
       bosI: 122,
       e: 122,
       obI: 100,
+      blockTop: 98.6,
       stop: 96,
       trail: true,
       market: true,

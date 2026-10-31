@@ -15,6 +15,7 @@ const setup = (over: Partial<Setup> = {}): Setup => ({
   e: 0,
   obI: 0,
   level: 0,
+  blockTop: 100,
   entries: [100, 99, 98, 97],
   stop: 96,
   target: 112,
