@@ -40,24 +40,20 @@ export interface Point {
   r: number;
 }
 
-export interface VariantRow {
-  id: string;
-  label: string;
-  setups: number;
-  filled: number;
-  missed: number;
-  expired: number;
-  /** Сводка по сделкам системы (одна позиция за раз), R после комиссии. */
+/** Сводка стороны или всех сделок: R после комиссии. */
+export interface SideRow {
   summary: Summary;
   grossExpectancy: number;
   /** Макс. просадка при риске 1 % на сделку, доля. */
   maxDd1: number;
-  /** Доля лонгов среди сделок системы. */
-  longShare: number;
-  /** Сделки подбора: подтверждение до 2023 года. */
-  dev: Summary;
-  /** Сделки проверки: подтверждение с 2023 года, при подборе не использовались. */
-  test: Summary;
+}
+
+/** Итоги стратегии за окно статистики. */
+export interface MainStats extends SideRow {
+  setups: number;
+  filled: number;
+  missed: number;
+  expired: number;
 }
 
 export interface OddsCheck {
@@ -255,9 +251,9 @@ export interface StrategyReport {
   computedAt: string;
   dataFrom: number;
   dataTo: number;
-  variants: VariantRow[];
   main: {
-    variant: VariantRow;
+    stats: MainStats;
+    sides: { all: SideRow; long: SideRow; short: SideRow };
     equity: Point[];
     byYear: YearRow[];
     trades: TradeRow[];

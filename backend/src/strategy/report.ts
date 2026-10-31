@@ -1,29 +1,22 @@
 import type {
   LearningBlock,
+  MainStats,
+  SideRow,
   StrategyReport,
   SystemBlock,
   TradeRow,
-  VariantRow,
   YearRow,
 } from './report.types';
 import {
   alignToClose,
   atr,
   closeMs,
-  maRegime,
   Series,
   structure,
   swings,
 } from './series';
 import { scanLevels } from './events';
-import {
-  findSetups,
-  MAIN,
-  Setup,
-  SetupContext,
-  Variant,
-  VARIANTS,
-} from './setups';
+import { findSetups, Setup, SetupContext } from './setups';
 import { Bar, FetchMinutes, Filled, simulateAll } from './simulate';
 import { authorCheck } from './author-check';
 import {
@@ -39,16 +32,16 @@ import {
   topMistakes,
   walkForward,
 } from './learning';
-import { OddsResult, selectSystem } from './odds';
+import { selectSystem } from './odds';
 import { plainNotional, withTheory, withoutTheory } from './money';
 import { theoryOf } from './theory';
 import { maxDrawdown, summarize } from './stats';
 
 /** Поднимать при любой правке правил, обучения или формы отчёта. */
-export const STRATEGY_VERSION = 4;
+export const STRATEGY_VERSION = 5;
 export const REPORT_ID = 'smc-intraday';
-/** Граница подбора и проверки: улучшения подбирались только по сделкам до неё. */
-export const HOLDOUT_MS = Date.UTC(2023, 0, 1);
+/** Сделки и статистика отчёта — за столько последних лет (решение владельца). */
+export const STATS_YEARS = 2;
 
 export interface ReportInput {
   m15: Series;
@@ -71,7 +64,6 @@ function prepare(
   d1: Series,
   trendHtf: Int8Array,
   trendD: Int8Array,
-  regD: Int8Array,
 ): Prepared {
   const a = atr(s);
   return {
@@ -81,25 +73,8 @@ function prepare(
       scan: scanLevels(s, a, swings(s)),
       htf: alignToClose(s, htf, trendHtf),
       daily: alignToClose(s, d1, trendD),
-      regime: alignToClose(s, d1, regD),
     },
   };
-}
-
-/** Одна позиция за раз: сетап, чей вход приходится на открытую позицию, пропускается. */
-export function sequential<T extends { fillMs: number; exitMs: number }>(
-  trades: T[],
-): T[] {
-  const sorted = [...trades].sort((a, b) => a.fillMs - b.fillMs);
-  const out: T[] = [];
-  let freeAt = -Infinity;
-  for (const t of sorted) {
-    if (t.fillMs >= freeAt) {
-      out.push(t);
-      freeAt = t.exitMs;
-    }
-  }
-  return out;
 }
 
 /** Риск сделки в долях цены: средняя дистанция уровней входа до стопа к средней цене уровней. */
@@ -111,8 +86,7 @@ export function stopPctOf(t: Pick<TradeRow, 'entries' | 'stop'>): number {
   );
 }
 
-function toRow(p: Prepared, st: Setup, f: Filled): TradeRow {
-  const { s } = p;
+function toRow(s: Series, st: Setup, f: Filled): TradeRow {
   return {
     id: st.id,
     dir: st.dir,
@@ -175,55 +149,52 @@ const toLearn = (trades: TradeRow[]): LearnTrade[] =>
     features: t.features,
   }));
 
-async function runVariant(
-  v: Variant,
+function statsFrom(nowMs: number): number {
+  const d = new Date(nowMs);
+  d.setUTCFullYear(d.getUTCFullYear() - STATS_YEARS);
+  return d.getTime();
+}
+
+function sideOf(trades: TradeRow[]): SideRow {
+  const rs = trades.map((t) => t.rNet);
+  return {
+    summary: summarize(rs),
+    grossExpectancy: summarize(trades.map((t) => t.rGross)).expectancy,
+    maxDd1: maxDrawdown(rs, 0.01),
+  };
+}
+
+async function runStrategy(
+  m15: Series,
   p: Prepared,
   fetch: FetchMinutes,
-  cache: Map<string, Bar[]>,
-  nowMs: number,
+  fromMs: number,
 ) {
-  const setups = findSetups(p.s, p.ctx, v);
-  const resolved = await simulateAll(p.s, setups, fetch, cache);
-  const all: TradeRow[] = [];
-  let missed = 0;
-  let expired = 0;
-  for (const r of resolved) {
-    if (r.result.status === 'filled') all.push(toRow(p, r.setup, r.result));
-    else if (r.result.status === 'missed') missed++;
-    else if (r.result.status === 'expired') expired++;
-  }
-  // Обучение влияет на сделки: сетап квартала проходит его правила, выведенные
-  // из сделок, закрытых до начала квартала. Оценка сторон — по всем исходам.
-  const quarters = v.learn
-    ? walkForward(toLearn(all), LEARN_FROM_MS, nowMs)
-    : [];
-  const candidates = all.filter((t) =>
-    kept(t, rulesAt(quarters, t.confirmMs) ?? []),
+  const setups = findSetups(m15, p.s, p.ctx);
+  const resolved = await simulateAll(
+    m15,
+    setups,
+    fetch,
+    new Map<string, Bar[]>(),
   );
-  const odds: OddsResult | null = v.odds ? selectSystem(candidates, all) : null;
-  const system = odds ? odds.system : sequential(candidates);
-  const sys = systemOf(system);
-  const row: VariantRow = {
-    id: v.id,
-    label: v.label,
-    setups: setups.length,
-    filled: all.length,
-    missed,
-    expired,
-    summary: sys.summary,
-    grossExpectancy: summarize(system.map((t) => t.rGross)).expectancy,
-    maxDd1: sys.maxDd1,
-    longShare: system.length
-      ? system.filter((t) => t.dir === 1).length / system.length
-      : 0,
-    dev: summarize(
-      system.filter((t) => t.confirmMs < HOLDOUT_MS).map((t) => t.rNet),
-    ),
-    test: summarize(
-      system.filter((t) => t.confirmMs >= HOLDOUT_MS).map((t) => t.rNet),
-    ),
+  const all: TradeRow[] = [];
+  const counts = { setups: 0, missed: 0, expired: 0 };
+  for (const r of resolved) {
+    const inWindow = closeMs(m15, r.setup.e) >= fromMs;
+    if (inWindow) counts.setups++;
+    if (r.result.status === 'filled') all.push(toRow(m15, r.setup, r.result));
+    else if (inWindow && r.result.status === 'missed') counts.missed++;
+    else if (inWindow && r.result.status === 'expired') counts.expired++;
+  }
+  // Сделки и квота — за окно, а оценка вероятности видит всю историю.
+  const filled = all.filter((t) => t.confirmMs >= fromMs);
+  const odds = selectSystem(filled, all);
+  const stats: MainStats = {
+    ...counts,
+    filled: filled.length,
+    ...sideOf(odds.system),
   };
-  return { v, row, all, system, sys, odds };
+  return { all, odds, stats };
 }
 
 function learningOf(filled: TradeRow[], nowMs: number): LearningBlock {
@@ -274,30 +245,19 @@ export async function buildReport(
   const { m15, h1, h4, d1, nowMs } = input;
   const trend4h = structure(h4);
   const trendD = structure(d1);
-  const regD = maRegime(d1);
-  const p15 = prepare(m15, h4, d1, trend4h, trendD, regD);
+  const p60 = prepare(h1, h4, d1, trend4h, trendD);
   await yieldFn();
-  const p60 = prepare(h1, d1, d1, trendD, trendD, regD);
-  await yieldFn();
-  const p240 = prepare(h4, d1, d1, trendD, trendD, regD);
-  await yieldFn();
-  const prepared = { 15: p15, 60: p60, 240: p240 };
 
-  const cache = new Map<string, Bar[]>();
-  const runs = [];
-  for (const v of VARIANTS) {
-    runs.push(await runVariant(v, prepared[v.tf], fetch, cache, nowMs));
-    await yieldFn();
-  }
-  const main = runs.find((r) => r.v.id === MAIN.id);
+  const fromMs = Math.max(statsFrom(nowMs), m15.t[0]);
+  const main = await runStrategy(m15, p60, fetch, fromMs);
+  await yieldFn();
+  const system = main.odds.system;
 
   const author = authorCheck(h1, p60.ctx.atr, p60.ctx.scan);
   await yieldFn();
-  // Основной вариант без обучения: на 4H сделок для правил мало. Обучение
-  // показывается на 15m, где оно действовало и было проверено вперёд.
-  const learning = learningOf(runs.find((r) => r.v.id === 'v3').all, nowMs);
+  const learning = learningOf(main.all, nowMs);
   await yieldFn();
-  const mt = main.system.map((t) => ({ rNet: t.rNet, stopPct: stopPctOf(t) }));
+  const mt = system.map((t) => ({ rNet: t.rNet, stopPct: stopPctOf(t) }));
   const notional = plainNotional(mt);
   const money = {
     theory: withTheory(mt),
@@ -305,7 +265,7 @@ export async function buildReport(
     plainNotional: notional,
   };
   const theory = theoryOf(
-    main.system.map((t) => ({
+    system.map((t) => ({
       rGross: t.rGross,
       rNet: t.rNet,
       stopPct: stopPctOf(t),
@@ -315,14 +275,18 @@ export async function buildReport(
   return {
     version: STRATEGY_VERSION,
     computedAt: new Date(nowMs).toISOString(),
-    dataFrom: m15.t[0],
+    dataFrom: fromMs,
     dataTo: closeMs(m15, m15.n - 1),
-    variants: runs.map((r) => r.row),
     main: {
-      variant: main.row,
-      equity: main.sys.equity,
-      byYear: byYear(main.system),
-      trades: main.system,
+      stats: main.stats,
+      sides: {
+        all: sideOf(system),
+        long: sideOf(system.filter((t) => t.dir === 1)),
+        short: sideOf(system.filter((t) => t.dir === -1)),
+      },
+      equity: systemOf(system).equity,
+      byYear: byYear(system),
+      trades: system,
       money,
     },
     odds: main.odds.block,
