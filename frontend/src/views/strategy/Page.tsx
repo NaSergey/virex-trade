@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { useAuth } from '@/features/auth';
 import { Wrap } from '@/shared/ui/Wrap';
 import { PageHead } from '@/shared/ui/PageHead';
@@ -20,14 +19,6 @@ import { LearningSection } from './components/LearningSection';
 import { TheorySection } from './components/TheorySection';
 import './strategy.css';
 
-const VARIANT_OPTIONS = [
-  { value: 'main', label: 'Цели от волатильности 4H' },
-  { value: 'saved', label: 'Цель 5R (сохранённый)' },
-];
-const MAIN_NOTE =
-  'Последний тейк — 4 ATR закрытой 4H-свечи от входа. Вход в средней трети диапазона 30 свечей 4H и цель ближе стопа — сделки нет.';
-const SAVED_NOTE = 'Цель — ровно 5R от входа до стопа, положение входа в диапазоне не проверяется.';
-
 const THEORY_KEY = 'virex.admin.strategy.theory';
 const decodeTheory = (raw: string | null) => raw !== '0';
 const encodeTheory = (on: boolean) => (on ? null : '0');
@@ -41,10 +32,7 @@ export function StrategyPage() {
   const { user, loading } = useAuth();
   const q = useStrategyReport(!!user?.isAdmin);
   const [theory, setTheory] = usePersistentValue(THEORY_KEY, decodeTheory, true, encodeTheory);
-  const [saved, setSaved] = useState(false);
-  const full = q.data?.report ?? null;
-  // Сохранённый вариант подменяет только свои разделы, цифры автора общие.
-  const report = full && saved ? { ...full, ...full.saved } : full;
+  const report = q.data?.report ?? null;
   // Без отчёта на странице только правила — якоря на пустые разделы не ставим.
   const anchors: [string, string][] = report
     ? [
@@ -93,17 +81,8 @@ export function StrategyPage() {
         <SkeletonLines />
       ) : report ? (
         <>
-          <div className="st-variant">
-            <Seg
-              options={VARIANT_OPTIONS}
-              value={saved ? 'saved' : 'main'}
-              onChange={(v) => setSaved(v === 'saved')}
-              ariaLabel="Вариант стратегии"
-            />
-            <span className="muted">{saved ? SAVED_NOTE : MAIN_NOTE}</span>
-          </div>
           <BacktestSection report={report} theory={theory} />
-          <CheckSection saved={saved} />
+          <CheckSection />
           <OddsSection block={report.odds} expectancy={report.main.stats.summary.expectancy} />
           <AuthorSection rows={report.author} />
           <LearningSection block={report.learning} />

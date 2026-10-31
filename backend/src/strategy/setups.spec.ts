@@ -1,7 +1,7 @@
 import { bars, mirror, Ohlc, SCENARIO } from './fixtures';
 import { atr, Series, swings } from './series';
 import { scanLevels } from './events';
-import { CONFIRM_LIFE, findSetups, SAVED_RULES, SetupContext } from './setups';
+import { CONFIRM_LIFE, findSetups, SetupContext } from './setups';
 
 /** SCENARIO как часовой ряд: свип 25 (ордерблок, стоп 96, верх 98,6), подтверждение 28. */
 const hours = () => bars(SCENARIO, 60);
@@ -17,7 +17,7 @@ const ctxOf = (
   s: Series,
   htf: number,
   range: [number, number] = [50, 60],
-  atr4 = 2,
+  atr4 = 3,
 ): SetupContext => {
   const a = atr(s);
   const h4 = h4Of(range[0], range[1]);
@@ -50,9 +50,9 @@ const close = (xs: number[], ys: number[]) => {
 };
 
 describe('setups: контекст 4H, сетап 1H, подтверждение 15m', () => {
-  it('сохранённый вариант: возврат в блок и слом 15m — вход, стоп часовой, цель 5R', () => {
+  it('возврат в часовой блок и слом 15m — вход, стоп часовой, цель 4 ATR 4H', () => {
     const s = hours();
-    const [st] = findSetups(quarters(FULL), s, ctxOf(s, 1), SAVED_RULES);
+    const [st] = findSetups(quarters(FULL), s, ctxOf(s, 1));
     expect(st).toMatchObject({
       id: '25:1',
       dir: 1,
@@ -65,26 +65,20 @@ describe('setups: контекст 4H, сетап 1H, подтверждение
       stop: 96,
       trail: true,
       market: true,
-      plannedR: 5,
+      atr4: 3,
+      rangeLo: 50,
+      rangeHi: 60,
     });
     const h = 104.5 - 96;
-    expect(st.target).toBeCloseTo(104.5 + 5 * h);
+    expect(st.target).toBeCloseTo(104.5 + 4 * 3);
+    expect(st.plannedR).toBeCloseTo(12 / h);
     close(st.entries, [
       104.5,
       104.5 - h / 4,
       104.5 - h / 2,
       104.5 - (3 * h) / 4,
     ]);
-    close(st.takes, [104.5 + (5 * h) / 3, 104.5 + (10 * h) / 3, 104.5 + 5 * h]);
-  });
-
-  it('цель — 4 ATR закрытой 4H-свечи от входа, план в R считается из неё', () => {
-    const s = hours();
-    const [st] = findSetups(quarters(FULL), s, ctxOf(s, 1, [50, 60], 3));
-    expect(st.target).toBeCloseTo(104.5 + 4 * 3);
-    expect(st.plannedR).toBeCloseTo(12 / 8.5);
     close(st.takes, [108.5, 112.5, 116.5]);
-    expect(st).toMatchObject({ atr4: 3, rangeLo: 50, rangeHi: 60 });
   });
 
   it('цель ближе стопа — сделки нет', () => {
@@ -104,9 +98,9 @@ describe('setups: контекст 4H, сетап 1H, подтверждение
     expect(count(30, 106)).toBe(1); // у верха
   });
 
-  it('истории 4H на диапазон нет — сделки нет; сохранённому варианту не мешает', () => {
+  it('истории 4H на диапазон нет — сделки нет', () => {
     const s = hours();
-    const ctx = ctxOf(s, 1, [50, 60], 3);
+    const ctx = ctxOf(s, 1);
     ctx.h4 = bars(
       Array.from({ length: 5 }, (): Ohlc => [50, 60, 50, 60]),
       240,
@@ -114,7 +108,6 @@ describe('setups: контекст 4H, сетап 1H, подтверждение
     );
     ctx.atr4 = new Float64Array(5).fill(3);
     expect(findSetups(quarters(FULL), s, ctx)).toHaveLength(0);
-    expect(findSetups(quarters(FULL), s, ctx, SAVED_RULES)).toHaveLength(1);
   });
 
   it('незакрытая 4H-свеча на цель не влияет', () => {
@@ -158,17 +151,12 @@ describe('setups: контекст 4H, сетап 1H, подтверждение
 
   it('свечи после слома на решение не влияют', () => {
     const s = hours();
-    const [a] = findSetups(quarters(FULL), s, ctxOf(s, 1), SAVED_RULES);
+    const [a] = findSetups(quarters(FULL), s, ctxOf(s, 1));
     const later: Ohlc[] = [
       [104.5, 200, 104, 150],
       [150, 151, 1, 2],
     ];
-    const [b] = findSetups(
-      quarters([...FULL, ...later]),
-      s,
-      ctxOf(s, 1),
-      SAVED_RULES,
-    );
+    const [b] = findSetups(quarters([...FULL, ...later]), s, ctxOf(s, 1));
     expect(b).toEqual(a);
   });
 
@@ -179,20 +167,15 @@ describe('setups: контекст 4H, сетап 1H, подтверждение
 
   it('шорт — зеркало лонга', () => {
     const s = mirror(hours());
-    const [st] = findSetups(
-      mirror(quarters(FULL)),
-      s,
-      ctxOf(s, -1),
-      SAVED_RULES,
-    );
+    const [st] = findSetups(mirror(quarters(FULL)), s, ctxOf(s, -1));
     expect(st).toMatchObject({ dir: -1, stop: -96, e: 122 });
     expect(st.entries[0]).toBeCloseTo(-104.5);
-    expect(st.target).toBeCloseTo(-(104.5 + 5 * 8.5));
+    expect(st.target).toBeCloseTo(-(104.5 + 4 * 3));
   });
 
   it('признаки сетапа', () => {
     const s = hours();
-    const [st] = findSetups(quarters(FULL), s, ctxOf(s, 1), SAVED_RULES);
+    const [st] = findSetups(quarters(FULL), s, ctxOf(s, 1));
     // Закрытие часа 28 — 05:00 UTC пятницы 2 января 1970.
     expect(st.features).toMatchObject({
       session: 'asia',

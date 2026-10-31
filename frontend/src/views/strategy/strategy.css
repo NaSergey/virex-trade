@@ -172,11 +172,3 @@
     padding-right: 0;
   }
 }
-
-.st-variant {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s3);
-  margin-top: var(--s4);
-}
