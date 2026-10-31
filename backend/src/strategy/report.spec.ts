@@ -1,10 +1,26 @@
-import { aggregate, walk } from './fixtures';
+import { aggregate, bars, walk } from './fixtures';
 import { closeMs } from './series';
-import { buildReport, stopPctOf, STRATEGY_VERSION } from './report';
+import { buildReport, excursions, stopPctOf, STRATEGY_VERSION } from './report';
 
 describe('report', () => {
   it('stopPctOf — средняя дистанция уровней до стопа к средней цене', () => {
     expect(stopPctOf({ entries: [100, 98], stop: 96 })).toBeCloseTo(3 / 99);
+  });
+
+  it('excursions — макс. ход от входа за сделку, шорт зеркально', () => {
+    const s = bars([
+      [100, 100, 100, 100],
+      [100, 104, 99, 103],
+      [103, 110, 95, 100],
+      [100, 200, 1, 100],
+    ]);
+    const step = 15 * 60_000;
+    const long = excursions(s, 1, 100, step, 3 * step);
+    expect(long.maxUp).toBeCloseTo(0.1);
+    expect(long.maxDown).toBeCloseTo(0.05);
+    const short = excursions(s, -1, 100, step, 3 * step);
+    expect(short.maxUp).toBeCloseTo(0.05);
+    expect(short.maxDown).toBeCloseTo(0.1);
   });
 
   it('buildReport собирает отчёт за последние 2 года на случайном блуждании', async () => {
@@ -44,6 +60,8 @@ describe('report', () => {
     for (const t of trades) {
       expect(t.confirmMs).toBeGreaterThanOrEqual(report.dataFrom);
       expect(t.exitMs).toBeGreaterThan(t.fillMs);
+      expect(t.maxUp).toBeGreaterThanOrEqual(0);
+      expect(t.maxDown).toBeGreaterThanOrEqual(0);
       expect(t.tf).toBe(15);
       expect(t.takes.length).toBe(3);
       expect(t.entries.length).toBe(4);

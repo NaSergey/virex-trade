@@ -142,7 +142,8 @@ export type LevelKind =
  */
 export interface Marker {
   id: string;
-  kind: 'entry' | 'exit';
+  /** `note` — заметка без стрелки: точка и подпись; сторона говорит, где подпись (лонг — под ценой). */
+  kind: 'entry' | 'exit' | 'note';
   /** Время события — по нему ищется свеча, над/под которой встанет стрелка. */
   time: number;
   price: number;
@@ -173,6 +174,8 @@ export interface Level {
   pnl?: number | null;
   /** Сторона сделки — у линии входа: красит плашку объёма. */
   direction?: 'long' | 'short';
+  /** Готовый текст плашки вместо подписи по виду уровня — у разбора закрытой сделки. */
+  label?: string;
 }
 
 /** Лимит на вход — висящий или черновик панели: плашка «Лимит цена | объём», как у позиции. */
@@ -268,6 +271,7 @@ export const ReplayChart = memo(function ReplayChart({
   onCloseGrid,
   rsi = false,
   ranges,
+  defaultCount = DEFAULT_COUNT,
 }: {
   /** ТФ свечей в `candles`, в минутах. */
   timeframe: number;
@@ -312,6 +316,8 @@ export const ReplayChart = memo(function ReplayChart({
    * экранных ценах. Ссылка стабильная — см. memo.
    */
   ranges?: ChartRange[];
+  /** Сколько свечей видно на старте и после сброса вида; без него — обычное окно терминала. */
+  defaultCount?: number;
 }) {
   const t = useTranslations('backtest');
   const svgRef = useRef<SVGSVGElement>(null);
@@ -342,7 +348,7 @@ export const ReplayChart = memo(function ReplayChart({
   const lastDrag = useRef<number | null>(null);
   /** Указатель, который тащит уровень — чтобы движение/отпускание другого пальца его не задевало. */
   const dragPointerId = useRef<number | null>(null);
-  const [view, setView] = useState<ViewState>({ count: DEFAULT_COUNT, anchorTime: null });
+  const [view, setView] = useState<ViewState>({ count: defaultCount, anchorTime: null });
   // Якорь пана/пинча — время свечи, а не индекс: догрузка истории при подходе
   // к краю (onNeedHistory) может прямо во время того же жеста добавить свечи
   // в начало массива и сдвинуть все индексы — время сдвиг не портит.
@@ -396,7 +402,7 @@ export const ReplayChart = memo(function ReplayChart({
   const [viewTf, setViewTf] = useState(timeframe);
   if (viewTf !== timeframe) {
     setViewTf(timeframe);
-    setView({ count: DEFAULT_COUNT, anchorTime: null });
+    setView({ count: defaultCount, anchorTime: null });
     setPriceRange(null);
   }
   // Alt+R — вид графика по умолчанию (как в TradingView): окно к живому краю, зум цены и RSI сброшены.
@@ -404,13 +410,13 @@ export const ReplayChart = memo(function ReplayChart({
     const onKey = (e: KeyboardEvent) => {
       if (!e.altKey || e.shiftKey || e.ctrlKey || e.metaKey || e.code !== 'KeyR' || isTypingTarget(e.target)) return;
       e.preventDefault();
-      setView({ count: DEFAULT_COUNT, anchorTime: null });
+      setView({ count: defaultCount, anchorTime: null });
       setPriceRange(null);
       setRsiRange(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [defaultCount]);
   // Плавный сдвиг «живого» окна (FLIP через CSS-transition) — группа свечей
   // и меток времени, которую двигаем; остальное — снимок предыдущего тика,
   // чтобы отличить «появилась новая свеча» от пана/зума/клика «→ сейчас».
@@ -1602,6 +1608,24 @@ export const ReplayChart = memo(function ReplayChart({
                 снизу, выход сверху, у шорта наоборот — две отметки на одной
                 свече не сходятся в одну точку. */}
             {shownMarkers.map(({ m, idx }) => {
+              if (m.kind === 'note') {
+                const below = m.direction === 'long';
+                return (
+                  <g key={m.id}>
+                    <circle cx={cx(idx)} cy={y(m.price)} r={px(2.5)} fill="var(--color-muted)" />
+                    <text
+                      x={cx(idx)}
+                      y={below ? y(m.price) + px(13) : y(m.price) - px(6)}
+                      fill="var(--color-muted)"
+                      fontSize={px(9)}
+                      fontFamily="var(--font-mono)"
+                      textAnchor="middle"
+                    >
+                      {m.label}
+                    </text>
+                  </g>
+                );
+              }
               const up = (m.kind === 'entry') === (m.direction === 'long');
               const color =
                 m.kind === 'entry'
@@ -1814,7 +1838,7 @@ export const ReplayChart = memo(function ReplayChart({
                 fill="transparent"
                 onPointerDown={l.draggable && onDragLevel ? startDrag(l) : undefined}
               />
-              {l.qty != null || l.pnl != null || isLimit(l.kind) || isGridDraft(l.kind) ? (
+              {l.label != null || l.qty != null || l.pnl != null || isLimit(l.kind) || isGridDraft(l.kind) ? (
                 (() => {
                   // Плашка на линии, как у бирж: результат | объём в монете | ⇅ | ✕.
                   // Вход — белая, стоп — красная, тейк — зелёная: цвет уровня. Цена слева
@@ -1827,7 +1851,9 @@ export const ReplayChart = memo(function ReplayChart({
                   const charW = charRatio * fs;
                   const isEntry = l.kind === 'entry';
                   const odds = l.kind === 'take' ? (l.oddsAt?.(price) ?? null) : null;
-                  const first = isEntry
+                  const first = l.label != null
+                    ? l.label
+                    : isEntry
                     ? `P&L ${l.pnl != null ? formatMoney(l.pnl) : '—'}`
                     : isLimit(l.kind)
                       ? `${levelLabel(l.kind)} ${formatPriceGrouped(price, priceDecimals)}`

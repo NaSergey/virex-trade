@@ -1,6 +1,7 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { fromApi, type ApiCandle } from '@/widgets/backtest-session';
 import { apiJson, qs } from '@/shared/api/http';
 import type { ReportResponse, TradeRow } from './types';
 
@@ -19,26 +20,22 @@ export function useStrategyReport(enabled: boolean) {
 }
 
 /** Свеча, как её отдаёт `/api/market-data/candles`. */
-export interface ChartCandle {
-  time: string;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-}
-
 export const CHART_BEFORE = 60;
 export const CHART_AFTER = 20;
 
-/** Свечи вокруг сделки: от 60 свечей до свипа до 20 после выхода. */
-export function useTradeCandles(trade: TradeRow) {
-  const step = trade.tf * 60_000;
-  const from = trade.sweepMs - CHART_BEFORE * step;
+/** Свечи вокруг сделки на выбранном ТФ: от 60 свечей до свипа (и `extra` глубже) до 20 после выхода. */
+export function useTradeCandles(trade: TradeRow, tf: number, extra = 0) {
+  const step = tf * 60_000;
+  const from = trade.sweepMs - (CHART_BEFORE + extra) * step;
   const to = trade.exitMs + CHART_AFTER * step;
   return useQuery({
-    queryKey: ['strategy', 'candles', trade.tf, from, to],
-    queryFn: () =>
-      apiJson<ChartCandle[]>(`/api/market-data/candles${qs({ tf: trade.tf, from, to, limit: 5000 })}`),
+    queryKey: ['strategy', 'candles', tf, from, to],
+    queryFn: async () => ({
+      tf,
+      candles: (await apiJson<ApiCandle[]>(`/api/market-data/candles${qs({ tf, from, to, limit: 5000 })}`)).map(fromApi),
+    }),
     staleTime: Infinity,
+    // Смена ТФ и догрузка истории: пока едут новые свечи, на экране прежние.
+    placeholderData: keepPreviousData,
   });
 }

@@ -107,54 +107,68 @@
   padding: var(--s2) var(--s3);
   border-left: 2px solid var(--ink);
 }
-.st-trade {
-  padding: var(--s2) 0;
-}
-.st-trade svg {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-.st-candle-up {
-  fill: var(--profit);
-  stroke: var(--profit);
-}
-.st-candle-down {
-  fill: var(--loss);
-  stroke: var(--loss);
-}
-.st-lvl {
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-}
-.st-lvl-entry {
-  stroke: var(--ink);
-  stroke-dasharray: 4 3;
-}
-.st-lvl-stop {
-  stroke: var(--loss);
-}
-.st-lvl-target {
-  stroke: var(--profit);
-}
-.st-lvl-pool {
-  stroke: var(--ink-2);
-  stroke-dasharray: 2 3;
-}
-.st-ob {
-  fill: var(--ink);
-  opacity: 0.08;
-}
-.st-tag {
-  fill: var(--ink-2);
-}
 
 @media (max-width: 760px) {
   .st-step-cols {
     grid-template-columns: 1fr;
   }
 }
-.st-lvl-trail {
-  stroke: var(--loss);
-  stroke-dasharray: 4 3;
+
+/* Окно разбора сделки: график забирает всю высоту, панель справа листается сама. */
+.st-tm {
+  display: flex;
+  flex-direction: column;
+  width: min(1600px, 96vw);
+  max-width: none;
+  height: 92dvh;
+  max-height: none;
+  overflow: hidden;
+}
+.st-tm-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: var(--s3);
+  padding: var(--s2) var(--s3) var(--s3);
+}
+.st-tm-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  min-width: 0;
+  min-height: 0;
+}
+.st-tm-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s3);
+}
+.st-tm-close {
+  margin-left: auto;
+}
+.st-tm-chart {
+  flex: 1;
+  min-height: 0;
+}
+.st-tm-side {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: var(--s1);
+}
+
+@media (max-width: 1000px) {
+  .st-tm-body {
+    display: block;
+    overflow-y: auto;
+  }
+  .st-tm-chart {
+    flex: none;
+    height: 60dvh;
+  }
+  .st-tm-side {
+    overflow: visible;
+    padding-right: 0;
+  }
 }

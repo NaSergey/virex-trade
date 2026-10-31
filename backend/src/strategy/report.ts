@@ -1,4 +1,5 @@
 import type {
+  Dir,
   LearningBlock,
   MainStats,
   SideRow,
@@ -11,6 +12,7 @@ import {
   alignToClose,
   atr,
   closeMs,
+  lowerBound,
   Series,
   structure,
   swings,
@@ -38,7 +40,7 @@ import { theoryOf } from './theory';
 import { maxDrawdown, summarize } from './stats';
 
 /** Поднимать при любой правке правил, обучения или формы отчёта. */
-export const STRATEGY_VERSION = 6;
+export const STRATEGY_VERSION = 7;
 export const REPORT_ID = 'smc-intraday';
 /** Сделки и статистика отчёта — за столько последних лет (решение владельца). */
 export const STATS_YEARS = 2;
@@ -86,6 +88,24 @@ export function stopPctOf(t: Pick<TradeRow, 'entries' | 'stop'>): number {
   );
 }
 
+/** Макс. ход цены от среднего входа за сделку, доли: в прибыль и против. */
+export function excursions(
+  s: Series,
+  dir: Dir,
+  avg: number,
+  fillMs: number,
+  exitMs: number,
+): { maxUp: number; maxDown: number } {
+  let up = 0;
+  let down = 0;
+  const to = lowerBound(s.t, exitMs);
+  for (let k = lowerBound(s.t, fillMs); k < to; k++) {
+    up = Math.max(up, dir === 1 ? s.h[k] - avg : avg - s.l[k]);
+    down = Math.max(down, dir === 1 ? avg - s.l[k] : s.h[k] - avg);
+  }
+  return { maxUp: up / Math.abs(avg), maxDown: down / Math.abs(avg) };
+}
+
 function toRow(s: Series, st: Setup, f: Filled): TradeRow {
   return {
     id: st.id,
@@ -110,6 +130,7 @@ function toRow(s: Series, st: Setup, f: Filled): TradeRow {
     fillMs: f.fillMs,
     exitMs: f.exitMs,
     exit: f.exit,
+    ...excursions(s, st.dir, f.avgEntry, f.fillMs, f.exitMs),
     outcome: f.outcome,
     rGross: f.rGross,
     rNet: f.rNet,

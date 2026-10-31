@@ -96,6 +96,9 @@ export interface TradeRow {
   exitMs: number;
   /** Цена последнего выхода. */
   exit: number;
+  /** Макс. ход цены за сделку от среднего входа, доли: в прибыль и против, по свечам 15m. */
+  maxUp: number;
+  maxDown: number;
   outcome: Outcome;
   rGross: number;
   rNet: number;
