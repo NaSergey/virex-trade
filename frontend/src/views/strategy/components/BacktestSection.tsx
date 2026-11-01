@@ -5,8 +5,9 @@ import { SectionHead } from '@/shared/ui/SectionHead';
 import { MetricCell } from '@/shared/ui/MetricCell';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import { Pagination } from '@/shared/ui/Pagination';
-import type { SideRow, StrategyReport, TradeRow, YearRow } from '../api/types';
+import type { CoinStats, SideRow, StrategyReport, TradeRow, YearRow } from '../api/types';
 import {
+  coinOf,
   fmtDate,
   fmtDateTime,
   fmtInt,
@@ -23,6 +24,7 @@ import { fmtMove, moveOf, planMoveOf } from '../model/trade';
 import { TradeDialog } from './TradeDialog';
 
 const PAGE = 25;
+const MONTH_MS = 30.44 * 86_400_000;
 
 interface SideLine {
   key: string;
@@ -66,6 +68,40 @@ const sideColumns: LedgerColumn<SideLine>[] = [
   },
 ];
 
+const coinColumns: LedgerColumn<CoinStats>[] = [
+  { key: 'coin', header: 'Монета', render: (c) => coinOf(c.symbol) },
+  { key: 'n', header: 'Сделок', align: 'right', cellClassName: 'n', render: (c) => fmtInt(c.after.summary.n) },
+  {
+    key: 'wr',
+    header: 'Винрейт',
+    align: 'right',
+    cellClassName: 'n',
+    render: (c) => (c.after.summary.n ? fmtPct(c.after.summary.winrate) : '—'),
+  },
+  {
+    key: 'exp',
+    header: 'Мат ожидание',
+    align: 'right',
+    cellClassName: 'n',
+    render: (c) => <span className={tone(c.after.summary.expectancy)}>{fmtR(c.after.summary.expectancy)}</span>,
+  },
+  {
+    key: 'sum',
+    header: 'Итог',
+    align: 'right',
+    cellClassName: 'n',
+    render: (c) => <span className={tone(c.after.summary.sumR)}>{fmtR(c.after.summary.sumR)}</span>,
+  },
+  { key: 'bn', header: 'До них: сделок', align: 'right', cellClassName: 'n', render: (c) => fmtInt(c.before.summary.n) },
+  {
+    key: 'bexp',
+    header: 'До них: мат ожидание',
+    align: 'right',
+    cellClassName: 'n',
+    render: (c) => <span className={tone(c.before.summary.expectancy)}>{fmtR(c.before.summary.expectancy)}</span>,
+  },
+];
+
 const yearColumns: LedgerColumn<YearRow>[] = [
   { key: 'year', header: 'Год', render: (y) => y.year },
   { key: 'n', header: 'Сделок', align: 'right', cellClassName: 'n', render: (y) => fmtInt(y.summary.n) },
@@ -88,9 +124,9 @@ const yearColumns: LedgerColumn<YearRow>[] = [
 
 const tradeColumns: LedgerColumn<TradeRow>[] = [
   { key: 'date', header: 'Вход (UTC)', render: (t) => fmtDateTime(t.fillMs) },
+  { key: 'coin', header: 'Монета', render: (t) => coinOf(t.symbol) },
   { key: 'dir', header: 'Сторона', render: (t) => (t.dir === 1 ? 'Лонг' : 'Шорт') },
-  { key: 'avg', header: 'Средний вход', align: 'right', cellClassName: 'n', render: (t) => fmtPrice(t.avgEntry) },
-  { key: 'filled', header: 'Исполнено', align: 'right', cellClassName: 'n', render: (t) => `${t.filled}/${t.entries.length}` },
+  { key: 'avg', header: 'Вход', align: 'right', cellClassName: 'n', render: (t) => fmtPrice(t.avgEntry) },
   { key: 'stop', header: 'Стоп', align: 'right', cellClassName: 'n', render: (t) => fmtPrice(t.stop) },
   {
     key: 'stopPct',
@@ -100,7 +136,6 @@ const tradeColumns: LedgerColumn<TradeRow>[] = [
     render: (t) => fmtMove(planMoveOf(t, t.stop)),
   },
   { key: 'target', header: 'Цель', align: 'right', cellClassName: 'n', render: (t) => fmtPrice(t.target) },
-  { key: 'takes', header: 'Тейков', align: 'right', cellClassName: 'n', render: (t) => `${t.takesHit}/${t.takes.length}` },
   { key: 'outcome', header: 'Выход', render: (t) => OUTCOME_LABELS[t.outcome] },
   {
     key: 'move',
@@ -127,8 +162,9 @@ const tradeColumns: LedgerColumn<TradeRow>[] = [
 
 /** Итоги стратегии за последние 2 года: лонги и шорты, деньги, кривая, годы и сделки с графиком. */
 export function BacktestSection({ report, theory }: { report: StrategyReport; theory: boolean }) {
-  const { stats, sides, equity, byYear, trades } = report.main;
+  const { stats, sides, before, byCoin, equity, byYear, trades } = report.main;
   const s = stats.summary;
+  const perMonth = s.n / ((report.dataTo - report.dataFrom) / MONTH_MS);
   const [page, setPage] = useState(1);
   const [opened, setOpened] = useState<TradeRow | null>(null);
   const newestFirst = [...trades].reverse();
@@ -138,16 +174,17 @@ export function BacktestSection({ report, theory }: { report: StrategyReport; th
     <section id="backtest" className="st-section">
       <SectionHead title="Бектест за последние 2 года" />
       <p className="muted">
-        BTCUSDT, {fmtDate(report.dataFrom)} — {fmtDate(report.dataTo)}. Контекст — 4H, сетап и стоп — 1H (свип, имбаланс, слом, ордерблок). 15m только
-        подтверждает вход: цена вернулась в часовой блок и свеча 15m дала слом. Тогда первый вход по рынку и 3 лимита ниже,
-        3 тейка со стопом за ними, последний — 4 ATR закрытой 4H-свечи от входа. Вход в средней трети диапазона 30 свечей 4H и
-        цель ближе стопа — сделки нет, лонгов 70 % и шортов 30 %. Одна позиция за раз, R — от риска всей сетки, после комиссии Bybit.
+        BTC, ETH, SOL, DOGE и PEPE, контракты и свечи Bybit, {fmtDate(report.dataFrom)} — {fmtDate(report.dataTo)}. Контекст — 4H, сетап и стоп — 1H (свип,
+        имбаланс, слом, ордерблок). 15m только подтверждает вход: цена вернулась в часовой блок и свеча 15m дала слом. Тогда один
+        вход по рынку и выход всем объёмом на +1,5 %. Стоп обычно около 3 %, поэтому один стоп съедает две прибыльные сделки. Вход в
+        средней трети диапазона 30 свечей 4H — сделки нет. Лонгов 70 % и шортов 30 %, одна позиция — у каждой монеты свои. R — после
+        комиссии Bybit.
       </p>
       <div className="st-metrics">
         <MetricCell
           label="Сделок"
           value={fmtInt(s.n)}
-          sub={`сетапов ${fmtInt(stats.setups)}, исполнено до отбора ${fmtInt(stats.filled)}`}
+          sub={`${fmtNum(perMonth)} в месяц, сетапов ${fmtInt(stats.setups)}, исполнено до отбора ${fmtInt(stats.filled)}`}
         />
         <MetricCell label="Винрейт" value={fmtPct(s.winrate)} sub={`безубыточный ${fmtPct(s.breakeven)}`} />
         <MetricCell
@@ -160,6 +197,20 @@ export function BacktestSection({ report, theory }: { report: StrategyReport; th
         <MetricCell label="Просадка при риске 1 %" value={fmtPct(stats.maxDd1)} />
         <MetricCell label="Итог" value={fmtR(s.sumR)} tone={tone(s.sumR)} />
       </div>
+
+      <h3 className="st-sub">2 года и период до них</h3>
+      <LedgerTable
+        columns={sideColumns}
+        rows={[
+          { key: 'after', label: 'Последние 2 года', s: sides.all },
+          { key: 'before', label: 'С 2022 года до них', s: before },
+        ]}
+        rowKey={(r) => r.key}
+        minWidth={820}
+      />
+
+      <h3 className="st-sub">По монетам</h3>
+      <LedgerTable columns={coinColumns} rows={byCoin} rowKey={(c) => c.symbol} minWidth={720} />
 
       <h3 className="st-sub">Лонги и шорты</h3>
       <LedgerTable
@@ -202,7 +253,7 @@ export function BacktestSection({ report, theory }: { report: StrategyReport; th
         rows={newestFirst.slice((page - 1) * PAGE, page * PAGE)}
         rowKey={(t) => t.id}
         onRowClick={setOpened}
-        minWidth={1300}
+        minWidth={1200}
         empty="Сделок нет"
       />
       <Pagination

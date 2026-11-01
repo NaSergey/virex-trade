@@ -1,6 +1,6 @@
 # Стратегия (админка)
 
-Раздел владельца на `admin.<домен>/strategy`: интрадей Smart Money из видео SanchoDT на истории BTC —
+Раздел владельца на `admin.<домен>/strategy`: интрадей Smart Money из видео SanchoDT на истории пяти монет Bybit —
 формализованные правила, готовый отчёт бектеста с вариантами, проверка цифр автора, обучение на ошибках
 с проверкой вперёд и выключаемая теория «Трейдинг = математика». Спека —
 `docs/superpowers/specs/2026-10-30-strategy-lab-design.md`.
@@ -11,7 +11,8 @@
 
 - Движок — чистые функции `backend/src/strategy/` (`series` → `events` → `setups` → `simulate`,
   `author-check`, `learning`, `theory`, `report`). Отчёт считает `worker` раз в сутки
-  (`strategy-report.service.ts`) и пишет в `strategy_reports`; `api` только отдаёт.
+  (`strategy-report.service.ts`, свечи читает с Bybit через общий шлюз, `bybit-candles.ts`) и пишет
+  в `strategy_reports`; `api` только отдаёт.
 - `api/types.ts` — копия `backend/src/strategy/report.types.ts`, правятся вместе.
 - Правка правил, обучения или формы отчёта — поднять `STRATEGY_VERSION` в `report.ts`: отчёт пересчитается сам.
 

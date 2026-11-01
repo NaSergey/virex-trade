@@ -29,6 +29,33 @@ export function judge(t: TradeRow, history: TradeRow[]): OddsCheck | null {
   };
 }
 
+/** Отбор нескольких монет: квота и позиция у каждой свои, в блоке — их сумма. */
+export function mergeOdds(results: OddsResult[]): OddsBlock {
+  const system = results.flatMap((r) => r.system);
+  const sideOf = (k: 'long' | 'short', dir: 1 | -1): OddsSide => {
+    const sum = (f: 'considered' | 'taken' | 'skipped' | 'unjudged') =>
+      results.reduce((a, r) => a + r.block[k][f], 0);
+    return {
+      considered: sum('considered'),
+      taken: sum('taken'),
+      skipped: sum('skipped'),
+      unjudged: sum('unjudged'),
+      summary: summarize(
+        system.filter((t) => t.dir === dir).map((t) => t.rNet),
+      ),
+    };
+  };
+  const long = sideOf('long', 1);
+  const short = sideOf('short', -1);
+  const taken = long.taken + short.taken;
+  return {
+    long,
+    short,
+    longShare: taken ? long.taken / taken : 0,
+    effect: effectOf(results.flatMap((r) => r.skipped).map((t) => t.rNet)),
+  };
+}
+
 export interface OddsResult {
   /** Взятые сделки: одна позиция за раз, по времени входа. */
   system: TradeRow[];

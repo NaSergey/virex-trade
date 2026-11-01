@@ -1,5 +1,5 @@
 import type { Features, TradeRow } from './report.types';
-import { judge, selectSystem } from './odds';
+import { judge, mergeOdds, selectSystem } from './odds';
 
 const FEAT = {
   session: 'asia',
@@ -19,6 +19,7 @@ const row = (
   daily = 'with',
 ): TradeRow => ({
   id: String(seq++),
+  symbol: 'BTCUSDT',
   dir,
   tf: 15,
   sweepMs: 0,
@@ -127,6 +128,18 @@ describe('odds', () => {
     const { system, block } = selectSystem([long, inside], []);
     expect(system).toHaveLength(1);
     expect(block.long.considered).toBe(1);
+  });
+
+  it('mergeOdds — сумма по монетам, квота у каждой своя', () => {
+    const a = selectSystem([...series(1, 7, 0), ...series(-1, 5, 1000)], []);
+    const b = selectSystem(series(1, 2, 0), []);
+    const block = mergeOdds([a, b]);
+    expect(block.long).toMatchObject({ considered: 9, taken: 9, skipped: 0 });
+    expect(block.short).toMatchObject({ considered: 5, taken: 3, skipped: 2 });
+    expect(block.long.summary.n).toBe(9);
+    expect(block.short.summary.n).toBe(3);
+    expect(block.longShare).toBeCloseTo(9 / 12);
+    expect(block.effect.n).toBe(2);
   });
 
   it('сводка сторон: сделки и винрейт, вердикт по пропущенным', () => {

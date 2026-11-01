@@ -1,7 +1,7 @@
 /*
- * Стратегия на других монетах: тот же код, что считает отчёт, свечи — Binance (кэш в каталоге).
- * Из него снимок `views/strategy/model/check.ts`. Запуск из backend/:
- * TS_NODE_TRANSPILE_ONLY=1 node -r ts-node/register src/scripts/strategy-coins.ts <каталог> BTC ETH XRP SOL BNB
+ * Сверка стратегии на свечах Binance: тот же код, что считает отчёт (сам отчёт читает Bybit), кэш в каталоге.
+ * Из него цифры Binance в снимке `views/strategy/model/check.ts`. Запуск из backend/:
+ * TS_NODE_TRANSPILE_ONLY=1 node -r ts-node/register src/scripts/strategy-coins.ts <каталог> BTC ETH SOL DOGE PEPE
  */
 import * as fs from 'fs';
 import * as path from 'path';

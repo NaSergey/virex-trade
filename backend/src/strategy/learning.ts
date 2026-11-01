@@ -2,8 +2,8 @@ import type { Effect, Features, Mistake, Rule } from './report.types';
 import { FEATURE_KEYS } from './setups';
 import { meanCi, upper95 } from './stats';
 
-/** С какого квартала система учится (до него — разгон истории с 2018). */
-export const LEARN_FROM_MS = Date.UTC(2020, 0, 1);
+/** С какого квартала система учится: с начала истории, правил нет, пока сделок меньше MIN_TRAIN. */
+export const LEARN_FROM_MS = Date.UTC(2022, 0, 1);
 export const MIN_TRAIN = 60;
 export const MIN_RULE_N = 20;
 export const MAX_RULES = 3;

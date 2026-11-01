@@ -3,8 +3,16 @@ import type { FeatureKey, Outcome, Rule } from '../api/types';
 
 const R2 = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const N0 = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
-const N1 = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-const pctFormat = new Map<number, Intl.NumberFormat>();
+const digitsFormat = new Map<number, Intl.NumberFormat>();
+
+function formatOf(digits: number): Intl.NumberFormat {
+  let f = digitsFormat.get(digits);
+  if (!f) {
+    f = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+    digitsFormat.set(digits, f);
+  }
+  return f;
+}
 
 const ok = (x: number | null | undefined): x is number => x != null && Number.isFinite(x);
 
@@ -15,17 +23,20 @@ export const fmtR = (x: number | null | undefined): string =>
 /** Доля в процентах: 0,412 → «41,2 %». */
 export function fmtPct(x: number | null | undefined, digits = 1): string {
   if (!ok(x)) return '—';
-  let f = pctFormat.get(digits);
-  if (!f) {
-    f = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: digits, maximumFractionDigits: digits });
-    pctFormat.set(digits, f);
-  }
+  const f = formatOf(digits);
   return `${f.format(x * 100)} %`;
 }
 
 export const fmtNum = (x: number | null | undefined): string => (ok(x) ? R2.format(x) : '—');
 export const fmtInt = (x: number | null | undefined): string => (ok(x) ? N0.format(x) : '—');
-export const fmtPrice = (x: number): string => N1.format(x);
+/** Знаков цены по её размеру: монеты стратегии — от BTC до тысячи PEPE за доли цента. */
+export function priceDigits(x: number): number {
+  const a = Math.abs(x);
+  return a >= 1000 ? 1 : a >= 10 ? 2 : a >= 1 ? 3 : a >= 0.05 ? 5 : 6;
+}
+export const fmtPrice = (x: number): string => formatOf(priceDigits(x)).format(x);
+/** Монета по инструменту Bybit: BTCUSDT → BTC, 1000PEPEUSDT → PEPE. */
+export const coinOf = (symbol: string): string => symbol.replace(/USDT$/, '').replace(/^1000/, '');
 export const fmtUsd = (x: number): string => `${x < 0 ? '−' : ''}$${N0.format(Math.abs(x))}`;
 
 export const fmtDate = (ms: number): string =>
@@ -81,7 +92,7 @@ export const valueText = (feature: FeatureKey, value: string): string =>
 export const ruleText = (r: Rule): string => `${FEATURE_LABELS[r.feature]}: ${valueText(r.feature, r.value)}`;
 
 export const OUTCOME_LABELS: Record<Outcome, string> = {
-  target: 'все тейки',
+  target: 'цель',
   stop: 'стоп',
   trail: 'стоп за тейками',
   time: 'срок',

@@ -7,9 +7,17 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { runsBackgroundJobs } from '../role';
-import { SYMBOL } from '../market-data/timeframes';
-import { buildReport, REPORT_ID, STRATEGY_VERSION } from './report';
-import { CandleRow, Series, toSeries } from './series';
+import { BybitTerminalClient } from '../terminal/bybit-terminal.client';
+import { loadCandles } from './bybit-candles';
+import {
+  buildReport,
+  CoinInput,
+  HISTORY_FROM_MS,
+  REPORT_ID,
+  STRATEGY_SYMBOLS,
+  STRATEGY_VERSION,
+} from './report';
+import { Series, toSeries } from './series';
 import { Bar, minuteKey } from './simulate';
 
 const DAY_MS = 86_400_000;
@@ -17,12 +25,12 @@ const DAY_MS = 86_400_000;
 const CHECK_MS = 60 * 60_000;
 /** Первый расчёт — после старта остальных фоновых сервисов. */
 const START_DELAY_MS = 60_000;
-const PAGE = 50_000;
 
 /**
  * Отчёт стратегии в админке. Считает только `worker` (роль `all` — локально):
  * раз в сутки и сразу, если отчёта нет или он посчитан другой версией правил.
- * `api` строку только читает.
+ * `api` строку только читает. Свечи — сам Bybit, через общий шлюз, в базу не пишутся:
+ * торговать на нём, и на чужих свечах те же правила дают другие сделки.
  */
 @Injectable()
 export class StrategyReportService
@@ -32,7 +40,10 @@ export class StrategyReportService
   private timers: NodeJS.Timeout[] = [];
   private running = false;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly bybit: BybitTerminalClient,
+  ) {}
 
   onApplicationBootstrap() {
     if (!runsBackgroundJobs()) return;
@@ -74,17 +85,23 @@ export class StrategyReportService
 
   private async compute(): Promise<void> {
     const started = Date.now();
-    const m15 = await this.load(15);
-    const h1 = await this.load(60);
-    const h4 = await this.load(240);
-    const d1 = await this.load(1440);
-    if (!m15.n || !h1.n || !h4.n || !d1.n) {
-      this.logger.warn('отчёт стратегии: свечей BTC ещё нет — расчёт отложен');
-      return;
+    const coins: CoinInput[] = [];
+    for (const symbol of STRATEGY_SYMBOLS) {
+      const m15 = await this.load(symbol, 15, started);
+      const h1 = await this.load(symbol, 60, started);
+      const h4 = await this.load(symbol, 240, started);
+      const d1 = await this.load(symbol, 1440, started);
+      if (!m15.n || !h1.n || !h4.n || !d1.n) {
+        this.logger.warn(
+          `отчёт стратегии: нет свечей ${symbol} — расчёт отложен`,
+        );
+        return;
+      }
+      coins.push({ symbol, m15, h1, h4, d1 });
     }
     const report = await buildReport(
-      { m15, h1, h4, d1, nowMs: Date.now() },
-      (ranges) => this.minutes(ranges),
+      { coins, nowMs: Date.now() },
+      (symbol, ranges) => this.minutes(symbol, ranges),
     );
     const data = report as unknown as Prisma.InputJsonValue;
     const computedAt = new Date(report.computedAt);
@@ -98,46 +115,36 @@ export class StrategyReportService
     );
   }
 
-  private async load(tf: number): Promise<Series> {
-    const rows: CandleRow[] = [];
-    let cursor: Date | undefined;
-    for (;;) {
-      const page = await this.prisma.priceCandle.findMany({
-        where: {
-          symbol: SYMBOL,
-          timeframe: tf,
-          ...(cursor ? { time: { gt: cursor } } : {}),
-        },
-        orderBy: { time: 'asc' },
-        take: PAGE,
-        select: { time: true, open: true, high: true, low: true, close: true },
-      });
-      for (const r of page) rows.push(r);
-      if (page.length < PAGE) break;
-      cursor = page[page.length - 1].time;
-    }
+  private readonly publicGet = (path: string, params: Record<string, string>) =>
+    this.bybit.publicGet(path, params);
+
+  private async load(
+    symbol: string,
+    tf: number,
+    nowMs: number,
+  ): Promise<Series> {
+    const rows = await loadCandles(
+      this.publicGet,
+      symbol,
+      tf,
+      HISTORY_FROM_MS,
+      nowMs,
+    );
     return toSeries(tf, rows);
   }
 
   private async minutes(
+    symbol: string,
     ranges: [number, number][],
   ): Promise<Map<string, Bar[]>> {
     const out = new Map<string, Bar[]>();
     for (const [from, to] of ranges) {
-      const rows = await this.prisma.priceCandle.findMany({
-        where: {
-          symbol: SYMBOL,
-          timeframe: 1,
-          time: { gte: new Date(from), lt: new Date(to) },
-        },
-        orderBy: { time: 'asc' },
-        select: { time: true, open: true, high: true, low: true, close: true },
-      });
+      const rows = await loadCandles(this.publicGet, symbol, 1, from, to);
       out.set(
         minuteKey(from, to),
         rows.map((r) => ({
-          t0: r.time.getTime(),
-          t1: r.time.getTime() + 60_000,
+          t0: r.time,
+          t1: r.time + 60_000,
           o: r.open,
           h: r.high,
           l: r.low,

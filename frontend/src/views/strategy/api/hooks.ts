@@ -19,20 +19,23 @@ export function useStrategyReport(enabled: boolean) {
   });
 }
 
-/** Свеча, как её отдаёт `/api/market-data/candles`. */
 export const CHART_BEFORE = 60;
 export const CHART_AFTER = 20;
 
-/** Свечи вокруг сделки на выбранном ТФ: от 60 свечей до свипа (и `extra` глубже) до 20 после выхода. */
+/**
+ * Свечи вокруг сделки на выбранном ТФ: от 60 свечей до свипа (и `extra` глубже) до 20 после выхода.
+ * Рынок Bybit, как у самого отчёта: на свечах Binance уровни сделки легли бы мимо.
+ */
 export function useTradeCandles(trade: TradeRow, tf: number, extra = 0) {
   const step = tf * 60_000;
   const from = trade.sweepMs - (CHART_BEFORE + extra) * step;
   const to = trade.exitMs + CHART_AFTER * step;
+  const { symbol } = trade;
   return useQuery({
-    queryKey: ['strategy', 'candles', tf, from, to],
+    queryKey: ['strategy', 'candles', symbol, tf, from, to],
     queryFn: async () => ({
       tf,
-      candles: (await apiJson<ApiCandle[]>(`/api/market-data/candles${qs({ tf, from, to, limit: 5000 })}`)).map(fromApi),
+      candles: (await apiJson<ApiCandle[]>(`/api/terminal/candles${qs({ symbol, tf, from, to, limit: 5000 })}`)).map(fromApi),
     }),
     staleTime: Infinity,
     // Смена ТФ и догрузка истории: пока едут новые свечи, на экране прежние.
