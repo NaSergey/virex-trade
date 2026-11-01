@@ -11,19 +11,13 @@ export const FEATURE_KEYS: FeatureKey[] = [
   'pierce',
 ];
 
-/** Последний тейк — столько ATR(14) закрытой 4H-свечи от входа. */
-export const TARGET_ATR = 4;
-/** Цель ближе стопа — сделки нет. */
-export const MIN_PLAN_R = 1;
+/** Выход всем объёмом — столько процентов от входа. */
+export const TARGET_PCT = 1.5;
 /** Диапазон для положения входа — столько последних закрытых 4H-свечей. */
 export const RANGE_BARS = 30;
 
 /** Сколько свечей 15m сетап ждёт возврата в блок и слома: 48 часов. */
 export const CONFIRM_LIFE = 192;
-/** Уровни сетки входа — доли расстояния от входа до стопа; первый — по рынку. */
-export const GRID_STEPS = [0, 0.25, 0.5, 0.75];
-/** Тейки — доли пути от входа до цели. */
-export const TAKE_STEPS = [1 / 3, 2 / 3, 1];
 
 export interface Setup {
   /** `${свеча свипа 1H}:${сторона}`. */
@@ -44,13 +38,13 @@ export interface Setup {
   rangeHi: number;
   /** ATR(14) закрытой 4H-свечи на момент решения. */
   atr4: number;
-  /** Уровни входа, от первого к стопу. */
+  /** Уровни входа: один, по рынку. */
   entries: number[];
   stop: number;
-  /** Последний тейк. */
   target: number;
+  /** Тейки: один, на цели. */
   takes: number[];
-  /** Стоп за тейками и снятие входа после первого тейка. */
+  /** Стоп за тейками и снятие входа после первого тейка; при одном тейке сделка им и кончается. */
   trail: boolean;
   /** Первый уровень исполняется по рынку на открытии следующей свечи. */
   market?: boolean;
@@ -173,8 +167,8 @@ function confirmOn15m(
 
 /**
  * Сетапы стратегии: контекст 4H → на 1H свип, FVG и слом в окне, ордерблок и стоп →
- * на 15m возврат в блок и слом, от него вход и сетка; на 4H положение входа и цель. Решение —
- * на закрытии свечи слома 15m; будущих свечей оно не видит.
+ * на 15m возврат в блок и слом, от него один вход и выход на +TARGET_PCT %; на 4H положение
+ * входа. Решение — на закрытии свечи слома 15m; будущих свечей оно не видит.
  */
 export function findSetups(m15: Series, s: Series, ctx: SetupContext): Setup[] {
   const out: Setup[] = [];
@@ -227,9 +221,9 @@ export function findSetups(m15: Series, s: Series, ctx: SetupContext): Setup[] {
     if (!range || atr4 == null) continue;
     const pos = (entry - range.lo) / (range.hi - range.lo);
     if (pos > 1 / 3 && pos < 2 / 3) continue;
-    const plannedR = (TARGET_ATR * atr4) / h;
-    if (plannedR < MIN_PLAN_R) continue;
-    const target = entry + d * plannedR * h;
+    const move = (TARGET_PCT / 100) * Math.abs(entry);
+    const target = entry + d * move;
+    const plannedR = move / h;
 
     out.push({
       id: `${sw.i}:${d}`,
@@ -244,10 +238,10 @@ export function findSetups(m15: Series, s: Series, ctx: SetupContext): Setup[] {
       rangeLo: range.lo,
       rangeHi: range.hi,
       atr4,
-      entries: GRID_STEPS.map((k) => entry - d * k * h),
+      entries: [entry],
       stop,
       target,
-      takes: TAKE_STEPS.map((k) => entry + (target - entry) * k),
+      takes: [target],
       trail: true,
       market: true,
       plannedR,

@@ -1,53 +1,28 @@
 'use client';
 
 import { SectionHead } from '@/shared/ui/SectionHead';
-import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
-import { fmtInt, fmtPct, fmtR, tone } from '../model/format';
-import { COINS, PLACEBO, type CoinRow } from '../model/check';
+import { CHECK } from '../model/check';
+import { fmtPct, fmtR } from '../model/format';
 
-const columns: LedgerColumn<CoinRow>[] = [
-  { key: 'coin', header: 'Монета', render: (c) => c.coin },
-  { key: 'n', header: 'Сделок за 2 года', align: 'right', cellClassName: 'n', render: (c) => fmtInt(c.n) },
-  { key: 'wr', header: 'Винрейт', align: 'right', cellClassName: 'n', render: (c) => fmtPct(c.winrate) },
-  {
-    key: 'exp',
-    header: 'Мат ожидание',
-    align: 'right',
-    cellClassName: 'n',
-    render: (c) => <span className={tone(c.expectancy)}>{fmtR(c.expectancy)}</span>,
-  },
-  {
-    key: 'sum',
-    header: 'Итог',
-    align: 'right',
-    cellClassName: 'n',
-    render: (c) => <span className={tone(c.sumR)}>{fmtR(c.sumR)}</span>,
-  },
-  {
-    key: 'all',
-    header: 'С 2018 года',
-    align: 'right',
-    cellClassName: 'n',
-    render: (c) => (
-      <>
-        <span className={tone(c.allExpectancy)}>{fmtR(c.allExpectancy)}</span>{' '}
-        <span className="muted">· {fmtInt(c.allN)}</span>
-      </>
-    ),
-  },
-];
-
-/** Повторяется ли результат BTC: то же правило без правок на других монетах. */
+/** Чего отчёт сервера не считает: случайный вход, сверка с Binance, цена перебора. */
 export function CheckSection() {
+  const { random, binance } = CHECK;
   return (
     <section id="check" className="st-section">
-      <SectionHead title="Проверка на других монетах" />
-      <p className="muted">
-        Снимок от 31.10.2026, правила те же, без единой правки. Случайный вход с теми же сторонами и стопами был не хуже стратегии
-        в {PLACEBO.above} из {PLACEBO.runs} прогонов и на BTC, и на ETH. Это не доказательство: монеты движутся вместе, сделок мало, а
-        проскальзывание не учтено.
+      <SectionHead title="Насколько этому верить" />
+      <p className="st-verdict">
+        Это бектест, а не доказанная прибыль: стратегия не отправляет ордера, вперёд и живым счётом не проверялась.
       </p>
-      <LedgerTable columns={columns} rows={COINS} rowKey={(c) => c.coin} minWidth={640} />
+      <p className="muted">
+        Снимок от {CHECK.date}. Случайный вход с теми же монетами, сторонами, стопами и целью был не хуже стратегии в{' '}
+        {fmtPct(random.after, 0)} из {random.runs} прогонов за 2 года и в {fmtPct(random.before, 0)} за период до них. На
+        свечах Binance те же правила дают {fmtR(binance.after)} и {fmtR(binance.before)}.
+      </p>
+      <p className="muted">
+        Проскальзывание не учтено: 0,1 % на входе по рынку и на стопе срежет около {CHECK.slippageR.toLocaleString('ru-RU')}R на
+        сделку. Вариант выбран примерно из {CHECK.tried}, поэтому часть результата может быть удачей. Заранее записанный критерий
+        он не прошёл: нужно было +0,15R и плюс на 3 монетах из 5.
+      </p>
     </section>
   );
 }

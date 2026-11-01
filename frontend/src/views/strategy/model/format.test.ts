@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clock, fmtPct, fmtR, ruleText, tone } from './format';
+import { clock, coinOf, fmtPct, fmtPrice, fmtR, priceDigits, ruleText, tone } from './format';
 
 describe('format', () => {
   it('fmtR — знак, два знака, R', () => {
@@ -18,6 +18,20 @@ describe('format', () => {
   it('ruleText — признак и корзина по-русски', () => {
     expect(ruleText({ feature: 'session', value: 'night' })).toBe('Сессия: ночь');
     expect(ruleText({ feature: 'stopAtr', value: '>1.5' })).toBe('Стоп: > 1,5 ATR');
+  });
+
+  it('цена — столько знаков, сколько нужно монете', () => {
+    const plain = (x: number) => fmtPrice(x).replace(/\s/g, '');
+    expect(plain(69123.45)).toBe('69123,5');
+    expect(plain(151.234)).toBe('151,23');
+    expect(plain(0.21234)).toBe('0,21234');
+    expect(plain(0.005061)).toBe('0,005061');
+    expect(priceDigits(-0.005)).toBe(6);
+  });
+
+  it('монета по инструменту', () => {
+    expect(coinOf('BTCUSDT')).toBe('BTC');
+    expect(coinOf('1000PEPEUSDT')).toBe('PEPE');
   });
 
   it('clock и tone', () => {

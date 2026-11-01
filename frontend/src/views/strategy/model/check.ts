@@ -1,21 +1,15 @@
-/** Снимок `backend/src/scripts/strategy-coins.ts` от 2026-10-31: в отчёте только BTC. */
-export interface CoinRow {
-  coin: string;
-  n: number;
-  winrate: number;
-  expectancy: number;
-  sumR: number;
-  /** Мат ожидание за всю историю с 2018 года. */
-  allExpectancy: number;
-  allN: number;
-}
-
-export const COINS: CoinRow[] = [
-  { coin: 'BTC', n: 12, winrate: 10 / 12, expectancy: 0.977, sumR: 11.7, allExpectancy: 0.23, allN: 57 },
-  { coin: 'ETH', n: 20, winrate: 14 / 20, expectancy: 0.551, sumR: 11, allExpectancy: 0.314, allN: 74 },
-  { coin: 'XRP', n: 12, winrate: 9 / 12, expectancy: 0.325, sumR: 3.9, allExpectancy: 0.07, allN: 54 },
-  { coin: 'SOL', n: 8, winrate: 3 / 8, expectancy: -0.143, sumR: -1.1, allExpectancy: 0.039, allN: 36 },
-  { coin: 'BNB', n: 14, winrate: 9 / 14, expectancy: -0.125, sumR: -1.7, allExpectancy: -0.15, allN: 69 },
-];
-/** Вход в случайный момент с теми же сторонами и стопами: 20 прогонов на BTC и на ETH, сколько из них не хуже настоящей стратегии. */
-export const PLACEBO = { runs: 20, above: 1 };
+/**
+ * Снимок от 2026-11-01: то, что отчёт сервера не считает. Случайный вход — те же монета, сторона, стоп
+ * и цель в случайный момент того же периода; Binance — `backend/src/scripts/strategy-coins.ts`.
+ */
+export const CHECK = {
+  date: '01.11.2026',
+  /** Доля прогонов случайного входа не хуже стратегии, свечи Bybit. */
+  random: { runs: 100, after: 0.07, before: 0.04 },
+  /** Те же правила и монеты на свечах Binance, мат ожидание. */
+  binance: { after: 0.23, before: 0.12 },
+  /** Оценка: 0,1 % проскальзывания на входе по рынку и на стопе при стопе около 3 %. */
+  slippageR: 0.04,
+  /** Сколько вариантов перебрано, прежде чем выбрать этот. */
+  tried: 100,
+};

@@ -22,7 +22,7 @@ import {
 } from '@/widgets/backtest-session';
 import { useTradeCandles } from '../api/hooks';
 import type { TradeRow } from '../api/types';
-import { fmtDateTime, fmtPct, fmtPrice, fmtR, OUTCOME_LABELS, tone } from '../model/format';
+import { coinOf, fmtDateTime, fmtPct, fmtPrice, fmtR, OUTCOME_LABELS, priceDigits, tone } from '../model/format';
 import { fmtDuration, fmtMove, levelLines, moveOf, planMoveOf, type LevelLine } from '../model/trade';
 
 const TF_OPTIONS = [
@@ -141,7 +141,7 @@ export function TradeDialog({ trade, onClose }: { trade: TradeRow; onClose: () =
     <Dialog open={!closing} onOpenChange={(v) => !v && close()}>
       <DialogContent className="st-tm">
         <DialogHeader
-          title={`${trade.dir === 1 ? 'Лонг' : 'Шорт'} BTCUSDT · ${fmtPrice(trade.avgEntry)} → ${fmtPrice(trade.exit)}`}
+          title={`${trade.dir === 1 ? 'Лонг' : 'Шорт'} ${coinOf(trade.symbol)} · ${fmtPrice(trade.avgEntry)} → ${fmtPrice(trade.exit)}`}
           subtitle={`${fmtDateTime(trade.fillMs)} — ${fmtDateTime(trade.exitMs)} UTC · ${fmtDuration(held)}`}
           aside={<span className={tone(trade.rNet)}>{fmtR(trade.rNet)}</span>}
         />
@@ -197,6 +197,7 @@ export function TradeDialog({ trade, onClose }: { trade: TradeRow; onClose: () =
                     onNeedHistory={moreHistory}
                     historyLoading={q.isFetching}
                     defaultCount={Math.min(MAX_VISIBLE, candles.length)}
+                    priceDecimals={priceDigits(trade.entries[0])}
                   />
                 ) : q.isLoading ? (
                   <Skeleton height={320} />
@@ -215,7 +216,7 @@ export function TradeDialog({ trade, onClose }: { trade: TradeRow; onClose: () =
             <KeyValue label="На счёте при риске 1 %" valueClassName={`n ${tone(trade.rNet) ?? ''}`}>
               {fmtMove(trade.rNet / 100)}
             </KeyValue>
-            <KeyValue label="Средний вход">{fmtPrice(trade.avgEntry)}</KeyValue>
+            <KeyValue label="Вход">{fmtPrice(trade.avgEntry)}</KeyValue>
             <KeyValue label="Выход">{fmtPrice(trade.exit)}</KeyValue>
             <KeyValue label="Причина выхода" valueClassName="">
               {OUTCOME_LABELS[trade.outcome]}
@@ -229,10 +230,8 @@ export function TradeDialog({ trade, onClose }: { trade: TradeRow; onClose: () =
             <KeyValue label="Макс. ход против" valueClassName="n neg">
               {fmtMove(-trade.maxDown)}
             </KeyValue>
-            <KeyValue label="Стоп от первого входа">{fmtMove(planMoveOf(trade, trade.stop))}</KeyValue>
-            <KeyValue label="Цель от первого входа">{fmtMove(planMoveOf(trade, trade.target))}</KeyValue>
-            <KeyValue label="Исполнено входов">{`${trade.filled} из ${trade.entries.length}`}</KeyValue>
-            <KeyValue label="Взято тейков">{`${trade.takesHit} из ${trade.takes.length}`}</KeyValue>
+            <KeyValue label="Стоп от входа">{fmtMove(planMoveOf(trade, trade.stop))}</KeyValue>
+            <KeyValue label="Цель от входа">{fmtMove(planMoveOf(trade, trade.target))}</KeyValue>
             <KeyValue label="В сделке">{fmtDuration(held)}</KeyValue>
             {trade.odds && (
               <KeyValue label="Шанс успеха / нужно">{`${fmtPct(trade.odds.p, 0)} / ${fmtPct(trade.odds.needed, 0)}`}</KeyValue>

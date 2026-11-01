@@ -50,7 +50,7 @@ const close = (xs: number[], ys: number[]) => {
 };
 
 describe('setups: контекст 4H, сетап 1H, подтверждение 15m', () => {
-  it('возврат в часовой блок и слом 15m — вход, стоп часовой, цель 4 ATR 4H', () => {
+  it('возврат в часовой блок и слом 15m — один вход, стоп часовой, цель +1,5 %', () => {
     const s = hours();
     const [st] = findSetups(quarters(FULL), s, ctxOf(s, 1));
     expect(st).toMatchObject({
@@ -70,22 +70,17 @@ describe('setups: контекст 4H, сетап 1H, подтверждение
       rangeHi: 60,
     });
     const h = 104.5 - 96;
-    expect(st.target).toBeCloseTo(104.5 + 4 * 3);
-    expect(st.plannedR).toBeCloseTo(12 / h);
-    close(st.entries, [
-      104.5,
-      104.5 - h / 4,
-      104.5 - h / 2,
-      104.5 - (3 * h) / 4,
-    ]);
-    close(st.takes, [108.5, 112.5, 116.5]);
+    const target = 104.5 * 1.015;
+    expect(st.target).toBeCloseTo(target);
+    expect(st.plannedR).toBeCloseTo((target - 104.5) / h);
+    close(st.entries, [104.5]);
+    close(st.takes, [target]);
   });
 
-  it('цель ближе стопа — сделки нет', () => {
-    const s = hours(); // стоп 8,5 — цель 4 × 2 = 8
-    expect(
-      findSetups(quarters(FULL), s, ctxOf(s, 1, [50, 60], 2)),
-    ).toHaveLength(0);
+  it('цель ближе стопа — сделка есть', () => {
+    const s = hours(); // стоп 8,5 от входа, цель 1,57
+    const [st] = findSetups(quarters(FULL), s, ctxOf(s, 1));
+    expect(st.plannedR).toBeLessThan(1);
   });
 
   it('вход в средней трети диапазона 4H — сделки нет, у краёв — есть', () => {
@@ -170,7 +165,7 @@ describe('setups: контекст 4H, сетап 1H, подтверждение
     const [st] = findSetups(mirror(quarters(FULL)), s, ctxOf(s, -1));
     expect(st).toMatchObject({ dir: -1, stop: -96, e: 122 });
     expect(st.entries[0]).toBeCloseTo(-104.5);
-    expect(st.target).toBeCloseTo(-(104.5 + 4 * 3));
+    expect(st.target).toBeCloseTo(-104.5 * 1.015);
   });
 
   it('признаки сетапа', () => {

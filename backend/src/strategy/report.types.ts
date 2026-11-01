@@ -66,7 +66,10 @@ export interface OddsCheck {
 }
 
 export interface TradeRow {
+  /** С монетой: сетап одной монеты не должен совпасть с сетапом другой. */
   id: string;
+  /** Инструмент Bybit. */
+  symbol: string;
   dir: Dir;
   tf: number;
   sweepMs: number;
@@ -116,6 +119,13 @@ export interface TradeRow {
 export interface YearRow {
   year: number;
   summary: Summary;
+}
+
+/** Монета за окно статистики и за период до него. */
+export interface CoinStats {
+  symbol: string;
+  after: SideRow;
+  before: SideRow;
 }
 
 export interface Share {
@@ -263,6 +273,9 @@ export interface StrategyReport {
   main: {
     stats: MainStats;
     sides: { all: SideRow; long: SideRow; short: SideRow };
+    /** Те же правила и монеты за период до окна статистики. */
+    before: SideRow;
+    byCoin: CoinStats[];
     equity: Point[];
     byYear: YearRow[];
     trades: TradeRow[];

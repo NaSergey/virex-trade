@@ -24,16 +24,21 @@ describe('report', () => {
   });
 
   it('buildReport собирает отчёт за последние 2 года на случайном блуждании', async () => {
-    const m15 = walk(800 * 96, 11);
-    const nowMs = closeMs(m15, m15.n - 1);
-    const report = await buildReport(
-      {
+    const coinOf = (symbol: string, seed: number) => {
+      const m15 = walk(800 * 96, seed, Date.UTC(2021, 0, 1));
+      return {
+        symbol,
         m15,
         h1: aggregate(m15, 60),
         h4: aggregate(m15, 240),
         d1: aggregate(m15, 1440),
-        nowMs,
-      },
+      };
+    };
+    const coins = [coinOf('BTCUSDT', 11), coinOf('ETHUSDT', 12)];
+    const { m15 } = coins[0];
+    const nowMs = closeMs(m15, m15.n - 1);
+    const report = await buildReport(
+      { coins, nowMs },
       async () => new Map(),
       async () => undefined,
     );
@@ -41,7 +46,7 @@ describe('report', () => {
     expect(report.author).toHaveLength(8);
     expect(report.learning.quarters.length).toBeGreaterThanOrEqual(2);
     expect(report.theory.ruin.rows).toHaveLength(4);
-    const { trades, sides, stats, money } = report.main;
+    const { trades, sides, stats, money, byCoin, before } = report.main;
     // Сделки на блуждании есть — иначе проверки ниже прошли бы вхолостую.
     expect(trades.length).toBeGreaterThan(0);
     expect(report.dataFrom).toBeGreaterThan(m15.t[0]);
@@ -63,12 +68,27 @@ describe('report', () => {
       expect(t.maxUp).toBeGreaterThanOrEqual(0);
       expect(t.maxDown).toBeGreaterThanOrEqual(0);
       expect(t.tf).toBe(15);
-      expect(t.takes.length).toBe(3);
-      expect(t.entries.length).toBe(4);
+      expect(t.takes.length).toBe(1);
+      expect(t.entries.length).toBe(1);
+      expect(t.id.startsWith(`${t.symbol}:`)).toBe(true);
+    }
+    // Одна позиция — у каждой монеты своя; в общем списке сделки идут по времени входа.
+    expect(byCoin.map((c) => c.symbol)).toEqual(['BTCUSDT', 'ETHUSDT']);
+    for (const c of byCoin) {
+      const own = trades.filter((t) => t.symbol === c.symbol);
+      expect(c.after.summary.n).toBe(own.length);
+      for (let i = 1; i < own.length; i++) {
+        expect(own[i].fillMs).toBeGreaterThanOrEqual(own[i - 1].exitMs);
+      }
     }
     for (let i = 1; i < trades.length; i++) {
-      expect(trades[i].fillMs).toBeGreaterThanOrEqual(trades[i - 1].exitMs);
+      expect(trades[i].fillMs).toBeGreaterThanOrEqual(trades[i - 1].fillMs);
     }
+    expect(before.summary.n).toBe(
+      byCoin.reduce((a, c) => a + c.before.summary.n, 0),
+    );
+    expect(before.summary.n).toBeGreaterThan(0);
+    expect(new Set(trades.map((t) => t.id)).size).toBe(trades.length);
     expect(() => JSON.stringify(report)).not.toThrow();
   });
 });
