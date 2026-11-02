@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { LANDING_PATH } from '@/shared/config/site';
-import { LOCALE_HEADER } from '@/shared/i18n/locale-storage';
+import { LOCALE_COOKIE, LOCALE_COOKIE_MAX_AGE, LOCALE_HEADER, localeCookieDomain } from '@/shared/i18n/locale-storage';
 import { adminOrigin, adminPath } from '@/shared/lib/utils/admin-host';
 import { HOME_OF, isJournalRoute, isPlayRoute, journalHost, partOfHost, playHost } from '@/shared/lib/utils/app-part';
 
@@ -39,6 +39,20 @@ function protoOf(request: NextRequest): string {
  */
 function originOf(request: NextRequest, host: string): string {
   return `${protoOf(request)}://${host}`;
+}
+
+/**
+ * Выбранный на площадке язык — с собой в журнал. Заведённая раньше кука языка живёт
+ * только на адресе площадки, и по закладке `/terminal` человек попал бы в журнал
+ * раньше, чем площадка успела её перенести на весь домен, — на языке по умолчанию.
+ */
+function carryLocale(request: NextRequest, response: NextResponse): NextResponse {
+  const locale = request.cookies.get(LOCALE_COOKIE)?.value;
+  const domain = localeCookieDomain(request.headers.get('host')?.split(':')[0] ?? '');
+  if (locale && domain) {
+    response.cookies.set(LOCALE_COOKIE, locale, { domain, path: '/', maxAge: LOCALE_COOKIE_MAX_AGE, sameSite: 'lax' });
+  }
+  return response;
 }
 
 export function proxy(request: NextRequest) {
@@ -83,10 +97,16 @@ export function proxy(request: NextRequest) {
    * запросом — закладки, ссылки из уведомлений и пункты рейки в соседнюю часть
    * держатся на этом. Вход спрашивает уже та часть, куда пришли. 307, а не 308:
    * постоянный редирект браузер запоминает, и откатить его было бы нечем.
+   *
+   * `/journal*` — внутренний адрес главной журнала: снаружи её адрес `/` и `/ru`.
    */
-  if (host && part === 'play' && (isJournalRoute(pathname) || pathname === '/journal' || pathname.startsWith('/journal/'))) {
+  const toJournalHome = pathname === '/journal' || pathname.startsWith('/journal/');
+  if (host && (toJournalHome || (part === 'play' && isJournalRoute(pathname)))) {
     const path = pathname.replace(/^\/journal(?=\/|$)/, '') || '/';
-    return NextResponse.redirect(`${originOf(request, journalHost(host))}${path}${request.nextUrl.search}`);
+    return carryLocale(
+      request,
+      NextResponse.redirect(`${originOf(request, journalHost(host))}${path}${request.nextUrl.search}`),
+    );
   }
   if (host && part === 'journal' && isPlayRoute(pathname)) {
     return NextResponse.redirect(`${originOf(request, playHost(host))}${pathname}${request.nextUrl.search}`);

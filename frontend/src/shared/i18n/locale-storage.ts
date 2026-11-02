@@ -7,7 +7,7 @@ export const SUPPORTED_LOCALES: readonly Locale[] = ['ru', 'en'];
 export const LOCALE_COOKIE = 'virex-locale';
 /** Язык, заданный адресом страницы (`/ru`): его ставит `proxy.ts`, и он сильнее куки. */
 export const LOCALE_HEADER = 'x-virex-locale';
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 год
+export const LOCALE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 год
 
 /**
  * Язык, который видит человек, впервые открывший продукт без куки.
@@ -75,5 +75,5 @@ export function setClientLocale(locale: Locale): void {
   const domain = localeCookieDomain(window.location.hostname);
   if (domain) document.cookie = `${LOCALE_COOKIE}=; path=/; max-age=0`;
   const scope = domain ? `; domain=${domain}` : '';
-  document.cookie = `${LOCALE_COOKIE}=${locale}; path=/; max-age=${COOKIE_MAX_AGE}; samesite=lax${scope}`;
+  document.cookie = `${LOCALE_COOKIE}=${locale}; path=/; max-age=${LOCALE_COOKIE_MAX_AGE}; samesite=lax${scope}`;
 }

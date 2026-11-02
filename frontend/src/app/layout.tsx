@@ -55,9 +55,9 @@ const jetbrainsMono = JetBrains_Mono({
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getServerLocale();
   const messages = await loadMessages(locale);
-  const journal = partOfHost((await headers()).get("host")) === "journal";
+  const part = partOfHost((await headers()).get("host"));
   return {
-    metadataBase: new URL(journal ? JOURNAL_URL : SITE_URL),
+    metadataBase: new URL(part === "journal" ? JOURNAL_URL : SITE_URL),
     title: messages.meta.title,
     description: messages.meta.description,
     // В выдачу идут только главные (`views/landing/seo.tsx`): остальное закрыто
@@ -68,7 +68,7 @@ export async function generateMetadata(): Promise<Metadata> {
     // браузера, со своей иконкой. Манифест — в `/assets/`: этот каталог гейт
     // `proxy.ts` пропускает без куки, а браузер берёт манифест без неё. У каждой
     // части свой: приложение стартует со своей главной.
-    manifest: journal ? "/assets/app/manifest.webmanifest" : "/assets/app/manifest-play.webmanifest",
+    manifest: part === "play" ? "/assets/app/manifest-play.webmanifest" : "/assets/app/manifest.webmanifest",
     // `favicon.ico` рядом подхватывает сам Next. Обе иконки — знак на чёрном поле:
     // серебро без поля пропало бы на светлой вкладке.
     icons: {

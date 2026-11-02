@@ -98,6 +98,37 @@ describe('proxy — части', () => {
     );
   });
 
+  it('внутренний адрес на самом журнале — на настоящую главную, а не вторая её копия', () => {
+    expect(locationOf(proxy(req('/journal', { host: journal, proto: 'https' })))).toBe('https://journal.trade-play.com/');
+    expect(locationOf(proxy(req('/journal/ru', { host: journal, proto: 'https' })))).toBe(
+      'https://journal.trade-play.com/ru',
+    );
+  });
+
+  it('в журнал по закладке — вместе с выбранным языком, на весь домен', () => {
+    const asked = new NextRequest(new URL('/terminal', `http://${play}`), {
+      headers: { host: play, cookie: 'virex-locale=ru', 'x-forwarded-proto': 'https' },
+    });
+    const carried = proxy(asked).headers.get('set-cookie') ?? '';
+    expect(carried).toContain('virex-locale=ru');
+    expect(carried).toMatch(/Domain=trade-play\.com/i);
+  });
+
+  it('языка не выбирали или адрес чужой — куку не придумываем', () => {
+    expect(proxy(req('/terminal', { host: play, proto: 'https' })).headers.get('set-cookie')).toBeNull();
+    const local = new NextRequest(new URL('/terminal', 'http://localhost:8090'), {
+      headers: { host: 'localhost:8090', cookie: 'virex-locale=ru' },
+    });
+    expect(proxy(local).headers.get('set-cookie')).toBeNull();
+  });
+
+  it('старая кука сессии считается и в журнале', () => {
+    const asked = new NextRequest(new URL('/terminal', `http://${journal}`), {
+      headers: { host: journal, cookie: 'refresh_token=x' },
+    });
+    expect(locationOf(proxy(asked))).toBeNull();
+  });
+
   it('/ и /ru вошедшего: площадка — витрина, журнал — терминал', () => {
     for (const path of ['/', '/ru']) {
       expect(locationOf(proxy(req(path, { host: play, authed: true })))).toMatch(/\/games$/);
