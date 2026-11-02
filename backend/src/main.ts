@@ -1,13 +1,15 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { GamesAppModule } from './games-app.module';
+import { trustProxy } from './http-proxy';
 import { ROLE, servesHttp } from './role';
 
 async function bootstrap() {
   // `games` — свой корень: только игры, без биржи и фона (games-app.module.ts).
-  const app = await NestFactory.create(ROLE === 'games' ? GamesAppModule : AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(ROLE === 'games' ? GamesAppModule : AppModule);
 
   // Без этого SIGTERM (docker stop / деплой) убивает процесс сразу, не
   // дав OnModuleDestroy-хукам отработать — в частности, UsageTrackerService
@@ -37,6 +39,8 @@ async function bootstrap() {
   const httpServer = app.getHttpServer();
   httpServer.keepAliveTimeout = 65_000;
   httpServer.headersTimeout = 66_000;
+
+  trustProxy(app);
 
   // Parse cookies so the refresh token (HttpOnly cookie) is available.
   app.use(cookieParser());
