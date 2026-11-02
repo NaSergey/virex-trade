@@ -1,7 +1,9 @@
 {
   "meta": {
     "title": "Trade Play — a platform for traders",
-    "description": "Journal, terminal, simulator and games for traders who build their own system"
+    "description": "Journal, terminal, simulator and games for traders who build their own system",
+    "landingTitle": "Trade Play — trading journal, Bybit terminal and backtesting",
+    "landingDescription": "Trading journal with automatic Bybit import: tags and analytics show where you go wrong. Risk-based terminal, backtesting and a simulator. Demo without sign-up."
   },
   "common": {
     "restoringSession": "Restoring session…",
@@ -668,6 +670,8 @@
     "TERMINAL_FOLLOW_NOT_SAVED": "The grid is placed, but the stop doesn't follow the takes yet. Open the grid window again.",
     "INVALID_CREDENTIALS": "Invalid email or password",
     "USER_EXISTS": "A user with this email already exists",
+    "NAME_NOT_READABLE": "Enter a real name or nickname: at least two letters, no random characters",
+    "EMAIL_NOT_REAL": "Enter a real email address: this one can't receive mail",
     "REFRESH_TOKEN_MISSING": "Refresh token missing",
     "REFRESH_TOKEN_INVALID": "Invalid refresh token",
     "REFRESH_TOKEN_EXPIRED": "Refresh token expired",
@@ -985,7 +989,7 @@
       }
     },
     "navRegister": "Sign up",
-    "platformTitle": "Trade Play — a platform for traders",
+    "platformTitle": "Trade Play — trading journal, Bybit terminal, backtesting and simulator",
     "registerHeading": "Create your account",
     "registerInvitedHeading": "You're invited",
     "loginHeading": "Log in to Trade Play",

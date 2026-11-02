@@ -344,6 +344,12 @@ describe('ProfileService.setName', () => {
     expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: ID }, data: { name: 'Ника' }, select: { name: true } });
   });
 
+  it('мусор вместо имени — 400 без записи: те же правила, что при регистрации', async () => {
+    const { service, prisma } = make({ email: 'nika@example.com' });
+    await expect(service.setName(ID, 'ыфвфыв')).rejects.toMatchObject({ response: { code: 'NAME_NOT_READABLE' } });
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
   it('демо-аккаунт — 403 без записи: его имя видит каждый посетитель витрины', async () => {
     const { service, prisma } = make({ email: 'demo@example.com' });
     await expect(service.setName(ID, 'Хакер')).rejects.toBeInstanceOf(ForbiddenException);

@@ -4,6 +4,7 @@ import { IsString, MaxLength, MinLength } from 'class-validator';
 /**
  * Новое имя из настроек профиля — те же правила, что при регистрации
  * (`RegisterDto.name`): пробелы по краям срезаются до проверки, 2–40 символов.
+ * Осмысленность имени проверяет `ProfileService.setName` (`identity-rules.ts`).
  */
 export class NameDto {
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))

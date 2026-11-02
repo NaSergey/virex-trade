@@ -8,6 +8,7 @@ import { getServerLocale } from "@/shared/i18n/server-locale";
 import { ThemeProvider } from "@/shared/theme";
 import { getServerTheme } from "@/shared/theme/server-theme";
 import { loadMessages } from "@/shared/i18n/load-messages";
+import { SITE_URL } from "@/shared/config/site";
 
 /**
  * Два голоса, и только два: серифы — речь (заголовки, пояснения, названия
@@ -52,13 +53,23 @@ export async function generateMetadata(): Promise<Metadata> {
   const locale = await getServerLocale();
   const messages = await loadMessages(locale);
   return {
+    metadataBase: new URL(SITE_URL),
     title: messages.meta.title,
     description: messages.meta.description,
+    // В выдачу идут только главные (`views/landing/seo.tsx`): остальное закрыто
+    // входом или, как профиль, показывает гостю одно приглашение. Запрет здесь,
+    // а не на страницах: новая страница не попадёт в поиск, пока это не решат.
+    robots: { index: false, follow: false },
     // С телефона продукт ставится на главный экран приложением: без строки
     // браузера, со своей иконкой. Манифест — в `/assets/`: этот каталог гейт
     // `proxy.ts` пропускает без куки, а браузер берёт манифест без неё.
     manifest: "/assets/app/manifest.webmanifest",
-    icons: { apple: "/assets/app/icon-180.png" },
+    // `favicon.ico` рядом подхватывает сам Next. Обе иконки — знак на чёрном поле:
+    // серебро без поля пропало бы на светлой вкладке.
+    icons: {
+      icon: { url: "/assets/app/icon.svg", type: "image/svg+xml" },
+      apple: "/assets/app/icon-180.png",
+    },
     appleWebApp: { capable: true, title: "Trade Play", statusBarStyle: "black-translucent" },
   };
 }

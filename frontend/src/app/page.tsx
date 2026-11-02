@@ -8,4 +8,17 @@
  * Файл роута — только объявление адреса, сама страница живёт в слое `views`
  * (см. соседние роуты и причину в `src/views`).
  */
-export { LandingPage as default } from '@/views/landing/Page';
+import { LANDING_PATH } from '@/shared/config/site';
+import { LandingPage } from '@/views/landing/Page';
+import { LandingJsonLd, landingMetadata } from '@/views/landing/seo';
+
+export const generateMetadata = () => landingMetadata(LANDING_PATH.en);
+
+export default function Page() {
+  return (
+    <>
+      <LandingJsonLd />
+      <LandingPage />
+    </>
+  );
+}
