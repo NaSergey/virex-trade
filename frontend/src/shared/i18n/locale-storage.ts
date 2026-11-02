@@ -1,3 +1,5 @@
+import { SITE_URL } from '@/shared/config/site';
+
 export type Locale = 'ru' | 'en';
 
 export const SUPPORTED_LOCALES: readonly Locale[] = ['ru', 'en'];
@@ -50,12 +52,28 @@ export function getClientLocale(
 }
 
 /**
+ * Домен куки языка: на площадке и в журнале он один, иначе выбравший русский
+ * получал бы другую часть продукта на английском. У админки, локально и на чужом
+ * адресе кука остаётся на своём.
+ */
+export function localeCookieDomain(hostname: string): string | undefined {
+  const apex = new URL(SITE_URL).hostname;
+  return hostname === apex || hostname === `journal.${apex}` ? apex : undefined;
+}
+
+/**
  * Пишет локаль в куку — не в `localStorage`: куку, в отличие от
  * `localStorage`, читает и сервер при SSR (см. `layout.tsx`), поэтому
  * следующая загрузка страницы сразу рендерится в правильном языке без
  * вспышки и hydration mismatch.
+ *
+ * Кука своего адреса снимается: заведённая раньше, она шла бы первой, и новый выбор
+ * на весь домен не читался бы.
  */
 export function setClientLocale(locale: Locale): void {
   if (typeof document === 'undefined') return;
-  document.cookie = `${LOCALE_COOKIE}=${locale}; path=/; max-age=${COOKIE_MAX_AGE}; samesite=lax`;
+  const domain = localeCookieDomain(window.location.hostname);
+  if (domain) document.cookie = `${LOCALE_COOKIE}=; path=/; max-age=0`;
+  const scope = domain ? `; domain=${domain}` : '';
+  document.cookie = `${LOCALE_COOKIE}=${locale}; path=/; max-age=${COOKIE_MAX_AGE}; samesite=lax${scope}`;
 }

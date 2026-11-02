@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { LANDING_PATH } from '@/shared/config/site';
 import { LOCALE_HEADER } from '@/shared/i18n/locale-storage';
-import { adminOrigin, adminPath, isAdminHost } from '@/shared/lib/utils/admin-host';
+import { adminOrigin, adminPath } from '@/shared/lib/utils/admin-host';
+import { HOME_OF, isJournalRoute, isPlayRoute, journalHost, partOfHost, playHost } from '@/shared/lib/utils/app-part';
 
 /**
  * Единственный гейт защищённых страниц продукта — до рендера, на edge.
@@ -43,9 +44,10 @@ function originOf(request: NextRequest, host: string): string {
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const host = request.headers.get('host');
+  const part = partOfHost(host);
   // Общая кука доезжает и до админки, но вход у неё свой. Старая вне админки ещё
   // считается: прежние сессии переходят на новую при первом обмене токена.
-  const authed = isAdminHost(host)
+  const authed = part === 'admin'
     ? request.cookies.has(LEGACY_COOKIE)
     : request.cookies.has(SESSION_COOKIE) || request.cookies.has(LEGACY_COOKIE);
 
@@ -59,12 +61,12 @@ export function proxy(request: NextRequest) {
    * сервера — мимо этой развилки (проверено на standalone-сборке). Здесь —
    * только гейт входа.
    *
-   * Кука сессии ставится без Domain, поэтому вход здесь свой: без куки любая
+   * Своя кука здесь ставится без Domain, поэтому вход свой: без неё любая
    * страница ведёт на `/login` поддомена. Сама форма входа — всегда форма, без
    * «уже вошёл → на главную»: решать это по одной куке нельзя — протухшая кука
    * и AuthGuard уводили бы друг на друга по кругу. Вошедшего уводит страница.
    */
-  if (isAdminHost(host)) {
+  if (part === 'admin' && host) {
     if (pathname === '/login' || authed) return NextResponse.next();
     return NextResponse.redirect(`${originOf(request, host)}/login?next=${encodeURIComponent(pathname)}`);
   }
@@ -74,6 +76,20 @@ export function proxy(request: NextRequest) {
   if (pathname === '/admin' || pathname.startsWith('/admin/')) {
     if (!host) return NextResponse.next();
     return NextResponse.redirect(`${adminOrigin(`${protoOf(request)}:`, host)}${adminPath(pathname)}`);
+  }
+
+  /*
+   * Части продукта (спека 2026-11-03): адрес чужой части уводит туда же с тем же
+   * запросом — закладки, ссылки из уведомлений и пункты рейки в соседнюю часть
+   * держатся на этом. Вход спрашивает уже та часть, куда пришли. 307, а не 308:
+   * постоянный редирект браузер запоминает, и откатить его было бы нечем.
+   */
+  if (host && part === 'play' && (isJournalRoute(pathname) || pathname === '/journal' || pathname.startsWith('/journal/'))) {
+    const path = pathname.replace(/^\/journal(?=\/|$)/, '') || '/';
+    return NextResponse.redirect(`${originOf(request, journalHost(host))}${path}${request.nextUrl.search}`);
+  }
+  if (host && part === 'journal' && isPlayRoute(pathname)) {
+    return NextResponse.redirect(`${originOf(request, playHost(host))}${pathname}${request.nextUrl.search}`);
   }
 
   /*
@@ -92,15 +108,14 @@ export function proxy(request: NextRequest) {
   if (pathname === '/login' || pathname.startsWith('/profile/')) return NextResponse.next();
 
   /*
-   * Корень — единственная страница продукта, открытая всем: это рассказ о
-   * том, что тут вообще происходит, и он адресован ровно тому, у кого ещё
-   * нет аккаунта. Отправлять его на вход значило бы требовать войти прежде,
-   * чем человек узнал куда.
+   * Корень — страница, открытая всем: это рассказ о том, что тут вообще
+   * происходит, и он адресован ровно тому, у кого ещё нет аккаунта. Отправлять
+   * его на вход значило бы требовать войти прежде, чем человек узнал куда. У
+   * каждой части своя главная: журнал получает её через rewrites `next.config.ts`.
    *
-   * А вошедшему рассказывать не о чем — он идёт на главную продукта, в
-   * терминал (владелец 2026-10-17; до этого — обзор дневника). Развилка
-   * стоит здесь, а не на самой странице: тогда лендинг остаётся статикой,
-   * которую не надо рендерить, чтобы тут же выбросить.
+   * А вошедшему рассказывать не о чем — он идёт на главную своей части
+   * (`HOME_OF`). Развилка стоит здесь, а не на самой странице: тогда лендинг не
+   * надо рендерить, чтобы тут же выбросить.
    *
    * `/ru` — та же главная по-русски, для поисковика (`views/landing/seo.tsx`).
    * Корневому layout адрес недоступен, поэтому язык едет к нему заголовком.
@@ -113,7 +128,7 @@ export function proxy(request: NextRequest) {
       return NextResponse.next({ request: { headers } });
     }
     const url = request.nextUrl.clone();
-    url.pathname = '/terminal';
+    url.pathname = HOME_OF[part];
     url.search = '';
     return NextResponse.redirect(url);
   }

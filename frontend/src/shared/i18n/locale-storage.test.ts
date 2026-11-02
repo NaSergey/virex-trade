@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { getClientLocale, parseLocaleCookie } from './locale-storage';
+import { getClientLocale, localeCookieDomain, parseLocaleCookie } from './locale-storage';
+
+describe('localeCookieDomain', () => {
+  it('на площадке и в журнале язык общий: домен один', () => {
+    expect(localeCookieDomain('trade-play.com')).toBe('trade-play.com');
+    expect(localeCookieDomain('journal.trade-play.com')).toBe('trade-play.com');
+  });
+
+  it('у админки, локально и на чужом адресе кука остаётся на своём', () => {
+    expect(localeCookieDomain('admin.trade-play.com')).toBeUndefined();
+    expect(localeCookieDomain('localhost')).toBeUndefined();
+    expect(localeCookieDomain('journal.localhost')).toBeUndefined();
+    expect(localeCookieDomain('evil.example')).toBeUndefined();
+  });
+});
 
 describe('parseLocaleCookie', () => {
   it('возвращает en по умолчанию, если куки нет', () => {

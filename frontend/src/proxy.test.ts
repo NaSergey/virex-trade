@@ -58,28 +58,84 @@ describe('proxy — основной хост', () => {
     }
   });
 
-  it('защищённая страница без куки — на вход на главной; корень открыт', () => {
-    expect(locationOf(proxy(req('/terminal', { host })))).toMatch(/\/\?auth=login&next=%2Fterminal$/);
-    expect(locationOf(proxy(req('/', { host })))).toBeNull();
+});
+
+describe('proxy — части', () => {
+  const play = 'trade-play.com';
+  const journal = 'journal.trade-play.com';
+
+  it('адрес журнала на площадке — в журнал с путём и запросом, 307', () => {
+    const res = proxy(req('/analytics?tags=1', { host: play, authed: true, proto: 'https' }));
+    expect(res.status).toBe(307);
+    expect(locationOf(res)).toBe('https://journal.trade-play.com/analytics?tags=1');
   });
 
-  it('/ru открыт гостю и задаёт язык заголовком запроса; у / заголовка нет', () => {
-    const ru = proxy(req('/ru', { host }));
-    expect(locationOf(ru)).toBeNull();
-    expect(ru.headers.get('x-middleware-request-x-virex-locale')).toBe('ru');
-    expect(proxy(req('/', { host })).headers.get('x-middleware-request-x-virex-locale')).toBeNull();
+  it('гость тоже уходит в журнал: вход спросит уже он', () => {
+    expect(locationOf(proxy(req('/terminal', { host: play, proto: 'https' })))).toBe(
+      'https://journal.trade-play.com/terminal',
+    );
   });
 
-  it('вошедший с обеих главных уходит в терминал', () => {
+  it('адрес площадки в журнале — на площадку', () => {
+    expect(locationOf(proxy(req('/games/poker', { host: journal, authed: true, proto: 'https' })))).toBe(
+      'https://trade-play.com/games/poker',
+    );
+    expect(locationOf(proxy(req('/profile/abc', { host: journal, proto: 'https' })))).toBe(
+      'https://trade-play.com/profile/abc',
+    );
+  });
+
+  it('приглашение в турнир из журнала не теряет запрос', () => {
+    expect(locationOf(proxy(req('/games/trading?t=abc', { host: journal, proto: 'https' })))).toBe(
+      'https://trade-play.com/games/trading?t=abc',
+    );
+  });
+
+  it('внутренний адрес главной журнала на площадке — на настоящую', () => {
+    expect(locationOf(proxy(req('/journal', { host: play, proto: 'https' })))).toBe('https://journal.trade-play.com/');
+    expect(locationOf(proxy(req('/journal/ru', { host: play, proto: 'https' })))).toBe(
+      'https://journal.trade-play.com/ru',
+    );
+  });
+
+  it('/ и /ru вошедшего: площадка — витрина, журнал — терминал', () => {
     for (const path of ['/', '/ru']) {
-      expect(locationOf(proxy(req(path, { host, authed: true })))).toMatch(/\/terminal$/);
+      expect(locationOf(proxy(req(path, { host: play, authed: true })))).toMatch(/\/games$/);
+      expect(locationOf(proxy(req(path, { host: journal, authed: true })))).toMatch(/\/terminal$/);
     }
+  });
+
+  it('/ и /ru гостя открыты в обеих частях; язык задаёт только /ru', () => {
+    for (const host of [play, journal]) {
+      const root = proxy(req('/', { host }));
+      expect(locationOf(root)).toBeNull();
+      expect(root.headers.get('x-middleware-request-x-virex-locale')).toBeNull();
+      const ru = proxy(req('/ru', { host }));
+      expect(locationOf(ru)).toBeNull();
+      expect(ru.headers.get('x-middleware-request-x-virex-locale')).toBe('ru');
+    }
+  });
+
+  it('закрытая страница гостя — на главную своей части', () => {
+    expect(locationOf(proxy(req('/games/poker', { host: play })))).toMatch(/\/\?auth=login&next=%2Fgames%2Fpoker$/);
+    expect(locationOf(proxy(req('/terminal', { host: journal })))).toMatch(/\/\?auth=login&next=%2Fterminal$/);
+  });
+
+  it('своя часть с кукой — пропуск; приглашение на профиль гостю открыто на площадке', () => {
+    expect(locationOf(proxy(req('/games/poker', { host: play, authed: true })))).toBeNull();
+    expect(locationOf(proxy(req('/terminal', { host: journal, authed: true })))).toBeNull();
+    expect(locationOf(proxy(req('/profile/abc', { host: play })))).toBeNull();
+  });
+
+  it('админка своей развилкой: адреса частей там не уводятся', () => {
+    expect(locationOf(proxy(req('/terminal', { host: 'admin.trade-play.com', authed: true })))).toBeNull();
+    expect(locationOf(proxy(req('/games', { host: 'admin.trade-play.com', authed: true })))).toBeNull();
   });
 });
 
 describe('proxy — кука сессии', () => {
   const asked = (host: string, cookie: string) =>
-    new NextRequest(new URL('/terminal', `http://${host}`), { headers: { host, cookie } });
+    new NextRequest(new URL('/games', `http://${host}`), { headers: { host, cookie } });
 
   it('вне админки вошедшим считается и новая кука, и старая', () => {
     for (const cookie of ['tp_session=x', 'refresh_token=x']) {

@@ -16,8 +16,9 @@ export function adminPath(pathname: string): string {
 
 /**
  * Origin админки рядом с текущим: `protocol` — как у `location` («https:»),
- * `host` — с портом. С `www.` админка — `admin.<домен>`, а не `admin.www.<домен>`.
+ * `host` — с портом. С `www.` и из журнала админка — `admin.<домен>`, а не
+ * `admin.www.<домен>`.
  */
 export function adminOrigin(protocol: string, host: string): string {
-  return `${protocol}//admin.${host.replace(/^www\./i, '')}`;
+  return `${protocol}//admin.${host.replace(/^(www|journal)\./i, '')}`;
 }
