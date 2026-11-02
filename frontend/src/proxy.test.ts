@@ -77,6 +77,26 @@ describe('proxy — основной хост', () => {
   });
 });
 
+describe('proxy — кука сессии', () => {
+  const asked = (host: string, cookie: string) =>
+    new NextRequest(new URL('/terminal', `http://${host}`), { headers: { host, cookie } });
+
+  it('вне админки вошедшим считается и новая кука, и старая', () => {
+    for (const cookie of ['tp_session=x', 'refresh_token=x']) {
+      expect(locationOf(proxy(asked('trade-play.com', cookie)))).toBeNull();
+    }
+  });
+
+  it('без куки — на вход', () => {
+    expect(locationOf(proxy(asked('trade-play.com', 'other=x')))).toMatch(/auth=login/);
+  });
+
+  it('админка не считает вошедшим по общей куке: вход у неё свой', () => {
+    expect(locationOf(proxy(asked('admin.trade-play.com', 'tp_session=x')))).toMatch(/\/login\?next=/);
+    expect(locationOf(proxy(asked('admin.trade-play.com', 'refresh_token=x')))).toBeNull();
+  });
+});
+
 describe('proxy — matcher', () => {
   const gated = (path: string) => new RegExp(`^${config.matcher[0]}$`).test(path);
 

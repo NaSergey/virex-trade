@@ -6,8 +6,8 @@ import { adminOrigin, adminPath, isAdminHost } from '@/shared/lib/utils/admin-ho
 /**
  * Единственный гейт защищённых страниц продукта — до рендера, на edge.
  *
- * Проверяет только присутствие куки сессии (`refresh_token`, HttpOnly,
- * `path: '/'` — см. `auth.controller.ts`), не её валидность: это не подмена
+ * Проверяет только присутствие куки сессии (HttpOnly, `path: '/'` — см.
+ * `session-cookie.ts` на backend), не её валидность: это не подмена
  * настоящей проверки (JWT в заголовке на каждом запросе к API, см.
  * `JwtAuthGuard`), а вход к странице. Просроченный или отозванный
  * refresh-токен здесь не отличить от действительного без похода в БД на
@@ -24,7 +24,8 @@ import { adminOrigin, adminPath, isAdminHost } from '@/shared/lib/utils/admin-ho
  * конвенции (бывший `middleware.ts` — тот тоже работает, но помечен
  * deprecated), и Next ищет его рядом с `src/app`, а не в корне пакета.
  */
-const REFRESH_COOKIE = 'refresh_token';
+const SESSION_COOKIE = 'tp_session';
+const LEGACY_COOKIE = 'refresh_token';
 
 /** Протокол запроса снаружи. Цепочка прокси пишет протоколы через запятую — свой у первого. */
 function protoOf(request: NextRequest): string {
@@ -40,9 +41,13 @@ function originOf(request: NextRequest, host: string): string {
 }
 
 export function proxy(request: NextRequest) {
-  const authed = request.cookies.has(REFRESH_COOKIE);
   const { pathname } = request.nextUrl;
   const host = request.headers.get('host');
+  // Общая кука доезжает и до админки, но вход у неё свой. Старая вне админки ещё
+  // считается: прежние сессии переходят на новую при первом обмене токена.
+  const authed = isAdminHost(host)
+    ? request.cookies.has(LEGACY_COOKIE)
+    : request.cookies.has(SESSION_COOKIE) || request.cookies.has(LEGACY_COOKIE);
 
   /*
    * Поддомен админки (`admin.*`, спека 2026-10-19-hyperliquid-wallet-scout-design.md)
