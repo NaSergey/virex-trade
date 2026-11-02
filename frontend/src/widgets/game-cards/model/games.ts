@@ -31,7 +31,7 @@ export type GameTag = '1v1' | 'pvp' | 'tournaments' | 'ratings' | 'fast' | 'mult
  */
 export type GameAccent = 'green' | 'red' | 'purple' | 'amber';
 
-/** Сцены, нарисованные кодом, — `views/games/components/<Name>Scene.tsx`. */
+/** Сцены, нарисованные кодом, — `widgets/game-cards/components/<Name>Scene.tsx`. */
 export type GameScene = 'trading' | 'poker' | 'blackjack' | 'jetpack' | 'race';
 
 export type Game = {
