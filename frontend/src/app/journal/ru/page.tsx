@@ -3,16 +3,16 @@
  * а не кукой: поисковик приходит без куки.
  */
 import { LANDING_PATH } from '@/shared/config/site';
-import { LandingPage } from '@/views/landing/Page';
+import { JournalLanding } from '@/views/landing/Page';
 import { LandingJsonLd, landingMetadata } from '@/views/landing/seo';
 
-export const generateMetadata = () => landingMetadata(LANDING_PATH.ru);
+export const generateMetadata = () => landingMetadata('journal', LANDING_PATH.ru);
 
 export default function Page() {
   return (
     <>
-      <LandingJsonLd />
-      <LandingPage />
+      <LandingJsonLd part="journal" />
+      <JournalLanding />
     </>
   );
 }

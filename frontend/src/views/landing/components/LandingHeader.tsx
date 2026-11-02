@@ -8,11 +8,11 @@ import { cn } from '@/shared/lib/utils/css';
 import type { AuthMode } from '@/features/auth';
 import { useActiveSection } from '../lib/useActiveSection';
 
-export const NAV_SECTIONS = ['platform', 'about', 'terminal', 'how', 'register'] as const;
-export type NavSection = (typeof NAV_SECTIONS)[number];
+export type NavSection = 'platform' | 'games' | 'about' | 'terminal' | 'how' | 'register';
 
 const LABEL: Record<NavSection, string> = {
   platform: 'navPlatform',
+  games: 'navGames',
   about: 'navAbout',
   how: 'navHow',
   terminal: 'navTerminal',
@@ -34,9 +34,16 @@ const LABEL: Record<NavSection, string> = {
  * Подсветка вкладки живёт здесь, а не в странице: смена секции перерисовывает
  * только шапку, а не сцены с GSAP.
  */
-export function LandingHeader({ onAuth }: { onAuth: (mode: AuthMode) => void }) {
+export function LandingHeader({
+  sections,
+  onAuth,
+}: {
+  /** Секции своей части продукта: у главных площадки и журнала они разные. */
+  sections: readonly NavSection[];
+  onAuth: (mode: AuthMode) => void;
+}) {
   const t = useTranslations('landing');
-  const active = useActiveSection(NAV_SECTIONS);
+  const active = useActiveSection(sections);
   const tabs = useRef<HTMLElement>(null);
   const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
   const [moving, setMoving] = useState(false);
@@ -74,7 +81,7 @@ export function LandingHeader({ onAuth }: { onAuth: (mode: AuthMode) => void }) 
               aria-hidden
             />
           )}
-          {NAV_SECTIONS.map((id) => (
+          {sections.map((id) => (
             <a
               key={id}
               href={`#${id}`}
