@@ -51,12 +51,13 @@ const nextConfig: NextConfig = {
       // новым запросом с Host сервера. Эти — внутренние. До файлов, чтобы
       // `/` поддомена не стал лендингом; `/api`, `/auth` и статика — мимо, их
       // ведут правила ниже и сам Next. Хост — то же правило, что `isAdminHost`.
+      // `robots.txt` — свой у поддомена, его отвечает `app/robots.ts`.
       //
       // Порядок важен: правила фазы применяются цепочкой, и корень первым стал
       // бы `/admin`, а общее правило дописало бы ему второй `/admin` (404).
       beforeFiles: [
         {
-          source: "/:path((?!api/|auth/|_next/|assets/|favicon\\.ico).+)",
+          source: "/:path((?!api/|auth/|_next/|assets/|favicon\\.ico|robots\\.txt).+)",
           has: [{ type: "host", value: ADMIN_HOST }],
           destination: "/admin/:path",
         },

@@ -1,8 +1,9 @@
 'use client';
 
-import { Suspense, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { Suspense, useEffect, useState } from 'react';
+import { useLocale, useTranslations } from 'next-intl';
 import type { AuthMode } from '@/features/auth';
+import { LANDING_PATH } from '@/shared/config/site';
 import { Wrap } from '@/shared/ui/Wrap';
 import './landing.css';
 import { useLenis } from './lib/useLenis';
@@ -46,9 +47,18 @@ import { TerminalScene } from './components/TerminalScene';
  */
 export function LandingPage() {
   const t = useTranslations('landing');
+  const locale = useLocale();
   useLenis();
 
   const [mode, setMode] = useState<AuthMode | null>(null);
+
+  // Адрес идёт за языком (`/` и `/ru`), без перехода: язык на `/ru` задан адресом,
+  // и выбравший английский иначе получал бы русский на первой же перезагрузке.
+  useEffect(() => {
+    const path = locale === 'ru' ? LANDING_PATH.ru : LANDING_PATH.en;
+    const { pathname, search, hash } = window.location;
+    if (pathname !== path) window.history.replaceState(null, '', `${path}${search}${hash}`);
+  }, [locale]);
 
   return (
     <>

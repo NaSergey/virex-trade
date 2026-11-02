@@ -1,4 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { LANDING_PATH } from '@/shared/config/site';
+import { LOCALE_HEADER } from '@/shared/i18n/locale-storage';
 import { adminOrigin, adminPath, isAdminHost } from '@/shared/lib/utils/admin-host';
 
 /**
@@ -94,9 +96,17 @@ export function proxy(request: NextRequest) {
    * терминал (владелец 2026-10-17; до этого — обзор дневника). Развилка
    * стоит здесь, а не на самой странице: тогда лендинг остаётся статикой,
    * которую не надо рендерить, чтобы тут же выбросить.
+   *
+   * `/ru` — та же главная по-русски, для поисковика (`views/landing/seo.tsx`).
+   * Корневому layout адрес недоступен, поэтому язык едет к нему заголовком.
    */
-  if (pathname === '/') {
-    if (!authed) return NextResponse.next();
+  if (pathname === LANDING_PATH.en || pathname === LANDING_PATH.ru) {
+    if (!authed) {
+      if (pathname === LANDING_PATH.en) return NextResponse.next();
+      const headers = new Headers(request.headers);
+      headers.set(LOCALE_HEADER, 'ru');
+      return NextResponse.next({ request: { headers } });
+    }
     const url = request.nextUrl.clone();
     url.pathname = '/terminal';
     url.search = '';
@@ -123,5 +133,8 @@ export const config = {
   // получал бы редирект на /login вместо файла и отвечал 400, то есть
   // картинки пропадали бы и у вошедшего. Вторая: в этих файлах нет ничего
   // пользовательского, защищать там нечего.
-  matcher: ['/((?!_next/static|_next/image|assets/|favicon.ico|api/|auth/).*)'],
+  //
+  // `robots.txt` и `sitemap.xml` читает поисковик без куки: через гейт он
+  // получал редирект на форму входа вместо файла.
+  matcher: ['/((?!_next/static|_next/image|assets/|favicon.ico|robots.txt|sitemap.xml|api/|auth/).*)'],
 };

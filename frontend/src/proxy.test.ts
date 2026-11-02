@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NextRequest } from 'next/server';
-import { proxy } from './proxy';
+import { config, proxy } from './proxy';
 
 /** Запрос, как его видит proxy за nginx: свой Host, кука сессии по желанию. */
 function req(url: string, opts: { host: string; authed?: boolean; proto?: string }) {
@@ -61,5 +61,31 @@ describe('proxy — основной хост', () => {
   it('защищённая страница без куки — на вход на главной; корень открыт', () => {
     expect(locationOf(proxy(req('/terminal', { host })))).toMatch(/\/\?auth=login&next=%2Fterminal$/);
     expect(locationOf(proxy(req('/', { host })))).toBeNull();
+  });
+
+  it('/ru открыт гостю и задаёт язык заголовком запроса; у / заголовка нет', () => {
+    const ru = proxy(req('/ru', { host }));
+    expect(locationOf(ru)).toBeNull();
+    expect(ru.headers.get('x-middleware-request-x-virex-locale')).toBe('ru');
+    expect(proxy(req('/', { host })).headers.get('x-middleware-request-x-virex-locale')).toBeNull();
+  });
+
+  it('вошедший с обеих главных уходит в терминал', () => {
+    for (const path of ['/', '/ru']) {
+      expect(locationOf(proxy(req(path, { host, authed: true })))).toMatch(/\/terminal$/);
+    }
+  });
+});
+
+describe('proxy — matcher', () => {
+  const gated = (path: string) => new RegExp(`^${config.matcher[0]}$`).test(path);
+
+  it('файлы для поисковика мимо гейта, страницы — через него', () => {
+    for (const path of ['/robots.txt', '/sitemap.xml', '/favicon.ico', '/assets/app/icon.svg']) {
+      expect(gated(path)).toBe(false);
+    }
+    for (const path of ['/', '/ru', '/terminal', '/login']) {
+      expect(gated(path)).toBe(true);
+    }
   });
 });
