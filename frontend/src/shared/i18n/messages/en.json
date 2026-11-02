@@ -52,6 +52,12 @@
     "market": "Market",
     "backtest": "Backtest",
     "games": "Games",
+    "tournaments": "Tournaments",
+    "poker": "Poker",
+    "blackjack": "Blackjack",
+    "jetpack": "Jetpack",
+    "race": "Racing",
+    "journalApp": "Journal",
     "support": "Support the developer",
     "referrals": "Invite a friend",
     "battlePass": "Profile"

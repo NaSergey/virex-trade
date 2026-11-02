@@ -1,6 +1,9 @@
+'use client';
+
 import type { ReactNode } from 'react';
 import { DailyRewardPrompt } from '@/features/daily-reward';
 import { OnboardingProvider, TourOverlay } from '@/features/onboarding';
+import { useAppPart } from '@/shared/lib/utils/AppPartProvider';
 import { GamesVeil } from '@/widgets/games-veil';
 import { SettingsHost } from '@/widgets/settings-dialog';
 import { TabBar, TopNav } from '@/widgets/top-nav';
@@ -15,14 +18,19 @@ import { TerminalWarmup } from '@/views/terminal/components/TerminalWarmup';
  *
  * Всё внутри читает сессию (баланс, Battle Pass), поэтому
  * гостю эта обвязка не показывается вовсе: его запросы получали бы 401.
+ *
+ * Части продукта обвязку делят (спека 2026-11-03): награда и заливка игр — только
+ * на площадке, обучение и прогрев терминала — только в журнале. Окно награды не
+ * должно всплывать поверх терминала с настоящими деньгами.
  */
 export function AppChrome({ children }: { children: ReactNode }) {
+  const play = useAppPart() === 'play';
   return (
     <OnboardingProvider>
       {/* Заливка тёмных маршрутов раздела игр — здесь, а не на каждой из
           страниц: один узел переживает переход между ними, и гаснет
           симметрично тому, как наливается (см. GamesVeil). */}
-      <GamesVeil />
+      {play && <GamesVeil />}
       <TopNav />
       {children}
       {/* На телефоне разделы — панелью внизу, как у приложения. */}
@@ -30,16 +38,16 @@ export function AppChrome({ children }: { children: ReactNode }) {
       {/* Обучение — последним слоем и снаружи защиты: рейка, которую оно
           подсвечивает первым шагом, тоже стоит снаружи. Провайдер обнимает
           и её, потому что «Обучение заново» живёт в меню профиля. */}
-      <TourOverlay />
+      {!play && <TourOverlay />}
       {/* Тоже снаружи защиты и тоже читает состояние Battle Pass, как и
           TopNav. */}
-      <DailyRewardPrompt />
+      {play && <DailyRewardPrompt />}
       {/* Окно настроек — одно на всё приложение: открывают его меню профиля,
           шестерёнка своего профиля и терминал без ключа (`openSettings`). */}
       <SettingsHost />
       {/* Терминал — главная: пока человек на другой странице, его счёт и
           свечи уже грузятся, и переход на терминал обходится без заглушек. */}
-      <TerminalWarmup />
+      {!play && <TerminalWarmup />}
     </OnboardingProvider>
   );
 }

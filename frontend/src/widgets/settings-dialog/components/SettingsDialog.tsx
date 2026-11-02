@@ -4,6 +4,7 @@ import { Fragment } from 'react';
 import { Settings as SettingsIcon } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { DEMO_EMAIL, useAuth } from '@/features/auth';
+import { useAppPart } from '@/shared/lib/utils/AppPartProvider';
 import { Button } from '@/shared/ui/Button';
 import { Dialog, DialogContent, DialogTitle, useDialogFade } from '@/shared/ui/dialog';
 import { cn } from '@/shared/lib/utils/css';
@@ -33,12 +34,15 @@ export function SettingsHost() {
  * Строка вкладок через «/» под шестерёнкой, разделы капсом с линейкой, строки
  * «подпись | значение» — по образцу окна настроек Доты. Размер окна постоянный:
  * смена вкладки не двигает его края, длинная вкладка листается внутри.
+ *
+ * Ключи биржи и сигналы относятся к торговле, поэтому на площадке только «Профиль».
  */
 function SettingsDialog({ tab }: { tab: SettingsTab }) {
   const t = useTranslations('settings');
   const { user } = useAuth();
   const { closing, close } = useDialogFade(closeSettings);
   const demo = user?.email === DEMO_EMAIL;
+  const tabs: readonly SettingsTab[] = useAppPart() === 'journal' ? SETTINGS_TABS : ['profile'];
 
   return (
     <Dialog open={!closing} onOpenChange={(v) => !v && close()}>
@@ -47,7 +51,7 @@ function SettingsDialog({ tab }: { tab: SettingsTab }) {
           <SettingsIcon className="stg-gear" size={18} aria-hidden />
           <DialogTitle className="stg-sr">{t('title')}</DialogTitle>
           <div className="stg-tabs" role="tablist" aria-label={t('title')}>
-            {SETTINGS_TABS.map((id, i) => (
+            {tabs.map((id, i) => (
               <Fragment key={id}>
                 {i > 0 && (
                   <span className="stg-sep" aria-hidden>

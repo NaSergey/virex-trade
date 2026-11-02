@@ -3,6 +3,8 @@
 import { useId, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { HOME_OF } from '@/shared/lib/utils/app-part';
+import { useAppPart } from '@/shared/lib/utils/AppPartProvider';
 import { Button } from '@/shared/ui/Button';
 import { Field, Input } from '@/shared/ui/Field';
 import { DEMO_EMAIL, DEMO_PASSWORD } from '../model/demo';
@@ -16,16 +18,13 @@ export type AuthMode = 'login' | 'register';
  */
 const NEXT_PATH = /^\/(?![/\\])/;
 
-/** Главная продукта — терминал (владелец 2026-10-17; до этого — обзор дневника). */
-const HOME = '/terminal';
-
 /**
  * Куда вести после входа. Принимается только путь внутри продукта —
  * начинающийся с одного слэша: без проверки `?next=//evil.example` браузер
  * прочтёт как адрес чужого сайта и уведёт туда сразу после ввода пароля.
- * `fallback` — своя главная там, где она другая (у админки — `/`).
+ * `fallback` — главная той части, где стоит форма (`HOME_OF`).
  */
-export function safeNext(raw: string | null | undefined, fallback: string = HOME): string {
+export function safeNext(raw: string | null | undefined, fallback: string = HOME_OF.journal): string {
   return raw && NEXT_PATH.test(raw) ? raw : fallback;
 }
 
@@ -50,7 +49,7 @@ export function AuthForm({
   initialMode = 'register',
   mode: controlled,
   onModeChange,
-  next = HOME,
+  next,
   refCode,
   loginOnly = false,
 }: {
@@ -64,6 +63,7 @@ export function AuthForm({
   loginOnly?: boolean;
 }) {
   const { login, register } = useAuth();
+  const home = HOME_OF[useAppPart()];
   const router = useRouter();
   const t = useTranslations('auth');
   const uid = useId();
@@ -88,7 +88,7 @@ export function AuthForm({
     try {
       if (mode === 'login') await login(email, password);
       else await register(email, password, name || undefined, refCode);
-      router.replace(next);
+      router.replace(next ?? home);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('genericError'));
       setSubmitting(false);
@@ -105,7 +105,7 @@ export function AuthForm({
     setDemoing(true);
     try {
       await login(DEMO_EMAIL, DEMO_PASSWORD);
-      router.replace(HOME);
+      router.replace(home);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('genericError'));
       setDemoing(false);
