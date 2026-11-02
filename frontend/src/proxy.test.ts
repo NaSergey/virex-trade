@@ -152,6 +152,12 @@ describe('proxy — части', () => {
     expect(locationOf(proxy(req('/terminal', { host: journal })))).toMatch(/\/\?auth=login&next=%2Fterminal$/);
   });
 
+  it('приглашение в турнир гостю: после входа окно турнира откроется — запрос едет в next', () => {
+    expect(locationOf(proxy(req('/games/trading?t=abc', { host: play })))).toMatch(
+      /\/\?auth=login&next=%2Fgames%2Ftrading%3Ft%3Dabc$/,
+    );
+  });
+
   it('своя часть с кукой — пропуск; приглашение на профиль гостю открыто на площадке', () => {
     expect(locationOf(proxy(req('/games/poker', { host: play, authed: true })))).toBeNull();
     expect(locationOf(proxy(req('/terminal', { host: journal, authed: true })))).toBeNull();

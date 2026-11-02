@@ -157,8 +157,9 @@ export function proxy(request: NextRequest) {
 
   const url = request.nextUrl.clone();
   // Входа-страницы больше нет: вход — окно на главной, оно открывается по `auth`.
+  // Запрос едет вместе с путём: приглашение в турнир — это `/games/trading?t=<id>`.
   url.pathname = '/';
-  url.search = `auth=login&next=${encodeURIComponent(pathname)}`;
+  url.search = `auth=login&next=${encodeURIComponent(`${pathname}${request.nextUrl.search}`)}`;
   return NextResponse.redirect(url);
 }
 

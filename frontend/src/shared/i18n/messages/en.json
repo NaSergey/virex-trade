@@ -1722,7 +1722,7 @@
       "kicker": "Season {key}",
       "kickerShort": "Season",
       "title": "Every level pays coins",
-      "note": "XP comes from tournaments, backtest sessions and tagging trades. Every tenth level is a big reward; unclaimed rewards expire when the season ends.",
+      "note": "XP comes from tournaments, games and trades in the terminal. Every tenth level is a big reward; unclaimed rewards expire when the season ends.",
       "action": "Season rewards",
       "claim": "Claim +{coins}",
       "endsIn": "Season ends in",
