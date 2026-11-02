@@ -14,6 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TournamentsService } from '../tournaments/tournaments.service';
 import { AggregateCacheService, cacheKey } from '../trades/aggregate-cache';
 import { demoLocked, isDemoEmail } from '../auth/demo-account';
+import { assertReadableName } from '../auth/identity-rules';
 import { collapseToPositions } from '../trades/positions';
 import { achievementsOf } from './achievements';
 import { AVATAR_MAX_BYTES, avatarUrl, sniffImage } from './avatar';
@@ -423,6 +424,7 @@ export class ProfileService {
    */
   async setName(userId: string, name: string) {
     await this.assertEditable(userId);
+    assertReadableName(name);
     return this.prisma.user.update({ where: { id: userId }, data: { name }, select: { name: true } });
   }
 

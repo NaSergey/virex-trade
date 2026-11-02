@@ -1494,6 +1494,8 @@
     "TERMINAL_FOLLOW_NOT_SAVED": "Сетка выставлена, но перенос стопа за тейками не включился. Откройте окно сетки ещё раз.",
     "INVALID_CREDENTIALS": "Неверный email или пароль",
     "USER_EXISTS": "Пользователь с таким email уже существует",
+    "NAME_NOT_READABLE": "Напишите настоящее имя или ник: хотя бы две буквы, без случайного набора символов",
+    "EMAIL_NOT_REAL": "Укажите настоящую почту: на этот адрес нельзя отправить письмо",
     "REFRESH_TOKEN_MISSING": "Refresh-токен отсутствует",
     "REFRESH_TOKEN_INVALID": "Недействительный refresh-токен",
     "REFRESH_TOKEN_EXPIRED": "Refresh-токен истёк",

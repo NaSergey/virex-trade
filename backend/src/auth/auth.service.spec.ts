@@ -2,6 +2,13 @@ import { BadRequestException, ForbiddenException, UnauthorizedException } from '
 import * as bcrypt from 'bcryptjs';
 import { AuthService } from './auth.service';
 import { REFERRAL_BONUS_COINS, REFERRAL_WELCOME_COINS } from '../coins/coins.config';
+import { isRealEmail } from './identity-rules';
+
+// Без похода в DNS: сама проверка почты — в identity-rules.spec.ts.
+jest.mock('./identity-rules', () => ({
+  ...jest.requireActual('./identity-rules'),
+  isRealEmail: jest.fn(async () => true),
+}));
 
 // Минимальные ручные стабы вместо полного PrismaService/JwtService — login с
 // несуществующим email не доходит ни до bcrypt, ни до jwt.sign, так что оба
@@ -73,6 +80,25 @@ describe('AuthService.register', () => {
     } as any;
     return { service: new AuthService(prisma, jwt, tags, coins), created, creditCalls };
   }
+
+  it('мусор вместо имени — 400 NAME_NOT_READABLE, аккаунт не создаётся', async () => {
+    const { service, created } = makeService([]);
+
+    await expect(service.register({ ...baseDto, name: 'sdfsdfsdf' } as any)).rejects.toMatchObject({
+      response: { code: 'NAME_NOT_READABLE' },
+    });
+    expect(created).toHaveLength(0);
+  });
+
+  it('почта, на которую нельзя написать, — 400 EMAIL_NOT_REAL, аккаунт не создаётся', async () => {
+    const { service, created } = makeService([]);
+    (isRealEmail as jest.Mock).mockResolvedValueOnce(false);
+
+    await expect(service.register(baseDto as any)).rejects.toMatchObject({
+      response: { code: 'EMAIL_NOT_REAL' },
+    });
+    expect(created).toHaveLength(0);
+  });
 
   it('валидный ref по id закрепляет пригласившего', async () => {
     const { service, created } = makeService([{ id: 'inviter-1' }]);

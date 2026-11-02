@@ -670,6 +670,8 @@
     "TERMINAL_FOLLOW_NOT_SAVED": "The grid is placed, but the stop doesn't follow the takes yet. Open the grid window again.",
     "INVALID_CREDENTIALS": "Invalid email or password",
     "USER_EXISTS": "A user with this email already exists",
+    "NAME_NOT_READABLE": "Enter a real name or nickname: at least two letters, no random characters",
+    "EMAIL_NOT_REAL": "Enter a real email address: this one can't receive mail",
     "REFRESH_TOKEN_MISSING": "Refresh token missing",
     "REFRESH_TOKEN_INVALID": "Invalid refresh token",
     "REFRESH_TOKEN_EXPIRED": "Refresh token expired",

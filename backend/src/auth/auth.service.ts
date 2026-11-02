@@ -13,6 +13,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { demoLocked, isDemoEmail } from './demo-account';
+import { assertReadableName, isRealEmail } from './identity-rules';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { resolveJwtAccessSecret } from './jwt-secret';
 import { isOwnerEmail } from '../admin/owner';
@@ -62,6 +63,14 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthResult> {
+    assertReadableName(dto.name);
+    if (!(await isRealEmail(dto.email))) {
+      throw new BadRequestException({
+        message: 'Укажите настоящую почту: на этот адрес нельзя отправить письмо',
+        code: 'EMAIL_NOT_REAL',
+      });
+    }
+
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
