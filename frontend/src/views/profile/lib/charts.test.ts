@@ -56,12 +56,11 @@ describe('byFrequency', () => {
 describe('favourite', () => {
   const g = (id: string, days90: number, played: number) => ({ id, days90, played });
 
-  it('чаще всего за 90 дней среди сыгранных, скрытые (бектест) не считаются', () => {
-    const games = [g('backtest', 50, 90), g('jetpack', 19, 412), g('tournament', 31, 23)];
-    expect(favourite(games, new Set(['backtest']))?.id).toBe('tournament');
+  it('чаще всего за 90 дней среди сыгранных', () => {
+    expect(favourite([g('jetpack', 19, 412), g('tournament', 31, 23)])?.id).toBe('tournament');
   });
 
   it('ни во что не играл — любимой игры нет', () => {
-    expect(favourite([g('poker', 0, 0)], new Set())).toBeNull();
+    expect(favourite([g('poker', 0, 0)])).toBeNull();
   });
 });

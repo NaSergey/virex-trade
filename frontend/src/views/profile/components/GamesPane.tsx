@@ -10,7 +10,6 @@ import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import { Pagination } from '@/shared/ui/Pagination';
 import { pageOf } from '../lib/fit';
 import { int } from '../lib/format';
-import { HIDDEN_GAMES } from '../lib/games';
 
 /**
  * Вкладка «Игры» — его результаты по играм. Игр станет двадцать и больше,
@@ -21,7 +20,7 @@ export function GamesPane({ profile, rows }: { profile: ProfileOverview; rows: n
   const { locale } = useLocaleControl();
   const intlLocale = locale === 'en' ? 'en-US' : 'ru-RU';
   const [page, setPage] = useState(1);
-  const games = profile.games.filter((g) => !HIDDEN_GAMES.has(g.id));
+  const games = profile.games;
   const sheet = pageOf(games, page, rows);
   // День игры — дата UTC (`YYYY-MM-DD`), и печатается по UTC: в поясе браузера
   // полночь UTC уехала бы на соседний день.

@@ -398,7 +398,7 @@
     "tabProfile": "Profile",
     "tabExchange": "Exchange",
     "tabNotifications": "Notifications",
-    "demoLocked": "The demo account is shared — its picture, name, password and trade visibility stay as they are.",
+    "demoLocked": "The demo account is shared — its picture, name and password stay as they are.",
     "playerTitle": "Player",
     "avatarChange": "Change",
     "avatarUpload": "Upload picture",
@@ -427,8 +427,6 @@
     "keyNotesTitle": "Rights and storage",
     "notifQuietTitle": "Quiet hours",
     "notifNeedTelegram": "Alerts show up here once a chat is linked.",
-    "privacyShowTrades": "Show my trades and positions on my profile",
-    "privacyFailed": "Could not save the setting",
     "telegramTitle": "Telegram",
     "telegramDisabled": "The bot is not configured on the server.",
     "telegramNotLinked": "Trade and market alerts arrive in Telegram. Linking a chat takes half a minute.",
@@ -1820,14 +1818,6 @@
         "name": "Twenty-one",
         "desc": "A hundred blackjack rounds"
       },
-      "tagger_100": {
-        "name": "Tagger",
-        "desc": "A hundred trades tagged"
-      },
-      "backtest_10": {
-        "name": "Researcher",
-        "desc": "Ten backtest sessions of your own"
-      },
       "rich_10k": {
         "name": "Capital",
         "desc": "Hold 10,000 coins"
@@ -1839,7 +1829,6 @@
     "days": "{days} d",
     "game": {
       "tournament": "Trading",
-      "backtest": "Backtest",
       "jetpack": "Jetpack",
       "poker": "Poker",
       "blackjack": "Blackjack"
@@ -1897,17 +1886,13 @@
     "guestSignIn": "Sign in",
     "guestSignUp": "Create account",
     "gateTitle": "Sign up to view this profile",
-    "gateBody": "Player profiles — their game results and trades — are open to anyone with an account. It's free.",
+    "gateBody": "Player profiles and their game results are open to anyone with an account. It's free.",
     "tabGames": "Games",
-    "tabExchange": "Exchange trades",
     "tabsLabel": "What to show",
     "colResult": "Result",
     "resWins": "{wins} wins",
     "gamesEmptyTitle": "Hasn't played yet",
     "gamesEmptyBody": "Results show up after the first tournament or round.",
-    "tradesEmptyTitle": "No trades",
-    "tradesEmptyBody": "Closed exchange trades will appear here once there are any.",
-    "tradesFailed": "Could not load trades",
     "xpPerDay": "Experience per day",
     "coinPerDay": "Balance at end of day",
     "records": "Records",
@@ -1933,11 +1918,7 @@
     "ratingNone": "No finished tournament yet",
     "coins30": "{delta} in 30 days",
     "xpWeek": "XP in 7 days",
-    "xpBefore": "week before {xp}",
-    "tabPositions": "Open positions",
-    "posEmptyTitle": "No open positions",
-    "posEmptyBody": "Positions open on the exchange right now will appear here.",
-    "positionsFailed": "Could not load positions"
+    "xpBefore": "week before {xp}"
   },
   "cardTable": {
     "mineTitle": "My tables",

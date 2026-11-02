@@ -416,35 +416,38 @@ export function TopNav() {
         </div>
       </div>
 
-      {/* Панель страниц «Дневника» — под пунктом, по наведению на него. Всегда
-          в разметке, спрятана стилем: так ей есть откуда раскрываться и куда
-          уходить, а не только где появляться. Миниатюры экранов и строки
-          описаний в ней стояли и сняты владельцем 2026-10-14 («борщанул»). */}
-      <div
-        className="jmenu"
-        ref={journalMenuRef}
-        data-open={journalOpen}
-        style={{ left: journalX }}
-        onPointerEnter={onJournalEnter}
-        onPointerLeave={() => closeJournal()}
-        onBlur={onJournalBlur}
-        onKeyDown={onJournalKey}
-      >
-        <nav aria-label={t('journalSections')}>
-          {JOURNAL_PAGES.map((id, i) => (
-            <Link
-              key={id}
-              className="jmenu-item"
-              href={`/${id}`}
-              aria-current={isJournalPage(pathname, id) ? 'page' : undefined}
-              style={{ '--i': i } as CSSProperties}
-              onClick={() => closeJournal(0)}
-            >
-              <span className="jmenu-t">{t(id)}</span>
-            </Link>
-          ))}
-        </nav>
-      </div>
+      {/* Панель страниц «Дневника» — под пунктом, по наведению на него. В журнале
+          всегда в разметке, спрятана стилем: так ей есть откуда раскрываться и куда
+          уходить, а не только где появляться. На площадке её нет: это ссылки в чужую
+          часть. Миниатюры экранов и строки описаний в ней стояли и сняты владельцем
+          2026-10-14 («борщанул»). */}
+      {!play && (
+        <div
+          className="jmenu"
+          ref={journalMenuRef}
+          data-open={journalOpen}
+          style={{ left: journalX }}
+          onPointerEnter={onJournalEnter}
+          onPointerLeave={() => closeJournal()}
+          onBlur={onJournalBlur}
+          onKeyDown={onJournalKey}
+        >
+          <nav aria-label={t('journalSections')}>
+            {JOURNAL_PAGES.map((id, i) => (
+              <Link
+                key={id}
+                className="jmenu-item"
+                href={`/${id}`}
+                aria-current={isJournalPage(pathname, id) ? 'page' : undefined}
+                style={{ '--i': i } as CSSProperties}
+                onClick={() => closeJournal(0)}
+              >
+                <span className="jmenu-t">{t(id)}</span>
+              </Link>
+            ))}
+          </nav>
+        </div>
+      )}
 
       {/* Окно живёт в шапке, а не в разделе: шапка есть на каждой странице
           продукта, и донат должен открываться поверх любой из них. */}

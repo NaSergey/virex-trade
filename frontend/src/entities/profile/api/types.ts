@@ -1,7 +1,5 @@
-import type { Trade } from '@/entities/trade';
-
 /** Игры, у которых есть строка в таблице профиля и ось паутинки. */
-export type GameId = 'tournament' | 'backtest' | 'jetpack' | 'poker' | 'blackjack';
+export type GameId = 'tournament' | 'jetpack' | 'poker' | 'blackjack';
 
 export type AchievementId =
   | 'first_tournament'
@@ -13,13 +11,11 @@ export type AchievementId =
   | 'jetpack_100'
   | 'poker_100'
   | 'blackjack_100'
-  | 'tagger_100'
-  | 'backtest_10'
   | 'rich_10k';
 
 export interface ProfileGame {
   id: GameId;
-  /** Действий за всё время: участий, сессий, ставок, раздач. */
+  /** Действий за всё время: участий, ставок, раздач. */
   played: number;
   /** В сколько из последних 90 дней человек играл в эту игру. */
   days90: number;
@@ -72,17 +68,6 @@ export interface ProfileOverview {
   balance: number;
   /** null — ещё не доиграл ни одного турнира. */
   rating: ProfileRating | null;
-  /**
-   * Есть ли у него сделки с биржи — по этому страница решает, заводить ли
-   * вкладку «Биржа». Признак, а не число: `false` значит и «не торговал», и
-   * «закрыл показ», и выключатель не сообщает, сколько сделок спрятано.
-   */
-  hasExchangeTrades: boolean;
-  /**
-   * Есть ли открытые позиции в свежем снимке синка — вкладка «Открытые
-   * позиции». Признак, а не число, и при закрытом показе — `false`.
-   */
-  hasOpenPositions: boolean;
   /** Рекорды — без потолка цели значков. */
   records: {
     /** Лучший вывод в джетпаке, множитель в сотых; 0 — выводов не было. */
@@ -100,47 +85,4 @@ export interface ProfileOverview {
   coinSeries: { day: string; balance: number }[];
   achievements: Achievement[];
   feed: FeedRow[];
-}
-
-/**
- * Лист чужого журнала биржи (`GET /api/profile/<id>/trades`).
- *
- * Строка — та же `Trade`, что в своём журнале, но без тегов и рыночного
- * контекста: «почему вошёл» — личная заметка, а раскрыть чужую строку нечем
- * (ордера и график сделки — эндпоинты своих сделок). Скрытый показ отвечает
- * 403 `PROFILE_TRADES_HIDDEN`, а не пустым листом.
- */
-export interface ProfileTrades {
-  total: number;
-  page: number;
-  pageSize: number;
-  trades: Trade[];
-}
-
-/**
- * Открытая позиция на профиле (`GET /api/profile/<id>/positions`) — та же
- * форма, что у позиции биржи в журнале (её рисует тот же `PositionsTable`),
- * плюс время открытия по нашим часам. `ExchangePosition` сущность не
- * импортирует — сущности друг друга не знают, совпадение здесь по форме.
- *
- * Это снимок синка (раз в минуту), а не биржа: чужой профиль не ходит к бирже
- * ключом владельца. Числа — строками, как их отдаёт биржа.
- */
-export interface ProfilePosition {
-  symbol: string;
-  direction: 'long' | 'short';
-  size: string;
-  avgPrice?: string;
-  markPrice?: string;
-  positionValue?: string;
-  unrealisedPnl?: string;
-  leverage?: string;
-  liqPrice?: string;
-  openedAt: string;
-}
-
-/** Снимок открытых позиций: `asOf` — когда он снят (null — свежих позиций нет). */
-export interface ProfilePositions {
-  asOf: string | null;
-  positions: ProfilePosition[];
 }

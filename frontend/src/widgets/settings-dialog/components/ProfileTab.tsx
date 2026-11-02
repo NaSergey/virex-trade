@@ -3,21 +3,20 @@
 import { type ChangeEvent, useId, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
-import { useAvatar, usePrivacy, useSetName, useSetPrivacy } from '@/entities/profile';
+import { useAvatar, useSetName } from '@/entities/profile';
 import { useAuth } from '@/features/auth';
 import { Button } from '@/shared/ui/Button';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { Input } from '@/shared/ui/Field';
 import { ProfilePicture } from '@/shared/ui/ProfilePicture';
-import { Skeleton } from '@/shared/ui/Skeleton';
 import { toAvatarBlob } from '../lib/avatar-image';
 import { Hint, Row, Section } from './Rows';
 
 /**
- * Вкладка «Профиль»: блок игрока на две колонки (картинка слева, имя и показ
- * сделок справа) и пароль третьей колонкой. У каждой строки своё сохранение.
- * Демо-аккаунт общий: сервер не даёт менять ничего из этого (403
- * `ACCOUNT_DEMO_LOCKED`), а вкладка говорит это словами и выключает поля.
+ * Вкладка «Профиль»: блок игрока на две колонки (картинка слева, имя справа) и
+ * пароль третьей колонкой. У каждой строки своё сохранение. Демо-аккаунт общий:
+ * сервер не даёт менять ничего из этого (403 `ACCOUNT_DEMO_LOCKED`), а вкладка
+ * говорит это словами и выключает поля.
  */
 export function ProfileTab({ locked }: { locked: boolean }) {
   const t = useTranslations('settings');
@@ -30,7 +29,6 @@ export function ProfileTab({ locked }: { locked: boolean }) {
             <AvatarPicker locked={locked} />
             <div className="stg-me-rows">
               <NameRow locked={locked} />
-              <PrivacyRow locked={locked} />
             </div>
           </div>
         </Section>
@@ -171,37 +169,6 @@ function NameRow({ locked }: { locked: boolean }) {
       </form>
       {changed && !valid && <Hint error>{t('nameShort')}</Hint>}
       <ErrorNote error={save.error} fallback={t('saveFailed')} />
-    </>
-  );
-}
-
-/** Кто видит мои сделки — одна строка, без пояснений (владелец 2026-10-17). */
-function PrivacyRow({ locked }: { locked: boolean }) {
-  const t = useTranslations('settings');
-  const id = useId();
-  const { data, isLoading } = usePrivacy();
-  const save = useSetPrivacy();
-  // Пока запрос в полёте, показывается то, что человек нажал: галка,
-  // отъезжающая назад на время запроса, читается как «не сработало».
-  const on = save.isPending ? save.variables : (data?.showTrades ?? true);
-
-  return (
-    <>
-      <Row label={t('privacyShowTrades')} htmlFor={id} className="is-flag">
-        {isLoading ? (
-          <Skeleton as="span" flush height={12} width={12} />
-        ) : (
-          <input
-            id={id}
-            type="checkbox"
-            className="stg-check"
-            checked={on}
-            disabled={locked || save.isPending}
-            onChange={(e) => save.mutate(e.target.checked)}
-          />
-        )}
-      </Row>
-      <ErrorNote error={save.error} fallback={t('privacyFailed')} />
     </>
   );
 }
