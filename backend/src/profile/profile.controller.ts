@@ -4,7 +4,6 @@ import {
   Get,
   Param,
   Patch,
-  Query,
   Put,
   Body,
   Res,
@@ -19,37 +18,19 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AVATAR_MAX_BYTES } from './avatar';
 import { NameDto } from './dto/name.dto';
-import { PrivacyDto } from './dto/privacy.dto';
-import { ProfileService, TRADES_PAGE_SIZE } from './profile.service';
+import { ProfileService } from './profile.service';
 
 /** Файл загрузки — только то, что читается; своих типов multer в проекте нет. */
 type Upload = { buffer: Buffer } | undefined;
 
 /**
- * Своё на профиле: картинка и выключатель показа сделок. Сам профиль, и свой
- * тоже, читается по id (`ProfileByIdController`): свой профиль живёт по тому же
- * адресу, что видят другие.
- *
- * Этот контроллер зарегистрирован в модуле раньше того, у которого `GET
- * :userId`, — иначе слово `privacy` было бы принято за id игрока. Тот же
- * порядок и та же ловушка, что у `GET tournaments/rating`. Вторая страховка —
- * проверка формата UUID в сервисе: `privacy` ей не проходит и получил бы 404,
- * а не чужие данные.
+ * Своё на профиле: имя и картинка. Сам профиль, и свой тоже, читается по id
+ * (`ProfileByIdController`): свой профиль живёт по тому же адресу, что видят другие.
  */
 @UseGuards(JwtAuthGuard)
 @Controller('api/profile')
 export class ProfileController {
   constructor(private readonly profile: ProfileService) {}
-
-  @Get('privacy')
-  privacy(@CurrentUser('userId') userId: string) {
-    return this.profile.privacy(userId);
-  }
-
-  @Patch('privacy')
-  setPrivacy(@CurrentUser('userId') userId: string, @Body() dto: PrivacyDto) {
-    return this.profile.setPrivacy(userId, dto.showTrades);
-  }
 
   /** Новое имя из настроек профиля. */
   @Patch('name')
@@ -72,16 +53,13 @@ export class ProfileController {
 }
 
 /**
+/**
  * Профиль игрока по id — **только вошедшему** (решение владельца 2026-10-02).
- * Отменяет прежнее («профиль по ссылке открывает и гость без аккаунта»,
- * 2026-10-01): на профиле теперь видны настоящие сделки, и показывать их
- * первому встречному без аккаунта — другое решение, чем показывать их
- * пользователям продукта.
  *
  * Гость при этом не редиректится, а читает приглашение: страница `/profile/<id>`
- * по-прежнему проходит гейт `proxy.ts` и рисует «чтобы посмотреть профиль,
- * зарегистрируйтесь». То есть защита стоит здесь, на данных, а текст — на
- * странице; «страница открылась» не значит «данные уехали».
+ * проходит гейт `proxy.ts` и рисует «чтобы посмотреть профиль, зарегистрируйтесь».
+ * То есть защита стоит здесь, на данных, а текст — на странице; «страница открылась»
+ * не значит «данные уехали».
  */
 @UseGuards(JwtAuthGuard)
 @Controller('api/profile')
@@ -93,23 +71,6 @@ export class ProfileByIdController {
     return this.profile.overview(userId);
   }
 
-  /**
-   * Его настоящие сделки с биржи. Скрыл показ — 403, а не пустой список:
-   * пустой читался бы как «не торгует».
-   */
-  @Get(':userId/trades')
-  trades(@Param('userId') userId: string, @Query('page') page?: string, @Query('pageSize') pageSize?: string) {
-    return this.profile.trades(userId, Number(page) || 1, Number(pageSize) || TRADES_PAGE_SIZE);
-  }
-
-  /**
-   * Его открытые позиции — снимок синка не старше пятнадцати минут, а не биржа.
-   * Скрыл показ — 403, как у сделок: выключатель один.
-   */
-  @Get(':userId/positions')
-  positions(@Param('userId') userId: string) {
-    return this.profile.positions(userId);
-  }
 }
 
 /**

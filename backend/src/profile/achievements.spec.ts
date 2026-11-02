@@ -9,8 +9,6 @@ const ZERO: Facts = {
   jetpackBestX100: 0,
   pokerHands: 0,
   blackjackHands: 0,
-  taggedTrades: 0,
-  backtestSessions: 0,
   maxBalance: 1000,
 };
 
