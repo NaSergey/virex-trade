@@ -7,11 +7,13 @@ import type { RunCard, Verdict } from './types';
 /**
  * Колода забега — очередь карточек учебника (спека, «Учёба внутри игры»):
  * сначала срок наступил, потом изучаемые, новые в пределах дневного лимита,
- * добор впрок. Игра — второй путь через повторение, и оценка у неё честная:
+ * добор впрок; истории мало — ещё не изученные слова без оценки (`filler`). Игра — второй путь через повторение, и оценка у неё честная:
  * интервал продлевает только вспоминание.
  */
 export const DECK_SIZE = 60;
 export const NEW_PER_RUN = 6;
+/** Колода короче — добирается словами без оценки: забег не должен крутить пять слов по кругу. */
+export const MIN_DECK = 30;
 /** Новое слово — не чаще раза в столько ходов. */
 export const NEW_EVERY = 4;
 /** Возвратов ошибочного слова за забег. */
@@ -58,6 +60,11 @@ export function buildRunDeck(
     deck.filter((c) => states.get(c.id)?.known),
   )) {
     push(toRun(c, 'filler'));
+  }
+  const freshIds = new Set(fresh.map((c) => c.id));
+  for (const c of deck) {
+    if (out.length + fresh.length >= MIN_DECK) break;
+    if (!states.has(c.id) && !freshIds.has(c.id)) push(toRun(c, 'filler'));
   }
   return [...out, ...fresh];
 }

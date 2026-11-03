@@ -83,6 +83,13 @@ describe('колода забега', () => {
     expect(out.filter((c) => c.tag === 'new')).toHaveLength(2);
   });
 
+  it('истории мало — колода добирается до 30 словами без оценки', () => {
+    const out = buildRunDeck({ deck, states: new Map(), now: NOW, newLimit: 20 }, rand(1));
+    expect(out.filter((c) => c.tag === 'new')).toHaveLength(6);
+    expect(out).toHaveLength(30);
+    expect(new Set(out.map((c) => c.id)).size).toBe(30);
+  });
+
   it('туман — карточки со сроком', () => {
     const states = new Map<string, CardState>([
       ['w1', state({ due: NOW - DAY })],
