@@ -146,7 +146,8 @@ export interface RunState {
   /** Карточки, чью оценку уже решил первый ответ. */
   graded: string[];
   boss: BossPlan;
-  scenes: { open: string[]; levels: Record<string, 1 | 2 | 3>; recent: string[] };
+  /** Уровни сцен с историей (`sceneLevels`): выбор сцены берёт давно не игранную и не освоенную. */
+  scenes: { open: string[]; levels: Record<string, SceneLevel>; recent: string[] };
   screen: Screen;
   stats: RunStats;
   score: number;
@@ -185,7 +186,8 @@ export interface StartInput {
   lessons: ReadonlySet<string>;
   /** Открытые находки (`meta.availableRelics`). */
   relics: readonly RelicId[];
-  scenes: { open: string[]; levels: Record<string, 1 | 2 | 3>; recent: string[] };
+  /** Уровни сцен с историей (`sceneLevels`): выбор сцены берёт давно не игранную и не освоенную. */
+  scenes: { open: string[]; levels: Record<string, SceneLevel>; recent: string[] };
 }
 
 const EXERCISE_BY_ID: ReadonlyMap<string, Exercise> = new Map(EXERCISES.map((e) => [e.id, e]));
@@ -338,7 +340,7 @@ function foeFor(c: Ctx, station: Station): Foe {
     foe.weak = 'listen';
     if (foe.resist === 'listen') delete foe.resist;
   }
-  if (s.weather === 'smog') foe.every = Math.max(2, foe.every - 1);
+  if (s.weather === 'smog' && foe.kind !== 'boss') foe.every = Math.max(2, foe.every - 1);
   foe.timer = foe.every;
   return foe;
 }
@@ -385,8 +387,11 @@ function drawWord(c: Ctx, f: Fight) {
   f.hint = false;
   f.last = null;
   if (!got) {
+    // Слов нет совсем (пустой каталог) — туман рассеивается сам, бой не застревает.
     f.card = null;
-    f.phase = 'choose';
+    f.foe.hp = 0;
+    f.phase = 'result';
+    f.last = { outcome: 'right', damage: 0, taken: 0, crit: false, blockedBy: null, healed: 0 };
     return;
   }
   c.s.cards = got.ds;
@@ -462,7 +467,9 @@ function answerWord(c: Ctx, value: string | number | number[] | null, dontKnow: 
     return true;
   }
   const card = f.card;
-  const verdict = verdictOf(ch.mode, outcome, dontKnow);
+  // Половина букв по подсказке — вспомнил не сам: «почти», а не «помню».
+  const raw = verdictOf(ch.mode, outcome, dontKnow);
+  const verdict = raw === 'recall' && f.hint && !ch.options ? 'typo' : raw;
   if (verdict !== 'none' && GRADED_TAGS.includes(card.tag) && !s.graded.includes(card.id)) {
     s.graded.push(card.id);
     c.fx.push({ kind: 'card', cardId: card.id, verdict });
@@ -667,7 +674,8 @@ function giveHint(c: Ctx, f: Fight) {
 function applyItem(c: Ctx, index: number): boolean {
   const { s } = c;
   const item = s.items[index];
-  if (!item) return false;
+  // Удар уже смертельный — карман не открывается: ни чай, ни пересадка не отменяют конец.
+  if (!item || s.hp <= 0) return false;
   const f = fightOf(s);
   switch (item) {
     case 'tea':
@@ -718,19 +726,16 @@ function shopOffers(c: Ctx): Offer[] {
   return offers;
 }
 
-function sceneLevelsMap(s: RunState): Map<string, SceneLevel> {
-  return new Map(Object.entries(s.scenes.levels).map(([id, level]) => [id, { level, best: [0, 0, 0], lastAt: 0 }]));
-}
-
 function enterScene(c: Ctx, station: Station) {
   const { s } = c;
-  const scene = pickScene(SCENES, new Set(s.scenes.open), sceneLevelsMap(s), s.scenes.recent, c.r);
+  const levels = new Map(Object.entries(s.scenes.levels));
+  const scene = pickScene(SCENES, new Set(s.scenes.open), levels, s.scenes.recent, c.r);
   if (!scene) {
     enterFight(c, { ...station, kind: 'fight' });
     return;
   }
   s.scenes.recent.push(scene.id);
-  const level = s.scenes.levels[scene.id] ?? 1;
+  const level = s.scenes.levels[scene.id]?.level ?? 1;
   const run = startScene(scene, level, c.r, { patience: s.fog >= 8 ? 2 : 3, guide: has(s, 'guide') });
   s.screen = { kind: 'scene', run, coins: null, stars: null };
 }

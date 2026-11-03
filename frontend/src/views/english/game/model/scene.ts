@@ -145,6 +145,8 @@ export function replyScene(
   const ok = okOf(run.options);
   let correct: boolean;
   if (run.level === 1) {
+    // Вычеркнутый вариант уже стоил терпения — повторное нажатие ничего не меняет.
+    if (typeof value === 'number' && run.struck.includes(value)) return { run, correct: false };
     correct = typeof value === 'number' && run.options[value]?.ok === true;
   } else if (run.level === 2) {
     const text = Array.isArray(value) ? value.map((i) => run.bank![i]).join(' ') : '';

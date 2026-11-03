@@ -55,7 +55,6 @@ export type Effect =
   | { kind: 'card'; cardId: string; verdict: Exclude<Verdict, 'none'> }
   | { kind: 'exercise'; itemId: string; unit: string; correct: boolean }
   | { kind: 'count'; counter: 'game' | 'phrases' }
-  | { kind: 'word'; en: string; ru: string }
   | { kind: 'sound'; name: SoundName };
 
 export interface ModeTally {

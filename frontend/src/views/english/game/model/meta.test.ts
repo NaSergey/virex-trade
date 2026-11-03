@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { RunRow } from '../../api/hooks';
 import { shiftDay } from '../../model/activity';
 import { QUESTS } from '../content/quests';
@@ -73,14 +73,13 @@ describe('открытия', () => {
 });
 
 describe('погода и задания дня', () => {
-  it('погода по дате устойчива и не повторяет вчерашнюю', () => {
-    let day = '2026-11-01';
-    for (let i = 0; i < 60; i++) {
-      const next = shiftDay(day, -1);
-      expect(weatherOf(next)).not.toBe(weatherOf(day));
-      expect(weatherOf(next)).toBe(weatherOf(next));
-      day = next;
-    }
+  it('погода по дате не повторяет вчерашнюю и не зависит от порядка расчёта', async () => {
+    const days = Array.from({ length: 60 }, (_, i) => shiftDay('2026-12-31', i));
+    for (let i = 1; i < days.length; i++) expect(weatherOf(days[i - 1])).not.toBe(weatherOf(days[i]));
+    // Свежий модуль, дни в обратном порядке: память расчёта не должна менять ответ.
+    vi.resetModules();
+    const fresh = (await import('./meta')).weatherOf;
+    for (const day of [...days].reverse()) expect(fresh(day)).toBe(weatherOf(day));
   });
 
   it('три задания из разных групп; без речи нет «скажи», без новых слов нет «познакомься»', () => {

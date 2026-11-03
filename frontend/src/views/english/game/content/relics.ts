@@ -45,7 +45,7 @@ export interface RelicDef {
 export const RELICS: Record<RelicId, RelicDef> = {
   umbrella: { name: 'Зонт', text: 'раз в бой прощает ошибку: удар за неё не проходит', unlock: null },
   thermos: { name: 'Термос', text: '+3 здоровья после каждого боя', unlock: null },
-  metronome: { name: 'Метроном', text: 'серия растёт на 0,5 за ответ', unlock: null },
+  metronome: { name: 'Метроном', text: 'серия растёт вдвое быстрее', unlock: null },
   stopwatch: { name: 'Секундомер', text: 'окно крита на 2 секунды длиннее', unlock: null },
   pencil: { name: 'Карандаш', text: 'в «Вспомнить» видна первая буква', unlock: null },
   headphones: { name: 'Наушники', text: 'верный удар на слух лечит 1', unlock: null },

@@ -185,6 +185,103 @@ describe('движок забега', () => {
     expect(toRunRow(s, NOW)).toMatchObject({ outcome: 'dead', depth: 1, character: 'tourist' });
   });
 
+  it('узнал выученное со сроком — эффект «узнал» и счёт «узнано»; филлер карточку не трогает', () => {
+    let s = firstFight();
+    s = go(s, { type: 'mode', mode: 'recognize', now: NOW }).state;
+    const out = answerRight(s);
+    expect(out.effects).toContainEqual({ kind: 'card', cardId: fightOf(s).card!.id, verdict: 'recognize' });
+    expect(out.state.stats.recognized).toBe(1);
+
+    let f = firstFight({ states: new Map(DECK.map((c) => [c.id, { ...DUE, known: true }])) });
+    expect(fightOf(f).card!.tag).toBe('filler');
+    f = go(f, { type: 'mode', mode: 'recall', now: NOW }).state;
+    const res = answerRight(f);
+    expect(res.effects.some((e) => e.kind === 'card')).toBe(false);
+    expect(res.effects).toContainEqual({ kind: 'count', counter: 'game' });
+  });
+
+  it('опечатка — «почти»; подсказка половиной букв — тоже «почти»', () => {
+    const deck = [{ ...DECK[0], id: 'v:elephant', en: 'elephant', ru: 'слон' }, ...DECK.slice(1)];
+    let s = firstFight({ deck, states: new Map(deck.map((c) => [c.id, DUE])) });
+    s = go(s, { type: 'mode', mode: 'recall', now: NOW }).state;
+    const card = fightOf(s).card!;
+    expect(card.en).toBe('elephant');
+    let out = go(s, { type: 'answer', value: 'elephnat', now: NOW + 60_000 });
+    expect(out.effects).toContainEqual({ kind: 'card', cardId: card.id, verdict: 'typo' });
+
+    let h = firstFight({ seed: 9 });
+    h = { ...h, items: ['hint'] };
+    h = go(h, { type: 'mode', mode: 'recall', now: NOW }).state;
+    h = go(h, { type: 'item', index: 0, now: NOW }).state;
+    expect(fightOf(h).hint).toBe(true);
+    out = answerRight(h);
+    expect(out.effects).toContainEqual({ kind: 'card', cardId: fightOf(h).card!.id, verdict: 'typo' });
+  });
+
+  it('хранитель: ошибочное упражнение возвращается один раз; на трети здоровья — новая фаза и передышка', () => {
+    let s = startRun(input());
+    const boss = s.map.find((x) => x.kind === 'boss')!;
+    s = go({ ...s, at: boss.id, screen: { kind: 'bossIntro' } }, { type: 'next', now: NOW }).state;
+    const first = currentExercise(s)!.id;
+    s = go(s, { type: 'exercise', correct: false, now: NOW }).state;
+    s = go(s, { type: 'next', now: NOW }).state;
+    expect(currentExercise(s)!.id).toBe(first);
+    s = go(s, { type: 'exercise', correct: false, now: NOW }).state;
+    s = go(s, { type: 'next', now: NOW }).state;
+    expect(currentExercise(s)!.id).not.toBe(first);
+
+    s = structuredClone(s);
+    fightOf(s).foe.hp = Math.ceil((fightOf(s).foe.maxHp * 2) / 3) + 1;
+    s = go(s, { type: 'exercise', correct: true, now: NOW + 60_000 }).state;
+    expect(fightOf(s)).toMatchObject({ bossPhase: 2, foe: { timer: 2 } });
+  });
+
+  it('скамейка лечит, лавка продаёт, находка добавляет', () => {
+    let s: RunState = { ...startRun(input()), hp: 10, screen: { kind: 'rest' } };
+    s = go(s, { type: 'rest', choice: 'sleep', now: NOW }).state;
+    expect(s.hp).toBe(19);
+    s = { ...s, coins: 100, screen: { kind: 'shop', offers: [{ kind: 'heal', n: 10, price: 12, sold: false }] } };
+    s = go(s, { type: 'buy', index: 0 }).state;
+    expect(s).toMatchObject({ hp: 29, coins: 88 });
+    expect(step(s, { type: 'buy', index: 0 }).state).toBe(s);
+    s = { ...s, screen: { kind: 'find', relics: ['scarf'], coins: 0 } };
+    s = go(s, { type: 'pick', relic: 'scarf' }).state;
+    expect(s).toMatchObject({ maxHp: 36, relics: ['umbrella', 'scarf'], screen: { kind: 'map' } });
+  });
+
+  it('при смертельном ударе карман не открывается', () => {
+    let s = firstFight();
+    s = { ...s, hp: 1, relics: [], items: ['transfer', 'tea'] };
+    s = go(s, { type: 'mode', mode: 'recall', now: NOW }).state;
+    s = go(s, { type: 'answer', value: 'zzz', now: NOW }).state;
+    expect(s.hp).toBe(0);
+    expect(step(s, { type: 'item', index: 0, now: NOW }).state).toBe(s);
+    expect(step(s, { type: 'item', index: 1, now: NOW }).state).toBe(s);
+  });
+
+  it('проваленная сцена — минус 4 здоровья и ноль звёзд', () => {
+    let s = startRun(input());
+    const station = s.map.find((x) => x.kind === 'scene')!;
+    s = go({ ...s, at: null, map: s.map.map((x) => (x.row === 1 ? { ...x, kind: 'scene' as const } : x)) }, { type: 'go', station: s.map.find((x) => x.row === 1)!.id, now: NOW }).state;
+    void station;
+    expect(s.screen.kind).toBe('scene');
+    for (let i = 0; i < 6 && s.screen.kind === 'scene' && !s.screen.run.done; i++) {
+      const run = s.screen.run;
+      const bad = run.options!.findIndex((o, k) => !o.ok && !run.struck.includes(k));
+      s = go(s, { type: 'reply', value: bad >= 0 ? bad : 0, voice: false, now: NOW }).state;
+    }
+    expect(s.screen.kind === 'scene' && s.screen.stars).toBe(0);
+    expect(s.hp).toBe(26);
+    expect(s.stats.scenes[0]).toMatchObject({ stars: 0 });
+  });
+
+  it('шаг не меняет входное состояние', () => {
+    const s = firstFight();
+    const before = JSON.stringify(s);
+    step(s, { type: 'mode', mode: 'recall', now: NOW });
+    expect(JSON.stringify(s)).toBe(before);
+  });
+
   it('сдаться можно с любого экрана', () => {
     const s = go(startRun(input()), { type: 'quit', now: NOW }).state;
     expect(s.outcome).toBe('quit');
