@@ -324,8 +324,8 @@ function foeFor(c: Ctx, station: Station): Foe {
       name: def.name,
       hp: st.hp,
       maxHp: st.hp,
-      atk: fast ? st.atk - 1 : st.atk,
-      every: fast ? 3 : st.every,
+      atk: fast ? st.atk - 2 : st.atk,
+      every: fast ? 2 : st.every,
       timer: 0,
       kind: 'fight',
       ...(def.weak ? { weak: def.weak } : {}),
@@ -420,10 +420,18 @@ function enterFight(c: Ctx, station: Station) {
   else drawWord(c, f);
 }
 
-/** Удар по игроку с Зонтом, складным зонтом и Шарфом. */
-function hurt(c: Ctx, f: Fight | null, hit: number): { taken: number; blockedBy: 'umbrella' | 'brolly' | null } {
+/**
+ * Удар по игроку со складным зонтом и Шарфом; Зонт гасит раз в бой удар за
+ * ошибку (`cause: 'wrong'`), а не за медленный бой.
+ */
+function hurt(
+  c: Ctx,
+  f: Fight | null,
+  hit: number,
+  cause: 'wrong' | 'timer',
+): { taken: number; blockedBy: 'umbrella' | 'brolly' | null } {
   if (hit <= 0) return { taken: 0, blockedBy: null };
-  const umbrella = !!f && f.umbrella && has(c.s, 'umbrella');
+  const umbrella = !!f && cause === 'wrong' && f.umbrella && has(c.s, 'umbrella');
   const res = absorb({ hp: c.s.hp, shield: 0 }, hit, { umbrella, brolly: c.s.brolly, scarf: has(c.s, 'scarf') });
   if (res.blockedBy === 'umbrella' && f) f.umbrella = false;
   if (res.blockedBy === 'brolly') c.s.brolly = false;
@@ -500,7 +508,7 @@ function answerWord(c: Ctx, value: string | number | number[] | null, dontKnow: 
     if (f.foe.hp > 0) {
       const t = enemyTurn(f.foe, 'right');
       f.foe = t.foe;
-      hit = hurt(c, f, t.hit);
+      hit = hurt(c, f, t.hit, 'timer');
     }
     f.last = { outcome, damage, taken: hit.taken, crit, blockedBy: hit.blockedBy, healed };
   } else {
@@ -512,7 +520,7 @@ function answerWord(c: Ctx, value: string | number | number[] | null, dontKnow: 
     const t = enemyTurn(f.foe, 'wrong');
     f.foe = t.foe;
     const extra = (s.weather === 'wind' ? 2 : 0) + (s.fog >= 5 ? 2 : 0);
-    const hit = hurt(c, f, t.hit + extra);
+    const hit = hurt(c, f, t.hit + extra, 'wrong');
     if (f.foe.trait === 'drain') f.foe.hp = Math.min(f.foe.maxHp, f.foe.hp + 3);
     s.cards = scheduleMistake(s.cards, card, c.r);
     f.last = { outcome, damage: 0, taken: hit.taken, crit: false, blockedBy: hit.blockedBy, healed: 0 };
@@ -560,7 +568,7 @@ function answerExercise(c: Ctx, correct: boolean): boolean {
     } else if (f.foe.hp > 0) {
       const t = enemyTurn(f.foe, 'right');
       f.foe = t.foe;
-      hit = hurt(c, f, t.hit);
+      hit = hurt(c, f, t.hit, 'timer');
     }
     f.last = { outcome: 'right', damage, taken: hit.taken, crit, blockedBy: hit.blockedBy, healed: 0 };
   } else {
@@ -576,7 +584,7 @@ function answerExercise(c: Ctx, correct: boolean): boolean {
     const t = enemyTurn(f.foe, 'wrong');
     f.foe = t.foe;
     const extra = (s.weather === 'wind' ? 2 : 0) + (s.fog >= 5 ? 2 : 0);
-    const hit = hurt(c, f, t.hit + extra);
+    const hit = hurt(c, f, t.hit + extra, 'wrong');
     f.last = { outcome: 'wrong', damage: 0, taken: hit.taken, crit: false, blockedBy: hit.blockedBy, healed: 0 };
   }
   f.phase = 'result';

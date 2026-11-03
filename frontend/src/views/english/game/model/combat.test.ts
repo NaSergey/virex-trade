@@ -32,8 +32,8 @@ const foe = (p: Partial<Foe> = {}): Foe => ({
 describe('урон', () => {
   it('база, серия и крит', () => {
     expect(hit({})).toBe(5);
-    expect(hit({ combo: 4 })).toBe(10);
-    expect(hit({ combo: 9 })).toBe(10);
+    expect(hit({ combo: 4 })).toBe(7);
+    expect(hit({ combo: 30 })).toBe(10);
     expect(hit({ crit: true })).toBe(8);
     expect(hit({ mode: 'recognize' })).toBe(2);
   });
@@ -47,8 +47,8 @@ describe('урон', () => {
   it('погода, находки, персонажи', () => {
     expect(hit({ crit: true, weather: 'fog' })).toBe(10);
     expect(hit({ mode: 'listen', crit: true, weather: 'fog' })).toBe(5);
-    expect(hit({ combo: 2, relics: ['metronome'] })).toBe(10);
-    expect(hit({ combo: 2, weather: 'wind' })).toBe(10);
+    expect(hit({ combo: 2, relics: ['metronome'] })).toBe(7);
+    expect(hit({ combo: 2, weather: 'wind' })).toBe(7);
     expect(hit({ mode: 'speak', relics: ['megaphone'] })).toBe(9);
     expect(hit({ mode: 'recognize', character: 'announcer' })).toBe(1);
     expect(hit({ typo: true })).toBe(3);
@@ -64,9 +64,9 @@ describe('урон', () => {
   });
 
   it('окно крита: секундомер длиннее, туман 3 короче', () => {
-    expect(critWindow('recall', [], 0)).toBe(8000);
-    expect(critWindow('recall', ['stopwatch'], 0)).toBe(10000);
-    expect(critWindow('recognize', [], 3)).toBe(2000);
+    expect(critWindow('recall', [], 0)).toBe(6000);
+    expect(critWindow('recall', ['stopwatch'], 0)).toBe(8000);
+    expect(critWindow('recognize', [], 3)).toBe(1500);
   });
 });
 

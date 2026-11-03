@@ -26,7 +26,7 @@ export const ENEMIES: EnemyDef[] = [
   { id: 'hum', name: 'Гул', rows: [2, 9], weak: 'listen', resist: 'recognize' },
   { id: 'echo', name: 'Эхо', rows: [2, 9], weak: 'recall', resist: 'listen' },
   { id: 'mute', name: 'Немота', rows: [3, 9], weak: 'speak', resist: 'recall', speech: true },
-  { id: 'smog', name: 'Смог', rows: [4, 9], trait: 'fast', text: 'бьёт раз в 3 хода, на 1 слабее' },
+  { id: 'smog', name: 'Смог', rows: [4, 9], trait: 'fast', text: 'бьёт каждые 2 хода, но на 2 слабее' },
   { id: 'damp', name: 'Сырость', rows: [4, 9], weak: 'recall', trait: 'drain', text: 'твоя ошибка лечит её на 3' },
 ];
 
@@ -61,14 +61,16 @@ export interface FoeStats {
 const foeHp = (hp: number, fog: number) => (fog >= 1 ? Math.round(hp * 1.15) : hp);
 
 export function enemyStats(row: number, fog: number): FoeStats {
-  return { hp: foeHp(12 + 2 * row, fog), atk: 3 + Math.floor((row - 1) / 3), every: 4 };
+  return { hp: foeHp(30 + 3 * row, fog), atk: 4 + Math.floor((row - 1) / 2), every: 3 };
 }
 
 export function eliteStats(row: number, fog: number): FoeStats {
-  return { hp: foeHp(32 + 2 * row, fog), atk: enemyStats(row, fog).atk + 2, every: 3 };
+  return { hp: foeHp(44 + 3 * row, fog), atk: enemyStats(row, fog).atk + 2, every: 3 };
 }
+
+const BOSS_HP = 80;
 
 /** Туман 6 и выше — хранитель на 25 % крепче. */
 export function bossStats(fog: number): FoeStats {
-  return { hp: fog >= 6 ? Math.round(54 * 1.25) : 54, atk: 7, every: 3 };
+  return { hp: fog >= 6 ? Math.round(BOSS_HP * 1.25) : BOSS_HP, atk: 9, every: 3 };
 }

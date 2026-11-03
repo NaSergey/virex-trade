@@ -43,7 +43,7 @@ export interface RelicDef {
 }
 
 export const RELICS: Record<RelicId, RelicDef> = {
-  umbrella: { name: 'Зонт', text: 'первый удар противника в каждом бою не проходит', unlock: null },
+  umbrella: { name: 'Зонт', text: 'раз в бой прощает ошибку: удар за неё не проходит', unlock: null },
   thermos: { name: 'Термос', text: '+3 здоровья после каждого боя', unlock: null },
   metronome: { name: 'Метроном', text: 'серия растёт на 0,5 за ответ', unlock: null },
   stopwatch: { name: 'Секундомер', text: 'окно крита на 2 секунды длиннее', unlock: null },

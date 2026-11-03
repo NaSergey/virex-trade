@@ -147,7 +147,7 @@ describe('движок забега', () => {
 
   it('противник убит — награда, выбор награды — карта', () => {
     let s = firstFight();
-    for (let i = 0; i < 20 && s.screen.kind === 'fight'; i++) {
+    for (let i = 0; i < 80 && s.screen.kind === 'fight'; i++) {
       const f = fightOf(s);
       if (f.phase === 'intro' || f.phase === 'result') s = go(s, { type: 'next', now: NOW }).state;
       else if (f.phase === 'choose') s = go(s, { type: 'mode', mode: 'recall', now: NOW }).state;
@@ -170,7 +170,7 @@ describe('движок забега', () => {
     expect(ex.type).toBe('choice');
     const out = go(s, { type: 'exercise', correct: false, now: NOW });
     expect(out.effects).toContainEqual({ kind: 'exercise', itemId: ex.id, unit: ex.unit, correct: false });
-    expect(out.state.hp).toBe(30 - 7);
+    expect(out.state.hp).toBe(30 - 9);
     expect(out.state.stats.boss).toMatchObject({ wrong: 1, reached: false });
   });
 

@@ -13,14 +13,14 @@ export const BASE: Record<Mode, number> = { recognize: 2, listen: 3, recall: 5, 
 export const EXERCISE_DAMAGE: Record<Exercise['type'], number> = { choice: 5, gap: 7, order: 7, translate: 9 };
 
 const CRIT_MS: Record<Mode, number> = {
-  recognize: 3000,
-  listen: 4000,
-  recall: 8000,
-  speak: 8000,
-  order: 12000,
-  dictate: 10000,
+  recognize: 2500,
+  listen: 3500,
+  recall: 6000,
+  speak: 5000,
+  order: 10000,
+  dictate: 8000,
 };
-const EXERCISE_CRIT_MS: Record<Exercise['type'], number> = { choice: 5000, gap: 9000, order: 12000, translate: 12000 };
+const EXERCISE_CRIT_MS: Record<Exercise['type'], number> = { choice: 4000, gap: 7000, order: 10000, translate: 10000 };
 
 /** Окно крита, мс: секундомер +2 с, туман 3 и выше −1 с. */
 export function critWindow(mode: Mode | Exercise['type'], relics: readonly RelicId[], fog: number): number {
@@ -28,9 +28,9 @@ export function critWindow(mode: Mode | Exercise['type'], relics: readonly Relic
   return base + (relics.includes('stopwatch') ? 2000 : 0) - (fog >= 3 ? 1000 : 0);
 }
 
-/** Множитель серии: +0,25 за верный ответ (Метроном и Ветер — вдвое быстрее), потолок ×2. */
+/** Множитель серии: +0,1 за верный ответ (Метроном и Ветер — вдвое быстрее), потолок ×2. */
 export function comboMult(combo: number, relics: readonly RelicId[], weather: WeatherId): number {
-  const step = 0.25 * (relics.includes('metronome') ? 2 : 1) * (weather === 'wind' ? 2 : 1);
+  const step = 0.1 * (relics.includes('metronome') ? 2 : 1) * (weather === 'wind' ? 2 : 1);
   return Math.min(2, 1 + step * combo);
 }
 
