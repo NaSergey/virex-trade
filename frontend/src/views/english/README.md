@@ -18,6 +18,11 @@ Friends Starter (SB + WB). Спека — `docs/superpowers/specs/2026-10-21-eng
   точность по видам заданий, слабые уроки, трудные слова, советы и подборка недостающих слов
   (кнопка создаёт свою тему с ними одним `POST themes` с `cards`). Своих таблиц и внешних
   сервисов нет; пороги — константы в `model/insights.ts`.
+- `game/` — игра «Mind the Gap» (`/english/game`, спека
+  `docs/superpowers/specs/2026-11-04-english-game-design.md`): рогалик по линии метро — бои на
+  словах (очередь карточек; интервал продлевает только вспоминание), сцены-диалоги, хранитель на
+  упражнениях курса. Движок — чистые функции `game/model/`, данные — `game/content/`, законченные
+  забеги — таблица `english_runs`, забег в процессе — `localStorage`.
 - `api/hooks.ts` — запросы к `/api/admin/english/*`.
 - `*Page.tsx`, `Layout.tsx`, `components/`, `english.css` — страницы и стили. На телефоне
   раздел — приложение: нижняя панель вкладок, сверху общая шапка админки с выбором раздела, манифест для главного
@@ -55,7 +60,7 @@ Friends Starter (SB + WB). Спека — `docs/superpowers/specs/2026-10-21-eng
    `backend/src/english/`, `frontend/public/assets/english/`.
 2. Убрать точки подключения 1, 2, блок схемы (4) и строку `.gitignore` (5).
 3. На базе: `npx prisma db push --accept-data-loss` или
-   `DROP TABLE english_cards, english_words, english_lessons, english_answers, english_days, english_theme_words, english_themes;`
+   `DROP TABLE english_cards, english_words, english_lessons, english_answers, english_days, english_theme_words, english_themes, english_runs;`
 4. На сервере: `rm -r /opt/english-audio` и её `location` из nginx.
 
 ## Перенести в другой проект

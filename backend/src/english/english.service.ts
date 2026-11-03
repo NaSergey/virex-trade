@@ -1,9 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CardStateDto } from './dto/card-state.dto';
 import type { WordDto } from './dto/word.dto';
 import type { AnswerDto } from './dto/answer.dto';
+import type { RunDto } from './dto/run.dto';
 
 /** Карточка своего слова — тот же id строит фронт (`views/english/model/deck.ts`). */
 export const myCardId = (wordId: string) => `my:${wordId}`;
@@ -11,7 +16,12 @@ export const myCardId = (wordId: string) => `my:${wordId}`;
 /** Сколько дней занятий отдаётся в состоянии — календарь страницы «Сегодня». */
 const DAYS_BACK = 400;
 
-type DayCounter = 'cards' | 'answers' | 'correct' | 'phrases' | 'quiz';
+type DayCounter = 'cards' | 'answers' | 'correct' | 'phrases' | 'quiz' | 'game';
+
+/** Сколько забегов отдаётся: из них выводится мета игры, сотни строк за годы. */
+const RUNS_BACK = 1000;
+/** Статистика забега — десятки чисел и id; больше этого — не наш клиент. */
+const STATS_MAX = 16_384;
 
 /**
  * Прогресс владельца в учебнике английского (спека
@@ -66,6 +76,7 @@ export class EnglishService {
         correct: d.correct,
         phrases: d.phrases,
         quiz: d.quiz,
+        game: d.game,
       })),
       themes: themes.map((t) => ({
         id: t.id,
@@ -176,6 +187,58 @@ export class EnglishService {
   /** Ответ в тесте по теме слов — только в счётчик дня: тест — тренировка, не учёт. */
   async quiz(day: string) {
     await this.countDay(day, { quiz: 1 });
+    return { ok: true };
+  }
+
+  /** Ответ в игре, не сдвинувший карточку и не записанный упражнением, — в счётчик дня. */
+  async game(day: string) {
+    await this.countDay(day, { game: 1 });
+    return { ok: true };
+  }
+
+  /** Законченные забеги игры, свежие сверху: из них фронт выводит открытия и рекорды. */
+  async runs() {
+    const rows = await this.prisma.englishRun.findMany({
+      orderBy: { finishedAt: 'desc' },
+      take: RUNS_BACK,
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      startedAt: r.startedAt.toISOString(),
+      finishedAt: r.finishedAt.toISOString(),
+      character: r.character,
+      fog: r.fog,
+      outcome: r.outcome,
+      depth: r.depth,
+      score: r.score,
+      stats: r.stats,
+    }));
+  }
+
+  /**
+   * Законченный забег. Повтор с тем же id (досылка после обрыва) молча
+   * пропускается — `skipDuplicates`, а не перехват ошибки.
+   */
+  async saveRun(dto: RunDto) {
+    if (JSON.stringify(dto.stats).length > STATS_MAX) {
+      throw new BadRequestException('Run stats too large');
+    }
+    await this.prisma.englishRun.createMany({
+      data: [
+        {
+          id: dto.id,
+          startedAt: new Date(dto.startedAt),
+          finishedAt: new Date(dto.finishedAt),
+          character: dto.character,
+          fog: dto.fog,
+          outcome: dto.outcome,
+          depth: dto.depth,
+          score: dto.score,
+          stats: dto.stats as Prisma.InputJsonValue,
+        },
+      ],
+      skipDuplicates: true,
+    });
     return { ok: true };
   }
 

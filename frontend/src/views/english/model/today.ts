@@ -24,7 +24,7 @@ export function activityLevel(n: number): 0 | 1 | 2 | 3 {
   return 3;
 }
 
-/** Подсказка клетки: «21 окт: 34 карточки, 12 заданий, 3 фразы»; пустой день — «21 окт: занятий нет». */
+/** Подсказка клетки: «21 окт: 34 карточки, 12 заданий, 3 фразы, 5 ответов в игре»; пустой день — «21 окт: занятий нет». */
 export function dayTitle(label: string, row: DayRow | undefined): string {
   if (!row || activityOf(row) === 0) return `${label}: занятий нет`;
   const parts = [
@@ -32,6 +32,7 @@ export function dayTitle(label: string, row: DayRow | undefined): string {
     row.answers ? `${row.answers} ${plural(row.answers, ['задание', 'задания', 'заданий'])}` : '',
     row.phrases ? `${row.phrases} ${plural(row.phrases, ['фраза', 'фразы', 'фраз'])}` : '',
     row.quiz ? `${row.quiz} ${plural(row.quiz, ['ответ', 'ответа', 'ответов'])} в тестах` : '',
+    row.game ? `${row.game} ${plural(row.game, ['ответ', 'ответа', 'ответов'])} в игре` : '',
   ].filter(Boolean);
   return `${label}: ${parts.join(', ')}`;
 }

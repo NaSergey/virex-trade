@@ -6,6 +6,7 @@ import { localDay, type DayRow } from '../model/activity';
 import type { AnswerRow } from '../model/course';
 import { myCardId, type CustomWord, type UserTheme } from '../model/deck';
 import type { CardState } from '../model/srs';
+import type { RunStats } from '../game/model/types';
 
 /**
  * Прогресс владельца в учебнике (`backend/src/english`). Состояние грузится
@@ -69,7 +70,7 @@ const toState = (r: StateResponse): EnglishState => ({
   lessons: new Set(r.lessons.map((l) => l.id)),
   lessonDates: new Map(r.lessons.map((l) => [l.id, Date.parse(l.doneAt)])),
   answers: new Map(r.answers.map((a) => [a.itemId, a])),
-  days: new Map(r.days.map((d) => [d.day, d])),
+  days: new Map(r.days.map((d) => [d.day, { ...d, game: d.game ?? 0 }])),
   themes: r.themes,
 });
 
@@ -106,7 +107,7 @@ function useStateMutation<V>(request: (v: V) => Promise<unknown>, apply: (s: Eng
 /** Счётчик дня в кэше — тот же, что сервер нарастит по `day` запроса. */
 function bumpDay(s: EnglishState, add: Partial<Omit<DayRow, 'day'>>): EnglishState {
   const day = localDay(Date.now());
-  const prev = s.days.get(day) ?? { day, cards: 0, answers: 0, correct: 0, phrases: 0, quiz: 0 };
+  const prev = s.days.get(day) ?? { day, cards: 0, answers: 0, correct: 0, phrases: 0, quiz: 0, game: 0 };
   const next = { ...prev };
   for (const [k, v] of Object.entries(add) as [keyof Omit<DayRow, 'day'>, number][]) next[k] += v;
   return { ...s, days: new Map(s.days).set(day, next) };
@@ -187,6 +188,51 @@ export function useQuizDone() {
     () => apiJson(`${BASE}/quiz`, send('POST', { day: localDay(Date.now()) })),
     (s) => bumpDay(s, { quiz: 1 }),
   );
+}
+
+/** Ответ в игре без карточки и упражнения — в счётчик дня. */
+export function useGameDone() {
+  return useStateMutation<void>(
+    () => apiJson(`${BASE}/game`, send('POST', { day: localDay(Date.now()) })),
+    (s) => bumpDay(s, { game: 1 }),
+  );
+}
+
+/** Законченный забег игры — строка `english_runs`; та же форма — тело `POST runs`. */
+export interface RunRow {
+  id: string;
+  startedAt: string;
+  finishedAt: string;
+  character: string;
+  fog: number;
+  outcome: 'win' | 'dead' | 'quit';
+  depth: number;
+  score: number;
+  stats: RunStats;
+}
+
+const RUNS_KEY = ['english', 'runs'] as const;
+
+/** Забеги игры, свежие сверху: из них выводятся открытия, рекорды и задания дня. */
+export function useRuns() {
+  return useQuery({
+    queryKey: RUNS_KEY,
+    queryFn: () => apiJson<RunRow[]>(`${BASE}/runs`),
+    staleTime: 30_000,
+  });
+}
+
+/** Законченный забег: в кэш — сразу, повтор с тем же id сервер пропустит. */
+export function useSaveRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (run: RunRow) => apiJson(`${BASE}/runs`, send('POST', run)),
+    onMutate: (run: RunRow) => {
+      qc.setQueryData<RunRow[]>(RUNS_KEY, (rows) =>
+        !rows ? rows : rows.some((r) => r.id === run.id) ? rows : [run, ...rows],
+      );
+    },
+  });
 }
 
 /** Своё слово: id выдаёт сервер, поэтому в кэш оно ложится по ответу, а не заранее. */

@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { EnglishService } from './english.service';
 
 function makePrisma(removedWords = 1) {
@@ -35,6 +35,10 @@ function makePrisma(removedWords = 1) {
         .fn()
         .mockImplementation(async ({ data }) => ({ id: 't1', ...data })),
       deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
+    englishRun: {
+      findMany: jest.fn().mockResolvedValue([]),
+      createMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     englishThemeWord: {
       createMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -220,5 +224,93 @@ describe('EnglishService', () => {
       },
     });
     expect(theme.cards).toEqual(['v:house', 'u01:hello']);
+  });
+
+  it('забег: createMany без дублей, даты — Date', async () => {
+    const prisma = makePrisma();
+    await new EnglishService(prisma as never).saveRun({
+      id: 'run12345abc',
+      startedAt: '2026-11-04T10:00:00.000Z',
+      finishedAt: '2026-11-04T10:08:00.000Z',
+      character: 'tourist',
+      fog: 0,
+      outcome: 'win',
+      depth: 10,
+      score: 640,
+      stats: { v: 1 },
+    });
+    const arg = prisma.englishRun.createMany.mock.calls[0][0];
+    expect(arg.skipDuplicates).toBe(true);
+    expect(arg.data[0].id).toBe('run12345abc');
+    expect(arg.data[0].startedAt).toEqual(new Date('2026-11-04T10:00:00.000Z'));
+    expect(arg.data[0].finishedAt).toBeInstanceOf(Date);
+    expect(arg.data[0].stats).toEqual({ v: 1 });
+  });
+
+  it('забег со статистикой больше 16 КБ — 400', async () => {
+    const prisma = makePrisma();
+    await expect(
+      new EnglishService(prisma as never).saveRun({
+        id: 'run12345abc',
+        startedAt: '2026-11-04T10:00:00.000Z',
+        finishedAt: '2026-11-04T10:08:00.000Z',
+        character: 'tourist',
+        fog: 0,
+        outcome: 'dead',
+        depth: 3,
+        score: 50,
+        stats: { junk: 'x'.repeat(17_000) },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.englishRun.createMany).not.toHaveBeenCalled();
+  });
+
+  it('забеги: свежие сверху, не больше 1000, даты наружу ISO', async () => {
+    const prisma = makePrisma();
+    prisma.englishRun.findMany.mockResolvedValue([
+      {
+        id: 'r1',
+        startedAt: new Date('2026-11-04T10:00:00.000Z'),
+        finishedAt: new Date('2026-11-04T10:08:00.000Z'),
+        character: 'tourist',
+        fog: 0,
+        outcome: 'win',
+        depth: 10,
+        score: 640,
+        stats: { v: 1 },
+      },
+    ]);
+    const runs = await new EnglishService(prisma as never).runs();
+    expect(prisma.englishRun.findMany).toHaveBeenCalledWith({
+      orderBy: { finishedAt: 'desc' },
+      take: 1000,
+    });
+    expect(runs[0].startedAt).toBe('2026-11-04T10:00:00.000Z');
+    expect(runs[0].finishedAt).toBe('2026-11-04T10:08:00.000Z');
+  });
+
+  it('ответ в игре — в счётчик дня game', async () => {
+    const prisma = makePrisma();
+    await new EnglishService(prisma as never).game('2026-11-04');
+    const { create, update } = prisma.englishDay.upsert.mock.calls[0][0];
+    expect(create).toEqual({ day: '2026-11-04', game: 1 });
+    expect(update).toEqual({ game: { increment: 1 } });
+  });
+
+  it('состояние отдаёт игру у дня', async () => {
+    const prisma = makePrisma();
+    prisma.englishDay.findMany.mockResolvedValue([
+      {
+        day: '2026-11-04',
+        cards: 1,
+        answers: 0,
+        correct: 0,
+        phrases: 0,
+        quiz: 0,
+        game: 7,
+      },
+    ]);
+    const state = await new EnglishService(prisma as never).state();
+    expect(state.days[0].game).toBe(7);
   });
 });
