@@ -86,6 +86,8 @@ export interface RunStats {
   mistakes: string[];
   /** id упражнений хранителя с ошибкой. */
   bossMistakes: string[];
+  /** Задания дня, выполненные к концу этого забега (за его день). */
+  quests: string[];
 }
 
 export const emptyStats = (): RunStats => ({
@@ -110,4 +112,5 @@ export const emptyStats = (): RunStats => ({
   scenes: [],
   mistakes: [],
   bossMistakes: [],
+  quests: [],
 });
