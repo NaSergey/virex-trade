@@ -9,7 +9,7 @@ export const S7: Scene[] = [
     place: { en: 'CAFÉ · PECKHAM', ru: 'Кафе в Пекэме' },
     npc: { name: 'Helen', role: 'управляющая кафе' },
     goal: 'Пройди собеседование на подработку в кафе.',
-    vars: { time: ['7:00', '8:00', '8:30', '9:00', '10:00'] },
+    vars: { time: ['8:00', '8:30', '9:00', '9:30', '10:00'] },
     steps: [
       { npc: 'Hello, Sasha. Please sit down. Where do you live?', ru: 'Здравствуйте, Саша. Садитесь. Где вы живёте?' },
       {
@@ -129,7 +129,7 @@ export const S7: Scene[] = [
     place: { en: 'STATION · EUSTON', ru: 'Вокзал Юстон' },
     npc: { name: 'Fred', role: 'сотрудник справочной' },
     goal: 'Узнай, когда отходит поезд в Манчестер и откуда.',
-    vars: { time: ['9:15', '10:30', '11:45', '1:20', '3:40'] },
+    vars: { time: ['10:45', '11:00', '11:15', '11:30', '11:45'] },
     steps: [
       { npc: 'Good morning. Where do you want to go?', ru: 'Доброе утро. Куда вы хотите поехать?' },
       {
@@ -191,10 +191,10 @@ export const S7: Scene[] = [
             react: 'Sorry? Likes?',
           },
           {
-            en: 'Good. I like coffee in the Monday.',
-            ru: 'Хорошо. Я люблю кофе в понедельник.',
-            why: 'Перед Monday ставят on, а не in the. А «по утрам» — in the morning.',
-            react: 'In the Monday? Hmm… OK!',
+            en: 'Good. I like coffee at the morning.',
+            ru: 'Хорошо. Я люблю кофе на утро.',
+            why: 'По утрам — in the morning, а не at the morning.',
+            react: 'At the morning? Hmm… in the morning!',
           },
         ],
       },
@@ -247,7 +247,7 @@ export const S7: Scene[] = [
     place: { en: 'TOUR · TOWER BRIDGE', ru: 'Экскурсия у Тауэрского моста' },
     npc: { name: 'Nick', role: 'гид' },
     goal: 'Послушай гида и расспроси его о достопримечательностях.',
-    vars: { n: ['4', '6', '7', '9', '12'] },
+    vars: { n: ['5', '6', '7', '9', '12'] },
     steps: [
       { npc: "Welcome to the city tour! I'm Nick. Where do you come from?", ru: 'Добро пожаловать на экскурсию! Я Ник. Откуда вы?' },
       {
@@ -299,7 +299,7 @@ export const S7: Scene[] = [
           },
         ],
       },
-      { npc: 'Do you like boats? Many people take the boat to Greenwich.', ru: 'Вы любите кораблики? Многие плывут на лодке до Гринвича.' },
+      { npc: 'Do you like boats? Many people take the boat to Greenwich.', ru: 'Вы любите лодки? Многие плывут на катере до Гринвича.' },
       {
         reply: [
           { en: 'Yes, I like boats. My friends like them too.', ru: 'Да, я люблю лодки. Мои друзья тоже.', ok: true },

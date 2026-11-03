@@ -9,7 +9,7 @@ export const S5: Scene[] = [
     place: { en: 'STREET · SOHO', ru: 'Улица в Сохо' },
     npc: { name: 'Oliver', role: 'прохожий' },
     goal: 'Узнай, как дойти до банка.',
-    vars: { n: ['2', '3', '5', '7', '10'] },
+    vars: { n: ['5', '6', '7', '8', '10'] },
     steps: [
       { npc: 'Hi! You look lost. Can I help?', ru: 'Привет! Ты, кажется, заблудился. Помочь?' },
       {
@@ -78,7 +78,7 @@ export const S5: Scene[] = [
           },
         ],
       },
-      { npc: "Yes, there is. It's on the corner. Look, I've got a map here.", ru: 'Да, есть. Он на углу. Смотрите, у меня тут карта.' },
+      { npc: "Yes, there is. It's on the corner. Look, I've got a map here. Do you want to see?", ru: 'Да, есть. Он на углу. Смотрите, у меня тут карта. Хотите посмотреть?' },
       {
         reply: [
           { en: 'Yes, show me on the map, please.', ru: 'Да, покажите на карте, пожалуйста.', ok: true },
@@ -96,7 +96,7 @@ export const S5: Scene[] = [
           },
         ],
       },
-      { npc: "Look, there you are! Turn left at the cinema. Don't forget!", ru: 'Смотрите, вот мы где! Налево у кинотеатра. Не забудьте!' },
+      { npc: "Look, here we are! Turn left at the cinema. Don't forget!", ru: 'Смотрите, вот мы где! Налево у кинотеатра. Не забудьте!' },
       {
         reply: [
           { en: 'OK, left at the cinema. Thanks!', ru: 'Хорошо, налево у кинотеатра. Спасибо!', ok: true },
@@ -165,11 +165,11 @@ export const S5: Scene[] = [
       { npc: 'Thank you. Is there anything else?', ru: 'Спасибо. Что-нибудь ещё не так?' },
       {
         reply: [
-          { en: "Yes. There's no hot water, too.", ru: 'Да. И горячей воды тоже нет.', ok: true },
+          { en: "Yes. There's no hot water.", ru: 'Да. И горячей воды нет.', ok: true },
           {
-            en: 'Yes. There are no hot water, too.',
-            ru: 'Да. И нет горячей воды тоже.',
-            why: 'Water — не считается, с ним is: there’s no hot water.',
+            en: 'Yes. There are no hot water.',
+            ru: 'Да. И нет горячей воды.',
+            why: 'Water неисчисляемое, поэтому is: there’s no hot water.',
             react: 'Sorry, there are…?',
           },
           {
@@ -179,7 +179,7 @@ export const S5: Scene[] = [
             react: 'Er… yes, but is there another problem?',
           },
         ],
-        accept: ["Yes. There's no hot water."],
+        accept: ['Yes. There is no hot water.'],
       },
       { npc: "Oh no! I'm sorry. Wait in the lobby, please. Don't worry!", ru: 'Ох, простите! Подождите в холле, пожалуйста. Не волнуйтесь!' },
       {
@@ -217,7 +217,7 @@ export const S5: Scene[] = [
           },
         ],
       },
-      { npc: "Good. Sorry again. Let's give you a free breakfast tomorrow!", ru: 'Хорошо. Ещё раз простите. Давайте мы завтра накормим вас бесплатным завтраком!' },
+      { npc: 'Good. Sorry again. How about a free breakfast tomorrow?', ru: 'Хорошо. Ещё раз простите. Как насчёт бесплатного завтрака завтра?' },
       {
         reply: [
           { en: "That's very nice. Thank you!", ru: 'Это очень мило. Спасибо!', ok: true },
@@ -268,7 +268,7 @@ export const S5: Scene[] = [
           },
         ],
       },
-      { npc: 'OK! It is sunny. Is there a café in the park?', ru: 'Хорошо! Будет солнечно. В парке есть кафе?' },
+      { npc: 'OK! It is sunny. Is there a café in the park?', ru: 'Хорошо! Сейчас солнечно. В парке есть кафе?' },
       {
         reply: [
           { en: "Yes, there is. Let's have coffee.", ru: 'Да, есть. Давай выпьем кофе.', ok: true },
@@ -299,7 +299,7 @@ export const S5: Scene[] = [
           },
         ],
       },
-      { npc: "Brilliant. And food? Let's take a picnic.", ru: 'Отлично. А еда? Давай возьмём пикник.' },
+      { npc: "Brilliant. And food? Let's have a picnic.", ru: 'Отлично. А еда? Давай устроим пикник.' },
       {
         reply: [
           { en: "Yes! Let's buy sandwiches.", ru: 'Да! Давай купим бутерброды.', ok: true },

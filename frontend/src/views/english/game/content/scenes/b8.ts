@@ -9,7 +9,7 @@ export const S8: Scene[] = [
     place: { en: 'CLINIC · WHITECHAPEL', ru: 'Клиника в Уайтчепеле' },
     npc: { name: 'Dr Evans', role: 'врач' },
     goal: 'Расскажи врачу, что тебя беспокоит.',
-    vars: { n: ['2', '3', '5', '7', '10'] },
+    vars: { n: ['5', '6', '7', '8', '10'] },
     steps: [
       { npc: "Come in, Sasha. What's the problem?", ru: 'Проходите, Саша. Что вас беспокоит?' },
       {
@@ -63,16 +63,16 @@ export const S8: Scene[] = [
       { npc: 'Does your job start early?', ru: 'Ваша работа начинается рано?' },
       {
         reply: [
-          { en: 'Yes, it does. I start at six.', ru: 'Да. Я начинаю в шесть.', ok: true },
+          { en: 'Yes, it does. It starts at six.', ru: 'Да. Начинается в шесть.', ok: true },
           {
-            en: 'Yes, it do. I start at six.',
-            ru: 'Да. Я начинаю в шесть.',
+            en: 'Yes, it do. It starts at six.',
+            ru: 'Да. Начинается в шесть.',
             why: 'Подлежащее — it, поэтому does.',
             react: 'Sorry? It do?',
           },
           {
-            en: 'No, it does. I start at six.',
-            ru: 'Нет, начинается. Я начинаю в шесть.',
+            en: 'No, it does. It starts at six.',
+            ru: 'Нет, начинается. Начинается в шесть.',
             why: 'No и does противоречат друг другу. Либо Yes, it does, либо No, it doesn’t.',
             react: 'No… but yes? Which one?',
           },
@@ -128,7 +128,7 @@ export const S8: Scene[] = [
     place: { en: 'BANK · CITY OF LONDON', ru: 'Отделение банка в Сити' },
     npc: { name: 'Peter', role: 'консультант банка' },
     goal: 'Открой банковский счёт.',
-    vars: { n: ['2', '3', '5', '7', '10'] },
+    vars: { n: ['5', '6', '7', '8', '10'] },
     steps: [
       { npc: 'Good morning. How can I help?', ru: 'Доброе утро. Чем могу помочь?' },
       {
@@ -147,6 +147,7 @@ export const S8: Scene[] = [
             react: 'A door? Our doors are open!',
           },
         ],
+        accept: ["I'd like to open an account, please."],
       },
       { npc: 'Of course. Do you live in the UK?', ru: 'Конечно. Вы живёте в Великобритании?' },
       {
@@ -219,10 +220,10 @@ export const S8: Scene[] = [
       { npc: 'Perfect. Please sign here. And where do you work?', ru: 'Отлично. Подпишите здесь. А где вы работаете?' },
       {
         reply: [
-          { en: 'I work online, from home.', ru: 'Я работаю онлайн, из дома.', ok: true },
+          { en: 'I work in a café, in Peckham.', ru: 'Я работаю в кафе, в Пекэме.', ok: true },
           {
-            en: 'I works online, from home.',
-            ru: 'Я работает онлайн, из дома.',
+            en: 'I works in a café, in Peckham.',
+            ru: 'Я работает в кафе, в Пекэме.',
             why: 'С I глагол без s: I work.',
             react: 'Sorry? Works?',
           },
@@ -280,7 +281,7 @@ export const S8: Scene[] = [
           {
             en: 'I work in a café. And does you?',
             ru: 'Я работаю в кафе. А делает ты?',
-            why: 'Встречный вопрос короткий: And you? Does с you не используют.',
+            why: 'С you ставится do, а не does. Встречный вопрос обычно короткий: And you?',
             react: 'And does… me? Ha, I work in a bank.',
           },
         ],
@@ -316,7 +317,7 @@ export const S8: Scene[] = [
           },
         ],
       },
-      { npc: 'Me too. Does your family live here?', ru: 'Мне тоже. Твоя семья живёт здесь?' },
+      { npc: 'Me too. Do your parents live here?', ru: 'Мне тоже. Твои родители живут здесь?' },
       {
         reply: [
           { en: "No, they don't. They live in Russia.", ru: 'Нет. Они живут в России.', ok: true },

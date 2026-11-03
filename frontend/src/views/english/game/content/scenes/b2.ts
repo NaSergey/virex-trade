@@ -48,7 +48,7 @@ export const S2: Scene[] = [
         ],
         accept: ["It's takeaway, please.", "It's for takeaway, please."],
       },
-      { npc: 'Great. Our cakes are really good today.', ru: 'Отлично. Наши пирожные сегодня очень вкусные.' },
+      { npc: 'Great. Look, we have cakes today.', ru: 'Отлично. Смотрите, у нас сегодня пирожные.' },
       {
         reply: [
           { en: 'Are the cakes nice?', ru: 'Пирожные вкусные?', ok: true },
@@ -61,7 +61,7 @@ export const S2: Scene[] = [
           {
             en: 'No, I am not a cake.',
             ru: 'Нет, я не пирожное.',
-            why: 'Ответ не к месту: про пирожные можно спросить, а не отрицать, что ты пирожное.',
+            why: 'Ответ не к месту: тебя спросили про пирожные, а не про тебя.',
             react: 'Ha! I hope not.',
           },
         ],
@@ -205,7 +205,7 @@ export const S2: Scene[] = [
           { en: "Yes, it is. I'm from Russia.", ru: 'Да, впервые. Я из России.', ok: true },
           {
             en: "Yes, I am. I'm from Russia.",
-            ru: 'Да, это так. Я из России.',
+            ru: 'Да, я. Я из России.',
             why: 'Вопрос начинается с Is this…, значит и краткий ответ — Yes, it is.',
             react: 'You are what? Ha ha. Yes, it is!',
           },

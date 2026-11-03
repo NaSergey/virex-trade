@@ -167,12 +167,12 @@ export const S3: Scene[] = [
           },
         ],
       },
-      { npc: 'Wait, look! My keys are on the {thing}!', ru: 'Постой, смотри! Мои ключи на {thing}!' },
+      { npc: 'Wait, look! My keys are on the {thing}!', ru: 'Постой, смотри! Ключи нашлись: «on the {thing}»!' },
       {
         reply: [
           {
             en: 'On the {thing}? Great!',
-            ru: 'На {thing}? Здорово!',
+            ru: '«On the {thing}»? Здорово!',
             ok: true,
             distract: 'thing',
             why: 'Он сказал on the {thing}.',
@@ -205,7 +205,7 @@ export const S3: Scene[] = [
           {
             en: "I'm welcome, Dan!",
             ru: 'Я желанный гость, Дэн!',
-            why: 'Ответ на «спасибо» — You’re welcome, то есть «пожалуйста» к нему, а не I’m.',
+            why: 'На «спасибо» отвечают You’re welcome — «пожалуйста». I’m welcome значит «мне рады».',
             react: 'You are welcome here, yes. But I said thank you!',
           },
           {
@@ -318,7 +318,7 @@ export const S3: Scene[] = [
         ],
         accept: ["No, thanks. It's not cheap.", "No, thank you. It isn't cheap."],
       },
-      { npc: 'Fair enough! Here are your apples. See you next week!', ru: 'Ну ладно! Вот ваши яблоки. До встречи на той неделе!' },
+      { npc: 'Fair enough! Here are your apples. See you next week!', ru: 'Ну ладно! Вот ваши яблоки. До встречи на следующей неделе!' },
       {
         reply: [
           { en: 'Thanks. Have a good day!', ru: 'Спасибо. Хорошего дня!', ok: true },

@@ -144,7 +144,7 @@ export const S1: Scene[] = [
           },
           {
             en: 'Yes. A, B, C, D, E.',
-            ru: 'Да. А, Б, К, Д, Е.',
+            ru: 'Да. А, Б, Ц, Д, Е.',
             why: 'Это первые буквы алфавита, а не твоя фамилия.',
             react: "Er… that's not your name!",
           },
@@ -182,7 +182,7 @@ export const S1: Scene[] = [
           },
         ],
       },
-      { npc: "It's on the first floor. Is that OK?", ru: 'Она на первом этаже. Вас это устроит?' },
+      { npc: "It's on the ground floor. Is that OK?", ru: 'Она на первом этаже. Вас это устроит?' },
       {
         reply: [
           { en: "Yes, that's great. Thank you.", ru: 'Да, отлично. Спасибо.', ok: true },
@@ -203,12 +203,12 @@ export const S1: Scene[] = [
       { npc: 'Enjoy your stay! Breakfast is at seven.', ru: 'Приятного отдыха! Завтрак в семь.' },
       {
         reply: [
-          { en: "Thanks! You're very kind.", ru: 'Спасибо! Вы очень любезны.', ok: true },
+          { en: 'Thanks! See you at breakfast.', ru: 'Спасибо! До встречи за завтраком.', ok: true },
           {
-            en: 'Thanks! Your very kind.',
-            ru: 'Спасибо! Ваш очень любезны.',
-            why: 'Your — «твой/ваш». «Вы добры» — you’re (you are).',
-            react: 'My very kind what? Ha ha!',
+            en: 'Thanks! See you in breakfast.',
+            ru: 'Спасибо! До встречи в завтраке.',
+            why: 'Встреча за едой — at breakfast, а не in.',
+            react: 'In breakfast? Ha ha, at breakfast!',
           },
           {
             en: 'Thanks! Good morning.',

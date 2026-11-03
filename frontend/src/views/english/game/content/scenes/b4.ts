@@ -47,9 +47,9 @@ export const S4: Scene[] = [
             react: 'So… yes or no?',
           },
         ],
-        accept: ["No, I haven't.", "No, I haven't a temperature."],
+        accept: ["No, I haven't."],
       },
-      { npc: "Good. Take two of these tablets. They're {price} a box.", ru: 'Хорошо. Принимайте по две таблетки. Они стоят {price} за коробку.' },
+      { npc: "Good. Take these tablets. They're {price} a box.", ru: 'Хорошо. Вот эти таблетки. Они стоят {price} за коробку.' },
       {
         reply: [
           {
@@ -130,7 +130,7 @@ export const S4: Scene[] = [
     place: { en: 'FLAT · HACKNEY', ru: 'Дом в Хакни' },
     npc: { name: 'Tom', role: 'сосед' },
     goal: 'Познакомься с соседом и расскажи про свою семью.',
-    vars: { n: ['2', '3', '4', '5', '6'] },
+    vars: { n: ['5', '6', '7', '8', '9'] },
     steps: [
       { npc: 'Hi! Are you the new neighbour?', ru: 'Привет! Ты наш новый сосед?' },
       {
@@ -219,7 +219,7 @@ export const S4: Scene[] = [
         ],
         accept: ['Yes, she has two children.', 'Yes, she has got two children.'],
       },
-      { npc: 'Lovely! Tea in my flat, number 4, one day soon. Bye, Sasha!', ru: 'Здорово! Как-нибудь на днях чай у меня, квартира 4. Пока, Саша!' },
+      { npc: "Lovely! Come for tea one day. I'm in flat 4. Bye, Sasha!", ru: 'Здорово! Заходи как-нибудь на чай. Я в квартире 4. Пока, Саша!' },
       {
         reply: [
           { en: 'Thanks, Tom. See you soon!', ru: 'Спасибо, Том. До скорого!', ok: true },
@@ -255,11 +255,11 @@ export const S4: Scene[] = [
       { npc: 'Hello. Can I see your passport, please?', ru: 'Здравствуйте. Покажите паспорт, пожалуйста.' },
       {
         reply: [
-          { en: "Here you are. I've got a Russian passport.", ru: 'Вот. У меня российский паспорт.', ok: true },
+          { en: "Here you are. It's a Russian passport.", ru: 'Вот. Паспорт российский.', ok: true },
           {
-            en: 'Here you are. I has a Russian passport.',
-            ru: 'Вот. У меня российский паспорт.',
-            why: 'С I нужно have (’ve), а не has.',
+            en: "Here you are. It's Russian passport.",
+            ru: 'Вот. Российский паспорт.',
+            why: 'Перед одним паспортом нужен артикль: a Russian passport.',
             react: 'Sorry? Say that again, please.',
           },
           {
@@ -269,7 +269,7 @@ export const S4: Scene[] = [
             react: "Yes, it is! But what's this? A passport, thank you.",
           },
         ],
-        accept: ['Here you are. I have a Russian passport.'],
+        accept: ['Here you are. It is a Russian passport.'],
       },
       { npc: 'Thanks. How many bags have you got?', ru: 'Спасибо. Сколько у вас сумок?' },
       {

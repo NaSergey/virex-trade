@@ -42,7 +42,7 @@ export const S6: Scene[] = [
           },
         ],
       },
-      { npc: 'Here is the menu. Are you OK with everything?', ru: 'Вот меню. Вам всё подходит?' },
+      { npc: 'Here is the menu. Can you eat everything?', ru: 'Вот меню. Вы едите всё?' },
       {
         reply: [
           { en: "No. I can't eat nuts.", ru: 'Нет. Мне нельзя орехи.', ok: true },
@@ -97,7 +97,7 @@ export const S6: Scene[] = [
           },
         ],
       },
-      { npc: 'Of course. Your chicken is coming. Can you wait five minutes?', ru: 'Конечно. Ваша курица скоро будет. Можете подождать пять минут?' },
+      { npc: 'Of course. Your drink is coming. Can you wait five minutes?', ru: 'Конечно. Ваш напиток уже несут. Можете подождать пять минут?' },
       {
         reply: [
           { en: 'Yes, I can. No problem.', ru: 'Да, могу. Без проблем.', ok: true },
@@ -180,7 +180,7 @@ export const S6: Scene[] = [
           },
         ],
       },
-      { npc: 'Can you run? Are you good at running?', ru: 'А бегать умеете? Вы хорошо бегаете?' },
+      { npc: 'And can you run fast?', ru: 'А быстро бегать умеете?' },
       {
         reply: [
           { en: "No, I can't run fast.", ru: 'Нет, быстро бегать не умею.', ok: true },
@@ -305,7 +305,7 @@ export const S6: Scene[] = [
           { en: 'Yes, I like him very much.', ru: 'Да, он мне очень нравится.', ok: true },
           {
             en: 'Yes, I like he very much.',
-            ru: 'Да, он мне очень нравится (он).',
+            ru: 'Да, он мне очень нравится.',
             why: 'После глагола ставят him, а не he.',
             react: 'Like he? Sorry?',
           },
