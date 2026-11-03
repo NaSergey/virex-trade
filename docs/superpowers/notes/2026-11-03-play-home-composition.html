@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>J · Игры — одна композиция</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,500;7..72,600;7..72,700&amp;family=Golos+Text:wght@400;500;600&amp;family=JetBrains+Mono:wght@500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#F2EADF}a:hover{color:#FFFFFF}
+.jc{--ground:#0E0B0C;--felt:#111A2C;--ink:#F2EADF;--ink2:#BBAE9F;--ink3:#968A7D;--paper:#EFE6D6;--paper-ink:#1B1516;--brass:#C9A45C;--brass-h:#D6B373;--brass-ink:#1A1308;--hair:rgba(201,164,92,.4);--garnet:#6A1D2A;--emerald:#16493A;--sapphire:#1F3F70;--cognac:#6A4317;
+  position:relative;width:1440px;height:900px;overflow:hidden;background:var(--ground);color:var(--ink);font-family:"Golos Text",system-ui,sans-serif;font-variant-numeric:tabular-nums}
+.jc *{box-sizing:border-box}
+.jc p,.jc h1,.jc h2,.jc h3{margin:0}
+.layer{position:absolute;inset:0;width:1440px;height:900px;pointer-events:none}
+.grain{opacity:.13;mix-blend-mode:overlay}
+.sc{font-size:12px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--brass)}
+.mono{font-family:"JetBrains Mono",Consolas,monospace}
+.coin{width:16px;height:12px;flex:none;color:var(--brass)}
+
+.nav{position:absolute;left:96px;right:96px;top:20px;height:44px;display:flex;align-items:center;gap:40px}
+.logo{font-family:Literata,Georgia,serif;font-weight:600;font-size:22px;color:var(--ink);text-decoration:none}
+.logo span{color:var(--brass)}
+.tabs{display:flex;gap:28px}
+.tab{font-size:15px;color:var(--ink2);text-decoration:none;padding:4px 0;border-bottom:1px solid transparent}
+.tab.on{color:var(--ink);border-bottom-color:var(--brass)}
+.me{margin-left:auto;display:flex;align-items:center;gap:14px}
+.bal{display:flex;align-items:center;gap:8px;height:36px;padding:0 14px;border:1px solid var(--hair);border-radius:6px;font-family:"JetBrains Mono",monospace;font-weight:700;font-size:15px}
+.ava{width:36px;height:36px;border-radius:50%;border:1px solid var(--hair);overflow:hidden;display:block}
+
+.title{position:absolute;left:96px;top:112px;width:600px;display:flex;flex-direction:column;gap:14px}
+.title h1{font-family:Literata,Georgia,serif;font-weight:600;font-size:64px;line-height:1;letter-spacing:-.01em}
+.title .sub{font-size:15px;color:var(--ink2)}
+.row{display:flex;align-items:center;gap:22px;margin-top:4px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:46px;padding:0 22px;border-radius:6px;border:0;font-family:"Golos Text",sans-serif;font-weight:600;font-size:15px;text-decoration:none;cursor:pointer;white-space:nowrap}
+.btn.brass{background:var(--brass);color:var(--brass-ink)}
+.btn.brass:hover{background:var(--brass-h);color:var(--brass-ink)}
+.clock span{display:block;font-size:12px;color:var(--ink3)}
+.clock b{display:block;font-family:"JetBrains Mono",monospace;font-weight:700;font-size:17px;margin-top:2px}
+
+.ticket{position:absolute;left:1060px;top:104px;width:284px;transform:rotate(4deg);transform-origin:50% 50%;background:var(--paper);color:var(--paper-ink);border-radius:6px;box-shadow:0 18px 40px rgba(0,0,0,.45)}
+.ticket .top{padding:18px 20px 14px;display:flex;flex-direction:column;gap:6px}
+.ticket .live{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;letter-spacing:.16em;color:var(--garnet)}
+.ticket .live i{width:7px;height:7px;border-radius:50%;background:var(--garnet)}
+.ticket h2{font-family:Literata,Georgia,serif;font-weight:600;font-size:26px;line-height:1.1}
+.ticket .meta{font-size:13px;color:#5C4F45}
+.perf{position:relative;border-top:1px dashed rgba(27,21,22,.35);margin:0 14px}
+.perf::before,.perf::after{content:"";position:absolute;top:-8px;width:16px;height:16px;border-radius:50%;background:var(--ground)}
+.perf::before{left:-22px}.perf::after{right:-22px}
+.ticket .bot{padding:14px 20px 16px;display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end}
+.ticket .bot span{display:block;font-size:11px;color:#6F6257}
+.ticket .bot b{display:flex;align-items:center;gap:5px;font-family:"JetBrains Mono",monospace;font-weight:700;font-size:16px;margin-top:2px}
+.ticket .bot .coin{color:#8A6A2C}
+.ticket a{color:var(--garnet);font-weight:600;font-size:13px;text-decoration:none;white-space:nowrap}
+
+.lbl{position:absolute;font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--ink3);transform:translate(-50%,-50%);white-space:nowrap}
+.lbl b{color:var(--ink2);font-weight:500}
+.mark{position:absolute;transform:translate(-50%,-50%);font-family:"JetBrains Mono",monospace;font-weight:700;font-size:12px;color:var(--brass);white-space:nowrap}
+
+.card{position:absolute;left:600px;top:540px;width:240px;height:340px;transform-origin:120px 660px;border-radius:8px;background:var(--c);color:var(--ink);text-decoration:none;padding:20px;box-shadow:-10px 0 28px rgba(0,0,0,.42),10px 0 28px rgba(0,0,0,.42)}
+.card::before{content:"";position:absolute;inset:8px;border:1px solid var(--hair);border-radius:4px;pointer-events:none}
+.card .sc{position:relative;display:block}
+.card h3{position:relative;font-family:Literata,Georgia,serif;font-weight:600;font-size:24px;margin-top:6px}
+.card.r{text-align:right}
+.card svg{position:absolute;left:18px;top:112px;width:204px;height:auto}
+.card svg text{font-family:Literata,Georgia,serif}
+.c-bj{--c:var(--emerald)}.c-pk{--c:var(--garnet)}.c-jp{--c:var(--sapphire)}.c-rc{--c:var(--cognac)}
+.c-tr{--c:var(--paper);color:var(--paper-ink)}
+.c-tr::before{border-color:rgba(106,29,42,.35)}
+.c-tr .sc{color:var(--garnet)}
+.c-tr .go{position:absolute;left:20px;right:20px;bottom:22px;display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:600;color:var(--garnet)}
+
+.print{position:absolute;bottom:26px;width:300px;font-size:13px;line-height:1.55;color:var(--ink2)}
+.print b{color:var(--ink);font-weight:600}
+.print.l{left:96px}
+.print.r{right:96px;text-align:right}
+</style>
+</helmet>
+<div class="jc">
+  <svg class="layer" viewBox="0 0 1440 900" aria-hidden="true">
+    <circle cx="720" cy="1200" r="820" fill="#111A2C"></circle>
+    <circle cx="720" cy="1200" r="806" fill="none" stroke="rgba(201,164,92,.10)" stroke-width="1"></circle>
+    <path d="M24.6 765.5A820 820 0 0 1 1415.4 765.5" fill="none" stroke="rgba(201,164,92,.38)" stroke-width="1"></path>
+    <path d="M24.6 765.5A820 820 0 0 1 437.9 430.1" fill="none" stroke="#C9A45C" stroke-width="3" stroke-linecap="round"></path>
+    <path d="M39.8 734.9L34.9 731.5M59.6 707.2L54.8 703.6M80.6 680.3L75.9 676.5M102.6 654.3L98.1 650.4M125.6 629.3L121.3 625.1M149.7 605.2L145.6 600.9M174.8 582.2L170.8 577.7M200.8 560.2L197.0 555.5M227.6 539.3L224.0 534.5M283.8 500.9L280.7 495.8M313.1 483.5L310.1 478.3M343.0 467.3L340.3 461.9M373.6 452.3L371.1 446.9M404.8 438.7L402.5 433.1" stroke="#C9A45C" stroke-width="1.2"></path>
+    <path d="M436.5 426.3L434.5 420.7M468.7 415.2L466.9 409.5M501.4 405.5L499.8 399.8M534.4 397.2L533.0 391.3M601.3 384.6L600.4 378.7M635.0 380.4L634.4 374.4M669.0 377.6L668.6 371.6M703.0 376.2L702.9 370.2M737.0 376.2L737.1 370.2M771.0 377.6L771.4 371.6M805.0 380.4L805.6 374.4M838.7 384.6L839.6 378.7M872.3 390.2L873.4 384.3M938.6 405.5L940.2 399.8M971.3 415.2L973.1 409.5M1003.5 426.3L1005.5 420.7M1035.2 438.7L1037.5 433.1M1066.4 452.3L1068.9 446.9M1097.0 467.3L1099.7 461.9M1126.9 483.5L1129.9 478.3M1156.2 500.9L1159.3 495.8M1184.7 519.5L1188.0 514.6M1239.2 560.2L1243.0 555.5M1265.2 582.2L1269.2 577.7M1290.3 605.2L1294.4 600.9M1314.4 629.3L1318.7 625.1M1337.4 654.3L1341.9 650.4M1359.4 680.3L1364.1 676.5M1380.4 707.2L1385.2 703.6M1400.2 734.9L1405.1 731.5" stroke="rgba(201,164,92,.45)" stroke-width="1.2"></path>
+    <path d="M21.2 763.3L7.6 754.9M255.3 519.5L246.3 506.3M567.7 390.2L564.7 374.5M905.6 397.2L909.3 381.6M1212.4 539.3L1221.9 526.5M1418.8 763.3L1432.4 754.9" stroke="#C9A45C" stroke-width="1.5"></path>
+    <circle cx="437.9" cy="430.1" r="7" fill="#0E0B0C" stroke="#C9A45C" stroke-width="2"></circle>
+    <circle cx="437.9" cy="430.1" r="3" fill="#C9A45C"></circle>
+  </svg>
+  <svg class="layer grain" aria-hidden="true"><filter id="gJ"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="3" stitchTiles="stitch"></feTurbulence><feColorMatrix type="saturate" values="0"></feColorMatrix></filter><rect width="100%" height="100%" filter="url(#gJ)"></rect></svg>
+
+  <span class="lbl" style="left:60px;top:790px">1</span>
+  <span class="lbl" style="left:282px;top:556px">11 · <b>+100</b></span>
+  <span class="lbl" style="left:576px;top:432px">21 · <b>+150</b></span>
+  <span class="lbl" style="left:897px;top:438px">31 · <b>+200</b></span>
+  <span class="lbl" style="left:1186px;top:574px">41 · <b>+250</b></span>
+  <span class="lbl" style="left:1380px;top:790px">50</span>
+  <span class="mark" style="left:451px;top:470px">уровень 17</span>
+
+  <header class="nav">
+    <a class="logo" href="#">Trade <span>Play</span></a>
+    <nav class="tabs" aria-label="Разделы">
+      <a class="tab on" href="#">Игры</a>
+      <a class="tab" href="I-Tournaments.dc.html">Турниры</a>
+      <a class="tab" href="I-Profile.dc.html">Профиль</a>
+    </nav>
+    <div class="me">
+      <span class="bal"><svg class="coin" viewBox="0 0 100 74" aria-hidden="true"><path d="M0 10.8 29.2 10.5 55.5 56 42.1 73.6Z" fill="currentColor"></path><path d="M48.5 38.1 64.5 15.2 100 0 56.5 55.2Z" fill="currentColor" opacity=".8"></path></svg>4 820</span>
+      <a class="ava" href="I-Profile.dc.html" aria-label="Профиль"><svg viewBox="0 0 36 36" aria-hidden="true"><rect width="36" height="36" fill="#1E1819"></rect><circle cx="18" cy="14" r="6" fill="#C9A45C"></circle><path d="M6 36c1.5-8 6-11 12-11s10.5 3 12 11z" fill="#C9A45C"></path></svg></a>
+    </div>
+  </header>
+
+  <section class="title" aria-label="Сезон">
+    <span class="sc">Сезон 2026-Q4</span>
+    <h1>Каждый уровень —<br>монеты</h1>
+    <p class="sub">Уровень 17 из 50 · до 18-го — 160 опыта · за сезон до 7 450 монет</p>
+    <div class="row">
+      <a class="btn brass" href="I-Profile.dc.html">Забрать +450</a>
+      <div class="clock"><span>до конца сезона</span><b>58 д 06:41:12</b></div>
+    </div>
+  </section>
+
+  <article class="ticket" aria-label="Турнир в эфире">
+    <div class="top">
+      <span class="live"><i></i>В ЭФИРЕ</span>
+      <h2>Вечерний эфир</h2>
+      <p class="meta">Арена · 6 игроков · BTC, ETH, SOL</p>
+    </div>
+    <div class="perf" aria-hidden="true"></div>
+    <div class="bot">
+      <div><span>Фонд</span><b>600 <svg class="coin" viewBox="0 0 100 74" aria-hidden="true"><path d="M0 10.8 29.2 10.5 55.5 56 42.1 73.6Z" fill="currentColor"></path><path d="M48.5 38.1 64.5 15.2 100 0 56.5 55.2Z" fill="currentColor" opacity=".8"></path></svg></b></div>
+      <div><span>До конца</span><b>01:12:40</b></div>
+      <a href="I-Tournaments.dc.html">Смотреть →</a>
+    </div>
+  </article>
+
+  <a class="card c-bj" href="#" style="transform:rotate(-24deg);z-index:1">
+    <span class="sc">Столы</span>
+    <h3>Блэкджек</h3>
+    <svg viewBox="0 0 200 150" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true">
+      <g transform="rotate(-10 70 76)"><rect x="40" y="28" width="60" height="86" rx="5"></rect><text x="50" y="52" fill="currentColor" stroke="none" font-weight="600" font-size="19">A</text><path d="M70 70c-6 6-12 10-12 15a6 6 0 0 0 11 2l-2 6h7l-2-6a6 6 0 0 0 11-2c0-5-6-9-13-15z" fill="#C9A45C" stroke="none"></path></g>
+      <g transform="rotate(8 122 72)"><rect x="92" y="24" width="60" height="86" rx="5"></rect><text x="102" y="48" fill="currentColor" stroke="none" font-weight="600" font-size="19">J</text></g>
+      <circle cx="160" cy="122" r="18" stroke="#C9A45C"></circle><text x="160" y="128" text-anchor="middle" fill="#C9A45C" stroke="none" font-weight="600" font-size="15">21</text>
+    </svg>
+  </a>
+  <a class="card c-pk" href="#" style="transform:rotate(-12deg);z-index:2">
+    <span class="sc">Столы</span>
+    <h3>Покер</h3>
+    <svg viewBox="0 0 200 150" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true">
+      <g transform="rotate(-12 74 78)"><rect x="44" y="30" width="60" height="86" rx="5"></rect><text x="54" y="54" fill="currentColor" stroke="none" font-weight="600" font-size="19">A</text></g>
+      <g transform="rotate(8 118 74)"><rect x="90" y="26" width="60" height="86" rx="5"></rect><text x="100" y="50" fill="#C9A45C" stroke="none" font-weight="600" font-size="19">A</text><path d="M120 92c-8-6-11-11-11-14 0-4 3-6 5.5-6s4.5 2 5.5 4.5c1-2.5 3-4.5 5.5-4.5s5.5 2 5.5 6c0 3-3 8-11 14z" fill="#C9A45C" stroke="none"></path></g>
+    </svg>
+  </a>
+  <a class="card c-rc r" href="#" style="transform:rotate(24deg);z-index:1">
+    <span class="sc">Трое на трассе</span>
+    <h3>Гонки</h3>
+    <svg viewBox="0 0 200 150" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
+      <path d="M88 18 24 146M112 18l64 128"></path><path d="M100 26v12M100 52v16M100 84v20" stroke="#C9A45C" stroke-width="2.4"></path>
+      <g transform="translate(100 118)"><path d="M-28-6-20-28h40l8 22z"></path><rect x="-44" y="-6" width="88" height="30" rx="8"></rect><path d="M-34 6h12M22 6h12" stroke="#C9A45C" stroke-width="2.4"></path></g>
+    </svg>
+  </a>
+  <a class="card c-jp r" href="#" style="transform:rotate(12deg);z-index:2">
+    <span class="sc">Раунд на всех</span>
+    <h3>Джетпак</h3>
+    <svg viewBox="0 0 200 150" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
+      <path d="M20 140Q70 120 104 74" stroke="#C9A45C" stroke-dasharray="1.5 8"></path>
+      <g transform="translate(122 66) rotate(40)"><path d="M0-40C14-25 14 6 11 28h-22C-14 6-14-25 0-40z"></path><circle cx="0" cy="-10" r="6"></circle><path d="M-11 10-22 32l11-4M11 10l11 22-11-4"></path><path d="M-6 30Q0 52 6 30" stroke="#C9A45C"></path></g>
+      <text x="138" y="140" fill="#C9A45C" stroke="none" font-weight="600" font-size="20" font-style="italic">2.40×</text>
+    </svg>
+  </a>
+  <a class="card c-tr" href="I-Tournaments.dc.html" style="transform:rotate(0deg);z-index:3">
+    <span class="sc">Турниры</span>
+    <h3>Торговля</h3>
+    <svg viewBox="0 0 200 150" fill="none" stroke="#1B1516" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+      <path d="M30 108v32M56 110v22M82 92v40M108 90v22M134 66v44M160 38v42"></path>
+      <rect x="24" y="116" width="12" height="18" fill="#16493A" stroke="none"></rect><rect x="50" y="116" width="12" height="10" fill="#6A1D2A" stroke="none"></rect><rect x="76" y="98" width="12" height="28" fill="#16493A" stroke="none"></rect><rect x="102" y="98" width="12" height="8" fill="#6A1D2A" stroke="none"></rect><rect x="128" y="74" width="12" height="30" fill="#16493A" stroke="none"></rect><rect x="154" y="46" width="12" height="26" fill="#16493A" stroke="none"></rect>
+    </svg>
+    <span class="go">Турниры на живом рынке <span aria-hidden="true">→</span></span>
+  </a>
+
+  <p class="print l"><b>Монеты.</b> Каждый день +50 → +300, за сезон до 7 450, купить — 500 за 1 USDT. Вывод пока в разработке.</p>
+  <p class="print r">Все игры идут на монеты.<br>Деньги биржевого счёта в них не участвуют.</p>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
