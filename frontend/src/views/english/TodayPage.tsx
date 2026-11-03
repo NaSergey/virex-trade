@@ -6,7 +6,7 @@ import { PageHead } from '@/shared/ui/PageHead';
 import { SkeletonLines } from '@/shared/ui/Skeleton';
 import { usePersistentValue } from '@/shared/lib/storage/usePersistentValue';
 import { dateFormat } from '@/shared/lib/utils/intl';
-import { useEnglishState, type EnglishState } from './api/hooks';
+import { useEnglishState, useRuns, type EnglishState } from './api/hooks';
 import { Calendar } from './components/today/Calendar';
 import { DoneLessons } from './components/today/DoneLessons';
 import { PlanRow } from './components/today/PlanRow';
@@ -17,6 +17,8 @@ import { activityOf, localDay, streak } from './model/activity';
 import { currentSection, openUnits } from './model/course';
 import { catalog, dayProgress, deckOf, queue } from './model/deck';
 import { GOAL_ANSWERS, GOAL_PHRASES, mistakeCount, plural, practiceTarget } from './model/today';
+import { canListen } from './model/speech';
+import { questProgress, questsOf, statsOfDay } from './game/model/meta';
 
 // Те же ключи и значения по умолчанию, что у страницы карточек: очередь здесь — её очередь.
 const NEW_LIMITS = [10, 20, 50] as const;
@@ -72,6 +74,12 @@ function Today({ data, error }: { data: EnglishState; error: unknown }) {
   const deckEmpty = deck.length === 0;
   const repeat = q.due.length + q.ahead.length;
 
+  // Игра: задания дня — та же выборка, что на её экране.
+  const runs = useRuns();
+  const quests = runs.data ? questsOf(today, runs.data, canListen(), q.fresh.length > 0) : null;
+  const todayRuns = runs.data ? statsOfDay(runs.data, today) : [];
+  const questsDone = quests ? quests.filter((x) => questProgress(x, todayRuns) >= x.target).length : 0;
+
   const lesson = currentSection(COURSE, data.lessons);
   const lessonToday = [...data.lessonDates.values()].some((t) => localDay(t) === today);
   const target = practiceTarget(COURSE, data.lessons, EXERCISES);
@@ -125,6 +133,12 @@ function Today({ data, error }: { data: EnglishState; error: unknown }) {
           title="Карточки"
           status={deckEmpty ? 'колода пуста' : day.total > 0 ? `пройдено ${day.done} из ${day.total}` : 'на сегодня всё'}
           done={!deckEmpty && repeat === 0 && q.fresh.length === 0}
+        />
+        <PlanRow
+          href="/english/game"
+          title="Игра"
+          status={quests ? `заданий дня ${questsDone} из ${quests.length}` : 'Mind the Gap'}
+          done={!!quests && questsDone === quests.length}
         />
       </ul>
 

@@ -3,18 +3,22 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BookOpen, CalendarCheck, Layers, Library, Mic, PenLine, type LucideIcon } from 'lucide-react';
+import { BookOpen, CalendarCheck, Gamepad2, Layers, Library, Mic, PenLine, type LucideIcon } from 'lucide-react';
 import { Wrap } from '@/shared/ui/Wrap';
 import { adminPath } from '@/shared/lib/utils/admin-host';
+import { cn } from '@/shared/lib/utils/css';
+import { useRunActive } from './game/run-active';
 import './english.css';
 
 /**
  * Порядок — путь занятия: план дня, затем учебник (урок → практика → речь на
  * фразах пройденных уроков), затем слова (карточки → темы-словарь). План на
- * «Сегодня» идёт в том же порядке.
+ * «Сегодня» идёт в том же порядке. Игра — сразу после плана дня: второй путь
+ * через те же слова и упражнения.
  */
 const TABS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: '/english', label: 'Сегодня', icon: CalendarCheck },
+  { href: '/english/game', label: 'Игра', icon: Gamepad2 },
   { href: '/english/lessons', label: 'Уроки', icon: BookOpen },
   { href: '/english/practice', label: 'Практика', icon: PenLine },
   { href: '/english/speak', label: 'Речь', icon: Mic },
@@ -40,8 +44,10 @@ const isTab = (path: string, href: string) =>
  */
 export function EnglishLayout({ children }: { children: ReactNode }) {
   const path = adminPath(usePathname());
+  // На время забега панель вкладок на телефоне прячется — выход через паузу.
+  const running = useRunActive();
   return (
-    <Wrap page className="en en-app">
+    <Wrap page className={cn('en en-app', running && 'en-running')}>
       <nav className="en-tabs" aria-label="Разделы учебника">
         {TABS.map(({ href, label, icon: Icon }) => (
           <Link key={href} href={href} aria-current={isTab(path, href) ? 'page' : undefined}>

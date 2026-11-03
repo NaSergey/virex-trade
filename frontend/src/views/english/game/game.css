@@ -1,0 +1,275 @@
+/* ═══════════════════════════════════════════════════════════════
+   ИГРА «MIND THE GAP» (views/english/game, спека
+   docs/superpowers/specs/2026-11-04-english-game-design.md).
+
+   Поле забега всегда тёмное — «ночной Лондон» — в обеих темах: прикладные
+   имена темы переопределяются на корне `.eg-run`, общие компоненты берут
+   краску оттуда же (приём игровых окон продукта). Без свечений и
+   градиентов: фактура — зерно тумана, цвет — по смыслу. Нулевой радиус,
+   кроме кружков станций на схеме. Двигаются только transform и opacity.
+   ═══════════════════════════════════════════════════════════════ */
+
+.eg-run {
+  --color-app: #050505;
+  --color-surface: #0b0b0a;
+  --color-fg: #e8e4dc;
+  --color-muted: #8e887e;
+  --color-subtle: #565149;
+  --color-line: rgba(232, 228, 220, 0.14);
+  --color-line-2: rgba(232, 228, 220, 0.26);
+  --color-line-strong: rgba(232, 228, 220, 0.3);
+  --color-up: #5ba378;
+  --color-down: #c9524a;
+  --ground: #050505;
+  --ground-rgb: 5 5 5;
+  --ink: #e8e4dc;
+  --ink-rgb: 232 228 220;
+  --ink-2: #8e887e;
+  --ink-3: #565149;
+  --hair: rgba(232, 228, 220, 0.14);
+  --hair-2: rgba(232, 228, 220, 0.26);
+  --rule: rgba(232, 228, 220, 0.3);
+  --profit: #5ba378;
+  --loss: #c9524a;
+  /* Линия схемы — красная, как у одной из линий подземки; больше нигде не красит. */
+  --eg-track: #c8372d;
+  --eg-gold: #b8893f;
+  --eg-fill: #0d0d0c;
+  --eg-fill-2: #151513;
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  max-width: 640px;
+  min-height: calc(100dvh - 160px);
+  margin: 0 auto;
+  padding: var(--s3);
+  background: var(--ground);
+  color: var(--ink);
+}
+
+.eg h2 { margin: 0; font-size: var(--t-l); font-weight: 400; }
+.eg h3 { margin: var(--s3) 0 var(--s2); }
+.eg-row { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; }
+.eg-center { justify-content: center; }
+.eg-note { margin: 0; color: var(--ink-2); font-size: var(--t-s); }
+.eg-task,
+.eg-tag {
+  margin: 0;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.eg-key {
+  display: inline-block;
+  min-width: 1.4em;
+  margin-right: var(--s1);
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+}
+.eg-list { display: flex; flex-direction: column; gap: var(--s1); margin: 0; padding: 0; list-style: none; }
+.eg-list li { padding: var(--s1) 0; border-bottom: 1px solid var(--hair); }
+
+/* ── полосы: здоровье, противник, задания, окно крита ─────────────── */
+.eg-bar { height: 4px; background: var(--hair); overflow: hidden; }
+.eg-bar i { display: block; height: 100%; background: var(--ink); transform-origin: left; transition: transform 240ms ease-out; }
+.eg-bar-hp i { background: var(--profit); }
+.eg-crit { height: 2px; background: var(--hair); overflow: hidden; }
+.eg-crit i { display: block; height: 100%; background: var(--eg-gold); transform-origin: left; animation: eg-crit linear forwards; }
+@keyframes eg-crit { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+/* ── строка состояния ─────────────────────────────────────────────── */
+.eg-status { display: flex; flex-direction: column; gap: var(--s2); padding-bottom: var(--s2); border-bottom: 1px solid var(--hair); }
+.eg-status-row { display: flex; align-items: center; gap: var(--s3); font-family: var(--font-mono); font-size: var(--t-xs); }
+.eg-hp { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 90px; }
+.eg-stat { color: var(--ink-2); white-space: nowrap; }
+.eg-pocket { display: flex; flex-wrap: wrap; gap: var(--s1); }
+.eg-sheet { display: flex; flex-direction: column; gap: var(--s2); margin: 0; padding: var(--s3); list-style: none; background: var(--eg-fill); border: 1px solid var(--hair); }
+
+/* ── схема линии ─────────────────────────────────────────────────── */
+.eg-map { display: flex; flex-direction: column; gap: var(--s3); }
+.eg-map-svg { display: block; width: 100%; max-width: 420px; height: auto; margin: 0 auto; }
+.eg-track { stroke: var(--hair-2); stroke-width: 2; }
+.eg-track-past { stroke: var(--eg-track); stroke-width: 6; }
+.eg-track-live { stroke: var(--ink); stroke-width: 2; stroke-dasharray: 4 4; }
+.eg-stn circle { fill: var(--ground); stroke: var(--ink-3); stroke-width: 2; }
+.eg-stn svg { color: var(--ink-3); }
+.eg-stn-past circle { stroke: var(--eg-track); }
+.eg-stn-past svg { color: var(--ink-2); }
+.eg-stn-next { cursor: pointer; }
+.eg-stn-next circle { fill: var(--ink); stroke: var(--ink); }
+.eg-stn-next svg { color: var(--ground); }
+.eg-stn-next:focus-visible { outline: none; }
+.eg-stn-next:focus-visible circle { stroke: var(--eg-gold); stroke-width: 3; }
+.eg-stn-here circle { fill: var(--eg-track); stroke: var(--eg-track); }
+.eg-stn-here svg { color: var(--ink); }
+.eg-stn-boss circle { stroke-width: 3; }
+.eg-map-row { fill: var(--ink-3); font-family: var(--font-mono); font-size: 10px; }
+.eg-map-go { position: sticky; bottom: 0; padding: var(--s2) 0; background: var(--ground); border-top: 1px solid var(--hair); }
+.eg-map-go p { margin: 0 0 var(--s2); }
+
+/* ── бой ─────────────────────────────────────────────────────────── */
+.eg-fight { display: flex; flex-direction: column; gap: var(--s3); }
+.eg-foe { display: flex; flex-direction: column; gap: var(--s1); }
+.eg-foe-name { display: flex; align-items: baseline; gap: var(--s2); }
+.eg-foe-name span { color: var(--ink-3); font-family: var(--font-mono); font-size: var(--t-xs); letter-spacing: 0.14em; text-transform: uppercase; }
+.eg-foe-name b { font-family: var(--font-mono); font-size: var(--t-m); font-weight: 400; letter-spacing: 0.22em; text-transform: uppercase; }
+.eg-foe-rule { margin: 0; font-size: var(--t-s); }
+.eg-foe-meta { display: flex; justify-content: space-between; margin: 0; color: var(--ink-2); font-family: var(--font-mono); font-size: var(--t-xs); }
+
+.eg-fog { position: relative; min-height: 300px; overflow: hidden; border: 1px solid var(--hair); background: var(--eg-fill); }
+.eg-fog-layers { position: absolute; inset: 0; pointer-events: none; transition: opacity 400ms ease-out; }
+.eg-fog-shake { position: absolute; inset: 0; animation: eg-shake 220ms ease-out; }
+.eg-fog-layer {
+  position: absolute;
+  inset: -160px;
+  background-image: var(--eg-grain);
+  background-size: 160px 160px;
+  animation: eg-drift 38s linear infinite;
+}
+.eg-fog-layer-2 { background-size: 240px 240px; opacity: 0.6; animation-duration: 61s; animation-direction: reverse; }
+@keyframes eg-drift { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(160px, 80px, 0); } }
+@keyframes eg-shake {
+  0% { transform: translateX(0); }
+  30% { transform: translateX(-6px); }
+  60% { transform: translateX(4px); }
+  100% { transform: translateX(0); }
+}
+.eg-fog-body { position: relative; display: flex; flex-direction: column; gap: var(--s3); padding: var(--s3); }
+
+.eg-prompt { margin: var(--s2) 0; font-size: var(--t-xl); line-height: 1.2; text-align: center; }
+.eg-prompt-en { font-family: var(--font-serif); }
+.eg-word { margin: 0; font-size: var(--t-xl); line-height: 1.2; text-align: center; }
+.eg-word-ru { margin: 0; color: var(--ink-2); font-size: var(--t-m); text-align: center; }
+.eg-example { display: flex; flex-direction: column; gap: 2px; margin: 0; font-size: var(--t-s); text-align: center; }
+.eg-intro,
+.eg-result,
+.eg-challenge,
+.eg-choose { display: flex; flex-direction: column; gap: var(--s3); }
+.eg-intro > .btn,
+.eg-result > .btn { align-self: center; min-width: 50%; }
+
+.eg-attacks,
+.eg-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2); }
+.eg-attacks .btn,
+.eg-options .btn,
+.eg-cards .btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 64px;
+  padding: var(--s2) var(--s3);
+  text-align: left;
+  white-space: normal;
+}
+.eg-options .btn { flex-direction: row; align-items: center; min-height: 52px; }
+.eg-options-wide { grid-template-columns: 1fr; }
+.eg-attack-dmg { font-family: var(--font-mono); font-size: var(--t-l); }
+.eg-attacks .muted { font-size: var(--t-xs); }
+
+.eg-type { display: flex; flex-direction: column; gap: var(--s2); }
+.eg-type .in { font-size: 18px; text-align: center; }
+.eg-cells { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s2); }
+.eg-cells-word { display: flex; gap: 3px; }
+.eg-cells i {
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 16px;
+  height: 22px;
+  border-bottom: 1px solid var(--ink-2);
+  font-family: var(--font-mono);
+  font-style: normal;
+}
+.eg-speak { display: flex; flex-direction: column; gap: var(--s2); align-items: flex-start; }
+.eg-order { display: flex; flex-direction: column; gap: var(--s2); }
+.eg-built { min-height: 2em; margin: 0; padding: var(--s2); border-bottom: 1px solid var(--hair-2); font-size: var(--t-m); }
+.eg-bank { display: flex; flex-wrap: wrap; gap: var(--s1); }
+
+.eg-hits { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s3); margin: 0; font-family: var(--font-mono); }
+.eg-dmg { color: var(--ink); font-size: var(--t-l); animation: eg-pop 260ms ease-out; }
+.eg-critlabel { color: var(--eg-gold); letter-spacing: 0.14em; text-transform: uppercase; }
+@keyframes eg-pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.eg-result-bad .eg-word { color: var(--ink); }
+
+.eg-boss-turn { display: flex; flex-direction: column; gap: var(--s3); }
+.eg-boss-intro h2 { font-family: var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; }
+.eg-rules { padding: var(--s3); border: 1px solid var(--hair); }
+
+/* ── остановки ───────────────────────────────────────────────────── */
+.eg-stop { display: flex; flex-direction: column; gap: var(--s3); }
+.eg-stop p { margin: 0; }
+.eg-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--s2); }
+.eg-modepick { display: flex; flex-direction: column; gap: var(--s2); padding: var(--s3); border: 1px solid var(--hair); }
+.eg-shop { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.eg-shop li { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); padding: var(--s2) 0; border-bottom: 1px solid var(--hair); }
+.eg-shop li div { display: flex; flex-direction: column; gap: 2px; }
+
+/* ── сцена ───────────────────────────────────────────────────────── */
+.eg-scene { display: flex; flex-direction: column; gap: var(--s2); }
+.eg-plate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--s2) var(--s3);
+  border: 2px solid var(--ink);
+}
+.eg-plate b { font-family: var(--font-mono); font-size: var(--t-m); font-weight: 400; letter-spacing: 0.2em; }
+.eg-plate span { color: var(--ink-2); font-size: var(--t-s); }
+.eg-scene-who { display: flex; justify-content: space-between; gap: var(--s2); margin: 0; font-size: var(--t-s); }
+.eg-patience { color: var(--ink); letter-spacing: 0.2em; }
+.eg-goal { margin: 0; font-size: var(--t-s); }
+.eg-log { display: flex; flex-direction: column; gap: var(--s2); max-height: 42dvh; margin: 0; padding: var(--s2) 0; overflow-y: auto; list-style: none; }
+.eg-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s1); max-width: 88%; font-size: var(--t-m); line-height: 1.4; }
+.eg-line-npc { align-self: flex-start; }
+.eg-line-me { align-self: flex-end; justify-content: flex-end; padding: var(--s1) var(--s2); background: var(--eg-fill-2); }
+.eg-line-shown { color: var(--ink-2); }
+.eg-why { flex-basis: 100%; color: var(--ink-2); font-size: var(--t-s); }
+.eg-struck { text-decoration: line-through; opacity: 0.5; }
+.eg-scene-end { display: flex; flex-direction: column; gap: var(--s2); padding-top: var(--s2); border-top: 1px solid var(--hair); }
+.eg-stars { margin: 0; color: var(--eg-gold); font-size: var(--t-l); letter-spacing: 0.1em; }
+.eg-phrases { display: flex; flex-direction: column; gap: var(--s1); margin: 0; padding: 0; list-style: none; }
+.eg-phrases li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s2); }
+
+/* ── итог ────────────────────────────────────────────────────────── */
+.eg-results { display: flex; flex-direction: column; gap: var(--s2); }
+.eg-results p { margin: 0; }
+.eg-score { font-family: var(--font-mono); font-size: var(--t-xl); }
+.eg-score .muted { font-size: var(--t-s); }
+.eg-record { color: var(--eg-gold); font-size: var(--t-s); font-weight: 400; letter-spacing: 0.14em; text-transform: uppercase; }
+
+/* ── хаб ─────────────────────────────────────────────────────────── */
+.eg-hub-main { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s3); }
+.eg-hub-main p { margin: 0; }
+.eg-fogline { font-family: var(--font-mono); font-size: var(--t-s); letter-spacing: 0.06em; }
+.eg-start { min-width: 220px; min-height: 48px; }
+.eg-quests { display: flex; flex-direction: column; gap: var(--s2); margin: 0; padding: 0; list-style: none; }
+.eg-quests li { display: grid; grid-template-columns: 1fr auto; gap: var(--s1) var(--s2); }
+.eg-quests .eg-bar { grid-column: 1 / -1; }
+.eg-quest-n { color: var(--ink-2); font-family: var(--font-mono); font-size: var(--t-xs); }
+.eg-quest-done span { color: var(--profit); }
+.eg-strip { display: flex; gap: 3px; margin-top: var(--s3); }
+.eg-strip i { width: 14px; height: 14px; border: 1px solid var(--hair-2); }
+.eg-strip .eg-day-played { background: var(--ink-3); }
+.eg-strip .eg-day-gold { background: var(--eg-gold); border-color: var(--eg-gold); }
+.eg-collection details { padding: var(--s2) 0; border-bottom: 1px solid var(--hair); }
+.eg-collection summary { cursor: pointer; }
+.eg-collection .eg-list { margin-top: var(--s2); }
+
+@media (max-width: 760px) {
+  .eg-run { min-height: calc(100dvh - 72px); margin: 0 calc(-1 * var(--s3)); padding: var(--s3) var(--s3) calc(var(--s3) + env(safe-area-inset-bottom)); }
+  .eg-fog { min-height: 260px; }
+  .eg-prompt,
+  .eg-word { font-size: 28px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eg-fog-layer,
+  .eg-fog-shake,
+  .eg-dmg { animation: none; }
+}

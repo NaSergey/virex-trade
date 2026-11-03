@@ -127,6 +127,8 @@ export interface RunState {
   speech: boolean;
   map: Station[];
   at: string | null;
+  /** Пройденные станции по порядку — сплошная линия на схеме. */
+  path: string[];
   hp: number;
   maxHp: number;
   coins: number;
@@ -229,6 +231,7 @@ export function startRun(i: StartInput): RunState {
     speech: i.speech,
     map,
     at: null,
+    path: [],
     hp: maxHp - (i.fog >= 7 ? 4 : 0),
     maxHp,
     coins: 0,
@@ -804,6 +807,7 @@ function dispatch(c: Ctx, a: Action): boolean {
     case 'go': {
       if (s.screen.kind !== 'map' || !reachable(s.map, s.at).includes(a.station)) return false;
       s.at = a.station;
+      s.path.push(a.station);
       sound(c, 'step');
       enter(c, s.map.find((x) => x.id === a.station)!);
       return true;
