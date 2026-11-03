@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Activity, ChartCandlestick, Club, Flag, Gamepad2, History, NotebookPen, Rocket, Spade, Trophy, type LucideIcon } from 'lucide-react';
+import { Activity, ChartCandlestick, Gamepad2, History, NotebookPen, Trophy, UserRound, type LucideIcon } from 'lucide-react';
 import { useAppPart } from '@/shared/lib/utils/AppPartProvider';
 import { isActive, tabsOf, type Tab } from './sections';
 
@@ -14,11 +14,7 @@ const ICONS: Record<Tab, LucideIcon> = {
   backtest: History,
   games: Gamepad2,
   tournaments: Trophy,
-  poker: Spade,
-  blackjack: Club,
-  jetpack: Rocket,
-  race: Flag,
-  journalApp: NotebookPen,
+  profile: UserRound,
 };
 
 /**
@@ -46,19 +42,10 @@ export function TabBar() {
     <nav className="tabbar" aria-label={t('sections')} data-tour="nav">
       {tabsOf(part).map((item) => {
         const Icon = ICONS[item.id];
-        const face = (
-          <>
+        return (
+          <Link key={item.id} href={item.href} aria-current={isActive(pathname, item) ? 'page' : undefined}>
             <Icon size={20} strokeWidth={1.6} aria-hidden />
             <span>{t(item.labelKey)}</span>
-          </>
-        );
-        return item.other ? (
-          <a key={item.id} href={item.href}>
-            {face}
-          </a>
-        ) : (
-          <Link key={item.id} href={item.href} aria-current={isActive(pathname, item) ? 'page' : undefined}>
-            {face}
           </Link>
         );
       })}

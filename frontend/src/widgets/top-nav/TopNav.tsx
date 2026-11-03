@@ -230,11 +230,7 @@ export function TopNav() {
             />
           )}
           {nav.map((item) =>
-            item.other ? (
-              <a key={item.id} href={item.href}>
-                {t(item.labelKey)}
-              </a>
-            ) : item.id === 'journal' ? (
+            item.id === 'journal' ? (
               <Link
                 key={item.id}
                 ref={journalRef}
@@ -312,16 +308,12 @@ export function TopNav() {
                     2026-10-01): переход по адресу, а не окно. Кнопка меню
                     теперь кружок без подписи, и двух «Профилей» подряд нет. */}
                 {/* Сразу на `/profile/<id>`, а не на `/profile`: адрес в
-                    строке браузера и есть ссылка, которой делятся. Профиль живёт на
-                    площадке: из журнала туда обычная ссылка, куда надо уведёт гейт. */}
-                {play ? (
+                    строке браузера и есть ссылка, которой делятся. Профиль — игровой и
+                    живёт на площадке; журнал отдельный продукт, ссылки туда из него нет. */}
+                {play && (
                   <Link className="acct-item" href={user ? `/profile/${user.id}` : '/profile'} onClick={closeMenu}>
                     {t('battlePass')}
                   </Link>
-                ) : (
-                  <a className="acct-item" href={user ? `/profile/${user.id}` : '/profile'} onClick={closeMenu}>
-                    {t('battlePass')}
-                  </a>
                 )}
                 {/* Настройки — сюда же, рядом с языком: оба пункта про учётную
                     запись и подключение к ней, а не про работу с журналом,

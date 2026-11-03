@@ -55,11 +55,6 @@
     "backtest": "Backtest",
     "games": "Games",
     "tournaments": "Tournaments",
-    "poker": "Poker",
-    "blackjack": "Blackjack",
-    "jetpack": "Jetpack",
-    "race": "Racing",
-    "journalApp": "Journal",
     "support": "Support the developer",
     "referrals": "Invite a friend",
     "battlePass": "Profile"
@@ -815,18 +810,6 @@
         "s4": "Stage 4"
       },
       "items": {
-        "journal": {
-          "title": "Trade journal"
-        },
-        "tags": {
-          "title": "Tags & analytics"
-        },
-        "terminal": {
-          "title": "Bybit terminal"
-        },
-        "backtest": {
-          "title": "Backtest & simulator"
-        },
         "tournaments": {
           "title": "Trading tournaments"
         },
@@ -838,15 +821,7 @@
         },
         "profile": {
           "title": "Player profile",
-          "desc": "Stats across games, tournaments and trades"
-        },
-        "gridBots": {
-          "title": "Grid bots",
-          "desc": "An order grid that trades on its own"
-        },
-        "learning": {
-          "title": "Learning",
-          "desc": "How to build a system of your own setups"
+          "desc": "Stats across games and tournaments"
         },
         "newGames": {
           "title": "New games",
@@ -1722,7 +1697,7 @@
       "kicker": "Season {key}",
       "kickerShort": "Season",
       "title": "Every level pays coins",
-      "note": "XP comes from tournaments, games and trades in the terminal. Every tenth level is a big reward; unclaimed rewards expire when the season ends.",
+      "note": "XP comes from tournaments and games. Every tenth level is a big reward; unclaimed rewards expire when the season ends.",
       "action": "Season rewards",
       "claim": "Claim +{coins}",
       "endsIn": "Season ends in",

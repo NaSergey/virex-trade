@@ -4,33 +4,33 @@ import { isActive, navOf, tabsOf } from './sections';
 const ids = (list: { id: string }[]) => list.map((item) => item.id);
 
 describe('разделы частей', () => {
-  it('журнал: четыре раздела и выход на площадку', () => {
-    expect(ids(navOf('journal'))).toEqual(['terminal', 'journal', 'market', 'backtest', 'games']);
-    expect(navOf('journal').find((item) => item.id === 'games')?.other).toBe(true);
+  it('журнал: четыре раздела, ссылки на площадку нет', () => {
+    expect(ids(navOf('journal'))).toEqual(['terminal', 'journal', 'market', 'backtest']);
     expect(ids(tabsOf('journal'))).toEqual(ids(navOf('journal')));
   });
 
-  it('площадка: игры и выход в журнал; на телефоне три пункта', () => {
-    expect(ids(navOf('play'))).toEqual(['games', 'tournaments', 'poker', 'blackjack', 'jetpack', 'race', 'journalApp']);
-    expect(navOf('play').find((item) => item.id === 'journalApp')?.other).toBe(true);
-    expect(ids(tabsOf('play'))).toEqual(['games', 'tournaments', 'journalApp']);
+  it('площадка: игры, турниры и профиль; ни отдельных игр, ни журнала', () => {
+    expect(ids(navOf('play'))).toEqual(['games', 'tournaments', 'profile']);
+    expect(ids(tabsOf('play'))).toEqual(ids(navOf('play')));
   });
 
-  it('«Игры» горят только на витрине, игра — на своих адресах, чужая часть — никогда', () => {
+  it('«Игры» горят на витрине и в любой игре, кроме турниров; профиль — на любом профиле', () => {
     const of = (id: string) => navOf('play').find((item) => item.id === id)!;
     expect(isActive('/games', of('games'))).toBe(true);
-    expect(isActive('/games/poker/1', of('games'))).toBe(false);
-    expect(isActive('/games/poker/1', of('poker'))).toBe(true);
-    expect(isActive('/games/pokerx', of('poker'))).toBe(false);
-    expect(isActive('/games/trading', of('tournaments'))).toBe(true);
-    expect(isActive('/terminal', of('journalApp'))).toBe(false);
+    expect(isActive('/games/poker/1', of('games'))).toBe(true);
+    expect(isActive('/games/jetpack', of('games'))).toBe(true);
+    expect(isActive('/games/trading', of('games'))).toBe(false);
+    expect(isActive('/games/trading/abc', of('games'))).toBe(false);
+    expect(isActive('/games/trading/abc', of('tournaments'))).toBe(true);
+    expect(isActive('/games/tradingx', of('tournaments'))).toBe(false);
+    expect(isActive('/profile/abc', of('profile'))).toBe(true);
+    expect(isActive('/profiles', of('profile'))).toBe(false);
   });
 
-  it('«Дневник» горит на любой своей странице, «Игры» журнала — никогда', () => {
+  it('«Дневник» горит на любой своей странице', () => {
     const of = (id: string) => navOf('journal').find((item) => item.id === id)!;
     expect(isActive('/tags', of('journal'))).toBe(true);
     expect(isActive('/overview', of('journal'))).toBe(true);
     expect(isActive('/backtest/abc', of('backtest'))).toBe(true);
-    expect(isActive('/games', of('games'))).toBe(false);
   });
 });
