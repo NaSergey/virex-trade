@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { COURSE, EXERCISES } from '../../content';
+import { normalize } from '../../model/check';
+import { openUnits } from '../../model/course';
+import { combos } from '../model/scene';
 import { BOSSES, blockOf } from './bosses';
 import { CHARACTERS } from './characters';
 import { ELITES, ENEMIES, bossStats, eliteStats, enemyStats } from './enemies';
 import { QUESTS } from './quests';
 import { ITEMS, RELICS } from './relics';
+import { SCENES } from './scenes';
+import { isReply } from './scenes/types';
 import { WEATHER } from './weather';
 
 describe('данные игры', () => {
@@ -21,13 +26,13 @@ describe('данные игры', () => {
   });
 
   it('числа противников — из спеки, туман прибавляет здоровья', () => {
-    expect(enemyStats(5, 0)).toEqual({ hp: 22, atk: 4, every: 4 });
-    expect(enemyStats(1, 0)).toEqual({ hp: 14, atk: 3, every: 4 });
-    expect(enemyStats(9, 0)).toEqual({ hp: 30, atk: 5, every: 4 });
-    expect(enemyStats(5, 1).hp).toBe(Math.round(22 * 1.15));
-    expect(eliteStats(5, 0)).toEqual({ hp: 42, atk: 6, every: 3 });
-    expect(bossStats(0)).toEqual({ hp: 54, atk: 7, every: 3 });
-    expect(bossStats(6).hp).toBe(Math.round(54 * 1.25));
+    expect(enemyStats(5, 0)).toEqual({ hp: 45, atk: 6, every: 3 });
+    expect(enemyStats(1, 0)).toEqual({ hp: 33, atk: 4, every: 3 });
+    expect(enemyStats(9, 0)).toEqual({ hp: 57, atk: 8, every: 3 });
+    expect(enemyStats(5, 1).hp).toBe(Math.round(45 * 1.15));
+    expect(eliteStats(5, 0)).toEqual({ hp: 59, atk: 8, every: 3 });
+    expect(bossStats(0)).toEqual({ hp: 80, atk: 9, every: 3 });
+    expect(bossStats(6).hp).toBe(100);
   });
 
   it('восемь хранителей, каждый раздел с упражнениями — в блоке', () => {
@@ -56,4 +61,54 @@ describe('данные игры', () => {
     }
     expect(new Set(QUESTS.map((q) => q.id)).size).toBe(QUESTS.length);
   });
+});
+
+const BLOCK_UNITS = ['sp', 'u04', 'u07', 'u10', 'u13', 'u16', 'u19', 'u22'];
+
+describe('сцены', () => {
+  it('24 сцены, по три на блок, id уникальны, с начала открыты три', () => {
+    expect(SCENES).toHaveLength(24);
+    expect(new Set(SCENES.map((s) => s.id)).size).toBe(24);
+    for (const unit of BLOCK_UNITS) expect(SCENES.filter((s) => s.unit === unit)).toHaveLength(3);
+    const open = openUnits(COURSE, new Set());
+    expect(SCENES.filter((s) => open.has(s.unit))).toHaveLength(3);
+  });
+
+  for (const scene of SCENES) {
+    it(`${scene.id}: шаги, варианты, переменные`, () => {
+      expect(scene.title && scene.goal && scene.place.en && scene.place.ru && scene.npc.name).toBeTruthy();
+      expect('npc' in scene.steps[0]).toBe(true);
+      const replies = scene.steps.filter(isReply);
+      expect(replies.length).toBeGreaterThanOrEqual(5);
+      expect(replies.length).toBeLessThanOrEqual(6);
+      expect(scene.phrases.length).toBeGreaterThanOrEqual(2);
+      expect(scene.phrases.length).toBeLessThanOrEqual(3);
+      for (const values of Object.values(scene.vars ?? {})) {
+        expect(values.length).toBeGreaterThanOrEqual(3);
+        expect(values.length).toBeLessThanOrEqual(6);
+      }
+      const texts: string[] = [];
+      for (const step of scene.steps) {
+        if (!isReply(step)) {
+          expect(step.npc.trim() && step.ru.trim()).toBeTruthy();
+          texts.push(step.npc);
+          continue;
+        }
+        const ok = step.reply.filter((o) => o.ok);
+        expect(ok).toHaveLength(1);
+        expect(normalize(ok[0].en)).not.toBe('');
+        expect(new Set(step.reply.map((o) => o.en)).size).toBe(step.reply.length);
+        const wrong = step.reply.filter((o) => !o.ok);
+        if (ok[0].distract) {
+          expect(scene.vars?.[ok[0].distract]?.length).toBeGreaterThanOrEqual(3);
+          expect(ok[0].why && ok[0].react).toBeTruthy();
+        } else {
+          expect(wrong.length).toBe(2);
+        }
+        for (const o of wrong) expect(o.why && o.react && o.ru).toBeTruthy();
+        texts.push(...step.reply.flatMap((o) => [o.en, o.react ?? '']), ...(step.accept ?? []));
+      }
+      for (const t of texts) expect(combos(scene, t).length).toBeLessThanOrEqual(12);
+    });
+  }
 });
