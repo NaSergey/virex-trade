@@ -27,10 +27,12 @@ import { ThemeToggle } from '@/shared/ui/ThemeToggle';
 import { TradePlayMark } from '@/shared/ui/TradePlayMark';
 import { useLocaleControl } from '@/shared/i18n';
 import { adminOrigin } from '@/shared/lib/utils/admin-host';
+import { HOME_OF } from '@/shared/lib/utils/app-part';
+import { useAppPart } from '@/shared/lib/utils/AppPartProvider';
 import { isGamesDarkRoute } from '@/shared/lib/utils/games-dark-route';
 import { JOURNAL_PAGES, isJournalPage } from '@/shared/lib/utils/journal-route';
 import { openSettings } from '@/widgets/settings-dialog';
-import { NAV, isActive } from './sections';
+import { isActive, navOf } from './sections';
 
 /**
  * Разделы стоят горизонтальной рейкой в шапке, а не колонкой сбоку: страницы
@@ -57,15 +59,19 @@ export function TopNav() {
   const to = useTranslations('onboarding');
   const { locale } = useLocaleControl();
   const pathname = usePathname();
+  const part = useAppPart();
+  const play = part === 'play';
+  const nav = navOf(part);
   // Три состояния, а не флаг: закрытое меню ещё доигрывает анимацию ухода
   // ('closing'), и снять его с дерева сразу значило бы оборвать её первым
   // кадром. Повторное нажатие «Профиля» посреди ухода возвращает меню назад.
   const [menu, setMenu] = useState<'closed' | 'open' | 'closing'>('closed');
   const menuOpen = menu === 'open';
-  const closeMenu = useCallback(() => setMenu((m) => (m === 'open' ? 'closing' : m)), []);
+  const closeMenu = useCallback(() => setMenu((m) => (m === 'open' ? 'closing' : m)), [setMenu]);
   // Награда, которой не видно, — не награда: точка на кнопке профиля
-  // появляется, когда ждут либо уровни, либо сегодняшняя ежедневная.
-  const battlePass = useBattlePass();
+  // появляется, когда ждут либо уровни, либо сегодняшняя ежедневная. Награды живут на
+  // площадке: в журнале запроса нет вовсе.
+  const battlePass = useBattlePass(play);
   const hasRewards = Boolean(
     battlePass.data && (battlePass.data.pendingCoins > 0 || !battlePass.data.daily.claimedToday),
   );
@@ -82,7 +88,7 @@ export function TopNav() {
   // читалась бы кремовым пятном поверх чёрного содержимого под ней. Лобби
   // столов и турниры сюда не входят — там обычная тема (`isGamesDarkRoute`).
   const inGames = isGamesDarkRoute(pathname);
-  const section = NAV.find((item) => isActive(pathname, item.id));
+  const section = nav.find((item) => isActive(pathname, item));
 
   // Страницы «Дневника» — панелью под пунктом по наведению на него
   // (решение владельца 2026-10-14). Закрытие — с задержкой: курсор, идущий с
@@ -191,8 +197,8 @@ export function TopNav() {
   return (
     <header className={`top${inGames ? ' top-game' : ''}`} ref={headerRef}>
       <div className="top-in">
-        {/* Знак ведёт на главную продукта — терминал. */}
-        <Link href="/terminal" className="mark">
+        {/* Знак ведёт на главную своей части. */}
+        <Link href={HOME_OF[part]} className="mark">
           <TradePlayMark width={46} height={28} />
         </Link>
 
@@ -223,13 +229,17 @@ export function TopNav() {
               aria-hidden
             />
           )}
-          {NAV.map((item) =>
-            item.id === 'journal' ? (
+          {nav.map((item) =>
+            item.other ? (
+              <a key={item.id} href={item.href}>
+                {t(item.labelKey)}
+              </a>
+            ) : item.id === 'journal' ? (
               <Link
                 key={item.id}
                 ref={journalRef}
                 href={item.href}
-                aria-current={isActive(pathname, item.id) ? 'page' : undefined}
+                aria-current={isActive(pathname, item) ? 'page' : undefined}
                 aria-haspopup="true"
                 aria-expanded={journalOpen}
                 onPointerEnter={onJournalEnter}
@@ -245,7 +255,7 @@ export function TopNav() {
               <Link
                 key={item.id}
                 href={item.href}
-                aria-current={isActive(pathname, item.id) ? 'page' : undefined}
+                aria-current={isActive(pathname, item) ? 'page' : undefined}
               >
                 {t(item.labelKey)}
               </Link>
@@ -254,10 +264,9 @@ export function TopNav() {
         </nav>
 
         <div className="top-r" ref={menuRef}>
-          {/* Монеты — слева от переключателей и профиля: их тратят в играх, а
-              баланс должен быть виден с любой страницы, не только из раздела. */}
-          <CoinBalance onBuy={() => setDonateOpen(true)} />
-          <ThemeToggle />
+          {/* Монеты — слева от профиля: их тратят в играх, поэтому баланс живёт на
+              площадке. Там же нет темы: площадка всегда тёмная. */}
+          {play ? <CoinBalance onBuy={() => setDonateOpen(true)} /> : <ThemeToggle />}
           <Button
             variant="none"
             className={`acct acct-av${hasRewards ? ' has-dot' : ''}`}
@@ -303,10 +312,17 @@ export function TopNav() {
                     2026-10-01): переход по адресу, а не окно. Кнопка меню
                     теперь кружок без подписи, и двух «Профилей» подряд нет. */}
                 {/* Сразу на `/profile/<id>`, а не на `/profile`: адрес в
-                    строке браузера и есть ссылка, которой делятся. */}
-                <Link className="acct-item" href={user ? `/profile/${user.id}` : '/profile'} onClick={closeMenu}>
-                  {t('battlePass')}
-                </Link>
+                    строке браузера и есть ссылка, которой делятся. Профиль живёт на
+                    площадке: из журнала туда обычная ссылка, куда надо уведёт гейт. */}
+                {play ? (
+                  <Link className="acct-item" href={user ? `/profile/${user.id}` : '/profile'} onClick={closeMenu}>
+                    {t('battlePass')}
+                  </Link>
+                ) : (
+                  <a className="acct-item" href={user ? `/profile/${user.id}` : '/profile'} onClick={closeMenu}>
+                    {t('battlePass')}
+                  </a>
+                )}
                 {/* Настройки — сюда же, рядом с языком: оба пункта про учётную
                     запись и подключение к ней, а не про работу с журналом,
                     которой посвящена рейка разделов выше. Окно, а не адрес
@@ -321,19 +337,21 @@ export function TopNav() {
                 >
                   {t('settings')}
                 </Button>
-                {/* Обучение здесь, а не в Настройках: туры идут по всем пяти
-                    разделам, и вернуть их надо уметь с того раздела, где
-                    застрял, а не сходив за этим на страницу ключей. */}
-                <Button
-                  variant="none"
-                  className="acct-item"
-                  onClick={() => {
-                    closeMenu();
-                    restart();
-                  }}
-                >
-                  {to('menuLabel')}
-                </Button>
+                {/* Обучение здесь, а не в Настройках: туры идут по всем разделам
+                    журнала, и вернуть их надо уметь с того раздела, где застрял, а
+                    не сходив за этим на страницу ключей. На площадке туров нет. */}
+                {!play && (
+                  <Button
+                    variant="none"
+                    className="acct-item"
+                    onClick={() => {
+                      closeMenu();
+                      restart();
+                    }}
+                  >
+                    {to('menuLabel')}
+                  </Button>
+                )}
                 {/* Донат стоит здесь, а не в рейке разделов: рейка — это работа
                     с журналом, и просьба о деньгах в одном ряду со «Сделками»
                     торговалась бы за внимание с продуктом. В меню профиля она
@@ -398,35 +416,38 @@ export function TopNav() {
         </div>
       </div>
 
-      {/* Панель страниц «Дневника» — под пунктом, по наведению на него. Всегда
-          в разметке, спрятана стилем: так ей есть откуда раскрываться и куда
-          уходить, а не только где появляться. Миниатюры экранов и строки
-          описаний в ней стояли и сняты владельцем 2026-10-14 («борщанул»). */}
-      <div
-        className="jmenu"
-        ref={journalMenuRef}
-        data-open={journalOpen}
-        style={{ left: journalX }}
-        onPointerEnter={onJournalEnter}
-        onPointerLeave={() => closeJournal()}
-        onBlur={onJournalBlur}
-        onKeyDown={onJournalKey}
-      >
-        <nav aria-label={t('journalSections')}>
-          {JOURNAL_PAGES.map((id, i) => (
-            <Link
-              key={id}
-              className="jmenu-item"
-              href={`/${id}`}
-              aria-current={isJournalPage(pathname, id) ? 'page' : undefined}
-              style={{ '--i': i } as CSSProperties}
-              onClick={() => closeJournal(0)}
-            >
-              <span className="jmenu-t">{t(id)}</span>
-            </Link>
-          ))}
-        </nav>
-      </div>
+      {/* Панель страниц «Дневника» — под пунктом, по наведению на него. В журнале
+          всегда в разметке, спрятана стилем: так ей есть откуда раскрываться и куда
+          уходить, а не только где появляться. На площадке её нет: это ссылки в чужую
+          часть. Миниатюры экранов и строки описаний в ней стояли и сняты владельцем
+          2026-10-14 («борщанул»). */}
+      {!play && (
+        <div
+          className="jmenu"
+          ref={journalMenuRef}
+          data-open={journalOpen}
+          style={{ left: journalX }}
+          onPointerEnter={onJournalEnter}
+          onPointerLeave={() => closeJournal()}
+          onBlur={onJournalBlur}
+          onKeyDown={onJournalKey}
+        >
+          <nav aria-label={t('journalSections')}>
+            {JOURNAL_PAGES.map((id, i) => (
+              <Link
+                key={id}
+                className="jmenu-item"
+                href={`/${id}`}
+                aria-current={isJournalPage(pathname, id) ? 'page' : undefined}
+                style={{ '--i': i } as CSSProperties}
+                onClick={() => closeJournal(0)}
+              >
+                <span className="jmenu-t">{t(id)}</span>
+              </Link>
+            ))}
+          </nav>
+        </div>
+      )}
 
       {/* Окно живёт в шапке, а не в разделе: шапка есть на каждой странице
           продукта, и донат должен открываться поверх любой из них. */}

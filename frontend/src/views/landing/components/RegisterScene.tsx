@@ -6,6 +6,8 @@ import { useTranslations } from 'next-intl';
 import { useGSAP } from '@gsap/react';
 import { gsap } from 'gsap';
 import { AuthForm, safeNext, type AuthMode } from '@/features/auth';
+import { HOME_OF } from '@/shared/lib/utils/app-part';
+import { useAppPart } from '@/shared/lib/utils/AppPartProvider';
 import { TradePlayMark } from '@/shared/ui/TradePlayMark';
 import { Wrap } from '@/shared/ui/Wrap';
 import { registerGsap } from '../lib/gsapConfig';
@@ -56,7 +58,7 @@ export function RegisterScene({
   const asked = params.get('auth');
   const urlMode: AuthMode | null = asked === 'login' || asked === 'register' ? asked : null;
   const mode = chosen ?? urlMode ?? 'register';
-  const next = safeNext(params.get('next'));
+  const next = safeNext(params.get('next'), HOME_OF[useAppPart()]);
   const refCode = params.get('ref') || undefined;
 
   // Пришедший с намерением (`?auth=…` — гейт, приглашение) попадает сразу к

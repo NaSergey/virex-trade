@@ -4,6 +4,7 @@ import { memo, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { useGSAP } from '@gsap/react';
 import { gsap } from 'gsap';
+import { useAppPart } from '@/shared/lib/utils/AppPartProvider';
 import { Wrap } from '@/shared/ui/Wrap';
 import { registerGsap } from '../lib/gsapConfig';
 import { prefersReducedMotion } from '../lib/reducedMotion';
@@ -21,6 +22,7 @@ import { MarkAssembly } from './MarkAssembly';
  */
 export const PlatformScene = memo(function PlatformScene() {
   const t = useTranslations('landing');
+  const part = useAppPart();
   const root = useRef<HTMLElement>(null);
   const hint = useRef<HTMLSpanElement>(null);
 
@@ -42,7 +44,7 @@ export const PlatformScene = memo(function PlatformScene() {
       <div className="ls-plat-stick">
         <Wrap className="ls-plat-wrap">
           <h1 className="ls-sr" id="platform-title">
-            {t('platformTitle')}
+            {part === 'journal' ? t('platformTitle') : t('playTitle')}
           </h1>
 
           <MarkAssembly className="ls-plat-mark" />

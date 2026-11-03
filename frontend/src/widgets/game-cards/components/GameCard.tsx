@@ -27,8 +27,11 @@ const SCENES: Record<GameScene, ComponentType> = {
  * Карточка игры — ровно кадр картинки (или сцены, см. `SCENES`) и название
  * слева вверху, больше ничего: ни описания, ни чипов, ни кнопки, ни бейджа
  * (решение владельца 2026-09-25). У доступной игры кликабелен весь кадр.
+ *
+ * `link` — своя ссылка вместо адреса игры: на превью гость идёт не в игру, а к форме
+ * регистрации. Обычный `<a>`: якорь на той же странице крутит Lenis, а не роутер.
  */
-export function GameCard({ game }: { game: Game }) {
+export function GameCard({ game, link }: { game: Game; link?: { href: string; onClick: () => void } }) {
   const t = useTranslations('games');
 
   const Scene = game.scene && SCENES[game.scene];
@@ -48,6 +51,14 @@ export function GameCard({ game }: { game: Game }) {
   );
 
   const className = cn('gcard', `gcard-${game.accent}`, !game.available && 'gcard-soon');
+
+  if (link && game.available) {
+    return (
+      <a href={link.href} onClick={link.onClick} className={className}>
+        {face}
+      </a>
+    );
+  }
 
   return game.available ? (
     <Link href={game.href} className={className}>

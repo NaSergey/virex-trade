@@ -22,8 +22,6 @@ export interface Facts {
   jetpackBestX100: number;
   pokerHands: number;
   blackjackHands: number;
-  taggedTrades: number;
-  backtestSessions: number;
   /** Наибольший баланс монет за всё время. */
   maxBalance: number;
 }
@@ -38,8 +36,6 @@ export type AchievementId =
   | 'jetpack_100'
   | 'poker_100'
   | 'blackjack_100'
-  | 'tagger_100'
-  | 'backtest_10'
   | 'rich_10k';
 
 interface AchievementDef {
@@ -61,8 +57,6 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'jetpack_100', target: 100, value: (f) => f.jetpackRounds },
   { id: 'poker_100', target: 100, value: (f) => f.pokerHands },
   { id: 'blackjack_100', target: 100, value: (f) => f.blackjackHands },
-  { id: 'tagger_100', target: 100, value: (f) => f.taggedTrades },
-  { id: 'backtest_10', target: 10, value: (f) => f.backtestSessions },
   { id: 'rich_10k', target: 10_000, value: (f) => f.maxBalance },
 ];
 

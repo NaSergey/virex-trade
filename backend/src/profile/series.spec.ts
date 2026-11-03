@@ -18,15 +18,15 @@ describe('gamesOf', () => {
         { day: '2026-09-30', kind: 'jetpack', n: 2 },
         { day: '2026-01-01', kind: 'jetpack', n: 5 },
         { day: '2026-09-15', kind: 'tournament', n: 1 },
-        { day: '2026-09-15', kind: 'tag', n: 7 },
+        { day: '2026-09-15', kind: 'other', n: 7 },
       ],
       NOW,
     );
     const jetpack = games.find((g) => g.id === 'jetpack')!;
     expect(jetpack).toEqual({ id: 'jetpack', played: 47, days90: 2, lastDay: '2026-10-01' });
     expect(games.find((g) => g.id === 'poker')).toEqual({ id: 'poker', played: 0, days90: 0, lastDay: null });
-    // Разметка — не игра: в список игр не попадает.
-    expect(games.map((g) => g.id)).toEqual(['tournament', 'backtest', 'jetpack', 'poker', 'blackjack']);
+    // Вид, которого нет среди игр, в список не попадает.
+    expect(games.map((g) => g.id)).toEqual(['tournament', 'jetpack', 'poker', 'blackjack']);
   });
 
   it('день ровно 90 дней назад включительно ещё в окне, 91-й — нет', () => {
@@ -47,11 +47,11 @@ describe('countOf', () => {
     expect(
       countOf(
         [
-          { day: 'a', kind: 'tag', n: 2 },
-          { day: 'b', kind: 'tag', n: 3 },
+          { day: 'a', kind: 'other', n: 2 },
+          { day: 'b', kind: 'other', n: 3 },
           { day: 'b', kind: 'poker', n: 9 },
         ],
-        'tag',
+        'other',
       ),
     ).toBe(5);
   });

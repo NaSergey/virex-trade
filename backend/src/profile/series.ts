@@ -32,12 +32,12 @@ export interface ActionRow {
   n: number;
 }
 
-export type GameId = 'tournament' | 'backtest' | 'jetpack' | 'poker' | 'blackjack';
-export const GAME_IDS: GameId[] = ['tournament', 'backtest', 'jetpack', 'poker', 'blackjack'];
+export type GameId = 'tournament' | 'jetpack' | 'poker' | 'blackjack';
+export const GAME_IDS: GameId[] = ['tournament', 'jetpack', 'poker', 'blackjack'];
 
 export interface GameRow {
   id: GameId;
-  /** Действий за всё время: участий, сессий, ставок, раздач. */
+  /** Действий за всё время: участий, ставок, раздач. */
   played: number;
   /** В сколько из последних `RECENT_DAYS` дней человек играл в эту игру. */
   days90: number;

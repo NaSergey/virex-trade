@@ -18,6 +18,8 @@ const GAMES_INTERNAL_URL =
 // Хост поддомена админки — регуляркой условия `has` (Next сверяет её с именем
 // хоста целиком). То же правило, что `isAdminHost` в shared/lib/utils/admin-host.ts.
 const ADMIN_HOST = "admin\\..+";
+// Хост журнала — то же правило, что `partOfHost` в shared/lib/utils/app-part.ts.
+const JOURNAL_HOST = "journal\\..+";
 
 const nextConfig: NextConfig = {
   // Сборка в самодостаточный `.next/standalone` (свой server.js + только
@@ -37,7 +39,7 @@ const nextConfig: NextConfig = {
   // `admin.localhost:<порт>`. Dev-сервер Next отклоняет запросы своих
   // служебных ресурсов (HMR, чанки) с чужого origin — без этой строки админка
   // локально открывалась бы без живой перезагрузки. На прод-сборку не влияет.
-  allowedDevOrigins: ["admin.localhost"],
+  allowedDevOrigins: ["admin.localhost", "journal.localhost"],
   // Сводит браузер и backend на один origin. Без этого кука сессии,
   // поставленная backend'ом, не доезжала бы до Next-сервера — а без неё
   // middleware.ts (единственный гейт защищённых страниц) не может отличить
@@ -62,6 +64,9 @@ const nextConfig: NextConfig = {
           destination: "/admin/:path",
         },
         { source: "/", has: [{ type: "host", value: ADMIN_HOST }], destination: "/admin" },
+        // Журнал: остальные адреса у него те же, отличается только главная.
+        { source: "/", has: [{ type: "host", value: JOURNAL_HOST }], destination: "/journal" },
+        { source: "/ru", has: [{ type: "host", value: JOURNAL_HOST }], destination: "/journal/ru" },
       ],
       afterFiles: [
         // Игровые адреса — раньше общего /api: Next берёт первое совпавшее

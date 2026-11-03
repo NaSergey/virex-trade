@@ -5,11 +5,9 @@ import {
   Flame,
   Gauge,
   Gem,
-  History,
   Medal,
   Rocket,
   Spade,
-  Tag,
   Trophy,
   type LucideIcon,
 } from 'lucide-react';
@@ -30,8 +28,6 @@ export const ACHIEVEMENT_ICONS: Record<AchievementId, LucideIcon> = {
   jetpack_100: Gauge,
   poker_100: Spade,
   blackjack_100: Club,
-  tagger_100: Tag,
-  backtest_10: History,
   rich_10k: Gem,
 };
 

@@ -1,13 +1,14 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { LANDING_PATH } from '@/shared/config/site';
-import { LOCALE_HEADER } from '@/shared/i18n/locale-storage';
-import { adminOrigin, adminPath, isAdminHost } from '@/shared/lib/utils/admin-host';
+import { LOCALE_COOKIE, LOCALE_COOKIE_MAX_AGE, LOCALE_HEADER, localeCookieDomain } from '@/shared/i18n/locale-storage';
+import { adminOrigin, adminPath } from '@/shared/lib/utils/admin-host';
+import { HOME_OF, isJournalRoute, isPlayRoute, journalHost, partOfHost, playHost } from '@/shared/lib/utils/app-part';
 
 /**
  * Единственный гейт защищённых страниц продукта — до рендера, на edge.
  *
- * Проверяет только присутствие куки сессии (`refresh_token`, HttpOnly,
- * `path: '/'` — см. `auth.controller.ts`), не её валидность: это не подмена
+ * Проверяет только присутствие куки сессии (HttpOnly, `path: '/'` — см.
+ * `session-cookie.ts` на backend), не её валидность: это не подмена
  * настоящей проверки (JWT в заголовке на каждом запросе к API, см.
  * `JwtAuthGuard`), а вход к странице. Просроченный или отозванный
  * refresh-токен здесь не отличить от действительного без похода в БД на
@@ -24,7 +25,8 @@ import { adminOrigin, adminPath, isAdminHost } from '@/shared/lib/utils/admin-ho
  * конвенции (бывший `middleware.ts` — тот тоже работает, но помечен
  * deprecated), и Next ищет его рядом с `src/app`, а не в корне пакета.
  */
-const REFRESH_COOKIE = 'refresh_token';
+const SESSION_COOKIE = 'tp_session';
+const LEGACY_COOKIE = 'refresh_token';
 
 /** Протокол запроса снаружи. Цепочка прокси пишет протоколы через запятую — свой у первого. */
 function protoOf(request: NextRequest): string {
@@ -39,10 +41,29 @@ function originOf(request: NextRequest, host: string): string {
   return `${protoOf(request)}://${host}`;
 }
 
+/**
+ * Выбранный на площадке язык — с собой в журнал. Заведённая раньше кука языка живёт
+ * только на адресе площадки, и по закладке `/terminal` человек попал бы в журнал
+ * раньше, чем площадка успела её перенести на весь домен, — на языке по умолчанию.
+ */
+function carryLocale(request: NextRequest, response: NextResponse): NextResponse {
+  const locale = request.cookies.get(LOCALE_COOKIE)?.value;
+  const domain = localeCookieDomain(request.headers.get('host')?.split(':')[0] ?? '');
+  if (locale && domain) {
+    response.cookies.set(LOCALE_COOKIE, locale, { domain, path: '/', maxAge: LOCALE_COOKIE_MAX_AGE, sameSite: 'lax' });
+  }
+  return response;
+}
+
 export function proxy(request: NextRequest) {
-  const authed = request.cookies.has(REFRESH_COOKIE);
   const { pathname } = request.nextUrl;
   const host = request.headers.get('host');
+  const part = partOfHost(host);
+  // Общая кука доезжает и до админки, но вход у неё свой. Старая вне админки ещё
+  // считается: прежние сессии переходят на новую при первом обмене токена.
+  const authed = part === 'admin'
+    ? request.cookies.has(LEGACY_COOKIE)
+    : request.cookies.has(SESSION_COOKIE) || request.cookies.has(LEGACY_COOKIE);
 
   /*
    * Поддомен админки (`admin.*`, спека 2026-10-19-hyperliquid-wallet-scout-design.md)
@@ -54,12 +75,12 @@ export function proxy(request: NextRequest) {
    * сервера — мимо этой развилки (проверено на standalone-сборке). Здесь —
    * только гейт входа.
    *
-   * Кука сессии ставится без Domain, поэтому вход здесь свой: без куки любая
+   * Своя кука здесь ставится без Domain, поэтому вход свой: без неё любая
    * страница ведёт на `/login` поддомена. Сама форма входа — всегда форма, без
    * «уже вошёл → на главную»: решать это по одной куке нельзя — протухшая кука
    * и AuthGuard уводили бы друг на друга по кругу. Вошедшего уводит страница.
    */
-  if (isAdminHost(host)) {
+  if (part === 'admin' && host) {
     if (pathname === '/login' || authed) return NextResponse.next();
     return NextResponse.redirect(`${originOf(request, host)}/login?next=${encodeURIComponent(pathname)}`);
   }
@@ -69,6 +90,26 @@ export function proxy(request: NextRequest) {
   if (pathname === '/admin' || pathname.startsWith('/admin/')) {
     if (!host) return NextResponse.next();
     return NextResponse.redirect(`${adminOrigin(`${protoOf(request)}:`, host)}${adminPath(pathname)}`);
+  }
+
+  /*
+   * Части продукта (спека 2026-11-03): адрес чужой части уводит туда же с тем же
+   * запросом — закладки, ссылки из уведомлений и пункты рейки в соседнюю часть
+   * держатся на этом. Вход спрашивает уже та часть, куда пришли. 307, а не 308:
+   * постоянный редирект браузер запоминает, и откатить его было бы нечем.
+   *
+   * `/journal*` — внутренний адрес главной журнала: снаружи её адрес `/` и `/ru`.
+   */
+  const toJournalHome = pathname === '/journal' || pathname.startsWith('/journal/');
+  if (host && (toJournalHome || (part === 'play' && isJournalRoute(pathname)))) {
+    const path = pathname.replace(/^\/journal(?=\/|$)/, '') || '/';
+    return carryLocale(
+      request,
+      NextResponse.redirect(`${originOf(request, journalHost(host))}${path}${request.nextUrl.search}`),
+    );
+  }
+  if (host && part === 'journal' && isPlayRoute(pathname)) {
+    return NextResponse.redirect(`${originOf(request, playHost(host))}${pathname}${request.nextUrl.search}`);
   }
 
   /*
@@ -87,28 +128,33 @@ export function proxy(request: NextRequest) {
   if (pathname === '/login' || pathname.startsWith('/profile/')) return NextResponse.next();
 
   /*
-   * Корень — единственная страница продукта, открытая всем: это рассказ о
-   * том, что тут вообще происходит, и он адресован ровно тому, у кого ещё
-   * нет аккаунта. Отправлять его на вход значило бы требовать войти прежде,
-   * чем человек узнал куда.
+   * Корень — страница, открытая всем: это рассказ о том, что тут вообще
+   * происходит, и он адресован ровно тому, у кого ещё нет аккаунта. Отправлять
+   * его на вход значило бы требовать войти прежде, чем человек узнал куда. У
+   * каждой части своя главная: журнал получает её через rewrites `next.config.ts`.
    *
-   * А вошедшему рассказывать не о чем — он идёт на главную продукта, в
-   * терминал (владелец 2026-10-17; до этого — обзор дневника). Развилка
-   * стоит здесь, а не на самой странице: тогда лендинг остаётся статикой,
-   * которую не надо рендерить, чтобы тут же выбросить.
+   * А вошедшему рассказывать не о чем — он идёт на главную своей части
+   * (`HOME_OF`). Развилка стоит здесь, а не на самой странице: тогда лендинг не
+   * надо рендерить, чтобы тут же выбросить.
+   *
+   * Исключение — адрес с `auth`, то есть форма входа. Сюда уводит `AuthGuard`, когда
+   * сессия не ожила, а по одной куке живую сессию от мёртвой не отличить: увести
+   * отсюда на главную части значило бы вернуть человека на пустую страницу без
+   * единого способа войти, и F5 не помог бы. Живого уводит сама форма (`AuthForm`) по
+   * ответу `/auth/refresh`. Тот же приём у входа админки.
    *
    * `/ru` — та же главная по-русски, для поисковика (`views/landing/seo.tsx`).
    * Корневому layout адрес недоступен, поэтому язык едет к нему заголовком.
    */
   if (pathname === LANDING_PATH.en || pathname === LANDING_PATH.ru) {
-    if (!authed) {
+    if (!authed || request.nextUrl.searchParams.has('auth')) {
       if (pathname === LANDING_PATH.en) return NextResponse.next();
       const headers = new Headers(request.headers);
       headers.set(LOCALE_HEADER, 'ru');
       return NextResponse.next({ request: { headers } });
     }
     const url = request.nextUrl.clone();
-    url.pathname = '/terminal';
+    url.pathname = HOME_OF[part];
     url.search = '';
     return NextResponse.redirect(url);
   }
@@ -117,8 +163,9 @@ export function proxy(request: NextRequest) {
 
   const url = request.nextUrl.clone();
   // Входа-страницы больше нет: вход — окно на главной, оно открывается по `auth`.
+  // Запрос едет вместе с путём: приглашение в турнир — это `/games/trading?t=<id>`.
   url.pathname = '/';
-  url.search = `auth=login&next=${encodeURIComponent(pathname)}`;
+  url.search = `auth=login&next=${encodeURIComponent(`${pathname}${request.nextUrl.search}`)}`;
   return NextResponse.redirect(url);
 }
 

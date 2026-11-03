@@ -1,10 +1,9 @@
 'use client';
 
 import { Wrap } from '@/shared/ui/Wrap';
-import { GameCard } from './components/GameCard';
+import { GAMES, GameCard } from '@/widgets/game-cards';
 import { CoinsInfo } from './components/CoinsInfo';
 import { GamesPromo } from './components/GamesPromo';
-import { GAMES } from './model/games';
 
 /**
  * Игры — витрина раздела, а не игра. Сама по себе ничего не считает: это вход

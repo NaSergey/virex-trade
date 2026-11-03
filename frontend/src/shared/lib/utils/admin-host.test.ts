@@ -21,5 +21,6 @@ describe('admin-host', () => {
     expect(adminOrigin('https:', 'trade-play.com')).toBe('https://admin.trade-play.com');
     expect(adminOrigin('http:', 'localhost:8090')).toBe('http://admin.localhost:8090');
     expect(adminOrigin('https:', 'www.trade-play.com')).toBe('https://admin.trade-play.com');
+    expect(adminOrigin('https:', 'journal.trade-play.com')).toBe('https://admin.trade-play.com');
   });
 });

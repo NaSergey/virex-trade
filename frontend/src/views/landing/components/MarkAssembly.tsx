@@ -4,6 +4,7 @@ import { memo, useRef, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { useGSAP } from '@gsap/react';
 import { gsap } from 'gsap';
+import { useAppPart } from '@/shared/lib/utils/AppPartProvider';
 import { EDGES, GLINTS, H, SHARDS, STOPS, W, pts } from '@/shared/ui/tradePlayMarkGeometry';
 import { registerGsap } from '../lib/gsapConfig';
 import { prefersReducedMotion } from '../lib/reducedMotion';
@@ -118,6 +119,7 @@ const GLINTS_OF = {
 export const MarkAssembly = memo(function MarkAssembly({ className }: { className?: string }) {
   const root = useRef<HTMLDivElement>(null);
   const t = useTranslations('landing');
+  const part = useAppPart();
 
   useGSAP(
     () => {
@@ -384,10 +386,10 @@ export const MarkAssembly = memo(function MarkAssembly({ className }: { classNam
           <g className="mk-title">
             <g className="mk-title-in">
               <text x={TITLE_X} y={TITLE_Y - 3} textAnchor="middle">
-                {t('heroTitleA')}
+                {part === 'journal' ? t('heroTitleA') : t('playHeroA')}
               </text>
               <text x={TITLE_X} y={TITLE_Y + 14} textAnchor="middle">
-                {t('heroTitleB')}
+                {part === 'journal' ? t('heroTitleB') : t('playHeroB')}
               </text>
             </g>
           </g>,

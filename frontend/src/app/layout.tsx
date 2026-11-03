@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono } from "next/font/google";
+import { headers } from "next/headers";
 import "./globals.css";
 import { QueryProvider } from "./(internal)/QueryProvider";
 import { AuthProvider } from "@/features/auth";
@@ -8,7 +9,9 @@ import { getServerLocale } from "@/shared/i18n/server-locale";
 import { ThemeProvider } from "@/shared/theme";
 import { getServerTheme } from "@/shared/theme/server-theme";
 import { loadMessages } from "@/shared/i18n/load-messages";
-import { SITE_URL } from "@/shared/config/site";
+import { JOURNAL_URL, SITE_URL } from "@/shared/config/site";
+import { partOfHost } from "@/shared/lib/utils/app-part";
+import { AppPartProvider } from "@/shared/lib/utils/AppPartProvider";
 
 /**
  * Два голоса, и только два: серифы — речь (заголовки, пояснения, названия
@@ -52,8 +55,9 @@ const jetbrainsMono = JetBrains_Mono({
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getServerLocale();
   const messages = await loadMessages(locale);
+  const part = partOfHost((await headers()).get("host"));
   return {
-    metadataBase: new URL(SITE_URL),
+    metadataBase: new URL(part === "journal" ? JOURNAL_URL : SITE_URL),
     title: messages.meta.title,
     description: messages.meta.description,
     // В выдачу идут только главные (`views/landing/seo.tsx`): остальное закрыто
@@ -62,8 +66,9 @@ export async function generateMetadata(): Promise<Metadata> {
     robots: { index: false, follow: false },
     // С телефона продукт ставится на главный экран приложением: без строки
     // браузера, со своей иконкой. Манифест — в `/assets/`: этот каталог гейт
-    // `proxy.ts` пропускает без куки, а браузер берёт манифест без неё.
-    manifest: "/assets/app/manifest.webmanifest",
+    // `proxy.ts` пропускает без куки, а браузер берёт манифест без неё. У каждой
+    // части свой: приложение стартует со своей главной.
+    manifest: part === "play" ? "/assets/app/manifest-play.webmanifest" : "/assets/app/manifest.webmanifest",
     // `favicon.ico` рядом подхватывает сам Next. Обе иконки — знак на чёрном поле:
     // серебро без поля пропало бы на светлой вкладке.
     icons: {
@@ -96,7 +101,11 @@ export default async function RootLayout({
   // разметке, иначе выбравший светлую тему получает кадр чёрного на каждой
   // загрузке. Дефолт (тёмная) не пишет ничего лишнего — палитра :root и есть
   // тёмная, атрибут нужен только светлой.
-  const initialTheme = await getServerTheme();
+  //
+  // Площадка всегда тёмная (спека 2026-11-03): сцены игр сняты на чёрном, и
+  // выключателя темы там нет.
+  const part = partOfHost((await headers()).get("host"));
+  const initialTheme = part === "play" ? "dark" : await getServerTheme();
   // Словарь только выбранной локали: второй язык клиенту не отправляется и
   // подгружается провайдером в момент переключения.
   const initialMessages = await loadMessages(initialLocale);
@@ -108,15 +117,17 @@ export default async function RootLayout({
       className={jetbrainsMono.variable}
     >
       <body>
-        <QueryProvider>
-          <ThemeProvider initialTheme={initialTheme}>
-            <LocaleProvider initialLocale={initialLocale} initialMessages={initialMessages}>
-              <AuthProvider>
-                {children}
-              </AuthProvider>
-            </LocaleProvider>
-          </ThemeProvider>
-        </QueryProvider>
+        <AppPartProvider part={part}>
+          <QueryProvider>
+            <ThemeProvider initialTheme={initialTheme}>
+              <LocaleProvider initialLocale={initialLocale} initialMessages={initialMessages}>
+                <AuthProvider>
+                  {children}
+                </AuthProvider>
+              </LocaleProvider>
+            </ThemeProvider>
+          </QueryProvider>
+        </AppPartProvider>
       </body>
     </html>
   );

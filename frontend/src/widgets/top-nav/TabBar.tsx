@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Activity, ChartCandlestick, Gamepad2, History, NotebookPen, type LucideIcon } from 'lucide-react';
-import { NAV, isActive, type Tab } from './sections';
+import { Activity, ChartCandlestick, Club, Flag, Gamepad2, History, NotebookPen, Rocket, Spade, Trophy, type LucideIcon } from 'lucide-react';
+import { useAppPart } from '@/shared/lib/utils/AppPartProvider';
+import { isActive, tabsOf, type Tab } from './sections';
 
 const ICONS: Record<Tab, LucideIcon> = {
   terminal: ChartCandlestick,
@@ -12,6 +13,12 @@ const ICONS: Record<Tab, LucideIcon> = {
   market: Activity,
   backtest: History,
   games: Gamepad2,
+  tournaments: Trophy,
+  poker: Spade,
+  blackjack: Club,
+  jetpack: Rocket,
+  race: Flag,
+  journalApp: NotebookPen,
 };
 
 /**
@@ -33,15 +40,25 @@ const isImmersive = (pathname: string) =>
 export function TabBar() {
   const t = useTranslations('nav');
   const pathname = usePathname();
+  const part = useAppPart();
   if (isImmersive(pathname)) return null;
   return (
     <nav className="tabbar" aria-label={t('sections')} data-tour="nav">
-      {NAV.map((item) => {
+      {tabsOf(part).map((item) => {
         const Icon = ICONS[item.id];
-        return (
-          <Link key={item.id} href={item.href} aria-current={isActive(pathname, item.id) ? 'page' : undefined}>
+        const face = (
+          <>
             <Icon size={20} strokeWidth={1.6} aria-hidden />
             <span>{t(item.labelKey)}</span>
+          </>
+        );
+        return item.other ? (
+          <a key={item.id} href={item.href}>
+            {face}
+          </a>
+        ) : (
+          <Link key={item.id} href={item.href} aria-current={isActive(pathname, item) ? 'page' : undefined}>
+            {face}
           </Link>
         );
       })}

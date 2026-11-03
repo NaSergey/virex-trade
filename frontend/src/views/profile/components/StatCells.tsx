@@ -5,7 +5,6 @@ import type { ProfileOverview } from '@/entities/profile';
 import { CoinIcon } from '@/shared/ui/CoinIcon';
 import { favourite, trend, windowSums } from '../lib/charts';
 import { int, signed } from '../lib/format';
-import { HIDDEN_GAMES } from '../lib/games';
 import { BarSpark, LineSpark } from './Sparkline';
 
 /**
@@ -19,7 +18,7 @@ export function StatCells({ profile }: { profile: ProfileOverview }) {
   const xp = profile.xpSeries.map((p) => p.xp);
   const coins30 = trend(coins, 30).abs;
   const week = windowSums(xp, 7);
-  const fav = favourite(profile.games, HIDDEN_GAMES);
+  const fav = favourite(profile.games);
   const best = profile.records.bestX100;
 
   return (

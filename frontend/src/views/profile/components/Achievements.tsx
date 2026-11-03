@@ -24,8 +24,6 @@ const TONES: Record<AchievementId, string> = {
   jetpack_100: 'violet',
   poker_100: 'pink',
   blackjack_100: 'green',
-  tagger_100: 'cyan',
-  backtest_10: 'green',
   rich_10k: 'gold',
 };
 

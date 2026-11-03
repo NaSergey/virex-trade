@@ -14,24 +14,9 @@ import { AuthService, AuthResult } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { useSecureCookie } from './cookie-security';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-
-const REFRESH_COOKIE = 'refresh_token';
-// '/', не '/auth': кука должна доехать и до страниц продукта — её на входе
-// проверяет middleware фронтенда (единственный гейт неавторизованного
-// доступа), а не только сами /auth/* эндпоинты.
-const REFRESH_COOKIE_PATH = '/';
-// До смены пути кука ставилась на '/auth', и у всех, кто входил тогда, она
-// осталась лежать в браузере рядом с новой. Браузер по RFC 6265 отдаёт первой
-// ту, у которой путь длиннее, cookie-parser берёт первое значение — и на
-// /auth/refresh уезжал мёртвый токен, из-за чего сессия рвалась на каждой
-// перезагрузке. Сама по себе она не исчезнет: удалить куку можно только тем же
-// путём, которым её ставили, поэтому каждый успешный ответ авторизации гасит
-// её явно. Строку можно убрать, когда у живых пользователей её заведомо не
-// осталось.
-const LEGACY_REFRESH_COOKIE_PATH = '/auth';
+import { clearSessionCookie, readSessionToken, writeSessionCookie } from './session-cookie';
 
 // Credential-guessing budget per IP. Well clear of anything a real person does
 // (login is once per refresh-token lifetime) while making an online password
@@ -47,10 +32,11 @@ export class AuthController {
   @Throttle(CREDENTIAL_ATTEMPTS)
   async register(
     @Body() dto: RegisterDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.register(dto);
-    return this.respondWithTokens(res, result);
+    return this.respondWithTokens(req, res, result);
   }
 
   @Post('login')
@@ -58,10 +44,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async login(
     @Body() dto: LoginDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.login(dto);
-    return this.respondWithTokens(res, result);
+    return this.respondWithTokens(req, res, result);
   }
 
   @Post('refresh')
@@ -70,9 +57,8 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const raw = req.cookies?.[REFRESH_COOKIE];
-    const result = await this.authService.refresh(raw);
-    return this.respondWithTokens(res, result);
+    const result = await this.authService.refresh(readSessionToken(req));
+    return this.respondWithTokens(req, res, result);
   }
 
   @Post('logout')
@@ -81,10 +67,8 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const raw = req.cookies?.[REFRESH_COOKIE];
-    await this.authService.logout(raw);
-    res.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
-    res.clearCookie(REFRESH_COOKIE, { path: LEGACY_REFRESH_COOKIE_PATH });
+    await this.authService.logout(readSessionToken(req));
+    clearSessionCookie(req, res);
     return { success: true };
   }
 
@@ -101,23 +85,17 @@ export class AuthController {
   async changePassword(
     @CurrentUser('userId') userId: string,
     @Body() dto: ChangePasswordDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.changePassword(userId, dto);
-    return this.respondWithTokens(res, result);
+    return this.respondWithTokens(req, res, result);
   }
 
   // Sets the refresh token as an HttpOnly cookie and returns the access token
   // + public user in the JSON body. The raw refresh token never reaches JS.
-  private respondWithTokens(res: Response, result: AuthResult) {
-    res.clearCookie(REFRESH_COOKIE, { path: LEGACY_REFRESH_COOKIE_PATH });
-    res.cookie(REFRESH_COOKIE, result.refreshToken, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: useSecureCookie(),
-      path: REFRESH_COOKIE_PATH,
-      maxAge: this.authService.refreshCookieMaxAgeMs,
-    });
+  private respondWithTokens(req: Request, res: Response, result: AuthResult) {
+    writeSessionCookie(req, res, result.refreshToken, this.authService.refreshCookieMaxAgeMs);
 
     return {
       user: result.user,

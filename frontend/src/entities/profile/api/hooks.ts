@@ -1,8 +1,8 @@
 'use client';
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiJson } from '@/shared/api/http';
-import type { ProfileOverview, ProfilePositions, ProfileTrades } from './types';
+import type { ProfileOverview } from './types';
 
 /**
  * Ключ строкой, а не импортом в чужие сущности: его сбрасывает и выдача
@@ -28,73 +28,6 @@ export const useProfile = (userId: string, enabled = true) =>
     enabled: enabled && userId.length > 0,
     retry: false,
   });
-
-/**
- * Его настоящие сделки с биржи — вкладка «Сделки на бирже» на профиле.
- *
- * `pageSize` — сколько строк влезает в окно: профиль стоит в экран без
- * прокрутки, и лист режется под него (сервер держит 1…20). `enabled` держит
- * вызывающий: вкладка заказывает лист только когда открыта, и профиль, у
- * которого сделок нет, за ними не ходит вовсе. `retry: false` — у скрытого
- * показа ответ 403, и повторять его незачем.
- */
-export const useProfileTrades = (userId: string, page: number, pageSize: number, enabled: boolean) =>
-  useQuery({
-    queryKey: [...profileKey, userId, 'trades', pageSize, page],
-    queryFn: () =>
-      apiJson<ProfileTrades>(
-        `/api/profile/${encodeURIComponent(userId)}/trades?page=${page}&pageSize=${pageSize}`,
-      ),
-    enabled,
-    retry: false,
-    // Пока едет следующий лист, стоит прежний: иначе листалка на миг писала бы
-    // «0—0 из 0», а таблица мигала заглушкой.
-    placeholderData: keepPreviousData,
-  });
-
-/**
- * Его открытые позиции — снимок синка, который обновляется раз в минуту,
- * поэтому и опрос раз в минуту, и только пока вкладка открыта (`enabled`).
- */
-export const useProfilePositions = (userId: string, enabled: boolean) =>
-  useQuery({
-    queryKey: [...profileKey, userId, 'positions'],
-    queryFn: () => apiJson<ProfilePositions>(`/api/profile/${encodeURIComponent(userId)}/positions`),
-    enabled,
-    retry: false,
-    refetchInterval: 60_000,
-  });
-
-/**
- * Видят ли другие мои сделки — выключатель на странице настроек.
- *
- * Ключ лежит вне `['profile']`, а не внутри: это настройка смотрящего, а не
- * данные чьего-то профиля, и сброс профилей по префиксу не должен тащить её за
- * собой — переключение само кладёт свежий ответ в кэш. Профили при этом
- * сбрасываются: от флага зависит, есть ли на них вкладка «Биржа».
- */
-export const privacyKey = ['profile-privacy'] as const;
-
-export const usePrivacy = () =>
-  useQuery({
-    queryKey: privacyKey,
-    queryFn: () => apiJson<{ showTrades: boolean }>('/api/profile/privacy'),
-  });
-
-export function useSetPrivacy() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (showTrades: boolean) =>
-      apiJson<{ showTrades: boolean }>('/api/profile/privacy', {
-        method: 'PATCH',
-        body: JSON.stringify({ showTrades }),
-      }),
-    onSuccess: (data) => {
-      qc.setQueryData(privacyKey, data);
-      void qc.invalidateQueries({ queryKey: profileKey });
-    },
-  });
-}
 
 /**
  * Новое имя из настроек профиля. Профили перечитываются (имя стоит на карточке),
