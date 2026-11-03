@@ -7,8 +7,7 @@ import type { Station, StationKind, WeatherId } from './types';
  * пересечений: схема метро, а не клубок.
  */
 export const ROWS = 10;
-const LANES = [0, 1, 2] as const;
-type Lane = (typeof LANES)[number];
+type Lane = 0 | 1 | 2;
 
 const idOf = (row: number, lane: number) => `r${row}l${lane}`;
 
