@@ -137,11 +137,17 @@ export function proxy(request: NextRequest) {
    * (`HOME_OF`). Развилка стоит здесь, а не на самой странице: тогда лендинг не
    * надо рендерить, чтобы тут же выбросить.
    *
+   * Исключение — адрес с `auth`, то есть форма входа. Сюда уводит `AuthGuard`, когда
+   * сессия не ожила, а по одной куке живую сессию от мёртвой не отличить: увести
+   * отсюда на главную части значило бы вернуть человека на пустую страницу без
+   * единого способа войти, и F5 не помог бы. Живого уводит сама форма (`AuthForm`) по
+   * ответу `/auth/refresh`. Тот же приём у входа админки.
+   *
    * `/ru` — та же главная по-русски, для поисковика (`views/landing/seo.tsx`).
    * Корневому layout адрес недоступен, поэтому язык едет к нему заголовком.
    */
   if (pathname === LANDING_PATH.en || pathname === LANDING_PATH.ru) {
-    if (!authed) {
+    if (!authed || request.nextUrl.searchParams.has('auth')) {
       if (pathname === LANDING_PATH.en) return NextResponse.next();
       const headers = new Headers(request.headers);
       headers.set(LOCALE_HEADER, 'ru');

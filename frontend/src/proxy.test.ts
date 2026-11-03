@@ -136,6 +136,17 @@ describe('proxy — части', () => {
     }
   });
 
+  it('форму входа гейт не отнимает: мёртвую куку от живой он не отличит, и уводит сама форма', () => {
+    for (const host of [play, journal]) {
+      for (const path of ['/?auth=login&next=%2Fgames', '/?auth=register&ref=abc']) {
+        expect(locationOf(proxy(req(path, { host, authed: true })))).toBeNull();
+      }
+      const ru = proxy(req('/ru?auth=login', { host, authed: true }));
+      expect(locationOf(ru)).toBeNull();
+      expect(ru.headers.get('x-middleware-request-x-virex-locale')).toBe('ru');
+    }
+  });
+
   it('/ и /ru гостя открыты в обеих частях; язык задаёт только /ru', () => {
     for (const host of [play, journal]) {
       const root = proxy(req('/', { host }));

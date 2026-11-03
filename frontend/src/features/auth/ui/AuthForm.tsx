@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { HOME_OF } from '@/shared/lib/utils/app-part';
@@ -12,20 +12,26 @@ import { useAuth } from '../model/AuthContext';
 
 export type AuthMode = 'login' | 'register';
 
-/**
- * Путь внутри продукта: один слэш, дальше не слэш (иначе это чужой домен). И
- * не обратный слэш: браузер читает `/\evil.example` как `//evil.example`.
- */
-const NEXT_PATH = /^\/(?![/\\])/;
+/** Основа для разбора `next`: важно только, остался ли адрес на ней. */
+const PARSE_BASE = 'http://next.invalid';
 
 /**
- * Куда вести после входа. Принимается только путь внутри продукта —
- * начинающийся с одного слэша: без проверки `?next=//evil.example` браузер
- * прочтёт как адрес чужого сайта и уведёт туда сразу после ввода пароля.
- * `fallback` — главная той части, где стоит форма (`HOME_OF`).
+ * Куда вести после входа. Принимается только путь внутри продукта: без проверки
+ * `?next=//evil.example` браузер прочтёт как адрес чужого сайта и уведёт туда сразу
+ * после ввода пароля. `fallback` — главная той части, где стоит форма (`HOME_OF`).
+ *
+ * Решает тот же разбор адреса, которым пойдёт браузер, а не регулярка по строке:
+ * `/\evil.example` и `/<таб>/evil.example` он читает как `//evil.example`, и строка
+ * такого не покажет. Отдаётся исходная строка, а не разобранная: у `/.//evil.example`
+ * разобранный путь — как раз `//evil.example`.
  */
 export function safeNext(raw: string | null | undefined, fallback: string = HOME_OF.journal): string {
-  return raw && NEXT_PATH.test(raw) ? raw : fallback;
+  if (!raw?.startsWith('/')) return fallback;
+  try {
+    return new URL(raw, PARSE_BASE).origin === PARSE_BASE ? raw : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 /**
@@ -62,7 +68,7 @@ export function AuthForm({
   refCode?: string;
   loginOnly?: boolean;
 }) {
-  const { login, register } = useAuth();
+  const { user, loading, login, register } = useAuth();
   const home = HOME_OF[useAppPart()];
   const router = useRouter();
   const t = useTranslations('auth');
@@ -80,6 +86,13 @@ export function AuthForm({
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [demoing, setDemoing] = useState(false);
+
+  // Сессия жива — форма не нужна. Решает ответ /auth/refresh, а не кука в proxy:
+  // мёртвая кука и AuthGuard уводили бы друг на друга. Вход этой формой уводит сам:
+  // демо идёт на главную, а не в `next`.
+  useEffect(() => {
+    if (!loading && user && !submitting && !demoing) router.replace(next ?? home);
+  }, [loading, user, submitting, demoing, next, home, router]);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();

@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { AuthForm, safeNext, useAuth } from '@/features/auth';
+import { AuthForm, safeNext } from '@/features/auth';
 import { Wrap } from '@/shared/ui/Wrap';
 import { PageHead } from '@/shared/ui/PageHead';
 import { LocaleSwitch } from '@/shared/ui/LocaleSwitch';
@@ -11,19 +10,11 @@ import { LocaleSwitch } from '@/shared/ui/LocaleSwitch';
 /**
  * Вход на поддомене админки. Кука сессии у поддомена своя (ставится без
  * Domain), поэтому вход здесь — отдельный от продукта. Только вход: ни
- * регистрации, ни демо.
+ * регистрации, ни демо. Живую сессию уводит сама форма.
  */
 export function AdminLoginPage() {
   const t = useTranslations('adminShell');
-  const { user, loading } = useAuth();
-  const router = useRouter();
   const next = safeNext(useSearchParams().get('next'), '/');
-
-  // Сессия жива — форма не нужна. Решает ответ /auth/refresh, а не кука в
-  // proxy: протухшая кука и AuthGuard уводили бы друг на друга по кругу.
-  useEffect(() => {
-    if (!loading && user) router.replace(next);
-  }, [loading, user, next, router]);
 
   return (
     <Wrap page>
