@@ -91,8 +91,10 @@ export function GateView({ s }: { s: HoldState }) {
         <div className="ah-banner">{TITLE[v.kind].toUpperCase()}</div>
         <GateScene kind={v.kind} />
         <div className="ah-gate-say">
-          <small>{v.kind === 'beggar' ? 'THE WOMAN SAYS' : 'THE STRANGER SAYS'}</small>“<Tap text={v.speech} />”
-          {ru && v.ru ? <span className="ah-ru">{v.ru.speech}</span> : null}
+          <small>
+            <Tap text={v.kind === 'beggar' ? 'THE WOMAN SAYS' : 'THE STRANGER SAYS'} />
+          </small>
+          “<Tap text={v.speech} />”{ru && v.ru ? <span className="ah-ru">{v.ru.speech}</span> : null}
         </div>
         <p className="ah-gate-detail">
           <Tap text={v.detail} />
@@ -125,7 +127,9 @@ export function GateView({ s }: { s: HoldState }) {
           </>
         ) : (
           <div className="ah-gate-answers">
-            <p className="ah-lab">Your answer</p>
+            <p className="ah-lab">
+              <Tap text="Your answer" />
+            </p>
             {v.options.map((o) => (
               <button key={o.id} type="button" className="ah-gate-answer ah-frame" onClick={() => pick(o.id)}>
                 {o.text}

@@ -125,10 +125,12 @@ function SoundToggle() {
 function Title() {
   return (
     <section className="ah-title">
-      <p className="ah-kicker">a survival game in English</p>
+      <p className="ah-kicker">
+        <Tap text="a survival game in English" />
+      </p>
       <h1>Ashen Hold</h1>
       <p className="ah-lede">
-        Four people. Thirty days of winter. Give them orders in English — and keep them alive until the spring caravan comes.
+        <Tap text="Four people. Thirty days of winter. Give them orders in English — and keep them alive until the spring caravan comes." />
       </p>
       <button type="button" className="ah-btn" onClick={() => saveGame(newGame(Math.floor(Math.random() * 2 ** 31)))}>
         Begin
@@ -151,11 +153,14 @@ function Hud({ s }: { s: HoldState }) {
     <div className="ah-hud">
       <div className="ah-row">
         <span className="ah-plate ah-frame">
-          DAY {ROMAN(Math.min(s.day, DAYS))} <small>of {ROMAN(DAYS)}</small>
+          <Tap text="DAY" /> {ROMAN(Math.min(s.day, DAYS))}{' '}
+          <small>
+            <Tap text="of" /> {ROMAN(DAYS)}
+          </small>
         </span>
         <div className="ah-bar ah-frame" aria-label={`Morale ${m.toFixed(1)} of 10`}>
           <i className={cn(m <= 3 && 'low')} style={{ transform: `scaleX(${m / 10})` }} />
-          <span>MORALE</span>
+          <Tap text="MORALE" />
         </div>
       </div>
       <div className="ah-res">
@@ -182,15 +187,19 @@ function Night({ s }: { s: HoldState }) {
   return (
     <div className={cn('ah-night ah-frame', seen && r && r.strength > def && 'ah-danger')}>
       <Ic id={seen && r ? (r.kind === 'wolves' ? 'wolf' : 'bandit') : 'torch'} />
-      <span>
-        {seen
-          ? r
-            ? `The watchtower sees ${r.kind} coming tonight. Their strength: ${r.strength}.`
-            : 'The watchtower sees no one. The night will be quiet.'
-          : 'Night will come. You cannot see who is out there.'}
-      </span>
+      <Tap
+        text={
+          seen
+            ? r
+              ? `The watchtower sees ${r.kind} coming tonight. Their strength: ${r.strength}.`
+              : 'The watchtower sees no one. The night will be quiet.'
+            : 'Night will come. You cannot see who is out there.'
+        }
+      />
       <b title="Your defense tonight">
-        <small>DEFENSE</small>
+        <small>
+          <Tap text="DEFENSE" />
+        </small>
         {def}
       </b>
     </div>
@@ -207,7 +216,9 @@ function CrewRow({ p, onPick }: { p: Person; onPick: () => void }) {
         </span>
         <span className="ah-cn">
           <b>{p.name}</b>
-          <small>{p.status === 'dead' ? 'dead' : 'left the camp'}</small>
+          <small>
+            <Tap text={p.status === 'dead' ? 'dead' : 'left the camp'} />
+          </small>
         </span>
       </div>
     );
@@ -220,9 +231,11 @@ function CrewRow({ p, onPick }: { p: Person; onPick: () => void }) {
         </span>
         <span className="ah-cn">
           <b>
-            {p.name} · <span>{p.role}</span>
+            {p.name} · <Tap text={p.role} />
           </b>
-          <small>scouting the {PLACES[p.away.place].dir} · back tomorrow</small>
+          <small>
+            <Tap text={`scouting the ${PLACES[p.away.place].dir} · back tomorrow`} />
+          </small>
         </span>
       </div>
     );
@@ -281,9 +294,11 @@ function OrderSheet({ s, p, onClose }: { s: HoldState; p: Person; onClose: () =>
             <Ic id={p.id} />
           </span>
           <span>
-            <b>ORDER FOR {p.name.toUpperCase()}</b>
+            <b>
+              <Tap text={`ORDER FOR ${p.name.toUpperCase()}`} />
+            </b>
             <small>
-              {p.role} · {ROLE_PERK[p.role]}
+              <Tap text={`${p.role} · ${ROLE_PERK[p.role]}`} />
             </small>
           </span>
         </div>
@@ -360,15 +375,21 @@ function Buildings({ s }: { s: HoldState }) {
         const b = s.buildings[id];
         return (
           <div key={id} className={cn('ah-build ah-frame', b.done && 'done')}>
-            <b>{def.name}</b>
-            <small>{def.gives}</small>
-            <span>
-              {b.done
-                ? 'built'
-                : b.started
-                  ? `work ${Math.floor(b.progress)} / ${def.work}`
-                  : `${def.wood} wood${def.iron ? ` · ${def.iron} iron` : ''}`}
-            </span>
+            <b>
+              <Tap text={def.name} />
+            </b>
+            <small>
+              <Tap text={def.gives} />
+            </small>
+            <Tap
+              text={
+                b.done
+                  ? 'built'
+                  : b.started
+                    ? `work ${Math.floor(b.progress)} / ${def.work}`
+                    : `${def.wood} wood${def.iron ? ` · ${def.iron} iron` : ''}`
+              }
+            />
           </div>
         );
       })}
@@ -380,7 +401,9 @@ function Report({ s, onClose }: { s: HoldState; onClose: () => void }) {
   return (
     <div className="ah-sheet-back ah-report-back">
       <div className="ah-report" role="dialog" aria-label="Morning report">
-        <p className="ah-report-head">{s.day === 1 ? 'THE FIRST DAY' : `MORNING · DAY ${ROMAN(Math.min(s.day, DAYS))}`}</p>
+        <p className="ah-report-head">
+          <Tap text={s.day === 1 ? 'THE FIRST DAY' : `MORNING · DAY ${ROMAN(Math.min(s.day, DAYS))}`} />
+        </p>
         <ul>
           {s.report.map((l, i) => (
             <li key={i} style={{ animationDelay: `${i * 90}ms` }}>
@@ -400,29 +423,39 @@ function End({ s }: { s: HoldState }) {
   const alive = present(s);
   return (
     <section className="ah-title">
-      <p className="ah-kicker">{s.outcome === 'win' ? 'spring has come' : 'the winter won'}</p>
-      <h1>{s.outcome === 'win' ? 'You Survived' : 'The Hold Has Fallen'}</h1>
+      <p className="ah-kicker">
+        <Tap text={s.outcome === 'win' ? 'spring has come' : 'the winter won'} />
+      </p>
+      <h1>
+        <Tap text={s.outcome === 'win' ? 'You Survived' : 'The Hold Has Fallen'} />
+      </h1>
       <p className="ah-lede">
-        {s.outcome === 'win'
-          ? `${alive.map((p) => p.name).join(', ')} lived to see the caravan.`
-          : `You lasted ${s.day - 1} ${s.day - 1 === 1 ? 'day' : 'days'}.`}
+        <Tap
+          text={
+            s.outcome === 'win'
+              ? `${alive.map((p) => p.name).join(', ')} lived to see the caravan.`
+              : `You lasted ${s.day - 1} ${s.day - 1 === 1 ? 'day' : 'days'}.`
+          }
+        />
       </p>
       <ul className="ah-stats">
         <li>
-          <b>{s.stats.phrases}</b>orders given
+          <b>{s.stats.phrases}</b>
+          <Tap text="orders given" />
         </li>
         <li>
-          <b>{s.stats.mistakes}</b>orders not understood
+          <b>{s.stats.mistakes}</b>
+          <Tap text="orders not understood" />
         </li>
         <li>
           <b>{s.stats.translated ?? 0}</b>
-          phrases translated
+          <Tap text="phrases translated" />
         </li>
         <li>
           <b>
             {s.stats.repelled} / {s.stats.raids}
           </b>
-          raids stopped
+          <Tap text="raids stopped" />
         </li>
       </ul>
       <button type="button" className="ah-btn" onClick={() => saveGame(newGame(Math.floor(Math.random() * 2 ** 31)))}>

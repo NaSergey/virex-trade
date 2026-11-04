@@ -22,7 +22,50 @@ export function allTexts(): string[] {
   const out = new Set<string>();
   const add = (...xs: (string | undefined | null)[]) => xs.forEach((x) => x && out.add(x));
   add(...VERBS, ...OBJECTS, ...Object.values(ROLE_PERK), ...Object.values(REACTION_HINT));
-  for (const b of Object.values(BUILDINGS)) add(b.gives);
+  for (const b of Object.values(BUILDINGS)) add(b.gives, b.name);
+  // Подписи экранов: шапки, статусы, итоги — их тоже можно нажать.
+  add(
+    'a survival game in English',
+    'Four people. Thirty days of winter. Give them orders in English — and keep them alive until the spring caravan comes.',
+    'DAY',
+    'of',
+    'MORALE',
+    'DEFENSE',
+    'dead',
+    'left the camp',
+    'built',
+    'work',
+    'wood · iron',
+    'The watchtower sees wolves coming tonight. Their strength: 3.',
+    'The watchtower sees bandits coming tonight. Their strength: 3.',
+    'The watchtower sees no one. The night will be quiet.',
+    'Night will come. You cannot see who is out there.',
+    'THE FIRST DAY',
+    'MORNING · DAY',
+    'spring has come',
+    'the winter won',
+    'You Survived',
+    'The Hold Has Fallen',
+    'Mira, Tom lived to see the caravan.',
+    'You lasted 3 days.',
+    'You lasted 1 day.',
+    'orders given',
+    'orders not understood',
+    'phrases translated',
+    'raids stopped',
+    'NIGHT RAID · ROUND',
+    'Your answer',
+    'THE WOMAN SAYS',
+    'THE STRANGER SAYS',
+    'The lands around the camp',
+  );
+  for (const p of ['Mira', 'Tom', 'Ash', 'Ezra']) {
+    add(`ORDER FOR ${p.toUpperCase()}`, `${p}! Quick — how do you survive?`, `${p.toUpperCase()}’S REPORT · NORTH`);
+    add(`You did not understand ${p}. The mill stays in the fog.`);
+  }
+  for (const d of ['north', 'east', 'south', 'west']) add(`scouting the ${d} · back tomorrow`, d.toUpperCase());
+  for (const [role, perk] of Object.entries(ROLE_PERK)) add(`${role} · ${perk}`);
+  for (const n of ['the old mill', 'the ruins', 'the farm', 'the cave']) add(`Now ${n} is on your map. You can search it.`);
   for (let seed = 1; seed <= 40; seed++) {
     let s: HoldState = newGame(seed);
     add(...s.report);

@@ -123,6 +123,14 @@ const EXTRA: Record<string, Gloss> = {
   caravan: { en: 'caravan', ru: 'караван' },
   better: { en: 'good', ru: 'лучше (good, well)' },
   blocked: { en: 'block', ru: 'отбил, заблокировал (block)' },
+  cannot: { en: 'can', ru: 'не может, нельзя (can not)' },
+  defense: { en: 'defense', ru: 'оборона, защита' },
+  fallen: { en: 'fall', ru: 'пал, павший (fall)' },
+  given: { en: 'give', ru: 'отдан, данный (give)' },
+  morale: { en: 'morale', ru: 'боевой дух' },
+  their: { en: 'their', ru: 'их (чей?)' },
+  understood: { en: 'understand', ru: 'понял, понятый (understand)' },
+  won: { en: 'win', ru: 'победил (win)' },
 };
 
 /**
@@ -159,6 +167,13 @@ export const GAME_VOCAB = new Set([
   'find',
   'found',
   'steal',
+  'fog',
+  'phrase',
+  'stranger',
+  'survival',
+  'translate',
+  'morale',
+  'defense',
 ]);
 
 /** Откуда слово: книга курса, общий словарь (с местом по частоте) или словарь игры. */
