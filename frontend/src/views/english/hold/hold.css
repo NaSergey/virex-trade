@@ -285,3 +285,19 @@
 .ah-q-result { margin: 0; text-align: center; font: italic 700 16px var(--gar); }
 .ah-report .pos { color: #2e6a34; }
 .ah-report .neg { color: #7d1410; }
+
+/* ── гость у ворот ── */
+.ah-gate-back { align-items: center; padding: 12px; }
+.ah-gate { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 480px; max-height: 92dvh; overflow-y: auto; padding: 10px; background: #070505; border: 1px solid #3a2c1c; animation: ah-up 240ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.ah-gate .ah-banner { align-self: stretch; text-align: center; }
+.ah-gate-scene { aspect-ratio: 390 / 250; }
+.ah-gate-say { position: relative; padding: 12px 14px 14px; text-align: center; font: italic 700 19px/1.3 var(--gar); color: #24160c; background: linear-gradient(#efe2c2, #cdb98c); clip-path: polygon(0 4%, 3% 0, 97% 4%, 100% 0, 99% 96%, 96% 100%, 4% 96%, 0 100%); }
+.ah-gate-say small { display: block; margin-bottom: 4px; font: 700 9px var(--cin); font-style: normal; letter-spacing: 0.3em; color: #6b4a2a; }
+.ah-gate-detail { margin: 0; text-align: center; font: italic 600 17px var(--gar); color: #d8a090; }
+.ah-gate-answers { display: flex; flex-direction: column; gap: 7px; }
+.ah-lab { margin: 0; text-align: center; font: 700 11px var(--cin); letter-spacing: 0.24em; text-transform: uppercase; color: var(--ah-ember); }
+.ah-gate-answer { min-height: 52px; padding: 8px 14px; font: italic 600 18px var(--gar) !important; text-align: center; }
+.ah-gate-answer:active { transform: scale(0.98); }
+.ah-gate-result { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 10px 12px; list-style: none; border-left: 2px solid var(--ah-ember); font: italic 600 17px/1.3 var(--gar); color: var(--ah-bone); }
+/* Силуэт гостя на тёмном проёме ворот виден по отсвету факелов на контуре. */
+.ah-visitor { filter: drop-shadow(0 0 1px #8a5a2a) drop-shadow(0 0 8px rgb(232 145 60 / 0.5)); }

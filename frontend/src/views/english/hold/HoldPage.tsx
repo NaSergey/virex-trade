@@ -7,6 +7,7 @@ import { cn } from '@/shared/lib/utils/css';
 import { BattleView } from './components/Battle';
 import { CampScene, HoldDefs } from './components/CampScene';
 import { Lands, ScoutReportView } from './components/Lands';
+import { GateView } from './components/Gate';
 import { PLACES } from './model/scout';
 import { startBattle } from './model/battle';
 import { CREDIT, ICONS, type IconId } from './icons';
@@ -439,6 +440,8 @@ function Camp({ s }: { s: HoldState }) {
       </div>
       {person ? <OrderSheet key={person.id} s={s} p={person} onClose={() => setPicked(null)} /> : null}
       {s.reports?.length ? <ScoutReportView key={`${s.day}:${s.reports.length}`} s={s} /> : null}
+      {/* Гость ждёт, пока прочитаны доклады разведчиков: два окна разом не открываются. */}
+      {!s.reports?.length && s.visitor ? <GateView key={s.day} s={s} /> : null}
     </>
   );
 }

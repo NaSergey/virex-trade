@@ -1,6 +1,7 @@
 import { chance, int, next, pick, rand, type Rand } from '../../game/model/rng';
 import type { Battle } from './battle';
 import { PLACES, PLACE_OF, makePlaces, makeReport, type Dir, type PlaceId, type Places, type ScoutReport } from './scout';
+import { rollVisitor, type Visitor } from './visitors';
 
 /**
  * Ashen Hold, шаг 1 — лагерь (спека docs/superpowers/specs/2026-11-04-ashen-hold-design.md).
@@ -149,6 +150,8 @@ export interface HoldState {
   places?: Places;
   /** Доклады вернувшихся разведчиков, ещё без ответа на вопрос. */
   reports?: ScoutReport[];
+  /** Гость у ворот этим утром (шаг 4) — ждёт ответа. */
+  visitor?: Visitor | null;
 }
 
 const START_PEOPLE: Omit<Person, 'hp' | 'morale' | 'status' | 'order'>[] = [
@@ -439,6 +442,7 @@ export function endDay(s0: HoldState): HoldState {
   for (const p of s.people) p.order = null;
   s.nightLog = null;
   s.battle = null;
+  s.visitor = null;
   s.day += 1;
   // Разведчики, чьё утро наступило, возвращаются с докладом.
   for (const p of s.people) {
@@ -461,6 +465,7 @@ export function endDay(s0: HoldState): HoldState {
   } else {
     s.tonight = rollRaid(r, s.day);
     next(r);
+    s.visitor = rollVisitor(r, s);
   }
   s.report = log;
   s.rng = r.s;
