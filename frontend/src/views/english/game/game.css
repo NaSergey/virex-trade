@@ -372,6 +372,11 @@
 .eg-score .muted { font-size: var(--t-s); }
 .eg-record { color: var(--eg-gold); font-size: var(--t-s); font-weight: 400; letter-spacing: 0.14em; text-transform: uppercase; }
 
+/* Переход во вторую игру — плашка над заголовком хаба. */
+.eg-other { display: flex; flex-direction: column; gap: 2px; margin-bottom: var(--s3); padding: var(--s2) var(--s3); border: 1px solid #6b5636; background: #120d0a; color: #e2d5b8; text-decoration: none; }
+.eg-other b { font-family: Georgia, serif; font-size: var(--t-m); letter-spacing: 0.12em; text-transform: uppercase; color: #c42a1e; }
+.eg-other span { color: #9c8f76; font-size: var(--t-s); }
+
 /* ── хаб ─────────────────────────────────────────────────────────── */
 .eg-hub-main { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s3); }
 .eg-hub-main p { margin: 0; }

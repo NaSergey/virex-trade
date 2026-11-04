@@ -1,0 +1,216 @@
+/* ═══════════════════════════════════════════════════════════════
+   ASHEN HOLD (views/english/hold, спека
+   docs/superpowers/specs/2026-11-04-ashen-hold-design.md).
+
+   Тёмное фэнтези: поле всегда чёрное, кость и пергамент — текст, кровь — угроза,
+   жар — выбор и действие. Рамки — двойная обводка «ковкой», плитки слов — камень.
+   Шрифты — Cinzel (заголовки) и EB Garamond (речь), свои файлы в `fonts/` (OFL).
+   Иконки — game-icons.net (CC BY 3.0), подпись внизу экрана обязательна.
+   ═══════════════════════════════════════════════════════════════ */
+
+.ah {
+  --ah-bone: #e2d5b8;
+  --ah-bone-2: #9c8f76;
+  --ah-blood: #c42a1e;
+  --ah-ember: #e8913c;
+  --ah-gold: #c9a24a;
+  --ah-good: #6fbf7a;
+  --cin: var(--ah-cin), Georgia, serif;
+  --gar: var(--ah-gar), Georgia, serif;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 560px;
+  min-height: calc(100dvh - 160px);
+  margin: 0 auto;
+  padding: 10px;
+  background: radial-gradient(ellipse at 50% 0%, #1a1310, #050404 70%);
+  color: var(--ah-bone);
+  font-family: var(--gar);
+}
+.ah-defs { position: absolute; width: 0; height: 0; }
+.ah button { font: inherit; color: inherit; cursor: pointer; }
+.ah-ic { width: 18px; height: 18px; fill: url(#ah-bone); flex: none; }
+
+.ah-frame {
+  background: linear-gradient(#1b1510, #0d0a08);
+  border: 1px solid #6b5636;
+  box-shadow: inset 0 0 0 2px #0a0806, inset 0 0 0 3px #3a2c1c, 0 4px 10px rgba(0, 0, 0, 0.6);
+}
+
+.ah-btn {
+  min-height: 50px;
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 14px var(--cin) !important;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ah-bone) !important;
+  background: linear-gradient(#5a1a12, #2a0a07);
+  border: 1px solid #9a4a2a;
+  box-shadow: inset 0 0 0 2px #1a0604, inset 0 0 0 3px #6b2a1a, 0 4px 10px rgba(0, 0, 0, 0.7);
+  text-shadow: 0 1px 2px #000;
+  transition: transform 90ms, filter 120ms;
+}
+.ah-btn:active { transform: scale(0.98); }
+.ah-btn:disabled { filter: grayscale(1) brightness(0.6); cursor: default; }
+.ah-btn-ghost { background: linear-gradient(#1b1510, #0d0a08); border-color: #6b5636; box-shadow: inset 0 0 0 2px #0a0806, inset 0 0 0 3px #3a2c1c; }
+
+/* ── шапка ── */
+.ah-hud { display: flex; flex-direction: column; gap: 6px; }
+.ah-row { display: flex; gap: 6px; align-items: stretch; }
+.ah-plate { display: inline-flex; align-items: center; gap: 5px; padding: 0 10px; height: 34px; font: 700 13px var(--cin); white-space: nowrap; }
+.ah-plate small { font: 500 12px var(--gar); color: var(--ah-bone-2); }
+.ah-bar { position: relative; flex: 1; height: 34px; padding: 4px; overflow: hidden; }
+.ah-bar i { position: absolute; inset: 4px; background: linear-gradient(#8a6ad0, #3a2a6a); transform-origin: left; transition: transform 400ms; }
+.ah-bar i.low { background: linear-gradient(#d23a2a, #6a0f0b); }
+.ah-bar span { position: relative; display: flex; align-items: center; height: 100%; padding-left: 8px; font: 700 12px var(--cin); letter-spacing: 0.16em; text-shadow: 0 1px 2px #000; }
+.ah-res { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.ah-res span { display: flex; align-items: center; justify-content: center; gap: 5px; height: 40px; font: 700 15px var(--cin); }
+.ah-res small { font: 700 10px var(--cin); }
+.ah-res .ah-short { border-color: var(--ah-blood); }
+.ah .pos { color: var(--ah-good); }
+.ah .neg { color: #e05a4a; }
+
+/* ── сцена ── */
+.ah-scene { display: block; width: 100%; aspect-ratio: 390 / 250; border: 1px solid #3a2c1c; }
+.ah-flame { animation: ah-flicker 1.6s ease-in-out infinite; }
+.ah-glow { animation: ah-glow 3.2s ease-in-out infinite; }
+.ah-ghost { opacity: 0.5; animation: ah-ghost 2s ease-in-out infinite; }
+@keyframes ah-flicker { 0%, 100% { opacity: 1; } 45% { opacity: 0.78; } 70% { opacity: 0.92; } }
+@keyframes ah-glow { 0%, 100% { opacity: 1; } 50% { opacity: 0.8; } }
+@keyframes ah-ghost { 50% { opacity: 0.25; } }
+
+.ah-night { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 8px 12px; font: italic 500 15px var(--gar); }
+.ah-night .ah-ic { width: 24px; height: 24px; }
+.ah-night b { display: flex; flex-direction: column; align-items: center; font: 700 18px var(--cin); color: var(--ah-ember); line-height: 1; }
+.ah-night b small { font: 700 8px var(--cin); letter-spacing: 0.16em; color: var(--ah-bone-2); margin-bottom: 3px; }
+.ah-danger { border-color: var(--ah-blood); box-shadow: inset 0 0 0 2px #0a0806, inset 0 0 0 3px #6b1a14, 0 0 14px rgba(196, 42, 30, 0.35); }
+.ah-danger .ah-ic { fill: var(--ah-blood); }
+
+/* ── отряд ── */
+.ah-crewlist { display: flex; flex-direction: column; gap: 6px; }
+.ah-crew { display: grid; grid-template-columns: 44px 1fr auto; gap: 10px; align-items: center; min-height: 58px; padding: 6px 10px; text-align: left; }
+.ah-crew-idle { border-color: var(--ah-ember); box-shadow: inset 0 0 0 2px #0a0806, inset 0 0 0 3px #8a5a22, 0 0 12px rgba(232, 145, 60, 0.25); }
+.ah-crew-out { opacity: 0.45; filter: grayscale(1); }
+.ah-por { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: radial-gradient(#3a2a20, #0c0806); border: 2px solid #6b5636; }
+.ah-por .ah-ic { width: 30px; height: 30px; }
+.ah-cn { display: flex; flex-direction: column; min-width: 0; }
+.ah-cn b { font: 700 13px var(--cin); letter-spacing: 0.06em; }
+.ah-cn b span { color: var(--ah-bone-2); font-weight: 400; }
+.ah-cn small { font: italic 500 15px var(--gar); color: var(--ah-bone-2); }
+.ah-crew-idle .ah-cn small { color: var(--ah-ember); }
+.ah-side { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+.ah-hp { display: flex; gap: 2px; }
+.ah-hp i { width: 8px; height: 6px; background: #2a1c16; border: 1px solid #000; }
+.ah-hp i.on { background: var(--ah-blood); }
+.ah-mood { font: 700 9px var(--cin); letter-spacing: 0.14em; padding: 2px 6px; border: 1px solid; text-transform: uppercase; }
+.ah-mood-calm { color: var(--ah-good); border-color: #2e5a34; }
+.ah-mood-afraid { color: #d6a23a; border-color: #6a4a18; }
+.ah-mood-broken { color: #e05a4a; border-color: #6a1a14; }
+
+/* ── постройки ── */
+.ah-builds { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.ah-build { display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; }
+.ah-build b { font: 700 12px var(--cin); letter-spacing: 0.1em; }
+.ah-build small { font: italic 500 13px var(--gar); color: var(--ah-bone-2); line-height: 1.2; }
+.ah-build span { font: 700 10px var(--cin); letter-spacing: 0.1em; color: var(--ah-ember); margin-top: 2px; }
+.ah-build.done span { color: var(--ah-good); }
+
+.ah-endbar { position: sticky; bottom: 0; z-index: 4; margin: 0 -10px; padding: 18px 10px 8px; background: linear-gradient(transparent, #050404 40%); }
+.ah-endbar .ah-btn { width: 100%; }
+
+/* ── лист приказа ── */
+.ah-sheet-back { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; background: rgba(0, 0, 0, 0.7); animation: ah-fade 160ms ease-out; }
+.ah-sheet { width: 100%; max-width: 560px; max-height: 92dvh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 14px 12px calc(14px + env(safe-area-inset-bottom)); animation: ah-up 220ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.ah-sheet-head { display: flex; align-items: center; gap: 10px; }
+.ah-sheet-head > span:last-child { display: flex; flex-direction: column; }
+.ah-sheet-head b { font: 700 13px var(--cin); letter-spacing: 0.2em; color: var(--ah-ember); }
+.ah-sheet-head small { font: italic 500 15px var(--gar); color: var(--ah-bone-2); }
+.ah-phrase { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; padding: 6px 0; }
+.ah-w { min-width: 72px; height: 44px; padding: 0 10px; display: flex; align-items: center; justify-content: center; background: none; border: 0; border-bottom: 2px solid var(--ah-bone-2); font: 700 21px var(--gar) !important; color: var(--ah-bone-2) !important; }
+.ah-w.f { color: #ffcf8a !important; border-color: var(--ah-ember); text-shadow: 0 0 10px rgba(232, 145, 60, 0.6); }
+.ah-shake { animation: ah-shake 360ms; }
+.ah-wrong { margin: 0; text-align: center; font: italic 600 16px var(--gar); color: #e07a6a; }
+.ah-tiles { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.ah-tile {
+  min-height: 44px;
+  padding: 0 12px;
+  font: 700 18px var(--gar) !important;
+  color: #2a2420 !important;
+  background: linear-gradient(145deg, #c9bea6, #8f8572 60%, #6a6252);
+  border: 1px solid #1a1714;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.25), inset 0 -3px 0 rgba(0, 0, 0, 0.35), 0 3px 6px rgba(0, 0, 0, 0.7);
+  transition: transform 80ms;
+}
+.ah-tile:active { transform: translateY(2px); }
+.ah-tile.used { opacity: 0.25; }
+.ah-sheet-actions { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; }
+
+/* ── доклад утра ── */
+.ah-report-back { align-items: center; padding: 16px; }
+.ah-report {
+  width: 100%;
+  max-width: 480px;
+  max-height: 86dvh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 18px 16px;
+  color: #24160c;
+  background: linear-gradient(#efe2c2, #cdb98c);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.85);
+  clip-path: polygon(0 1.5%, 3% 0, 97% 1.5%, 100% 0, 99% 98.5%, 96% 100%, 4% 98.5%, 0 100%);
+  animation: ah-up 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.ah-report-head { margin: 0; font: 700 12px var(--cin); letter-spacing: 0.26em; color: #6b3a1a; text-align: center; }
+.ah-report ul { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.ah-report li { font: italic 600 19px/1.3 var(--gar); animation: ah-in 300ms ease-out backwards; }
+.ah-report .ah-btn { margin-top: 4px; }
+
+/* ── начало и конец ── */
+.ah-title { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; min-height: 60dvh; text-align: center; padding: 20px 8px; }
+.ah-title h1 { margin: 0; font: 900 40px var(--cin); letter-spacing: 0.1em; color: var(--ah-blood); text-shadow: 0 0 22px rgba(196, 42, 30, 0.5), 0 3px 0 #000; }
+.ah-kicker { margin: 0; font: 700 12px var(--cin); letter-spacing: 0.3em; text-transform: uppercase; color: var(--ah-bone-2); }
+.ah-lede { margin: 0; max-width: 380px; font: italic 500 19px/1.35 var(--gar); color: var(--ah-bone); }
+.ah-title .ah-btn { min-width: 220px; }
+.ah-stats { display: flex; gap: 16px; margin: 0; padding: 0; list-style: none; font: italic 14px var(--gar); color: var(--ah-bone-2); }
+.ah-stats li { display: flex; flex-direction: column; align-items: center; }
+.ah-stats b { font: 700 22px var(--cin); color: var(--ah-bone); font-style: normal; }
+
+.ah-credit { margin: 6px 0 0; font: 10px system-ui, sans-serif; color: #5a5248; text-align: center; }
+
+@keyframes ah-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ah-up { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+@keyframes ah-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes ah-shake { 0%, 100% { transform: none; } 25% { transform: translateX(-8px); } 50% { transform: translateX(6px); } 75% { transform: translateX(-3px); } }
+
+@media (max-width: 760px) {
+  .ah { min-height: 0; margin: 0 calc(-1 * var(--s3)); padding: 8px; }
+  .ah-endbar { bottom: calc(57px + env(safe-area-inset-bottom)); margin: 0 -8px; padding: 18px 8px 8px; }
+  .ah-scene { aspect-ratio: 390 / 210; }
+  .ah-sheet-back { bottom: calc(57px + env(safe-area-inset-bottom)); }
+  .ah-sheet { padding-bottom: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ah-flame, .ah-glow, .ah-ghost { animation: none; }
+}
+
+/* Исключения из глобального нуля радиусов и теней — в @layer base с !important: сброс стоит
+   там же с !important, и важное из позднего слоя иначе проиграло бы (правило «Столы»). */
+@layer base {
+  .ah .ah-frame { box-shadow: inset 0 0 0 2px #0a0806, inset 0 0 0 3px #3a2c1c, 0 4px 10px rgba(0, 0, 0, 0.6) !important; }
+  .ah .ah-btn { box-shadow: inset 0 0 0 2px #1a0604, inset 0 0 0 3px #6b2a1a, 0 4px 10px rgba(0, 0, 0, 0.7) !important; }
+  .ah .ah-btn-ghost { box-shadow: inset 0 0 0 2px #0a0806, inset 0 0 0 3px #3a2c1c !important; }
+  .ah .ah-tile { box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.25), inset 0 -3px 0 rgba(0, 0, 0, 0.35), 0 3px 6px rgba(0, 0, 0, 0.7) !important; }
+  .ah .ah-crew-idle { box-shadow: inset 0 0 0 2px #0a0806, inset 0 0 0 3px #8a5a22, 0 0 12px rgba(232, 145, 60, 0.25) !important; }
+  .ah .ah-danger { box-shadow: inset 0 0 0 2px #0a0806, inset 0 0 0 3px #6b1a14, 0 0 14px rgba(196, 42, 30, 0.35) !important; }
+  .ah .ah-report { box-shadow: 0 8px 22px rgba(0, 0, 0, 0.85) !important; }
+  .ah .ah-por { border-radius: 50% !important; }
+}
+.ah-back { align-self: flex-start; font: 700 11px var(--cin); letter-spacing: 0.16em; color: var(--ah-bone-2); text-decoration: none; }

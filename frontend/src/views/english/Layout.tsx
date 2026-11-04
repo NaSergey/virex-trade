@@ -28,6 +28,7 @@ const TABS: { href: string; label: string; icon: LucideIcon }[] = [
 const isTab = (path: string, href: string) =>
   path === href ||
   (href === '/english/words' && path === '/english/test') ||
+  (href === '/english/game' && path === '/english/hold') ||
   (href === '/english' && path === '/english/insights');
 
 /**

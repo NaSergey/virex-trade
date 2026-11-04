@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { Button } from '@/shared/ui/Button';
 import { PageHead } from '@/shared/ui/PageHead';
 import { Seg } from '@/shared/ui/Seg';
@@ -61,6 +62,10 @@ export function Hub(p: HubProps) {
   const fmt = dateFormat('ru', { day: 'numeric', month: 'short' });
   return (
     <>
+      <Link href="/english/hold" className="eg-other">
+        <b>Ashen Hold</b>
+        <span>вторая игра · выживание отряда, приказы по-английски</span>
+      </Link>
       <PageHead
         title="Mind the Gap"
         lede={

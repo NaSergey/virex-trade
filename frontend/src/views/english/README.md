@@ -23,6 +23,9 @@ Friends Starter (SB + WB). Спека — `docs/superpowers/specs/2026-10-21-eng
   словах (очередь карточек; интервал продлевает только вспоминание), сцены-диалоги, хранитель на
   упражнениях курса. Движок — чистые функции `game/model/`, данные — `game/content/`, законченные
   забеги — таблица `english_runs`, забег в процессе — `localStorage`.
+- `hold/` — вторая игра «Ashen Hold» (`/english/hold`, спека
+  `docs/superpowers/specs/2026-11-04-ashen-hold-design.md`): выживание отряда, приказы фразами по-английски.
+  Игра — в `localStorage`; иконки game-icons.net (CC BY 3.0, подпись на экране), шрифты — `hold/fonts/`.
 - `api/hooks.ts` — запросы к `/api/admin/english/*`.
 - `*Page.tsx`, `Layout.tsx`, `components/`, `english.css` — страницы и стили. На телефоне
   раздел — приложение: нижняя панель вкладок, сверху общая шапка админки с выбором раздела, манифест для главного
