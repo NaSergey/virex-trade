@@ -9,7 +9,7 @@ import { CampScene, HoldDefs } from './components/CampScene';
 import { Tap, TileHint, WordCard } from './components/Words';
 import { Lands, ScoutReportView } from './components/Lands';
 import { GateView } from './components/Gate';
-import { PLACES } from './model/scout';
+import { PLACES, type PlaceId } from './model/scout';
 import { startBattle } from './model/battle';
 import { CREDIT, ICONS, type IconId } from './icons';
 import {
@@ -27,6 +27,7 @@ import {
   newGame,
   present,
   upkeep,
+  wrongOrder,
   type BuildingId,
   type HoldState,
   type Obj,
@@ -263,10 +264,17 @@ function CrewRow({ p, onPick }: { p: Person; onPick: () => void }) {
   );
 }
 
+/** Место на плитке: ещё в тумане или уже пустое — видно до ошибки. */
+function fogOf(s: HoldState, o: Obj): 'fog' | 'empty' | null {
+  const p = s.places?.[o.replace(/^the /, '') as PlaceId];
+  return !p ? null : !p.known ? 'fog' : p.looted ? 'empty' : null;
+}
+
 function OrderSheet({ s, p, onClose }: { s: HoldState; p: Person; onClose: () => void }) {
   const [verb, setVerb] = useState<Verb | null>(p.order?.verb ?? null);
   const [object, setObject] = useState<Obj | null>(p.order?.object ?? null);
   const [wrong, setWrong] = useState<string | null>(null);
+  const [fix, setFix] = useState<string[]>([]);
   const [hint, setHint] = useState<string | null>(null);
   const [shake, setShake] = useState(0);
   const give = () => {
@@ -275,14 +283,9 @@ function OrderSheet({ s, p, onClose }: { s: HoldState; p: Person; onClose: () =>
     saveGame(r.state);
     if (r.ok) onClose();
     else {
-      const place = object.replace(/^the /, '');
-      setWrong(
-        !r.ok && r.reason === 'unknown'
-          ? `${p.name} does not know what is in the ${place}. Scout it first.`
-          : !r.ok && r.reason === 'empty'
-            ? `The ${place} is already empty.`
-            : `${p.name} does not understand: “${verb} ${object}”?`,
-      );
+      const w = wrongOrder(p.name, { verb, object }, r.reason);
+      setWrong(w.text);
+      setFix(w.fix);
       setShake((n) => n + 1);
     }
   };
@@ -311,14 +314,20 @@ function OrderSheet({ s, p, onClose }: { s: HoldState; p: Person; onClose: () =>
             {object ?? '· · ·'}
           </button>
         </div>
-        {wrong ? <p className="ah-wrong">{wrong}</p> : <TileHint word={hint} />}
+        {wrong ? (
+          <p className="ah-wrong">
+            <Tap text={wrong} />
+          </p>
+        ) : (
+          <TileHint word={hint} />
+        )}
         <div className="ah-tiles ah-tiles-grid ah-tiles-verbs">
           {VERBS.map((v) => (
             <button
               key={v}
               type="button"
-              className={cn('ah-tile', verb === v && 'used')}
-              onClick={() => (setVerb(v), setHint(v), setWrong(null))}
+              className={cn('ah-tile', verb === v && 'used', fix.includes(v) && 'ah-tile-fix')}
+              onClick={() => (setVerb(v), setHint(v), setWrong(null), setFix([]))}
             >
               {v}
             </button>
@@ -332,8 +341,13 @@ function OrderSheet({ s, p, onClose }: { s: HoldState; p: Person; onClose: () =>
                 <button
                   key={o}
                   type="button"
-                  className={cn('ah-tile', object === o && 'used')}
-                  onClick={() => (setObject(o), setHint(o), setWrong(null))}
+                  className={cn(
+                    'ah-tile',
+                    object === o && 'used',
+                    fix.includes(o) && 'ah-tile-fix',
+                    fogOf(s, o) && `ah-tile-${fogOf(s, o)}`,
+                  )}
+                  onClick={() => (setObject(o), setHint(o), setWrong(null), setFix([]))}
                 >
                   {o.replace(/^(by )?the /, '')}
                 </button>

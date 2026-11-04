@@ -88,6 +88,24 @@ const PHRASES: Record<string, Task> = {
   'search the cave': { kind: 'search', place: 'cave' },
 };
 
+/** С чем глагол складывается в приказ — плитки, которые подсвечивает подсказка после ошибки. */
+export function objectsFor(verb: Verb): Obj[] {
+  return (Object.keys(PHRASES) as string[]).filter((k) => k.startsWith(`${verb} `)).map((k) => k.slice(verb.length + 1) as Obj);
+}
+
+/** Почему приказ не понят — простым английским; `fix` — плитки, которые исправят приказ. */
+export function wrongOrder(name: string, o: Order, reason: 'nonsense' | 'unknown' | 'empty' | undefined) {
+  const place = o.object.replace(/^the /, '');
+  const dir = PLACES[place as PlaceId]?.dir;
+  if (reason === 'unknown' && dir)
+    return { text: `We do not know the ${place} yet. First scout the ${dir}.`, fix: ['scout', `the ${dir}`] };
+  if (reason === 'empty') return { text: `The ${place} is empty now. We took everything from it.`, fix: [] };
+  return {
+    text: `“${o.verb} ${o.object}”? ${name} does not understand. Try one of the light words.`,
+    fix: objectsFor(o.verb) as string[],
+  };
+}
+
 export function taskOf(verb: Verb, object: Obj): Task | null {
   return PHRASES[`${verb} ${object}`] ?? null;
 }

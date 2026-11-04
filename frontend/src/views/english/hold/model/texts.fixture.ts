@@ -7,6 +7,7 @@ import {
   ROLE_PERK,
   VERBS,
   endDay,
+  wrongOrder,
   giveOrder,
   newGame,
   present,
@@ -65,6 +66,9 @@ export function allTexts(): string[] {
   }
   for (const d of ['north', 'east', 'south', 'west']) add(`scouting the ${d} · back tomorrow`, d.toUpperCase());
   for (const [role, perk] of Object.entries(ROLE_PERK)) add(`${role} · ${perk}`);
+  for (const o of OBJECTS)
+    for (const v of VERBS)
+      for (const r of ['nonsense', 'unknown', 'empty'] as const) add(wrongOrder('Mira', { verb: v, object: o }, r).text);
   for (const n of ['the old mill', 'the ruins', 'the farm', 'the cave']) add(`Now ${n} is on your map. You can search it.`);
   for (let seed = 1; seed <= 40; seed++) {
     let s: HoldState = newGame(seed);
