@@ -479,12 +479,41 @@ function End({ s }: { s: HoldState }) {
   );
 }
 
+type View = 'camp' | 'lands' | 'build';
+
+const VIEWS: { id: View; label: string; icon: IconId }[] = [
+  { id: 'camp', label: 'Camp', icon: 'fire' },
+  { id: 'lands', label: 'Lands', icon: 'spyglass' },
+  { id: 'build', label: 'Build', icon: 'tower' },
+];
+
+/** Навигация самой игры — внизу экрана, где у раздела раньше стояли вкладки учебника. */
+function GameNav({ view, onView, idle }: { view: View; onView: (v: View) => void; idle: number }) {
+  return (
+    <nav className="ah-nav" aria-label="Game">
+      {VIEWS.map((v) => (
+        <button
+          key={v.id}
+          type="button"
+          aria-current={view === v.id ? 'page' : undefined}
+          onClick={() => (onView(v.id), window.scrollTo({ top: 0 }))}
+        >
+          <Ic id={v.icon} />
+          <span>{v.label}</span>
+          {v.id === 'camp' && idle > 0 ? <b className="ah-nav-badge">{idle}</b> : null}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
 function Camp({ s }: { s: HoldState }) {
   const [picked, setPicked] = useState<Person['id'] | null>(null);
   // Доклад утра показывается один раз на день: запомнен день, доклад которого уже прочитан.
   const [readDay, setReadDay] = useState<number | null>(null);
   const [ended, setEnded] = useState(false);
   const [sure, setSure] = useState(false);
+  const [view, setView] = useState<View>('camp');
   const person = picked ? s.people.find((p) => p.id === picked && p.status === 'ok' && !p.away) : undefined;
   const idle = present(s).filter((p) => !p.order).length;
 
@@ -508,15 +537,21 @@ function Camp({ s }: { s: HoldState }) {
   return (
     <>
       <Hud s={s} />
-      <CampScene s={s} />
-      <Night s={s} />
-      <div className="ah-crewlist">
-        {s.people.map((p) => (
-          <CrewRow key={p.id} p={p} onPick={() => setPicked(p.id)} />
-        ))}
-      </div>
-      <Lands s={s} />
-      <Buildings s={s} />
+      {view === 'camp' ? (
+        <>
+          <CampScene s={s} />
+          <Night s={s} />
+          <div className="ah-crewlist">
+            {s.people.map((p) => (
+              <CrewRow key={p.id} p={p} onPick={() => setPicked(p.id)} />
+            ))}
+          </div>
+        </>
+      ) : view === 'lands' ? (
+        <Lands s={s} />
+      ) : (
+        <Buildings s={s} />
+      )}
       <div className="ah-endbar">
         <button
           type="button"
@@ -530,6 +565,7 @@ function Camp({ s }: { s: HoldState }) {
           {idle > 0 && sure ? `${idle} without orders will rest — end the day?` : 'End the day'}
         </button>
       </div>
+      <GameNav view={view} onView={setView} idle={idle} />
       {person ? <OrderSheet key={person.id} s={s} p={person} onClose={() => setPicked(null)} /> : null}
       {s.reports?.length ? <ScoutReportView key={`${s.day}:${s.reports.length}`} s={s} /> : null}
       {/* Гость ждёт, пока прочитаны доклады разведчиков: два окна разом не открываются. */}

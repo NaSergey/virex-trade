@@ -711,6 +711,11 @@
       border-bottom: 1px solid var(--rule);
       background: var(--ground);
     }
+    .adm-m:has(.adm-m-slot:not(:empty)) {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
     .adm-m-btn {
       display: flex;
       align-items: center;

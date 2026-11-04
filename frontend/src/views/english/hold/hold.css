@@ -381,7 +381,7 @@
 
 .ah-endbar {
   position: sticky;
-  bottom: 0;
+  bottom: 57px;
   z-index: 4;
   margin: 0 -10px;
   padding: 18px 10px 8px;
@@ -663,10 +663,7 @@
     aspect-ratio: 390 / 210;
   }
   .ah-sheet-back {
-    bottom: calc(57px + env(safe-area-inset-bottom));
-  }
-  .ah-sheet {
-    padding-bottom: 14px;
+    z-index: 70;
   }
 }
 
@@ -1386,4 +1383,61 @@
 .ah-tile.ah-tile-empty {
   text-decoration: line-through;
   opacity: 0.55;
+}
+
+/* ── навигация игры: низ экрана, три места лагеря ── */
+.ah-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding-bottom: env(safe-area-inset-bottom);
+  border-top: 1px solid #3a2c1c;
+  background: #0b0806;
+}
+.ah-nav button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 56px;
+  border-top: 2px solid transparent;
+  color: #8a7a62;
+  font: 600 12px var(--cin);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  -webkit-tap-highlight-color: transparent;
+}
+.ah-nav button .ah-ic {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+}
+.ah-nav button[aria-current='page'] {
+  border-top-color: var(--ah-ember);
+  color: #f0c27a;
+}
+.ah-nav-badge {
+  position: absolute;
+  top: 6px;
+  left: calc(50% + 10px);
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  font: 700 11px/18px var(--gar);
+  color: #1a0e06;
+  background: var(--ah-ember);
+  text-align: center;
+}
+/* На компьютере у страницы свой низ: панель встаёт под колонкой игры. */
+@media (min-width: 761px) {
+  .ah-nav {
+    position: sticky;
+    margin-top: 8px;
+  }
 }
