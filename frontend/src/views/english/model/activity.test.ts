@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { calendar, localDay, shiftDay, streak, type DayRow } from './activity';
+import { activityOf, calendar, localDay, shiftDay, streak, type DayRow } from './activity';
 
-const row = (day: string, cards = 1): [string, DayRow] => [day, { day, cards, answers: 0, correct: 0, phrases: 0, quiz: 0 }];
+const row = (day: string, cards = 1): [string, DayRow] => [day, { day, cards, answers: 0, correct: 0, phrases: 0, quiz: 0, game: 0 }];
 
 describe('дни занятий', () => {
   it('местная дата и сдвиг по календарю через границу месяца и года', () => {
@@ -17,6 +17,12 @@ describe('дни занятий', () => {
     expect(streak(new Map([...days, row('2026-10-21')]), '2026-10-21')).toBe(3);
     expect(streak(new Map([row('2026-10-19')]), '2026-10-21')).toBe(0);
     expect(streak(new Map([row('2026-10-20', 0)]), '2026-10-21')).toBe(0);
+  });
+
+  it('игра — тоже занятие: день с одними ответами в игре учебный', () => {
+    const day: DayRow = { day: '2026-11-04', cards: 0, answers: 0, correct: 0, phrases: 0, quiz: 0, game: 3 };
+    expect(activityOf(day)).toBe(3);
+    expect(streak(new Map([['2026-11-04', day]]), '2026-11-04')).toBe(1);
   });
 
   it('календарь: столбцы-недели с понедельника, будущее — null', () => {

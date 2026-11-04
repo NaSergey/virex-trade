@@ -1556,6 +1556,8 @@ model EnglishDay {
   phrases Int    @default(0)
   /// Ответы в тестах по темам слов.
   quiz    Int    @default(0)
+  /// Ответы в игре, не сдвинувшие карточку и не записанные упражнением.
+  game    Int    @default(0)
 
   @@map("english_days")
 }
@@ -1578,6 +1580,27 @@ model EnglishThemeWord {
 
   @@id([themeId, cardId])
   @@map("english_theme_words")
+}
+
+/// Законченный забег игры «Mind the Gap»: из них выводятся открытия, рекорды,
+/// задания дня и уровни сцен (спека docs/superpowers/specs/2026-11-04-english-game-design.md).
+model EnglishRun {
+  /// id выдаёт клиент: повтор отправки не задваивает забег.
+  id         String   @id
+  startedAt  DateTime
+  finishedAt DateTime
+  character  String
+  fog        Int
+  /// win | dead | quit
+  outcome    String
+  /// Последний пройденный ряд линии, 0–10.
+  depth      Int
+  score      Int
+  /// Статистика забега с версией (`views/english/game/model/types.ts`, `RunStats`).
+  stats      Json
+
+  @@index([finishedAt])
+  @@map("english_runs")
 }
 
 // ═══ /english ═══

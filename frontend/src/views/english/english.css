@@ -459,7 +459,7 @@
     bottom: 0;
     z-index: 40;
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: 0;
     margin: 0;
     padding-bottom: env(safe-area-inset-bottom);
@@ -480,6 +480,9 @@
     text-transform: none;
   }
   .en-tabs a[aria-current="page"] { border-top-color: var(--ink); }
+  /* Забег игры — во весь экран: панели нет, выход через паузу. */
+  .en-running .en-tabs { display: none; }
+  .en-running.wrap { padding-bottom: env(safe-area-inset-bottom); }
   .en-tab-ic { display: block; }
   .en .pagehead h1 { font-size: var(--t-l); }
   .en .pagehead .lede { font-size: var(--t-s); }

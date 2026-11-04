@@ -1,6 +1,6 @@
 /**
  * Занятия по дням: местная дата, серия дней подряд и календарь. День считается
- * учебным, если в нём было хоть одно занятие — карточка, задание или фраза.
+ * учебным, если в нём было хоть одно занятие — карточка, задание, фраза или ответ в игре.
  */
 
 export interface DayRow {
@@ -11,6 +11,8 @@ export interface DayRow {
   phrases: number;
   /** Ответы в тестах по темам слов. */
   quiz: number;
+  /** Ответы в игре, не сдвинувшие карточку и не записанные упражнением. */
+  game: number;
 }
 
 /** Местная дата `YYYY-MM-DD`: день занятий — по часам владельца, а не по UTC. */
@@ -26,7 +28,8 @@ export function shiftDay(day: string, n: number): string {
   return localDay(new Date(y, m - 1, d - n, 12).getTime());
 }
 
-export const activityOf = (r: DayRow | undefined) => (r ? r.cards + r.answers + r.phrases + (r.quiz ?? 0) : 0);
+export const activityOf = (r: DayRow | undefined) =>
+  r ? r.cards + r.answers + r.phrases + (r.quiz ?? 0) + (r.game ?? 0) : 0;
 
 /**
  * Серия дней подряд с занятиями. Сегодня ещё не занимался — серия не рвётся,

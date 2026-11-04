@@ -86,9 +86,9 @@ describe('разбор', () => {
 
   it('занятия — только за окно', () => {
     const days = new Map<string, DayRow>([
-      ['2026-10-23', { day: '2026-10-23', cards: 5, answers: 4, correct: 3, phrases: 2, quiz: 1 }],
-      ['2026-10-10', { day: '2026-10-10', cards: 1, answers: 0, correct: 0, phrases: 0, quiz: 0 }],
-      ['2026-10-09', { day: '2026-10-09', cards: 99, answers: 0, correct: 0, phrases: 0, quiz: 0 }],
+      ['2026-10-23', { day: '2026-10-23', cards: 5, answers: 4, correct: 3, phrases: 2, quiz: 1, game: 0 }],
+      ['2026-10-10', { day: '2026-10-10', cards: 1, answers: 0, correct: 0, phrases: 0, quiz: 0, game: 0 }],
+      ['2026-10-09', { day: '2026-10-09', cards: 99, answers: 0, correct: 0, phrases: 0, quiz: 0, game: 0 }],
     ]);
     const m = activityMix(days, '2026-10-23', 14);
     expect(m).toMatchObject({ cards: 6, answers: 4, correct: 3, phrases: 2, quiz: 1, activeDays: 2, total: 13 });

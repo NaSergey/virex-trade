@@ -18,6 +18,7 @@ import { LessonDto } from './dto/lesson.dto';
 import { AnswerDto } from './dto/answer.dto';
 import { PhraseDto } from './dto/phrase.dto';
 import { ThemeDto, ThemeWordDto } from './dto/theme.dto';
+import { RunDto } from './dto/run.dto';
 
 /** id из адреса: слово владельца или раздел курса. */
 function idParam(value: string): string {
@@ -81,6 +82,24 @@ export class EnglishController {
   @Post('quiz')
   quiz(@Body() dto: PhraseDto) {
     return this.english.quiz(dto.day);
+  }
+
+  /** POST /api/admin/english/game — ответ в игре без карточки и упражнения (тело — `{ day }`). */
+  @Post('game')
+  game(@Body() dto: PhraseDto) {
+    return this.english.game(dto.day);
+  }
+
+  /** GET /api/admin/english/runs — законченные забеги игры, свежие сверху. */
+  @Get('runs')
+  runs() {
+    return this.english.runs();
+  }
+
+  /** POST /api/admin/english/runs — законченный забег (id с клиента, повтор не задваивает). */
+  @Post('runs')
+  saveRun(@Body() dto: RunDto) {
+    return this.english.saveRun(dto);
   }
 
   /** POST /api/admin/english/themes — своя тема, можно сразу со словами (`cards`). */
