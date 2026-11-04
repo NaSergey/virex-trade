@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Mic, Volume2 } from 'lucide-react';
+import { Ear, Eye, Keyboard, Mic, PenLine, Puzzle, Swords, Volume2, type LucideIcon } from 'lucide-react';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Field';
 import { cn } from '@/shared/lib/utils/css';
@@ -12,40 +12,21 @@ import { MODE_HINT, MODE_LABEL, tagOf } from '../labels';
 import { critWindow } from '../model/combat';
 import { currentExercise, modesOf, previewDamage, type Action, type Fight, type RunState } from '../model/engine';
 import type { Mode } from '../model/types';
-import { Fog } from './Fog';
+import { FoeStage } from './FoeStage';
 
 /** Верный ответ сам листает дальше — на телефоне одно касание на ход. */
-const AUTO_NEXT_MS = 900;
+const AUTO_NEXT_MS = 800;
+
+const MODE_ICON: Record<Mode, LucideIcon> = {
+  recognize: Eye,
+  listen: Ear,
+  recall: Keyboard,
+  speak: Mic,
+  order: Puzzle,
+  dictate: PenLine,
+};
 
 type Dispatch = (a: Action) => void;
-
-/** Противник: имя, правило, здоровье и намерение. */
-function FoeHead({ f }: { f: Fight }) {
-  const { foe } = f;
-  const tags = [foe.weak ? `слаб к «${MODE_LABEL[foe.weak]}»` : '', foe.resist ? `стоек к «${MODE_LABEL[foe.resist]}»` : '']
-    .filter(Boolean)
-    .join(' · ');
-  return (
-    <header className="eg-foe">
-      <div className="eg-foe-name">
-        <span>{foe.kind === 'boss' ? 'Хранитель' : foe.kind === 'elite' ? 'Элита' : 'Туман'}</span>
-        <b>{foe.name}</b>
-      </div>
-      {foe.text || tags ? <p className="eg-foe-rule muted">{[foe.text, tags].filter(Boolean).join(' · ')}</p> : null}
-      <div className="eg-bar" aria-label={`Здоровье противника ${foe.hp} из ${foe.maxHp}`}>
-        <i style={{ transform: `scaleX(${foe.hp / foe.maxHp})` }} />
-      </div>
-      <p className="eg-foe-meta">
-        <span>
-          {foe.hp} / {foe.maxHp}
-        </span>
-        <span>
-          удар {foe.atk} · через {foe.timer} {foe.timer === 1 ? 'ход' : foe.timer < 5 ? 'хода' : 'ходов'}
-        </span>
-      </p>
-    </header>
-  );
-}
 
 /** Полоса окна крита: тает от полной до нуля, дальше крита нет. */
 function CritBar({ ms, at }: { ms: number; at: number }) {
@@ -145,7 +126,11 @@ function SpeakAnswer({ f, dispatch }: { f: Fight; dispatch: Dispatch }) {
           Не помню
         </Button>
       </div>
-      {heard && active ? <p className="muted" lang="en">{heard}</p> : null}
+      {heard && active ? (
+        <p className="muted" lang="en">
+          {heard}
+        </p>
+      ) : null}
       {error ? <p className="neg">{error}</p> : null}
     </div>
   );
@@ -192,15 +177,25 @@ function Options({ f, dispatch }: { f: Fight; dispatch: Dispatch }) {
       {ch.options!.map((o, i) => (
         <Button
           key={i}
-          variant="default"
+          variant="none"
+          className="eg-option"
           disabled={f.hidden?.includes(i)}
           onClick={() => dispatch({ type: 'answer', value: i, now: Date.now() })}
         >
           <span className="eg-key">{i + 1}</span>
-          {o}
+          <span>{o}</span>
         </Button>
       ))}
     </div>
+  );
+}
+
+function ModeTag({ mode }: { mode: Mode }) {
+  const Icon = MODE_ICON[mode];
+  return (
+    <p className="eg-task">
+      <Icon size={14} aria-hidden /> {MODE_LABEL[mode]} · {MODE_HINT[mode]}
+    </p>
   );
 }
 
@@ -214,9 +209,7 @@ function Challenge({ run, f, dispatch }: { run: RunState; f: Fight; dispatch: Di
   }, [hears, ch.audio]);
   return (
     <div className="eg-challenge">
-      <p className="eg-task">
-        {MODE_LABEL[ch.mode]} · {MODE_HINT[ch.mode]}
-      </p>
+      <ModeTag mode={ch.mode} />
       {hears ? (
         <div className="eg-row eg-center">
           <Button variant="default" onClick={() => speak(ch.audio)} aria-label="Ещё раз">
@@ -251,7 +244,8 @@ function Result({ f, dispatch }: { f: Fight; dispatch: Dispatch }) {
   const card = f.card;
   const ok = last.outcome !== 'wrong';
   useEffect(() => {
-    if (card && f.mode !== 'listen' && f.mode !== 'dictate') speak(f.mode === 'order' && card.example ? card.example[0] : card.en);
+    if (card && f.mode !== 'listen' && f.mode !== 'dictate')
+      speak(f.mode === 'order' && card.example ? card.example[0] : card.en);
   }, [card, f.mode]);
   useEffect(() => {
     if (!ok || f.foe.hp <= 0) return;
@@ -260,6 +254,7 @@ function Result({ f, dispatch }: { f: Fight; dispatch: Dispatch }) {
   }, [ok, f.foe.hp, dispatch]);
   return (
     <div className={cn('eg-result', ok ? 'eg-result-ok' : 'eg-result-bad')}>
+      <p className="eg-verdict">{ok ? (last.outcome === 'typo' ? 'Почти!' : 'Верно!') : 'Мимо'}</p>
       {card ? (
         <>
           <p className="eg-word" lang="en">
@@ -274,17 +269,15 @@ function Result({ f, dispatch }: { f: Fight; dispatch: Dispatch }) {
           ) : null}
         </>
       ) : null}
-      <p className="eg-hits">
-        {ok ? <span className="eg-dmg">−{last.damage}</span> : <span className="neg">мимо</span>}
-        {last.crit ? <span className="eg-critlabel">крит</span> : null}
-        {last.outcome === 'typo' ? <span className="muted">почти — опечатка</span> : null}
-        {last.taken > 0 ? <span className="neg">♥ −{last.taken}</span> : null}
-        {last.blockedBy ? <span className="muted">{last.blockedBy === 'umbrella' ? 'Зонт простил ошибку' : 'Зонт закрыл удар'}</span> : null}
-        {last.healed > 0 ? <span className="pos">♥ +{last.healed}</span> : null}
-      </p>
+      {last.outcome === 'typo' || last.blockedBy ? (
+        <p className="eg-note eg-center-text">
+          {last.outcome === 'typo' ? 'почти — опечатка' : ''}
+          {last.blockedBy ? (last.blockedBy === 'umbrella' ? 'Зонт простил ошибку' : 'Зонт закрыл удар') : ''}
+        </p>
+      ) : null}
       {!ok || f.foe.hp <= 0 ? (
-        <Button variant="solid" autoFocus onClick={() => dispatch({ type: 'next', now: Date.now() })}>
-          {f.foe.hp <= 0 ? 'Туман рассеян' : 'Дальше'}
+        <Button variant="solid" className="eg-go" autoFocus onClick={() => dispatch({ type: 'next', now: Date.now() })}>
+          {f.foe.hp <= 0 ? 'Победа — дальше' : 'Дальше'}
         </Button>
       ) : null}
     </div>
@@ -307,8 +300,8 @@ function Intro({ f, dispatch }: { f: Fight; dispatch: Dispatch }) {
           <span className="muted">{card.example[1]}</span>
         </p>
       ) : null}
-      <Button variant="solid" autoFocus onClick={() => dispatch({ type: 'next', now: Date.now() })}>
-        Понял
+      <Button variant="solid" className="eg-go" autoFocus onClick={() => dispatch({ type: 'next', now: Date.now() })}>
+        Запомнил — в бой
       </Button>
     </div>
   );
@@ -318,19 +311,36 @@ function Attacks({ run, f, dispatch }: { run: RunState; f: Fight; dispatch: Disp
   const modes = modesOf(run);
   return (
     <div className="eg-choose">
-      <p className="eg-tag">{f.card ? tagOf(f.card, f.via) : ''}</p>
+      <div className="eg-choose-head">
+        <p className="eg-task">Выбери удар</p>
+        {f.card ? <span className="eg-wordtag">{tagOf(f.card, f.via)}</span> : null}
+      </div>
       <div className="eg-attacks">
-        {modes.map((m, i) => (
-          <Button key={m} variant="default" onClick={() => dispatch({ type: 'mode', mode: m, now: Date.now() })}>
-            <span className="eg-key">{i + 1}</span>
-            <b>{MODE_LABEL[m]}</b>
-            <span className="eg-attack-dmg">
-              {previewDamage(run, m)}
-              {f.foe.weak === m ? ' ▲' : f.foe.resist === m ? ' ▼' : ''}
-            </span>
-            <span className="muted">{MODE_HINT[m]}</span>
-          </Button>
-        ))}
+        {modes.map((m, i) => {
+          const Icon = MODE_ICON[m];
+          const weak = f.foe.weak === m;
+          const resist = f.foe.resist === m;
+          return (
+            <Button
+              key={m}
+              variant="none"
+              className={cn('eg-attack', weak && 'eg-attack-weak', resist && 'eg-attack-resist')}
+              onClick={() => dispatch({ type: 'mode', mode: m, now: Date.now() })}
+              style={{ animationDelay: `${i * 40}ms` }}
+            >
+              <span className="eg-key">{i + 1}</span>
+              <Icon className="eg-attack-ic" size={22} aria-hidden />
+              <span className="eg-attack-name">{MODE_LABEL[m]}</span>
+              <span className="eg-attack-hint">{MODE_HINT[m]}</span>
+              <span className="eg-attack-dmg" aria-label={`урон ${previewDamage(run, m)}`}>
+                <Swords size={14} aria-hidden />
+                {previewDamage(run, m)}
+              </span>
+              {weak ? <span className="eg-attack-badge">слабость</span> : null}
+              {resist ? <span className="eg-attack-badge eg-attack-badge-dim">стойкость</span> : null}
+            </Button>
+          );
+        })}
       </div>
     </div>
   );
@@ -348,13 +358,6 @@ function BossTurn({ run, f, dispatch }: { run: RunState; f: Fight; dispatch: Dis
         onAnswer={(correct) => dispatch({ type: 'exercise', correct, now: Date.now() })}
         onNext={() => dispatch({ type: 'next', now: Date.now() })}
       />
-      {f.phase === 'result' && f.last ? (
-        <p className="eg-hits">
-          {f.last.outcome !== 'wrong' ? <span className="eg-dmg">−{f.last.damage}</span> : null}
-          {f.last.crit ? <span className="eg-critlabel">крит</span> : null}
-          {f.last.taken > 0 ? <span className="neg">♥ −{f.last.taken}</span> : null}
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -382,10 +385,12 @@ export function FightView({ run, f, dispatch }: { run: RunState; f: Fight; dispa
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  const hurt = f.phase === 'result' && f.last && f.last.taken > 0;
   return (
     <section className="eg-fight">
-      <FoeHead f={f} />
-      <Fog density={f.foe.hp / f.foe.maxHp} hit={hits}>
+      {hurt ? <div key={`hurt${hits}:${f.shownAt}`} className="eg-hurt" aria-hidden /> : null}
+      <FoeStage f={f} />
+      <div className="eg-panel">
         {f.foe.kind === 'boss' ? (
           <BossTurn run={run} f={f} dispatch={dispatch} />
         ) : f.phase === 'intro' ? (
@@ -397,7 +402,7 @@ export function FightView({ run, f, dispatch }: { run: RunState; f: Fight; dispa
         ) : (
           <Result f={f} dispatch={dispatch} />
         )}
-      </Fog>
+      </div>
     </section>
   );
 }

@@ -36,6 +36,8 @@ export interface HubProps {
   open: ReadonlySet<string>;
   levels: ReadonlyMap<string, SceneLevel>;
   unlocked: ReadonlySet<string>;
+  /** Отвечать голосом; null — микрофона в браузере нет, выбора тоже. */
+  voice: { on: boolean; set: (on: boolean) => void } | null;
   onStart: () => void;
 }
 
@@ -80,6 +82,17 @@ export function Hub(p: HubProps) {
         <p className="muted">
           Погода дня — {WEATHER[p.weather].name.toLowerCase()}: {WEATHER[p.weather].text}.
         </p>
+        {p.voice ? (
+          <Seg
+            ariaLabel="Ответы голосом"
+            options={[
+              { value: 'on', label: 'С голосом', title: 'Удар «Сказать» и ответы в сценах — вслух' },
+              { value: 'off', label: 'Без голоса', title: 'Всё пишешь и выбираешь — говорить вслух не нужно' },
+            ]}
+            value={p.voice.on ? 'on' : 'off'}
+            onChange={(v) => p.voice!.set(v === 'on')}
+          />
+        ) : null}
         {p.characters.length > 1 ? (
           <Seg
             ariaLabel="Персонаж"

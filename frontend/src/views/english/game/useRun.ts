@@ -1,10 +1,9 @@
 'use client';
 
-import { useEffect, useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from 'react';
 import type { RunRow } from '../api/hooks';
 import { applyEffects, type EffectDeps } from './model/effects';
 import { startRun, step, toRunRow, type Action, type RunState, type StartInput } from './model/engine';
-import { setRunActive } from './run-active';
 
 /**
  * Забег страницы. Состояние — в localStorage после каждого действия: вкладку на
@@ -76,11 +75,6 @@ export interface RunDeps {
 
 export function useRun(deps: RunDeps) {
   const run = useSyncExternalStore(subscribe, snapshot, () => null);
-
-  useEffect(() => {
-    setRunActive(!!run && !run.outcome);
-    return () => setRunActive(false);
-  }, [run]);
 
   const dispatch = (a: Action) => {
     const prev = snapshot();
