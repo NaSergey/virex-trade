@@ -413,8 +413,8 @@
   .eg-result,
   .eg-intro { padding: var(--s2) var(--s3); }
   .eg-start { width: 100%; }
-  /* Кнопки станций липнут над панелью вкладок учебника (56 px + рамка). */
-  .eg-map-go { bottom: calc(57px + env(safe-area-inset-bottom)); }
+  /* Кнопки станций липнут к низу экрана, над полоской «домой». */
+  .eg-map-go { bottom: 0; padding-bottom: calc(var(--s2) + env(safe-area-inset-bottom)); }
   .eg-map-go .eg-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
   .eg-prompt,
   .eg-word { font-size: 28px; }

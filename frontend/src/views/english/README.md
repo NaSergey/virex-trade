@@ -28,7 +28,8 @@ Friends Starter (SB + WB). Спека — `docs/superpowers/specs/2026-10-21-eng
   Игра — в `localStorage`; иконки game-icons.net (CC BY 3.0, подпись на экране), шрифты — `hold/fonts/`.
 - `api/hooks.ts` — запросы к `/api/admin/english/*`.
 - `*Page.tsx`, `Layout.tsx`, `components/`, `english.css` — страницы и стили. На телефоне
-  раздел — приложение: нижняя панель вкладок, сверху общая шапка админки с выбором раздела, манифест для главного
+  раздел — приложение: страницы — бургером справа в общей шапке админки (портал в `#adm-m-slot`), низ экрана —
+  навигация игры (у Ashen Hold — Camp / Lands / Build), манифест для главного
   экрана — `frontend/public/assets/english/`.
 - `tools/` — озвучка: `export-texts.ts` выгружает все фразы, `audio.py` озвучивает их
   нейросетевым голосом Kokoro (Apache-2.0, голос `af_heart` — выбран владельцем по образцам).
@@ -50,7 +51,8 @@ Friends Starter (SB + WB). Спека — `docs/superpowers/specs/2026-10-21-eng
 ## Точки подключения
 
 1. `backend/src/app.module.ts` — `EnglishModule` в `imports`.
-2. `frontend/src/app/(internal)/AdminChrome.tsx` — пункт `english` в `ITEMS`; ключ
+2. `frontend/src/app/(internal)/AdminChrome.tsx` — пункт `english` в `ITEMS` (слот `#adm-m-slot` в шапке
+   телефона общий — его можно оставить); ключ
    `adminShell.english` в `frontend/src/shared/i18n/messages/{ru,en}.json`.
 3. `frontend/src/app/admin/(in)/english/` — файлы маршрутов (реэкспорт отсюда).
 4. `backend/prisma/schema.prisma` — блок между метками `═══ english ═══` и `═══ /english ═══`.

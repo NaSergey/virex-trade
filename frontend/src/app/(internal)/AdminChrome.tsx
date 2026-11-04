@@ -140,6 +140,8 @@ function MobileNav({ path, email, onLogout }: { path: string; email?: string; on
         <span>{current ? t(current.key) : t('brand')}</span>
         <ChevronDown size={16} aria-hidden className="adm-m-chev" />
       </Button>
+      {/* Место для меню самого раздела (бургер учебника): раздел кладёт его сюда порталом. */}
+      <span id="adm-m-slot" className="adm-m-slot" />
       {open && (
         <nav className="adm-m-menu" aria-label={t('brand')}>
           {ITEMS.map(({ href, key, icon: ItemIcon }) => (
