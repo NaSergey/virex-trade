@@ -4,7 +4,9 @@ import { useState } from 'react';
 import Link from 'next/link';
 import localFont from 'next/font/local';
 import { cn } from '@/shared/lib/utils/css';
+import { BattleView } from './components/Battle';
 import { CampScene, HoldDefs } from './components/CampScene';
+import { startBattle } from './model/battle';
 import { CREDIT, ICONS, type IconId } from './icons';
 import {
   BUILDINGS,
@@ -370,6 +372,8 @@ function Camp({ s }: { s: HoldState }) {
   const idle = present(s).filter((p) => !p.order).length;
 
   if (s.outcome && ended) return <End s={s} />;
+  // Набег этой ночи — бой; до утра лагерь не показывается.
+  if (s.battle) return <BattleView s={s} />;
   if (readDay !== s.day || (s.outcome && !ended))
     return (
       <>
@@ -402,7 +406,7 @@ function Camp({ s }: { s: HoldState }) {
           onClick={() => {
             if (idle > 0 && !sure) return setSure(true);
             setSure(false);
-            saveGame(endDay(s));
+            saveGame(s.tonight ? startBattle(s) : endDay(s));
           }}
         >
           {idle > 0 && sure ? `${idle} without orders will rest — end the day?` : 'End the day'}

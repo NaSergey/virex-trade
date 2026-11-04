@@ -1,4 +1,5 @@
 import { chance, int, next, pick, rand, type Rand } from '../../game/model/rng';
+import type { Battle } from './battle';
 
 /**
  * Ashen Hold, шаг 1 — лагерь (спека docs/superpowers/specs/2026-11-04-ashen-hold-design.md).
@@ -119,6 +120,10 @@ export interface HoldState {
   report: string[];
   stats: { phrases: number; mistakes: number; raids: number; repelled: number };
   outcome: 'win' | 'lose' | null;
+  /** Идущий ночной бой (шаг 2): пока он есть, лагерь показывает бой. */
+  battle?: Battle | null;
+  /** Строки доклада, которые оставил бой этой ночи; набег уже разыгран — ночь его не считает. */
+  nightLog?: string[] | null;
 }
 
 const START_PEOPLE: Omit<Person, 'hp' | 'morale' | 'status' | 'order'>[] = [
@@ -288,7 +293,8 @@ export function endDay(s0: HoldState): HoldState {
 
   // ── набег ──
   const raid = s.tonight;
-  if (raid) {
+  if (s.nightLog) log.push(...s.nightLog);
+  else if (raid) {
     s.stats.raids += 1;
     const def = defenseOf(s0);
     const who = raid.kind === 'wolves' ? 'Wolves' : 'Bandits';
@@ -359,6 +365,8 @@ export function endDay(s0: HoldState): HoldState {
   }
 
   for (const p of s.people) p.order = null;
+  s.nightLog = null;
+  s.battle = null;
   s.day += 1;
   if (present(s).length === 0) {
     s.outcome = 'lose';
