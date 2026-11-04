@@ -125,7 +125,7 @@ export function startBattle(s0: HoldState): HoldState {
   const s: HoldState = structuredClone(s0);
   const r = box(s);
   const n = clamp(Math.round(raid.strength / 2.5), 1, 4);
-  const bonus = Math.floor(s.day / 10);
+  const bonus = Math.floor(s.day / 12);
   const list: [EnemyKind, string][] =
     raid.kind === 'wolves' ? WOLF_NAMES.slice(0, n).map((name) => ['wolf', name]) : BANDITS.slice(0, n);
   const enemies: Enemy[] = list.map(([kind, name], i) => ({

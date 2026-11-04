@@ -19,11 +19,23 @@ export type Danger = 'none' | 'wolves' | 'bandits';
 export const DIRS: readonly Dir[] = ['north', 'east', 'south', 'west'];
 export const PLACE_OF: Record<Dir, PlaceId> = { north: 'mill', east: 'ruins', south: 'farm', west: 'cave' };
 
-export const PLACES: Record<PlaceId, { name: string; dir: Dir; intro: string }> = {
-  mill: { name: 'the old mill', dir: 'north', intro: 'I went north and found the old mill.' },
-  ruins: { name: 'the ruins', dir: 'east', intro: 'In the east there are old stone ruins.' },
-  farm: { name: 'the farm', dir: 'south', intro: 'To the south there is an empty farm.' },
-  cave: { name: 'the cave', dir: 'west', intro: 'In the west I found a dark cave.' },
+export const PLACES: Record<PlaceId, { name: string; dir: Dir; intro: [string, string] }> = {
+  mill: {
+    name: 'the old mill',
+    dir: 'north',
+    intro: ['I went north. I found an old mill.', 'Я пошёл на север. Я нашёл старую мельницу.'],
+  },
+  ruins: {
+    name: 'the ruins',
+    dir: 'east',
+    intro: ['I went east. There are old ruins.', 'Я пошёл на восток. Там старые развалины.'],
+  },
+  farm: { name: 'the farm', dir: 'south', intro: ['I went south. There is an old farm.', 'Я пошёл на юг. Там старая ферма.'] },
+  cave: {
+    name: 'the cave',
+    dir: 'west',
+    intro: ['I went west. I found a dark cave.', 'Я пошёл на запад. Я нашёл тёмную пещеру.'],
+  },
 };
 
 /** Что чаще лежит в месте: на мельнице — зерно, в руинах и пещере — железо, на ферме — еда и доски. */
@@ -49,20 +61,42 @@ const LOOT_WEIGHTS: Record<PlaceId, readonly (readonly [Loot, number])[]> = {
   ],
 };
 
-const LOOT_LINES: Record<Loot, string[]> = {
-  food: ['There are sacks of grain inside.', 'I saw dried meat hanging from the roof.'],
-  wood: ['There are piles of dry planks.', 'Many old beams lie on the ground.'],
-  iron: ['I found old tools and nails.', 'There is a heap of rusty iron.'],
-  nothing: ['There is nothing useful there.', 'Someone took everything before us.'],
+/** Фразы доклада — короткие, на уровне начала курса; к каждой — перевод для «Translate». */
+const LOOT_LINES: Record<Loot, [string, string][]> = {
+  food: [
+    ['There is food inside.', 'Внутри есть еда.'],
+    ['I saw a lot of meat there.', 'Я видел там много мяса.'],
+  ],
+  wood: [
+    ['There is a lot of wood there.', 'Там много дерева.'],
+    ['I saw old wood on the floor.', 'Я видел старое дерево на полу.'],
+  ],
+  iron: [
+    ['There is old iron there.', 'Там есть старое железо.'],
+    ['I saw iron tools inside.', 'Я видел внутри железные инструменты.'],
+  ],
+  nothing: [
+    ['There is nothing there.', 'Там ничего нет.'],
+    ['It is empty. Nothing is inside.', 'Там пусто. Внутри ничего.'],
+  ],
 };
 
-const DANGER_LINES: Record<Danger, string[]> = {
-  none: ['It is quiet. I did not see anyone.', 'No one lives there now.'],
-  wolves: ['But wolves sleep there at night.', 'But I heard wolves near it.'],
-  bandits: ['But bandits have a camp there.', 'But I saw bandits with bows there.'],
+const DANGER_LINES: Record<Danger, [string, string][]> = {
+  none: [
+    ['It is quiet. Nobody is there.', 'Там тихо. Там никого нет.'],
+    ['I did not see any people there.', 'Я не видел там людей.'],
+  ],
+  wolves: [
+    ['But wolves live there.', 'Но там живут волки.'],
+    ['But I heard wolves near it.', 'Но я слышал рядом волков.'],
+  ],
+  bandits: [
+    ['But bandits live there.', 'Но там живут разбойники.'],
+    ['But I saw bandits with bows.', 'Но я видел разбойников с луками.'],
+  ],
 };
 
-export const LOOT_ANSWER: Record<Loot, string> = { food: 'Food', wood: 'Wood', iron: 'Iron', nothing: 'Nothing useful' };
+export const LOOT_ANSWER: Record<Loot, string> = { food: 'Food', wood: 'Wood', iron: 'Iron', nothing: 'Nothing' };
 export const DANGER_ANSWER: Record<Danger, string> = {
   none: 'Yes, it is safe.',
   wolves: 'No, wolves live there.',
@@ -83,6 +117,8 @@ export interface ScoutReport {
   person: PersonId;
   place: PlaceId;
   lines: string[];
+  /** Перевод строк — показывается по «Translate» за цену. */
+  ru: string[];
   question: string;
   options: string[];
   answer: number;
@@ -104,7 +140,9 @@ export function makePlaces(r: Rand): Places {
 
 /** Доклад вернувшегося разведчика и вопрос по нему — то о добыче, то об опасности. */
 export function makeReport(r: Rand, who: PersonId, id: PlaceId, p: Place): ScoutReport {
-  const lines = [PLACES[id].intro, pick(r, LOOT_LINES[p.loot]), pick(r, DANGER_LINES[p.danger])];
+  const pairs = [PLACES[id].intro, pick(r, LOOT_LINES[p.loot]), pick(r, DANGER_LINES[p.danger])];
+  const lines = pairs.map((x) => x[0]);
+  const ru = pairs.map((x) => x[1]);
   if (chance(r, 0.5)) {
     const wrong = shuffle(
       r,
@@ -115,6 +153,7 @@ export function makeReport(r: Rand, who: PersonId, id: PlaceId, p: Place): Scout
       person: who,
       place: id,
       lines,
+      ru,
       question: `What can we find in ${PLACES[id].name}?`,
       options: options.map((x) => LOOT_ANSWER[x]),
       answer: options.indexOf(p.loot),
@@ -125,6 +164,7 @@ export function makeReport(r: Rand, who: PersonId, id: PlaceId, p: Place): Scout
     person: who,
     place: id,
     lines,
+    ru,
     question: `Is ${PLACES[id].name} safe?`,
     options: options.map((x) => DANGER_ANSWER[x]),
     answer: options.indexOf(p.danger),

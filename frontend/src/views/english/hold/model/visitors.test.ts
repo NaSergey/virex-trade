@@ -7,7 +7,8 @@ const offer = { give: 'iron', giveN: 4, want: 'wood', wantN: 6 } as const;
 const trader = (kind: 'trader' | 'liar'): Visitor => ({
   kind,
   speech: 'Good morning…',
-  detail: kind === 'liar' ? 'His boots are red with fresh blood.' : 'His cart is full of sacks and tools.',
+  detail: kind === 'liar' ? 'There is blood on his boots.' : 'His cart is full of bags.',
+  ru: { speech: '', detail: '' },
   options: [],
   offer: { ...offer },
 });
@@ -30,7 +31,7 @@ describe('гости у ворот', () => {
       (v) => v && (v.kind === 'trader' || v.kind === 'liar'),
     );
     for (const v of both) {
-      expect(v!.speech).toMatch(/^Good morning\. I am a trader\./);
+      expect(v!.speech).toMatch(/^Hello\. I sell things\./);
       expect(v!.options.map((o) => o.id)).toEqual(['trade', 'check', 'refuse']);
     }
   });
@@ -40,7 +41,7 @@ describe('гости у ворот', () => {
     expect(state.res.wood).toBe(4);
     expect(state.res.iron).toBe(6);
     expect(state.visitor).toBeNull();
-    expect(lines[0]).toMatch(/A good trade/);
+    expect(lines[0]).toMatch(/Good!/);
   });
 
   it('впустить разбойника — грабёж, проверить руки — он бежит', () => {
@@ -49,11 +50,18 @@ describe('гости у ворот', () => {
     expect(robbed.lines[0]).toMatch(/It was a trap!/);
     const checked = answerVisitor(at(trader('liar')), 'check');
     expect(checked.state.res).toEqual({ food: 10, water: 10, wood: 10, iron: 2 });
-    expect(checked.lines[0]).toMatch(/runs back into the forest/);
+    expect(checked.lines[0]).toMatch(/runs away into the forest/);
   });
 
   it('раненый путник за воду открывает место на карте', () => {
-    const s = at({ kind: 'traveler', speech: '', detail: '', options: [], ask: { res: 'water', n: 2 } });
+    const s = at({
+      kind: 'traveler',
+      speech: '',
+      detail: '',
+      ru: { speech: '', detail: '' },
+      options: [],
+      ask: { res: 'water', n: 2 },
+    });
     const { state } = answerVisitor(s, 'give');
     expect(state.res.water).toBe(8);
     expect(Object.values(state.places!).filter((p) => p.known)).toHaveLength(1);

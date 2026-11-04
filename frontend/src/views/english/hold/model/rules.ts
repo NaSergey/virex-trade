@@ -140,7 +140,7 @@ export interface HoldState {
   tonight: Raid | null;
   /** Доклад прошлой ночи — показывается утром. */
   report: string[];
-  stats: { phrases: number; mistakes: number; raids: number; repelled: number };
+  stats: { phrases: number; mistakes: number; raids: number; repelled: number; translated?: number };
   outcome: 'win' | 'lose' | null;
   /** Идущий ночной бой (шаг 2): пока он есть, лагерь показывает бой. */
   battle?: Battle | null;
@@ -169,7 +169,7 @@ export const ROLE_PERK: Record<Role, string> = {
 };
 
 const rollRaid = (r: Rand, day: number): Raid | null =>
-  day >= 2 && chance(r, Math.min(0.75, 0.2 + day * 0.018))
+  day >= 2 && chance(r, Math.min(0.6, 0.15 + day * 0.016))
     ? { kind: day < 10 ? 'wolves' : pick(r, ['wolves', 'bandits'] as const), strength: int(r, 2, 4) + Math.floor(day / 5) }
     : null;
 
@@ -476,5 +476,14 @@ export const morale = (s: HoldState) => {
   const ps = present(s);
   return ps.length ? ps.reduce((n, p) => n + p.morale, 0) / ps.length : 0;
 };
+
+/** Цена перевода фразы целиком: −1 настроения у всех в лагере. */
+export function spendMorale(s: HoldState): HoldState {
+  return {
+    ...s,
+    people: s.people.map((p) => (p.status === 'ok' && !p.away ? { ...p, morale: Math.max(0, p.morale - 1) } : p)),
+    stats: { ...s.stats, translated: (s.stats.translated ?? 0) + 1 },
+  };
+}
 
 export const phraseOf = (name: string, o: Order) => `${name}, ${o.verb} ${o.object}.`;

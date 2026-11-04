@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import { cn } from '@/shared/lib/utils/css';
 import { ICONS, type IconId } from '../icons';
-import type { HoldState } from '../model/rules';
+import { spendMorale, type HoldState } from '../model/rules';
 import { PLACES, answerReport, type Danger, type Loot, type PlaceId } from '../model/scout';
 import { saveGame } from '../model/store';
+import { Tap } from './Words';
 
 /**
  * Карта окрестностей и доклад разведчика (шаг 3). Карта — те же фильтры местности, что у
@@ -125,6 +126,7 @@ export function ScoutReportView({ s }: { s: HoldState }) {
   const rep = s.reports![0];
   const who = s.people.find((p) => p.id === rep.person)!;
   const [picked, setPicked] = useState<number | null>(null);
+  const [ru, setRu] = useState(false);
   const done = picked !== null;
   const ok = picked === rep.answer;
   return (
@@ -136,11 +138,25 @@ export function ScoutReportView({ s }: { s: HoldState }) {
         <ul>
           {rep.lines.map((l, i) => (
             <li key={i} style={{ animationDelay: `${i * 90}ms` }}>
-              “{l}”
+              “<Tap text={l} />”{ru && rep.ru ? <span className="ah-ru">{rep.ru[i]}</span> : null}
             </li>
           ))}
         </ul>
-        <p className="ah-q-ask">{rep.question}</p>
+        {!done && !ru && rep.ru ? (
+          <button
+            type="button"
+            className="ah-translate ah-translate-paper"
+            onClick={() => {
+              saveGame(spendMorale(s));
+              setRu(true);
+            }}
+          >
+            Translate · −1 morale
+          </button>
+        ) : null}
+        <p className="ah-q-ask">
+          <Tap text={rep.question} />
+        </p>
         <div className="ah-answers">
           {rep.options.map((o, i) => (
             <button

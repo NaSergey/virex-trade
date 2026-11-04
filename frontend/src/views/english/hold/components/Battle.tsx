@@ -21,6 +21,7 @@ import {
 } from '../model/battle';
 import { MAX_HP, endDay, present, type HoldState, type Person, type PersonId } from '../model/rules';
 import { saveGame } from '../model/store';
+import { Tap, TileHint } from './Words';
 
 /** Сколько длится вспышка удара: не успел выбрать защиту — удар прошёл. */
 export const PARRY_MS = 4000;
@@ -58,7 +59,13 @@ function EnemyCard({ s, e }: { s: HoldState; e: Enemy }) {
         <b>{e.name}</b>
         <Pips n={e.hp} max={e.maxHp} />
       </span>
-      {said ? <p className="ah-say">{said}</p> : e.hp <= 0 ? <p className="ah-foe-out">dead</p> : null}
+      {said ? (
+        <p className="ah-say">
+          <Tap text={said} />
+        </p>
+      ) : e.hp <= 0 ? (
+        <p className="ah-foe-out">dead</p>
+      ) : null}
     </div>
   );
 }
@@ -92,6 +99,7 @@ function OrderPanel({ s, id, onDone }: { s: HoldState; id: PersonId; onDone: () 
   const [verb, setVerb] = useState<BVerb | null>(null);
   const [target, setTarget] = useState<string | null>(null);
   const [wrong, setWrong] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
   const [shake, setShake] = useState(0);
   const targets = [
     ...b.enemies.filter((e) => e.hp > 0).map((e) => e.name),
@@ -120,14 +128,14 @@ function OrderPanel({ s, id, onDone }: { s: HoldState; id: PersonId; onDone: () 
           {target ?? '· · ·'}
         </button>
       </div>
-      {wrong ? <p className="ah-wrong">{wrong}</p> : null}
+      {wrong ? <p className="ah-wrong">{wrong}</p> : <TileHint word={hint} />}
       <div className="ah-tiles">
         {BVERBS.map((v) => (
           <button
             key={v}
             type="button"
             className={cn('ah-tile', verb === v && 'used')}
-            onClick={() => (setVerb(v), setWrong(null))}
+            onClick={() => (setVerb(v), setHint(v), setWrong(null))}
           >
             {v}
           </button>
@@ -139,7 +147,7 @@ function OrderPanel({ s, id, onDone }: { s: HoldState; id: PersonId; onDone: () 
             key={t}
             type="button"
             className={cn('ah-tile', target === t && 'used')}
-            onClick={() => (setTarget(t), setWrong(null))}
+            onClick={() => (setTarget(t), setHint(t), setWrong(null))}
           >
             {t}
           </button>
@@ -229,7 +237,9 @@ export function BattleView({ s }: { s: HoldState }) {
       {b.last.length ? (
         <ul className="ah-blog">
           {b.last.map((l, i) => (
-            <li key={`${b.round}:${i}`}>{l}</li>
+            <li key={`${b.round}:${i}`}>
+              <Tap text={l} />
+            </li>
           ))}
         </ul>
       ) : null}

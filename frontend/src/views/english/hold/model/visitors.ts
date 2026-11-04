@@ -8,7 +8,7 @@ import { PLACES, type PlaceId } from './scout';
  * Утром у ворот может стоять гость. Он говорит по-английски, рассказчик добавляет одну деталь о
  * нём — и решить, что ответить, можно, только прочитав обе строки. Торговец и разбойник под видом
  * торговца говорят одно и то же и получают одни и те же три ответа: отличает их только деталь
- * («His boots are red with fresh blood.» против «His cart is full of sacks.»). Голодные беженцы
+ * («There is blood on his boots.» против «His cart is full of bags.»). Голодные беженцы
  * просят еды, раненый путник — воды и платит тем, что знает о местах вокруг лагеря.
  */
 
@@ -21,6 +21,8 @@ export interface Visitor {
   speech: string;
   /** Что видно со стены. Для разбойника — улика. */
   detail: string;
+  /** Перевод речи и детали — по «Translate» за цену. */
+  ru: { speech: string; detail: string };
   options: { id: Answer; text: string }[];
   /** Сделка торговца (и мнимая — у разбойника): он отдаёт `give`, хочет `want`. */
   offer?: { give: ResId; giveN: number; want: ResId; wantN: number };
@@ -31,15 +33,32 @@ export interface Visitor {
 const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
 export const word = (n: number) => WORDS[n] ?? String(n);
 
-const HONEST = [
-  'His cart is full of sacks and tools.',
-  'He shows you his empty hands and smiles.',
-  'An old horse pulls his small cart.',
+const RU_NUM = [
+  'ноль',
+  'один',
+  'два',
+  'три',
+  'четыре',
+  'пять',
+  'шесть',
+  'семь',
+  'восемь',
+  'девять',
+  'десять',
+  'одиннадцать',
+  'двенадцать',
 ];
-const CLUES = [
-  'His boots are red with fresh blood.',
-  'You see a knife under his coat.',
-  'You hear other men moving in the trees behind him.',
+const RU_RES: Record<ResId, string> = { food: 'еды', wood: 'дерева', iron: 'железа', water: 'воды' };
+
+const HONEST: [string, string][] = [
+  ['His cart is full of bags.', 'Его телега полна мешков.'],
+  ['He shows his hands. They are empty.', 'Он показывает руки. Они пустые.'],
+  ['He has an old horse and a small cart.', 'У него старая лошадь и маленькая телега.'],
+];
+const CLUES: [string, string][] = [
+  ['There is blood on his boots.', 'На его сапогах кровь.'],
+  ['He has a knife under his coat.', 'Под плащом у него нож.'],
+  ['Other men are in the trees behind him.', 'За ним в деревьях другие люди.'],
 ];
 
 const TRADE_OPTIONS = (o: NonNullable<Visitor['offer']>): Visitor['options'] => [
@@ -64,10 +83,15 @@ export function rollVisitor(r: Rand, s: HoldState): Visitor | null {
   const kind = pick(r, ['trader', 'trader', 'liar', 'liar', 'beggar', 'traveler'] as const);
   if (kind === 'trader' || kind === 'liar') {
     const offer = offerOf(r);
+    const [detail, detailRu] = pick(r, kind === 'trader' ? HONEST : CLUES);
     return {
       kind,
-      speech: `Good morning. I am a trader. I have ${word(offer.giveN)} ${offer.give} for you. I want ${word(offer.wantN)} ${offer.want}. May I come in?`,
-      detail: pick(r, kind === 'trader' ? HONEST : CLUES),
+      speech: `Hello. I sell things. I have ${word(offer.giveN)} ${offer.give} for you. I want ${word(offer.wantN)} ${offer.want}. Can I come in?`,
+      detail,
+      ru: {
+        speech: `Здравствуйте. Я торговец. У меня для вас ${RU_NUM[offer.giveN]} ${RU_RES[offer.give]}. Я хочу ${RU_NUM[offer.wantN]} ${RU_RES[offer.want]}. Можно войти?`,
+        detail: detailRu,
+      },
       options: TRADE_OPTIONS(offer),
       offer,
     };
@@ -77,18 +101,26 @@ export function rollVisitor(r: Rand, s: HoldState): Visitor | null {
     return {
       kind,
       speech: `Please help us. Our children are hungry. Can you give us ${word(n)} food?`,
-      detail: 'A thin woman holds two small children by the hand.',
+      detail: 'A woman is with two small children.',
+      ru: {
+        speech: `Пожалуйста, помогите нам. Наши дети голодны. Можете дать нам ${RU_NUM[n]} ${RU_RES.food}?`,
+        detail: 'Женщина с двумя маленькими детьми.',
+      },
       options: [
         { id: 'give', text: '“Yes. Take this food.”' },
-        { id: 'deny', text: '“Sorry, we have nothing to give.”' },
+        { id: 'deny', text: '“Sorry, we have no food for you.”' },
       ],
       ask: { res: 'food', n },
     };
   }
   return {
     kind,
-    speech: 'I am hurt and very thirsty. Give me some water, and I will tell you a secret about these lands.',
-    detail: 'There is a bloody cloth around his leg.',
+    speech: 'I am hurt and I am very thirsty. Give me water, please. I know a lot about this land.',
+    detail: 'His leg is hurt.',
+    ru: {
+      speech: 'Я ранен, и мне очень хочется пить. Дайте мне воды, пожалуйста. Я много знаю об этих землях.',
+      detail: 'У него ранена нога.',
+    },
     options: [
       { id: 'give', text: '“Here is some water.”' },
       { id: 'deny', text: '“Go away. We need our water.”' },
@@ -121,22 +153,21 @@ export function answerVisitor(s0: HoldState, answer: Answer): { state: HoldState
         const victim = people.length ? pick(r, people) : null;
         if (victim) victim.hp = Math.max(1, victim.hp - 1);
         mood(-1);
-        lines.push(`It was a trap! Bandits ran in after him and took ${food} food and ${wood} wood.`);
-        if (victim) lines.push(`${victim.name} was hurt in the fight.`);
+        lines.push(`It was a trap! Bandits ran in. They took ${food} food and ${wood} wood.`);
+        if (victim) lines.push(`${victim.name} is hurt.`);
       } else if (s.res[o.want] < o.wantN) {
-        lines.push(`You do not have ${word(o.wantN)} ${o.want}. The trader shakes his head and leaves.`);
+        lines.push(`You do not have ${word(o.wantN)} ${o.want}. The man goes away.`);
       } else {
         s.res[o.want] -= o.wantN;
         s.res[o.give] += o.giveN;
-        lines.push(`You gave ${o.wantN} ${o.want} and got ${o.giveN} ${o.give}. A good trade.`);
+        lines.push(`You gave ${o.wantN} ${o.want}. You got ${o.giveN} ${o.give}. Good!`);
       }
     } else if (answer === 'check') {
       if (v.kind === 'liar') {
         mood(1);
-        lines.push('He pulls out a knife — but you are ready. He runs back into the forest.');
-      } else lines.push('“I am an honest man!” The trader is angry and goes away.');
-    } else
-      lines.push(v.kind === 'liar' ? 'He spits on the ground and walks into the trees.' : 'The trader nods and drives away.');
+        lines.push('He has a knife! But you are ready. He runs away into the forest.');
+      } else lines.push('“I am a good man!” He is angry and goes away.');
+    } else lines.push(v.kind === 'liar' ? 'He is angry. He goes into the forest.' : 'He says “OK” and goes away.');
   } else if (answer === 'give') {
     const a = v.ask!;
     if (s.res[a.res] < a.n) lines.push(`You do not have ${word(a.n)} ${a.res} to give.`);
@@ -144,24 +175,22 @@ export function answerVisitor(s0: HoldState, answer: Answer): { state: HoldState
       s.res[a.res] -= a.n;
       if (v.kind === 'beggar') {
         mood(1);
-        lines.push('The woman cries and thanks you. Your people feel proud.');
+        lines.push('The woman says “Thank you!” Your people are happy.');
       } else {
         const hidden = (Object.keys(PLACES) as PlaceId[]).filter((id) => s.places && !s.places[id].known);
         if (hidden.length && s.places) {
           const id = pick(r, hidden);
           s.places[id] = { ...s.places[id], known: true };
-          lines.push(`He drinks and tells you about ${PLACES[id].name} in the ${PLACES[id].dir}. Now it is on your map.`);
+          lines.push(`He drinks. He tells you about ${PLACES[id].name} in the ${PLACES[id].dir}. Now it is on your map.`);
         } else {
           s.res.iron += 3;
-          lines.push('He drinks and gives you three pieces of iron. “For your kindness.”');
+          lines.push('He drinks. He gives you three iron. “Thank you!”');
         }
       }
     }
   } else {
     if (v.kind === 'beggar') mood(-1);
-    lines.push(
-      v.kind === 'beggar' ? 'They walk away slowly. Nobody in the camp speaks for a long time.' : 'He limps away into the cold.',
-    );
+    lines.push(v.kind === 'beggar' ? 'They go away. Your people are sad.' : 'He goes away slowly.');
   }
   s.visitor = null;
   s.rng = r.s;

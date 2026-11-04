@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { ICONS, type IconId } from '../icons';
-import type { HoldState } from '../model/rules';
+import { spendMorale, type HoldState } from '../model/rules';
 import { saveGame } from '../model/store';
+import { Tap } from './Words';
 import { answerVisitor, type Answer, type VisitorKind } from '../model/visitors';
 
 /**
@@ -82,6 +83,7 @@ function GateScene({ kind }: { kind: VisitorKind }) {
 export function GateView({ s }: { s: HoldState }) {
   const v = s.visitor!;
   const [result, setResult] = useState<{ state: HoldState; lines: string[] } | null>(null);
+  const [ru, setRu] = useState(false);
   const pick = (a: Answer) => setResult(answerVisitor(s, a));
   return (
     <div className="ah-sheet-back ah-gate-back">
@@ -89,14 +91,32 @@ export function GateView({ s }: { s: HoldState }) {
         <div className="ah-banner">{TITLE[v.kind].toUpperCase()}</div>
         <GateScene kind={v.kind} />
         <div className="ah-gate-say">
-          <small>{v.kind === 'beggar' ? 'THE WOMAN SAYS' : 'THE STRANGER SAYS'}</small>“{v.speech}”
+          <small>{v.kind === 'beggar' ? 'THE WOMAN SAYS' : 'THE STRANGER SAYS'}</small>“<Tap text={v.speech} />”
+          {ru && v.ru ? <span className="ah-ru">{v.ru.speech}</span> : null}
         </div>
-        <p className="ah-gate-detail">{v.detail}</p>
+        <p className="ah-gate-detail">
+          <Tap text={v.detail} />
+          {ru && v.ru ? <span className="ah-ru">{v.ru.detail}</span> : null}
+        </p>
+        {!result && !ru && v.ru ? (
+          <button
+            type="button"
+            className="ah-translate"
+            onClick={() => {
+              saveGame(spendMorale(s));
+              setRu(true);
+            }}
+          >
+            Translate · −1 morale
+          </button>
+        ) : null}
         {result ? (
           <>
             <ul className="ah-gate-result">
               {result.lines.map((l, i) => (
-                <li key={i}>{l}</li>
+                <li key={i}>
+                  <Tap text={l} />
+                </li>
               ))}
             </ul>
             <button type="button" className="ah-btn" onClick={() => saveGame(result.state)}>

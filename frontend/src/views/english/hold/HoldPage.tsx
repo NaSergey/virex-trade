@@ -6,6 +6,7 @@ import localFont from 'next/font/local';
 import { cn } from '@/shared/lib/utils/css';
 import { BattleView } from './components/Battle';
 import { CampScene, HoldDefs } from './components/CampScene';
+import { Tap, TileHint, WordCard } from './components/Words';
 import { Lands, ScoutReportView } from './components/Lands';
 import { GateView } from './components/Gate';
 import { PLACES } from './model/scout';
@@ -82,6 +83,7 @@ export function HoldPage() {
         ← Mind the Gap
       </Link>
       {game === undefined ? null : game === null ? <Title /> : <Camp s={game} />}
+      <WordCard />
       <p className="ah-credit">{CREDIT}</p>
     </div>
   );
@@ -219,6 +221,7 @@ function OrderSheet({ s, p, onClose }: { s: HoldState; p: Person; onClose: () =>
   const [verb, setVerb] = useState<Verb | null>(p.order?.verb ?? null);
   const [object, setObject] = useState<Obj | null>(p.order?.object ?? null);
   const [wrong, setWrong] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
   const [shake, setShake] = useState(0);
   const give = () => {
     if (!verb || !object) return;
@@ -260,14 +263,14 @@ function OrderSheet({ s, p, onClose }: { s: HoldState; p: Person; onClose: () =>
             {object ?? '· · ·'}
           </button>
         </div>
-        {wrong ? <p className="ah-wrong">{wrong}</p> : null}
+        {wrong ? <p className="ah-wrong">{wrong}</p> : <TileHint word={hint} />}
         <div className="ah-tiles">
           {VERBS.map((v) => (
             <button
               key={v}
               type="button"
               className={cn('ah-tile', verb === v && 'used')}
-              onClick={() => (setVerb(v), setWrong(null))}
+              onClick={() => (setVerb(v), setHint(v), setWrong(null))}
             >
               {v}
             </button>
@@ -279,7 +282,7 @@ function OrderSheet({ s, p, onClose }: { s: HoldState; p: Person; onClose: () =>
               key={o}
               type="button"
               className={cn('ah-tile', object === o && 'used')}
-              onClick={() => (setObject(o), setWrong(null))}
+              onClick={() => (setObject(o), setHint(o), setWrong(null))}
             >
               {o}
             </button>
@@ -343,7 +346,7 @@ function Report({ s, onClose }: { s: HoldState; onClose: () => void }) {
         <ul>
           {s.report.map((l, i) => (
             <li key={i} style={{ animationDelay: `${i * 90}ms` }}>
-              {l}
+              <Tap text={l} />
             </li>
           ))}
         </ul>
@@ -372,6 +375,10 @@ function End({ s }: { s: HoldState }) {
         </li>
         <li>
           <b>{s.stats.mistakes}</b>orders not understood
+        </li>
+        <li>
+          <b>{s.stats.translated ?? 0}</b>
+          phrases translated
         </li>
         <li>
           <b>
