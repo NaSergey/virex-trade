@@ -56,7 +56,9 @@ function EnemyCard({ s, e }: { s: HoldState; e: Enemy }) {
         <Ic id={ENEMY_ICON[e.kind]} />
       </span>
       <span className="ah-foe-body">
-        <b>{e.name}</b>
+        <b>
+          <Tap text={e.name} />
+        </b>
         <Pips n={e.hp} max={e.maxHp} />
       </span>
       {said ? (
@@ -64,7 +66,9 @@ function EnemyCard({ s, e }: { s: HoldState; e: Enemy }) {
           <Tap text={said} />
         </p>
       ) : e.hp <= 0 ? (
-        <p className="ah-foe-out">dead</p>
+        <p className="ah-foe-out">
+          <Tap text="dead" />
+        </p>
       ) : null}
     </div>
   );
@@ -180,7 +184,7 @@ function Parry({ s, index, onAnswer }: { s: HoldState; index: number; onAnswer: 
   return (
     <div className="ah-parry" role="dialog" aria-label="Defend yourself">
       <p className="ah-parry-who">
-        {e.name} → {p.name}
+        <Tap text={`${e.name} → ${p.name}`} />
       </p>
       <span className="ah-parry-foe">
         <Ic id={ENEMY_ICON[e.kind]} />
@@ -188,7 +192,9 @@ function Parry({ s, index, onAnswer }: { s: HoldState; index: number; onAnswer: 
       <div className="ah-ring" style={{ animationDuration: `${PARRY_MS}ms` }}>
         <b>{THIRD[h.verb].toUpperCase()}</b>
       </div>
-      <p className="ah-parry-ask">{p.name}! Quick — how do you survive?</p>
+      <p className="ah-parry-ask">
+        <Tap text={`${p.name}! Quick — how do you survive?`} />
+      </p>
       <div className="ah-acts">
         {choices.map((c) => (
           <button key={c} type="button" className="ah-act ah-frame" onClick={() => onAnswer(c)}>
@@ -227,7 +233,10 @@ export function BattleView({ s }: { s: HoldState }) {
   return (
     <section className="ah-battle">
       <div className="ah-banner">
-        NIGHT RAID · ROUND {ROMAN[b.round]} <small>of {ROMAN[MAX_ROUNDS]}</small>
+        <Tap text="NIGHT RAID · ROUND" /> {ROMAN[b.round]}{' '}
+        <small>
+          <Tap text="of" /> {ROMAN[MAX_ROUNDS]}
+        </small>
       </div>
       <div className="ah-foes">
         {b.enemies.map((e) => (

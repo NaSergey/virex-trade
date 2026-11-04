@@ -61,7 +61,9 @@ export function Lands({ s }: { s: HoldState }) {
   const away = s.people.filter((p) => p.status === 'ok' && p.away);
   return (
     <section className="ah-lands">
-      <p className="ah-lands-title">The lands around the camp</p>
+      <p className="ah-lands-title">
+        <Tap text="The lands around the camp" />
+      </p>
       <svg className="ah-scene ah-lands-map" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid slice" aria-label="Map">
         <rect width={W} height={H} fill="#2e2518" />
         <rect width={W} height={H} filter="url(#ah-terrain)" opacity=".9" />
@@ -133,7 +135,7 @@ export function ScoutReportView({ s }: { s: HoldState }) {
     <div className="ah-sheet-back ah-report-back">
       <div className="ah-report" role="dialog" aria-label={`${who.name}'s report`}>
         <p className="ah-report-head">
-          {who.name.toUpperCase()}’S REPORT · {PLACES[rep.place].dir.toUpperCase()}
+          <Tap text={`${who.name.toUpperCase()}’S REPORT · ${PLACES[rep.place].dir.toUpperCase()}`} />
         </p>
         <ul>
           {rep.lines.map((l, i) => (
@@ -173,9 +175,13 @@ export function ScoutReportView({ s }: { s: HoldState }) {
         {done ? (
           <>
             <p className={cn('ah-q-result', ok ? 'pos' : 'neg')}>
-              {ok
-                ? `Now ${PLACES[rep.place].name} is on your map. You can search it.`
-                : `You did not understand ${who.name}. ${PLACES[rep.place].name[0].toUpperCase()}${PLACES[rep.place].name.slice(1)} stays in the fog.`}
+              <Tap
+                text={
+                  ok
+                    ? `Now ${PLACES[rep.place].name} is on your map. You can search it.`
+                    : `You did not understand ${who.name}. ${PLACES[rep.place].name[0].toUpperCase()}${PLACES[rep.place].name.slice(1)} stays in the fog.`
+                }
+              />
             </p>
             <button type="button" className="ah-btn" onClick={() => saveGame(answerReport(s, picked).state)}>
               Continue
