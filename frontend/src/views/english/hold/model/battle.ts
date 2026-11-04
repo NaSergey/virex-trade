@@ -109,7 +109,8 @@ export interface Battle {
 export const MAX_ROUNDS = 4;
 
 const box = (s: HoldState): Rand => ({ s: s.rng });
-const fighters = (s: HoldState) => present(s).filter((p) => p.hp > 0);
+/** Кто дерётся: в лагере, на ногах и не уходит этой ночью в разведку. */
+const fighters = (s: HoldState) => present(s).filter((p) => p.hp > 0 && p.order?.verb !== 'scout');
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
 function rollTargets(r: Rand, s: HoldState, b: Battle) {

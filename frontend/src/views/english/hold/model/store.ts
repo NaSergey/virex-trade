@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import type { HoldState } from './rules';
+import { withPlaces, type HoldState } from './rules';
 
 /**
  * Игра лежит в localStorage после каждого действия: вкладку можно закрыть посреди дня.
@@ -15,7 +15,7 @@ function read(): HoldState | null {
   try {
     const raw = localStorage.getItem(KEY);
     const parsed = raw ? (JSON.parse(raw) as HoldState) : null;
-    cache = parsed && parsed.v === 1 ? parsed : null;
+    cache = parsed && parsed.v === 1 ? withPlaces(parsed) : null;
   } catch {
     cache = null;
   }

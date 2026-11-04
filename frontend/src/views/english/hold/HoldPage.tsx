@@ -6,6 +6,8 @@ import localFont from 'next/font/local';
 import { cn } from '@/shared/lib/utils/css';
 import { BattleView } from './components/Battle';
 import { CampScene, HoldDefs } from './components/CampScene';
+import { Lands, ScoutReportView } from './components/Lands';
+import { PLACES } from './model/scout';
 import { startBattle } from './model/battle';
 import { CREDIT, ICONS, type IconId } from './icons';
 import {
@@ -174,6 +176,21 @@ function CrewRow({ p, onPick }: { p: Person; onPick: () => void }) {
       </div>
     );
   }
+  if (p.away) {
+    return (
+      <div className="ah-crew ah-frame ah-crew-away">
+        <span className="ah-por">
+          <Ic id={p.id} />
+        </span>
+        <span className="ah-cn">
+          <b>
+            {p.name} · <span>{p.role}</span>
+          </b>
+          <small>scouting the {PLACES[p.away.place].dir} · back tomorrow</small>
+        </span>
+      </div>
+    );
+  }
   return (
     <button type="button" className={cn('ah-crew ah-frame', !p.order && 'ah-crew-idle')} onClick={onPick}>
       <span className="ah-por">
@@ -208,7 +225,14 @@ function OrderSheet({ s, p, onClose }: { s: HoldState; p: Person; onClose: () =>
     saveGame(r.state);
     if (r.ok) onClose();
     else {
-      setWrong(`${p.name} does not understand: “${verb} ${object}”?`);
+      const place = object.replace(/^the /, '');
+      setWrong(
+        !r.ok && r.reason === 'unknown'
+          ? `${p.name} does not know what is in the ${place}. Scout it first.`
+          : !r.ok && r.reason === 'empty'
+            ? `The ${place} is already empty.`
+            : `${p.name} does not understand: “${verb} ${object}”?`,
+      );
       setShake((n) => n + 1);
     }
   };
@@ -368,7 +392,7 @@ function Camp({ s }: { s: HoldState }) {
   const [readDay, setReadDay] = useState<number | null>(null);
   const [ended, setEnded] = useState(false);
   const [sure, setSure] = useState(false);
-  const person = picked ? s.people.find((p) => p.id === picked && p.status === 'ok') : undefined;
+  const person = picked ? s.people.find((p) => p.id === picked && p.status === 'ok' && !p.away) : undefined;
   const idle = present(s).filter((p) => !p.order).length;
 
   if (s.outcome && ended) return <End s={s} />;
@@ -398,6 +422,7 @@ function Camp({ s }: { s: HoldState }) {
           <CrewRow key={p.id} p={p} onPick={() => setPicked(p.id)} />
         ))}
       </div>
+      <Lands s={s} />
       <Buildings s={s} />
       <div className="ah-endbar">
         <button
@@ -413,6 +438,7 @@ function Camp({ s }: { s: HoldState }) {
         </button>
       </div>
       {person ? <OrderSheet key={person.id} s={s} p={person} onClose={() => setPicked(null)} /> : null}
+      {s.reports?.length ? <ScoutReportView key={`${s.day}:${s.reports.length}`} s={s} /> : null}
     </>
   );
 }

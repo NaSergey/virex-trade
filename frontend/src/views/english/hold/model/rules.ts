@@ -1,5 +1,6 @@
 import { chance, int, next, pick, rand, type Rand } from '../../game/model/rng';
 import type { Battle } from './battle';
+import { PLACES, PLACE_OF, makePlaces, makeReport, type Dir, type PlaceId, type Places, type ScoutReport } from './scout';
 
 /**
  * Ashen Hold, шаг 1 — лагерь (спека docs/superpowers/specs/2026-11-04-ashen-hold-design.md).
@@ -20,7 +21,7 @@ export type PersonId = 'mira' | 'tom' | 'ash' | 'ezra';
 export type Role = 'hunter' | 'builder' | 'scout' | 'healer';
 
 /** Глаголы и дополнения приказа — плитки фразы «<имя>, <глагол> <дополнение>». */
-export const VERBS = ['go', 'fetch', 'chop', 'mine', 'build', 'guard', 'rest'] as const;
+export const VERBS = ['go', 'fetch', 'chop', 'mine', 'build', 'guard', 'rest', 'scout', 'search'] as const;
 export const OBJECTS = [
   'hunting',
   'water',
@@ -32,6 +33,14 @@ export const OBJECTS = [
   'the tower',
   'the gate',
   'by the fire',
+  'the north',
+  'the east',
+  'the south',
+  'the west',
+  'the mill',
+  'the ruins',
+  'the farm',
+  'the cave',
 ] as const;
 export type Verb = (typeof VERBS)[number];
 export type Obj = (typeof OBJECTS)[number];
@@ -43,7 +52,9 @@ export type Task =
   | { kind: 'iron' }
   | { kind: 'build'; building: BuildingId }
   | { kind: 'guard' }
-  | { kind: 'rest' };
+  | { kind: 'rest' }
+  | { kind: 'scout'; dir: Dir }
+  | { kind: 'search'; place: PlaceId };
 
 /** Единственный источник верных фраз: глагол + дополнение → дело. Остальные сочетания — бессмыслица. */
 const PHRASES: Record<string, Task> = {
@@ -57,6 +68,14 @@ const PHRASES: Record<string, Task> = {
   'build the tower': { kind: 'build', building: 'tower' },
   'guard the gate': { kind: 'guard' },
   'rest by the fire': { kind: 'rest' },
+  'scout the north': { kind: 'scout', dir: 'north' },
+  'scout the east': { kind: 'scout', dir: 'east' },
+  'scout the south': { kind: 'scout', dir: 'south' },
+  'scout the west': { kind: 'scout', dir: 'west' },
+  'search the mill': { kind: 'search', place: 'mill' },
+  'search the ruins': { kind: 'search', place: 'ruins' },
+  'search the farm': { kind: 'search', place: 'farm' },
+  'search the cave': { kind: 'search', place: 'cave' },
 };
 
 export function taskOf(verb: Verb, object: Obj): Task | null {
@@ -76,6 +95,8 @@ export interface Person {
   morale: number;
   status: 'ok' | 'dead' | 'gone';
   order: Order | null;
+  /** В разведке: утро возвращения и куда ушёл. Пока человек в пути, приказов ему нет. */
+  away?: { back: number; place: PlaceId } | null;
 }
 
 export interface BuildingDef {
@@ -124,6 +145,10 @@ export interface HoldState {
   battle?: Battle | null;
   /** Строки доклада, которые оставил бой этой ночи; набег уже разыгран — ночь его не считает. */
   nightLog?: string[] | null;
+  /** Места вокруг лагеря (шаг 3); у игр шага 1 их нет — подставляет `withPlaces`. */
+  places?: Places;
+  /** Доклады вернувшихся разведчиков, ещё без ответа на вопрос. */
+  reports?: ScoutReport[];
 }
 
 const START_PEOPLE: Omit<Person, 'hp' | 'morale' | 'status' | 'order'>[] = [
@@ -163,12 +188,25 @@ export function newGame(seed: number): HoldState {
     report: ['The winter is coming. Keep your people alive for thirty days.'],
     stats: { phrases: 0, mistakes: 0, raids: 0, repelled: 0 },
     outcome: null,
+    places: makePlaces(r),
+    reports: [],
   };
   s.rng = r.s;
   return s;
 }
 
-export const present = (s: HoldState) => s.people.filter((p) => p.status === 'ok');
+/** Игра, начатая до разведки, получает места при чтении: разыгрываются от её же случайности. */
+export function withPlaces(s: HoldState): HoldState {
+  if (s.places) return s;
+  const r = { s: s.rng };
+  const places = makePlaces(r);
+  return { ...s, places, reports: s.reports ?? [], rng: r.s };
+}
+
+/** Кто в лагере сейчас: жив, не ушёл и не в разведке. */
+export const present = (s: HoldState) => s.people.filter((p) => p.status === 'ok' && !p.away);
+/** Кто ещё в отряде — в том числе в разведке. */
+export const alive = (s: HoldState) => s.people.filter((p) => p.status === 'ok');
 
 /** Сколько ночь съест и выпьет. */
 export function upkeep(s: HoldState): { food: number; water: number } {
@@ -183,14 +221,23 @@ export function defenseOf(s: HoldState): number {
   return guards * (s.buildings.forge.done ? 3 : 2) + wall;
 }
 
-export type OrderResult = { ok: true; state: HoldState } | { ok: false; state: HoldState };
+export type OrderResult =
+  | { ok: true; state: HoldState }
+  | { ok: false; state: HoldState; reason?: 'nonsense' | 'unknown' | 'empty' };
 
 /** Приказ человеку. Бессмысленная фраза не принимается и считается ошибкой. */
 export function giveOrder(s: HoldState, id: PersonId, order: Order): OrderResult {
   const p = s.people.find((x) => x.id === id);
-  if (!p || p.status !== 'ok' || s.outcome) return { ok: false, state: s };
-  if (!taskOf(order.verb, order.object)) {
-    return { ok: false, state: { ...s, stats: { ...s.stats, mistakes: s.stats.mistakes + 1 } } };
+  if (!p || p.status !== 'ok' || p.away || s.outcome) return { ok: false, state: s };
+  const task = taskOf(order.verb, order.object);
+  if (!task) {
+    return { ok: false, reason: 'nonsense', state: { ...s, stats: { ...s.stats, mistakes: s.stats.mistakes + 1 } } };
+  }
+  // Обыскать можно только место, о котором понят доклад, и только один раз.
+  if (task.kind === 'search') {
+    const place = s.places?.[task.place];
+    if (!place?.known) return { ok: false, reason: 'unknown', state: s };
+    if (place.looted) return { ok: false, reason: 'empty', state: s };
   }
   return {
     ok: true,
@@ -282,6 +329,31 @@ export function endDay(s0: HoldState): HoldState {
         } else log.push(`${p.name} worked on the ${def.name.toLowerCase()}.`);
         break;
       }
+      case 'scout': {
+        const dir = (task as { dir: Dir }).dir;
+        p.away = { back: s.day + 2, place: PLACE_OF[dir] };
+        log.push(`${p.name} went to scout the ${dir}.`);
+        break;
+      }
+      case 'search': {
+        const id = (task as { place: PlaceId }).place;
+        const place = s.places?.[id];
+        if (!place || place.looted) break;
+        place.looted = true;
+        const name = PLACES[id].name;
+        if (place.loot === 'nothing' || place.amount === 0) log.push(`${p.name} searched ${name} and found nothing.`);
+        else {
+          const n = Math.round(place.amount * tired(p));
+          res[place.loot] += n;
+          log.push(`${p.name} searched ${name} and brought back ${n} ${place.loot}.`);
+        }
+        if (place.danger !== 'none') {
+          p.hp -= 2;
+          p.morale = clamp(p.morale - 1, 0, MAX_MORALE);
+          log.push(`${place.danger === 'wolves' ? 'Wolves' : 'Bandits'} attacked ${p.name} at ${name}.`);
+        }
+        break;
+      }
       case 'guard':
         break;
       case 'rest':
@@ -368,7 +440,19 @@ export function endDay(s0: HoldState): HoldState {
   s.nightLog = null;
   s.battle = null;
   s.day += 1;
-  if (present(s).length === 0) {
+  // Разведчики, чьё утро наступило, возвращаются с докладом.
+  for (const p of s.people) {
+    if (p.status !== 'ok' || !p.away || p.away.back !== s.day || !s.places) continue;
+    const id = p.away.place;
+    p.away = null;
+    s.reports = [...(s.reports ?? []), makeReport(r, p.id, id, s.places[id])];
+    log.push(`${p.name} came back from the ${PLACES[id].dir} with a report.`);
+    if (chance(r, 0.1)) {
+      p.hp = Math.max(1, p.hp - 1);
+      log.push(`${p.name} is tired and a little hurt.`);
+    }
+  }
+  if (alive(s).length === 0) {
     s.outcome = 'lose';
     log.push('No one is left in the camp.');
   } else if (s.day > DAYS) {

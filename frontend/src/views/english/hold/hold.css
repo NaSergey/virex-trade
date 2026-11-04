@@ -260,3 +260,28 @@
   .ah .ah-token, .ah .ah-ring { border-radius: 50% !important; }
   .ah .ah-flash { box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9) !important; }
 }
+
+/* ── окрестности и доклад разведчика ── */
+.ah-lands { display: flex; flex-direction: column; gap: 6px; }
+.ah-lands-title { margin: 4px 0 0; font: 700 11px var(--cin); letter-spacing: 0.24em; text-transform: uppercase; color: var(--ah-bone-2); }
+.ah-lands-map { aspect-ratio: 390 / 230; }
+.ah-road { stroke: #7a6a52; stroke-width: 2; stroke-dasharray: 3 6; opacity: 0.8; }
+.ah-node { fill: #1a1310; stroke: #6b5636; stroke-width: 2; }
+.ah-node-camp { stroke: var(--ah-gold); stroke-width: 3; }
+.ah-node-danger { stroke: #c42a1e; }
+.ah-node-scout { stroke: var(--ah-ember); stroke-width: 2; }
+.ah-fog { fill: rgb(150 150 160 / 0.18); stroke: rgb(200 200 210 / 0.25); stroke-dasharray: 4 4; }
+.ah-q { font: 900 22px var(--cin); fill: #b8b2a6; }
+.ah-dir { font: 700 9px var(--cin); letter-spacing: 0.18em; fill: #9c8f76; paint-order: stroke; stroke: #000; stroke-width: 3px; }
+.ah-known { fill: var(--ah-ember); }
+.ah-looted { opacity: 0.45; }
+.ah-crew-away { opacity: 0.7; border-style: dashed; }
+.ah-crew-away .ah-cn small { color: var(--ah-ember); }
+.ah-q-ask { margin: 4px 0 0; text-align: center; font: 900 14px var(--cin); letter-spacing: 0.12em; color: #7d1410; text-transform: uppercase; }
+.ah-answers { display: flex; flex-direction: column; gap: 6px; }
+.ah-answer { min-height: 46px; padding: 6px 12px; font: italic 700 18px var(--gar) !important; color: #24160c !important; background: rgb(255 255 255 / 0.35); border: 1px solid #a08a5a; text-align: center; }
+.ah-answer.right { background: rgb(80 150 90 / 0.35); border-color: #3e7a46; }
+.ah-answer.wrong { background: rgb(196 42 30 / 0.25); border-color: #7d1410; }
+.ah-q-result { margin: 0; text-align: center; font: italic 700 16px var(--gar); }
+.ah-report .pos { color: #2e6a34; }
+.ah-report .neg { color: #7d1410; }
