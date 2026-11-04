@@ -1354,3 +1354,36 @@
   height: 40px;
   font-size: 19px !important;
 }
+
+/* Подсказка после ошибки: плитки, которые исправят приказ, мерцают. */
+.ah-tile.ah-tile-fix {
+  color: #1a120a !important;
+  background: linear-gradient(145deg, #f3d39a, #d29a4c 60%, #a06a2a);
+  animation: ah-fix 1.1s ease-in-out infinite;
+}
+@keyframes ah-fix {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.25);
+  }
+}
+/* Место в тумане — «?» на плитке; пустое — зачёркнуто. Видно до того, как приказ отвергнут. */
+.ah-tile.ah-tile-fog {
+  position: relative;
+  background: linear-gradient(145deg, #8a8170, #5f5849 60%, #463f34);
+}
+.ah-tile.ah-tile-fog::after {
+  content: '?';
+  position: absolute;
+  top: 2px;
+  right: 6px;
+  font: 700 13px var(--gar);
+  color: #2a2420;
+}
+.ah-tile.ah-tile-empty {
+  text-decoration: line-through;
+  opacity: 0.55;
+}
