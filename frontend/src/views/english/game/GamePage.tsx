@@ -62,6 +62,8 @@ const decodeCharacter = (raw: string | null): CharacterId =>
   CHARACTER_IDS.includes(raw as CharacterId) ? (raw as CharacterId) : 'tourist';
 const decodeFog = (raw: string | null) => Math.max(0, Math.min(8, Number(raw) || 0));
 const asString = (v: string | number) => String(v);
+const decodeVoice = (raw: string | null) => raw !== '0';
+const encodeVoice = (v: boolean) => (v ? '1' : '0');
 
 /** Игра «Mind the Gap» (спека docs/superpowers/specs/2026-11-04-english-game-design.md). */
 export function GamePage() {
@@ -87,6 +89,8 @@ function Game({ data, runs }: { data: EnglishState; runs: RunRow[] }) {
   const [deckSpec] = usePersistentValue<string>('virex.english.deck', decodeDeck, 'all', asString);
   const [character, setCharacter] = usePersistentValue<CharacterId>('virex.english.game.character', decodeCharacter, 'tourist', asString);
   const [fogPick, setFog] = usePersistentValue<number>('virex.english.game.fog', decodeFog, 0, asString);
+  // Отвечать голосом — настройка: без неё удара «Сказать» и голосовых ответов в сценах нет.
+  const [voice, setVoice] = usePersistentValue<boolean>('virex.english.game.voice', decodeVoice, true, encodeVoice);
 
   // «Сейчас» — момент входа и возврата на вкладку, как на «Сегодня».
   const [now, setNow] = useState(() => Date.now());
@@ -96,7 +100,8 @@ function Game({ data, runs }: { data: EnglishState; runs: RunRow[] }) {
     return () => window.removeEventListener('focus', refresh);
   }, []);
   const today = localDay(now);
-  const speech = canListen();
+  const mic = canListen();
+  const speech = mic && voice;
 
   const open = useMemo(() => openUnits(COURSE, data.lessons), [data.lessons]);
   const deck = useMemo(
@@ -196,7 +201,13 @@ function Game({ data, runs }: { data: EnglishState; runs: RunRow[] }) {
         </div>
       );
     }
-    return <RunView run={run} dispatch={dispatch} />;
+    return (
+      <RunView
+        run={run}
+        dispatch={dispatch}
+        voice={mic ? { on: run.speech, set: (on) => (setVoice(on), dispatch({ type: 'voice', on })) } : null}
+      />
+    );
   }
 
   return (
@@ -219,6 +230,7 @@ function Game({ data, runs }: { data: EnglishState; runs: RunRow[] }) {
         open={open}
         levels={levels}
         unlocked={unlocked(runs)}
+        voice={mic ? { on: voice, set: setVoice } : null}
         onStart={begin}
       />
     </div>
@@ -252,11 +264,16 @@ function BossIntro({ run, dispatch }: { run: RunState; dispatch: (a: Action) => 
   );
 }
 
-function RunView({ run, dispatch }: { run: RunState; dispatch: (a: Action) => void }) {
+export interface VoiceSetting {
+  on: boolean;
+  set: (on: boolean) => void;
+}
+
+function RunView({ run, dispatch, voice }: { run: RunState; dispatch: (a: Action) => void; voice: VoiceSetting | null }) {
   const sc = run.screen;
   return (
-    <div className="eg eg-run">
-      <StatusBar run={run} dispatch={dispatch} />
+    <div className={`eg eg-run eg-on-${sc.kind}`}>
+      <StatusBar run={run} dispatch={dispatch} voice={voice} />
       {sc.kind === 'map' ? <LineMap run={run} dispatch={dispatch} /> : null}
       {sc.kind === 'fight' ? <FightView run={run} f={sc.fight} dispatch={dispatch} /> : null}
       {sc.kind === 'scene' ? <SceneView run={run} sc={sc} dispatch={dispatch} /> : null}

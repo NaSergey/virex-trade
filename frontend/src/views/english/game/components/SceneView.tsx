@@ -50,8 +50,8 @@ function Bank({ run, dispatch }: { run: SceneRun; dispatch: Dispatch }) {
   );
 }
 
-function SayReply({ dispatch }: { dispatch: Dispatch }) {
-  const voice = canListen();
+function SayReply({ dispatch, speech }: { dispatch: Dispatch; speech: boolean }) {
+  const voice = speech && canListen();
   const [value, setValue] = useState('');
   const [active, setActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +67,7 @@ function SayReply({ dispatch }: { dispatch: Dispatch }) {
     };
     return (
       <form className="eg-type" onSubmit={submit}>
-        <p className="muted">Микрофона в этом браузере нет — напиши ответ.</p>
+        <p className="muted">Напиши ответ по-английски.</p>
         <Input
           autoFocus
           value={value}
@@ -202,7 +202,7 @@ export function SceneView({ run, sc, dispatch }: { run: RunState; sc: Extract<Sc
         ) : r.level === 2 ? (
           <Bank key={r.step} run={r} dispatch={dispatch} />
         ) : (
-          <SayReply key={r.step} dispatch={dispatch} />
+          <SayReply key={r.step} dispatch={dispatch} speech={run.speech} />
         )
       ) : null}
       {r.done ? (

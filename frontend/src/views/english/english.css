@@ -480,9 +480,6 @@
     text-transform: none;
   }
   .en-tabs a[aria-current="page"] { border-top-color: var(--ink); }
-  /* Забег игры — во весь экран: панели нет, выход через паузу. */
-  .en-running .en-tabs { display: none; }
-  .en-running.wrap { padding-bottom: env(safe-area-inset-bottom); }
   .en-tab-ic { display: block; }
   .en .pagehead h1 { font-size: var(--t-l); }
   .en .pagehead .lede { font-size: var(--t-s); }

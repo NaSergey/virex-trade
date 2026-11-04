@@ -6,8 +6,6 @@ import { usePathname } from 'next/navigation';
 import { BookOpen, CalendarCheck, Gamepad2, Layers, Library, Mic, PenLine, type LucideIcon } from 'lucide-react';
 import { Wrap } from '@/shared/ui/Wrap';
 import { adminPath } from '@/shared/lib/utils/admin-host';
-import { cn } from '@/shared/lib/utils/css';
-import { useRunActive } from './game/run-active';
 import './english.css';
 
 /**
@@ -30,6 +28,7 @@ const TABS: { href: string; label: string; icon: LucideIcon }[] = [
 const isTab = (path: string, href: string) =>
   path === href ||
   (href === '/english/words' && path === '/english/test') ||
+  (href === '/english/game' && path === '/english/hold') ||
   (href === '/english' && path === '/english/insights');
 
 /**
@@ -44,10 +43,8 @@ const isTab = (path: string, href: string) =>
  */
 export function EnglishLayout({ children }: { children: ReactNode }) {
   const path = adminPath(usePathname());
-  // На время забега панель вкладок на телефоне прячется — выход через паузу.
-  const running = useRunActive();
   return (
-    <Wrap page className={cn('en en-app', running && 'en-running')}>
+    <Wrap page className={'en en-app'}>
       <nav className="en-tabs" aria-label="Разделы учебника">
         {TABS.map(({ href, label, icon: Icon }) => (
           <Link key={href} href={href} aria-current={isTab(path, href) ? 'page' : undefined}>

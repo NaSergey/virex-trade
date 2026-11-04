@@ -171,6 +171,8 @@ export type Action =
   | { type: 'pick'; relic: RelicId | null }
   | { type: 'reply'; value: string | number | number[]; voice: boolean; now: number }
   | { type: 'peek' }
+  /** Отвечать голосом или нет — настройка, переключается и посреди забега. */
+  | { type: 'voice'; on: boolean }
   | { type: 'quit'; now: number };
 
 export interface StartInput {
@@ -804,6 +806,11 @@ function dispatch(c: Ctx, a: Action): boolean {
     return true;
   }
   switch (a.type) {
+    case 'voice': {
+      if (s.speech === a.on) return false;
+      s.speech = a.on;
+      return true;
+    }
     case 'go': {
       if (s.screen.kind !== 'map' || !reachable(s.map, s.at).includes(a.station)) return false;
       s.at = a.station;
