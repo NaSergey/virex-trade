@@ -121,8 +121,74 @@ const EXTRA: Record<string, Gloss> = {
   miss: { en: 'miss', ru: 'промахнуться' },
   mine: { en: 'mine', ru: 'добывать (в шахте); шахта; мой' },
   caravan: { en: 'caravan', ru: 'караван' },
+  better: { en: 'good', ru: 'лучше (good, well)' },
   blocked: { en: 'block', ru: 'отбил, заблокировал (block)' },
 };
+
+/**
+ * Словарь самой игры: её нужно знать, чтобы играть, и она его учит. Только эти слова в текстах
+ * могут быть реже 1500-го места по частоте — остальное держится в уровне начала курса.
+ */
+export const GAME_VOCAB = new Set([
+  'wolf',
+  'hunt',
+  'hunter',
+  'iron',
+  'gate',
+  'tower',
+  'ruins',
+  'forest',
+  'west',
+  'east',
+  'meat',
+  'knife',
+  'boot',
+  'bite',
+  'kick',
+  'shoot',
+  'duck',
+  'thief',
+  'builder',
+  'hungry',
+  'thirsty',
+  'angry',
+  'alive',
+  'grey',
+  'trap',
+  'hello',
+  'find',
+  'found',
+  'steal',
+]);
+
+/** Откуда слово: книга курса, общий словарь (с местом по частоте) или словарь игры. */
+export type Level = { from: 'book' } | { from: 'vocab'; rank: number } | { from: 'game' };
+
+let levels: Map<string, Level> | null = null;
+function levelMap(): Map<string, Level> {
+  if (levels) return levels;
+  levels = new Map();
+  for (const w of WORDS) levels.set(clean(w.en), { from: 'book' });
+  for (const w of VOCAB) if (!levels.has(clean(w.en))) levels.set(clean(w.en), { from: 'vocab', rank: w.rank });
+  return levels;
+}
+
+/** Уровень слова из текста; `null` — слова нет нигде. */
+export function levelOf(token: string): Level | null {
+  const w = token.toLowerCase().replace(/[’]/g, "'").replace(/'s$/, '');
+  const m = levelMap();
+  for (const s of stems(w)) {
+    const l = m.get(s);
+    if (l) return l;
+  }
+  const g =
+    EXTRA[w] ??
+    stems(w)
+      .map((s) => EXTRA[s])
+      .find(Boolean);
+  if (!g) return null;
+  return m.get(g.en.toLowerCase()) ?? { from: 'game' };
+}
 
 const clean = (s: string) =>
   s

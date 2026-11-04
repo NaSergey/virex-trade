@@ -21,6 +21,9 @@ type DayCounter = 'cards' | 'answers' | 'correct' | 'phrases' | 'quiz' | 'game';
 /** Сколько забегов отдаётся: из них выводится мета игры, сотни строк за годы. */
 const RUNS_BACK = 1000;
 /** Статистика забега — десятки чисел и id; больше этого — не наш клиент. */
+const HOLD_ID = 'main';
+/** Игра на 30 дней с докладами и боем — десятки килобайт; потолок с запасом. */
+const HOLD_MAX = 200_000;
 const STATS_MAX = 16_384;
 
 /**
@@ -193,6 +196,41 @@ export class EnglishService {
   /** Ответ в игре, не сдвинувший карточку и не записанный упражнением, — в счётчик дня. */
   async game(day: string) {
     await this.countDay(day, { game: 1 });
+    return { ok: true };
+  }
+
+  /** Сохранённая игра «Ashen Hold»; `null` — игры нет. */
+  async hold() {
+    const row = await this.prisma.englishHold.findUnique({
+      where: { id: HOLD_ID },
+    });
+    return row ? { state: row.state, savedAt: row.savedAt.getTime() } : null;
+  }
+
+  /**
+   * Сохранить игру «Ashen Hold». Запись старше сохранённой не принимается — отвечаем тем,
+   * что лежит: вторая вкладка или другое устройство со старым состоянием не затрут новое.
+   */
+  async saveHold(dto: { state: Record<string, unknown>; savedAt: number }) {
+    if (JSON.stringify(dto.state).length > HOLD_MAX)
+      throw new BadRequestException('Game state too large');
+    const at = new Date(dto.savedAt);
+    const state = dto.state as Prisma.InputJsonValue;
+    await this.prisma.englishHold.upsert({
+      where: { id: HOLD_ID },
+      create: { id: HOLD_ID, state, savedAt: at },
+      update: {},
+    });
+    await this.prisma.englishHold.updateMany({
+      where: { id: HOLD_ID, savedAt: { lt: at } },
+      data: { state, savedAt: at },
+    });
+    return this.hold();
+  }
+
+  /** Сбросить игру (новая начинается с чистого листа). */
+  async deleteHold() {
+    await this.prisma.englishHold.deleteMany({ where: { id: HOLD_ID } });
     return { ok: true };
   }
 

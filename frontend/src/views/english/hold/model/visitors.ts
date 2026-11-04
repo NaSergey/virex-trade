@@ -190,7 +190,7 @@ export function answerVisitor(s0: HoldState, answer: Answer): { state: HoldState
     }
   } else {
     if (v.kind === 'beggar') mood(-1);
-    lines.push(v.kind === 'beggar' ? 'They go away. Your people are sad.' : 'He goes away slowly.');
+    lines.push(v.kind === 'beggar' ? 'They go away. Your people are sad.' : 'He goes away.');
   }
   s.visitor = null;
   s.rng = r.s;

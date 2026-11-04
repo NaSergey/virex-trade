@@ -40,6 +40,12 @@ function makePrisma(removedWords = 1) {
       findMany: jest.fn().mockResolvedValue([]),
       createMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
+    englishHold: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      upsert: jest.fn().mockResolvedValue({}),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
     englishThemeWord: {
       createMany: jest.fn().mockResolvedValue({ count: 1 }),
       deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -312,5 +318,24 @@ describe('EnglishService', () => {
     ]);
     const state = await new EnglishService(prisma as never).state();
     expect(state.days[0].game).toBe(7);
+  });
+
+  it('игра «Ashen Hold»: новее — пишется, старее — нет, слишком большая — отказ', async () => {
+    const prisma = makePrisma();
+    prisma.englishHold.findUnique.mockResolvedValue({
+      state: { v: 1, day: 3 },
+      savedAt: new Date(5000),
+    });
+    const svc = new EnglishService(prisma as never);
+    const out = await svc.saveHold({ state: { v: 1, day: 4 }, savedAt: 9000 });
+    // Перезапись — только если сохранённое старше присланного.
+    expect(prisma.englishHold.updateMany.mock.calls[0][0].where).toEqual({
+      id: 'main',
+      savedAt: { lt: new Date(9000) },
+    });
+    expect(out).toEqual({ state: { v: 1, day: 3 }, savedAt: 5000 });
+    await expect(
+      svc.saveHold({ state: { big: 'x'.repeat(300_000) }, savedAt: 1 }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

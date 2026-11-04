@@ -43,6 +43,15 @@ export const OBJECTS = [
   'the farm',
   'the cave',
 ] as const;
+/** Дополнения приказа — группами, чтобы 18 плиток читались на телефоне. Слово «the» на плитке не
+ * пишется (оно есть во фразе сверху), состав групп ответа не подсказывает: группа — тема, а не глагол. */
+export const OBJECT_GROUPS: [string, Obj[]][] = [
+  ['work', ['hunting', 'water', 'wood', 'iron']],
+  ['camp', ['the wall', 'the well', 'the forge', 'the tower', 'the gate', 'by the fire']],
+  ['lands', ['the north', 'the east', 'the south', 'the west']],
+  ['places', ['the mill', 'the ruins', 'the farm', 'the cave']],
+];
+
 export type Verb = (typeof VERBS)[number];
 export type Obj = (typeof OBJECTS)[number];
 
@@ -165,7 +174,7 @@ export const ROLE_PERK: Record<Role, string> = {
   hunter: 'brings more food',
   builder: 'builds twice as fast',
   scout: 'finds more water',
-  healer: 'heals one wounded every night',
+  healer: 'helps one hurt person every night',
 };
 
 const rollRaid = (r: Rand, day: number): Raid | null =>
@@ -292,7 +301,7 @@ export function endDay(s0: HoldState): HoldState {
       case 'water': {
         const n = Math.round((int(r, 4, 6) + (p.role === 'scout' ? 3 : 0)) * tired(p));
         res.water += n;
-        log.push(`${p.name} fetched ${n} water from the stream.`);
+        log.push(`${p.name} brought ${n} water.`);
         break;
       }
       case 'wood': {
@@ -420,7 +429,7 @@ export function endDay(s0: HoldState): HoldState {
   const wounded = people.filter((p) => p.hp > 0 && p.hp < MAX_HP && p !== healer).sort((a, b) => a.hp - b.hp)[0];
   if (healer && wounded) {
     wounded.hp += 1;
-    log.push(`${healer.name} took care of ${wounded.name}'s wounds.`);
+    log.push(`${healer.name} helped ${wounded.name}. ${wounded.name} feels better.`);
   }
 
   // ── потери ──
@@ -449,7 +458,7 @@ export function endDay(s0: HoldState): HoldState {
     if (p.status !== 'ok' || !p.away || p.away.back !== s.day || !s.places) continue;
     const id = p.away.place;
     p.away = null;
-    s.reports = [...(s.reports ?? []), makeReport(r, p.id, id, s.places[id])];
+    s.reports = [...(s.reports ?? []), makeReport(r, p.id, id, s.places[id], s.day)];
     log.push(`${p.name} came back from the ${PLACES[id].dir} with a report.`);
     if (chance(r, 0.1)) {
       p.hp = Math.max(1, p.hp - 1);

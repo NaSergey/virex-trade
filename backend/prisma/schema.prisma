@@ -1603,6 +1603,17 @@ model EnglishRun {
   @@map("english_runs")
 }
 
+/// Игра «Ashen Hold» (`views/english/hold`) — одна строка на владельца: состояние целиком.
+/// Побеждает запись с более поздним `savedAt` (часы клиента): телефон и компьютер не
+/// затирают друг друга старым состоянием.
+model EnglishHold {
+  id      String   @id
+  state   Json
+  savedAt DateTime
+
+  @@map("english_hold")
+}
+
 // ═══ /english ═══
 
 // ═══ plan ═══ План дня владельца в админке (backend/src/plan; спека

@@ -96,6 +96,26 @@ const DANGER_LINES: Record<Danger, [string, string][]> = {
   ],
 };
 
+/** С 12-го дня доклады длиннее: два предложения связаны союзом, ответ спрятан глубже. */
+export const HARD_DAY = 12;
+
+const LOOT_LONG: Record<Loot, [string, string][]> = {
+  food: [['I looked inside and saw a lot of meat and other food.', 'Я заглянул внутрь и увидел много мяса и другой еды.']],
+  wood: [['There is old wood in every room, enough for a new wall.', 'В каждой комнате старое дерево — хватит на новую стену.']],
+  iron: [['Under the floor I found old iron tools.', 'Под полом я нашёл старые железные инструменты.']],
+  nothing: [
+    [
+      'I looked in every room, but somebody took everything before us.',
+      'Я заглянул в каждую комнату, но кто-то забрал всё до нас.',
+    ],
+  ],
+};
+const DANGER_LONG: Record<Danger, [string, string][]> = {
+  none: [['I stayed there all night, and nobody came.', 'Я пробыл там всю ночь, и никто не пришёл.']],
+  wolves: [['At night I heard wolves near it, so I did not stay.', 'Ночью я слышал рядом волков, поэтому не остался.']],
+  bandits: [['I saw bandits with bows near the door, so I ran away.', 'Я видел у двери разбойников с луками и убежал.']],
+};
+
 export const LOOT_ANSWER: Record<Loot, string> = { food: 'Food', wood: 'Wood', iron: 'Iron', nothing: 'Nothing' };
 export const DANGER_ANSWER: Record<Danger, string> = {
   none: 'Yes, it is safe.',
@@ -139,8 +159,13 @@ export function makePlaces(r: Rand): Places {
 }
 
 /** Доклад вернувшегося разведчика и вопрос по нему — то о добыче, то об опасности. */
-export function makeReport(r: Rand, who: PersonId, id: PlaceId, p: Place): ScoutReport {
-  const pairs = [PLACES[id].intro, pick(r, LOOT_LINES[p.loot]), pick(r, DANGER_LINES[p.danger])];
+export function makeReport(r: Rand, who: PersonId, id: PlaceId, p: Place, day = 1): ScoutReport {
+  const hard = day >= HARD_DAY;
+  const pairs = [
+    PLACES[id].intro,
+    pick(r, (hard ? LOOT_LONG : LOOT_LINES)[p.loot]),
+    pick(r, (hard ? DANGER_LONG : DANGER_LINES)[p.danger]),
+  ];
   const lines = pairs.map((x) => x[0]);
   const ru = pairs.map((x) => x[1]);
   if (chance(r, 0.5)) {

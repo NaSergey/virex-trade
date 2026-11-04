@@ -1299,3 +1299,58 @@
     box-shadow: 0 10px 30px rgb(0 0 0 / 0.8) !important;
   }
 }
+.ah-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ah-sound {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid #3a2c1c;
+  color: var(--ah-bone-2) !important;
+}
+.ah-sound[aria-pressed='false'] {
+  opacity: 0.5;
+}
+
+/* ── компактный лист приказа ── */
+.ah-tiles-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+}
+.ah-tiles-verbs {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.ah-tiles-grid .ah-tile {
+  min-height: 44px;
+  padding: 0 4px;
+  font-size: 16px !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ah-group {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  gap: 6px;
+  align-items: center;
+}
+.ah-group-label {
+  font: 700 9px var(--cin);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ah-bone-2);
+}
+.ah-sheet {
+  gap: 8px;
+}
+.ah-sheet .ah-phrase .ah-w {
+  height: 40px;
+  font-size: 19px !important;
+}

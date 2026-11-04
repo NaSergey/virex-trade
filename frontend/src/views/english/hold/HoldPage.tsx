@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import localFont from 'next/font/local';
 import { cn } from '@/shared/lib/utils/css';
@@ -16,7 +16,7 @@ import {
   BUILDINGS,
   DAYS,
   MAX_HP,
-  OBJECTS,
+  OBJECT_GROUPS,
   ROLE_PERK,
   VERBS,
   clearOrder,
@@ -35,6 +35,8 @@ import {
   type Verb,
 } from './model/rules';
 import { saveGame, useGame } from './model/store';
+import { setSoundOn, soundOn } from '../game/sound';
+import { Volume2, VolumeX } from 'lucide-react';
 import './hold.css';
 
 const cinzel = localFont({ src: './fonts/cinzel.woff2', weight: '400 900', variable: '--ah-cin', display: 'swap' });
@@ -79,13 +81,44 @@ export function HoldPage() {
   return (
     <div className={cn('ah', cinzel.variable, garamond.variable)}>
       <HoldDefs />
-      <Link href="/english/game" className="ah-back">
-        ← Mind the Gap
-      </Link>
+      <div className="ah-topline">
+        <Link href="/english/game" className="ah-back">
+          ← Mind the Gap
+        </Link>
+        <SoundToggle />
+      </div>
       {game === undefined ? null : game === null ? <Title /> : <Camp s={game} />}
       <WordCard />
       <p className="ah-credit">{CREDIT}</p>
     </div>
+  );
+}
+
+/** Звук — общий выключатель с первой игрой (`virex.english.game.sound`). */
+const soundListeners = new Set<() => void>();
+const subscribeSound = (l: () => void) => {
+  soundListeners.add(l);
+  return () => soundListeners.delete(l);
+};
+
+function SoundToggle() {
+  const on = useSyncExternalStore(subscribeSound, soundOn, () => true);
+  const setOn = (v: boolean) => {
+    setSoundOn(v);
+    soundListeners.forEach((l) => l());
+  };
+  return (
+    <button
+      type="button"
+      className="ah-sound"
+      aria-pressed={on}
+      aria-label={on ? 'Sound on' : 'Sound off'}
+      onClick={() => {
+        setOn(!on);
+      }}
+    >
+      {on ? <Volume2 size={18} aria-hidden /> : <VolumeX size={18} aria-hidden />}
+    </button>
   );
 }
 
@@ -264,7 +297,7 @@ function OrderSheet({ s, p, onClose }: { s: HoldState; p: Person; onClose: () =>
           </button>
         </div>
         {wrong ? <p className="ah-wrong">{wrong}</p> : <TileHint word={hint} />}
-        <div className="ah-tiles">
+        <div className="ah-tiles ah-tiles-grid ah-tiles-verbs">
           {VERBS.map((v) => (
             <button
               key={v}
@@ -276,18 +309,23 @@ function OrderSheet({ s, p, onClose }: { s: HoldState; p: Person; onClose: () =>
             </button>
           ))}
         </div>
-        <div className="ah-tiles">
-          {OBJECTS.map((o) => (
-            <button
-              key={o}
-              type="button"
-              className={cn('ah-tile', object === o && 'used')}
-              onClick={() => (setObject(o), setHint(o), setWrong(null))}
-            >
-              {o}
-            </button>
-          ))}
-        </div>
+        {OBJECT_GROUPS.map(([label, list]) => (
+          <div key={label} className="ah-group">
+            <span className="ah-group-label">{label}</span>
+            <div className="ah-tiles ah-tiles-grid">
+              {list.map((o) => (
+                <button
+                  key={o}
+                  type="button"
+                  className={cn('ah-tile', object === o && 'used')}
+                  onClick={() => (setObject(o), setHint(o), setWrong(null))}
+                >
+                  {o.replace(/^(by )?the /, '')}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
         <div className="ah-sheet-actions">
           {p.order ? (
             <button

@@ -19,6 +19,7 @@ import { AnswerDto } from './dto/answer.dto';
 import { PhraseDto } from './dto/phrase.dto';
 import { ThemeDto, ThemeWordDto } from './dto/theme.dto';
 import { RunDto } from './dto/run.dto';
+import { HoldDto } from './dto/hold.dto';
 
 /** id из адреса: слово владельца или раздел курса. */
 function idParam(value: string): string {
@@ -88,6 +89,24 @@ export class EnglishController {
   @Post('game')
   game(@Body() dto: PhraseDto) {
     return this.english.game(dto.day);
+  }
+
+  /** GET /api/admin/english/hold — сохранённая игра «Ashen Hold» или null. */
+  @Get('hold')
+  hold() {
+    return this.english.hold();
+  }
+
+  /** PUT /api/admin/english/hold — сохранить игру; старее сохранённой не затирает. */
+  @Put('hold')
+  saveHold(@Body() dto: HoldDto) {
+    return this.english.saveHold(dto);
+  }
+
+  /** DELETE /api/admin/english/hold — сбросить игру. */
+  @Delete('hold')
+  deleteHold() {
+    return this.english.deleteHold();
   }
 
   /** GET /api/admin/english/runs — законченные забеги игры, свежие сверху. */

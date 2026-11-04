@@ -227,7 +227,11 @@ export function fight(s0: HoldState): HoldState {
       const before = t.hp;
       t.hp = Math.min(MAX_HP, t.hp + n);
       last.push(
-        t.hp > before ? `${p.name} healed ${t.id === p.id ? 'own' : `${t.name}'s`} wounds.` : `${t.name} did not need healing.`,
+        t.hp > before
+          ? t.id === p.id
+            ? `${p.name} feels better.`
+            : `${p.name} helped ${t.name}. ${t.name} feels better.`
+          : `${t.name} did not need healing.`,
       );
     }
   }
@@ -335,7 +339,7 @@ export function finishBattle(s0: HoldState): HoldState {
     const what = pick(r, kinds);
     const lost = Math.min(s.res[what], take + int(r, 0, 2));
     s.res[what] -= lost;
-    if (lost > 0) b.log.push(`They ${b.kind === 'wolves' ? 'ate' : 'stole'} ${lost} ${what}.`);
+    if (lost > 0) b.log.push(`They ${b.kind === 'wolves' ? 'ate' : 'took'} ${lost} ${what}.`);
     for (const p of people) p.morale = clamp(p.morale - (b.outcome === 'lost' ? 2 : 1), 0, MAX_MORALE);
   }
   s.nightLog = b.log;

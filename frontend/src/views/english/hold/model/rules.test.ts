@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   DAYS,
+  OBJECTS,
+  OBJECT_GROUPS,
   defenseOf,
   endDay,
   giveOrder,
@@ -33,6 +35,13 @@ describe('фраза приказа', () => {
     expect(r.ok).toBe(false);
     expect(r.state.stats.mistakes).toBe(1);
     expect(r.state.people.find((p) => p.id === 'tom')!.order).toBeNull();
+  });
+});
+
+describe('плитки приказа', () => {
+  it('группы дополнений — все дополнения ровно по разу', () => {
+    const flat = OBJECT_GROUPS.flatMap(([, list]) => list);
+    expect([...flat].sort()).toEqual([...OBJECTS].sort());
   });
 });
 
