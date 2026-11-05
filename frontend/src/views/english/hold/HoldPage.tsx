@@ -8,7 +8,10 @@ import { CampScene, HoldDefs } from './components/CampScene';
 import { Tap, TileHint, WordCard } from './components/Words';
 import { Lands, ScoutReportView } from './components/Lands';
 import { GateView } from './components/Gate';
-import { PLACES, type PlaceId } from './model/scout';
+import { dirOf, type PlaceId } from './model/scout';
+import { CONDS } from './model/conds';
+import { TRAIT_TEXT, TRAIT_WORD } from './model/crew';
+import { EventView } from './components/Event';
 import { startBattle } from './model/battle';
 import { CREDIT, ICONS, type IconId } from './icons';
 import {
@@ -17,6 +20,9 @@ import {
   MAX_HP,
   OBJECT_GROUPS,
   ROLE_PERK,
+  condOf,
+  faceOf,
+  placeObjects,
   VERBS,
   clearOrder,
   defenseOf,
@@ -137,6 +143,15 @@ function Hud({ s }: { s: HoldState }) {
           );
         })}
       </div>
+      <p className="ah-cond">
+        <Tap text={CONDS[condOf(s)].name} />
+        {s.kids ? (
+          <>
+            {' · '}
+            <Tap text={s.kids === 1 ? 'one child in the camp' : `${s.kids} children in the camp`} />
+          </>
+        ) : null}
+      </p>
     </div>
   );
 }
@@ -167,13 +182,13 @@ function Night({ s }: { s: HoldState }) {
   );
 }
 
-function CrewRow({ p, onPick }: { p: Person; onPick: () => void }) {
+function CrewRow({ s, p, onPick }: { s: HoldState; p: Person; onPick: () => void }) {
   const mood = p.morale >= 6 ? 'calm' : p.morale >= 3 ? 'afraid' : 'broken';
   if (p.status !== 'ok') {
     return (
       <div className="ah-crew ah-frame ah-crew-out">
         <span className="ah-por">
-          <Ic id={p.id} />
+          <Ic id={faceOf(p)} />
         </span>
         <span className="ah-cn">
           <b>{p.name}</b>
@@ -188,14 +203,14 @@ function CrewRow({ p, onPick }: { p: Person; onPick: () => void }) {
     return (
       <div className="ah-crew ah-frame ah-crew-away">
         <span className="ah-por">
-          <Ic id={p.id} />
+          <Ic id={faceOf(p)} />
         </span>
         <span className="ah-cn">
           <b>
             {p.name} · <Tap text={p.role} />
           </b>
           <small>
-            <Tap text={`scouting the ${PLACES[p.away.place].dir} · back tomorrow`} />
+            <Tap text={`scouting the ${dirOf(s.places, p.away.place)} · back tomorrow`} />
           </small>
         </span>
       </div>
@@ -204,11 +219,12 @@ function CrewRow({ p, onPick }: { p: Person; onPick: () => void }) {
   return (
     <button type="button" className={cn('ah-crew ah-frame', !p.order && 'ah-crew-idle')} onClick={onPick}>
       <span className="ah-por">
-        <Ic id={p.id} />
+        <Ic id={faceOf(p)} />
       </span>
       <span className="ah-cn">
         <b>
           {p.name} · <span>{p.role}</span>
+          {p.trait ? <span className="ah-trait">{TRAIT_WORD[p.trait]}</span> : null}
         </b>
         <small>{p.order ? `“${p.order.verb} ${p.order.object}”` : 'waiting for an order'}</small>
       </span>
@@ -255,7 +271,7 @@ function WhoSheet({
           {crew.map((p) => (
             <button key={p.id} type="button" className="ah-crew ah-frame" onClick={() => onPick(p.id)}>
               <span className="ah-por">
-                <Ic id={p.id} />
+                <Ic id={faceOf(p)} />
               </span>
               <span className="ah-cn">
                 <b>
@@ -287,7 +303,7 @@ function OrderSheet({ s, p, preset, onClose }: { s: HoldState; p: Person; preset
     saveGame(r.state);
     if (r.ok) onClose();
     else {
-      const w = wrongOrder(p.name, { verb, object }, r.reason);
+      const w = wrongOrder(s, p.name, { verb, object }, r.reason);
       setWrong(w.text);
       setFix(w.fix);
       setShake((n) => n + 1);
@@ -298,7 +314,7 @@ function OrderSheet({ s, p, preset, onClose }: { s: HoldState; p: Person; preset
       <div className="ah-sheet ah-frame" role="dialog" aria-label={`Order for ${p.name}`} onClick={(e) => e.stopPropagation()}>
         <div className="ah-sheet-head">
           <span className="ah-por">
-            <Ic id={p.id} />
+            <Ic id={faceOf(p)} />
           </span>
           <span>
             <b>
@@ -307,6 +323,11 @@ function OrderSheet({ s, p, preset, onClose }: { s: HoldState; p: Person; preset
             <small>
               <Tap text={`${p.role} · ${ROLE_PERK[p.role]}`} />
             </small>
+            {p.trait ? (
+              <small>
+                <Tap text={TRAIT_TEXT[p.trait]} />
+              </small>
+            ) : null}
           </span>
         </div>
         <div key={shake} className={cn('ah-phrase', shake > 0 && 'ah-shake')}>
@@ -337,7 +358,7 @@ function OrderSheet({ s, p, preset, onClose }: { s: HoldState; p: Person; preset
             </button>
           ))}
         </div>
-        {OBJECT_GROUPS.map(([label, list]) => (
+        {[...OBJECT_GROUPS, ['places', placeObjects(s)] as [string, Obj[]]].map(([label, list]) => (
           <div key={label} className="ah-group">
             <span className="ah-group-label">{label}</span>
             <div className="ah-tiles ah-tiles-grid">
@@ -550,7 +571,7 @@ function Camp({ s }: { s: HoldState }) {
           <Night s={s} />
           <div className="ah-crewlist">
             {s.people.map((p) => (
-              <CrewRow key={p.id} p={p} onPick={() => setPicked(p.id)} />
+              <CrewRow key={p.id} s={s} p={p} onPick={() => setPicked(p.id)} />
             ))}
           </div>
         </>
@@ -593,6 +614,7 @@ function Camp({ s }: { s: HoldState }) {
       {s.reports?.length ? <ScoutReportView key={`${s.day}:${s.reports.length}`} s={s} /> : null}
       {/* Гость ждёт, пока прочитаны доклады разведчиков: два окна разом не открываются. */}
       {!s.reports?.length && s.visitor ? <GateView key={s.day} s={s} /> : null}
+      {!s.reports?.length && !s.visitor && s.event ? <EventView key={`e${s.day}`} s={s} /> : null}
     </>
   );
 }

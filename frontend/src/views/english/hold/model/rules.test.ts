@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ALL_PLACES } from './scout';
 import {
   DAYS,
   OBJECTS,
@@ -30,7 +31,7 @@ describe('фраза приказа', () => {
   });
 
   it('бессмыслица не принимается и считается ошибкой', () => {
-    const s = newGame(1);
+    const s = newGame(1, { classic: true });
     const r = giveOrder(s, 'tom', { verb: 'fetch', object: 'the wall' });
     expect(r.ok).toBe(false);
     expect(r.state.stats.mistakes).toBe(1);
@@ -40,14 +41,14 @@ describe('фраза приказа', () => {
 
 describe('плитки приказа', () => {
   it('группы дополнений — все дополнения ровно по разу', () => {
-    const flat = OBJECT_GROUPS.flatMap(([, list]) => list);
+    const flat = [...OBJECT_GROUPS.flatMap(([, list]) => list), ...ALL_PLACES.map((id) => `the ${id}`)];
     expect([...flat].sort()).toEqual([...OBJECTS].sort());
   });
 });
 
 describe('ночь', () => {
   it('добыча, еда и вода считаются, приказы снимаются, день идёт', () => {
-    let s = newGame(7);
+    let s = newGame(7, { classic: true });
     s = { ...s, tonight: null };
     s = order(s, 'mira', { verb: 'go', object: 'hunting' });
     s = order(s, 'ash', { verb: 'fetch', object: 'water' });
@@ -61,7 +62,7 @@ describe('ночь', () => {
   });
 
   it('стройка: материалы вносятся один раз, строитель кончает колодец за день', () => {
-    let s: HoldState = { ...newGame(3), tonight: null };
+    let s: HoldState = { ...newGame(3, { classic: true }), tonight: null };
     s = order(s, 'tom', { verb: 'build', object: 'the well' });
     const n = endDay(s);
     expect(n.buildings.well.done).toBe(true);
@@ -70,7 +71,7 @@ describe('ночь', () => {
   });
 
   it('без материалов стройка не начинается', () => {
-    let s: HoldState = { ...newGame(3), tonight: null };
+    let s: HoldState = { ...newGame(3, { classic: true }), tonight: null };
     s = order(s, 'tom', { verb: 'build', object: 'the wall' });
     const n = endDay(s);
     expect(n.buildings.wall.started).toBe(false);
@@ -78,7 +79,7 @@ describe('ночь', () => {
   });
 
   it('стража отбивает набег слабее защиты', () => {
-    let s: HoldState = { ...newGame(5), tonight: { kind: 'wolves', strength: 4 } };
+    let s: HoldState = { ...newGame(5, { classic: true }), tonight: { kind: 'wolves', strength: 4 } };
     s = order(s, 'tom', { verb: 'guard', object: 'the gate' });
     s = order(s, 'ash', { verb: 'guard', object: 'the gate' });
     expect(defenseOf(s)).toBe(4);
@@ -88,20 +89,20 @@ describe('ночь', () => {
   });
 
   it('прорыв ранит и уносит запасы', () => {
-    const s: HoldState = { ...newGame(5), tonight: { kind: 'bandits', strength: 6 } };
+    const s: HoldState = { ...newGame(5, { classic: true }), tonight: { kind: 'bandits', strength: 6 } };
     const n = endDay(s);
     expect(n.stats.repelled).toBe(0);
     expect(n.report.some((l) => l.includes('broke into the camp'))).toBe(true);
   });
 
   it('голод без еды — люди слабеют и в конце уходят или гибнут', () => {
-    let s: HoldState = { ...newGame(9), res: { food: 0, water: 0, wood: 0, iron: 0 } };
+    let s: HoldState = { ...newGame(9, { classic: true }), res: { food: 0, water: 0, wood: 0, iron: 0 } };
     for (let i = 0; i < 12 && !s.outcome; i++) s = endDay({ ...s, tonight: null, res: { food: 0, water: 0, wood: 0, iron: 0 } });
     expect(s.outcome).toBe('lose');
   });
 
   it('продержаться тридцать дней — победа', () => {
-    let s = newGame(11);
+    let s = newGame(11, { classic: true });
     // Простой бот: охота, вода, стража, остальные — дрова или колодец.
     for (let d = 0; d < DAYS && !s.outcome; d++) {
       const plan: [PersonId, Order][] = [
@@ -124,6 +125,6 @@ describe('ночь', () => {
   });
 
   it('один и тот же сид — одна и та же игра', () => {
-    expect(endDay(newGame(42))).toEqual(endDay(newGame(42)));
+    expect(endDay(newGame(42, { classic: true }))).toEqual(endDay(newGame(42, { classic: true })));
   });
 });

@@ -12,12 +12,16 @@ const trader = (kind: 'trader' | 'liar'): Visitor => ({
   options: [],
   offer: { ...offer },
 });
-const at = (v: Visitor): HoldState => ({ ...newGame(4), visitor: v, res: { food: 10, water: 10, wood: 10, iron: 2 } });
+const at = (v: Visitor): HoldState => ({
+  ...newGame(4, { classic: true }),
+  visitor: v,
+  res: { food: 10, water: 10, wood: 10, iron: 2 },
+});
 
 describe('гости у ворот', () => {
   it('гость приходит с третьего дня и не раньше', () => {
     const r = rand(9);
-    const s = newGame(9);
+    const s = newGame(9, { classic: true });
     for (let i = 0; i < 20; i++) expect(rollVisitor(r, { ...s, day: 2 })).toBeNull();
     const seen = Array.from({ length: 60 }, () => rollVisitor(r, { ...s, day: 5 })).filter(Boolean);
     expect(seen.length).toBeGreaterThan(10);
@@ -26,12 +30,12 @@ describe('гости у ворот', () => {
 
   it('у торговца и разбойника одни и те же слова и ответы — отличает только деталь', () => {
     const r = rand(3);
-    const s = { ...newGame(3), day: 6 };
+    const s = { ...newGame(3, { classic: true }), day: 6 };
     const both = Array.from({ length: 80 }, () => rollVisitor(r, s)).filter(
       (v) => v && (v.kind === 'trader' || v.kind === 'liar'),
     );
     for (const v of both) {
-      expect(v!.speech).toMatch(/^Hello\. I sell things\./);
+      expect(v!.speech).toMatch(/Can I come in\?$/);
       expect(v!.options.map((o) => o.id)).toEqual(['trade', 'check', 'refuse']);
     }
   });

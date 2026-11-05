@@ -19,7 +19,7 @@ import {
   type Enemy,
   type Reaction,
 } from '../model/battle';
-import { MAX_HP, endDay, present, type HoldState, type Person, type PersonId } from '../model/rules';
+import { MAX_HP, endDay, faceOf, present, type HoldState, type Person, type PersonId } from '../model/rules';
 import { saveGame } from '../model/store';
 import { Tap, TileHint } from './Words';
 
@@ -84,7 +84,7 @@ function FighterCard({ s, p, active, onPick }: { s: HoldState; p: Person; active
   return (
     <button type="button" className={cn('ah-fighter ah-frame', active && 'on', down && 'down')} onClick={onPick} disabled={down}>
       <span className="ah-por">
-        <Ic id={p.id} />
+        <Ic id={faceOf(p)} />
       </span>
       <span className="ah-cn">
         <b>
