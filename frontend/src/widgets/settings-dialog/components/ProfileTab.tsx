@@ -20,6 +20,9 @@ import { Hint, Row, Section } from './Rows';
  */
 export function ProfileTab({ locked }: { locked: boolean }) {
   const t = useTranslations('settings');
+  // Аккаунт, заведённый через Google, пароля не имеет и входит только им —
+  // менять нечего. `undefined` (ответ старого бэкенда) — блок на месте.
+  const noPassword = useAuth().user?.hasPassword === false;
   return (
     <div className="stg-grid">
       {locked && <p className="stg-note">{t('demoLocked')}</p>}
@@ -33,9 +36,11 @@ export function ProfileTab({ locked }: { locked: boolean }) {
           </div>
         </Section>
       </div>
-      <div className="stg-col">
-        <PasswordSection locked={locked} />
-      </div>
+      {!noPassword && (
+        <div className="stg-col">
+          <PasswordSection locked={locked} />
+        </div>
+      )}
     </div>
   );
 }

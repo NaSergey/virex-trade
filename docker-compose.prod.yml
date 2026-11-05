@@ -93,6 +93,10 @@ services:
       JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-7}
       CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:?set CREDENTIALS_ENCRYPTION_KEY in .env.prod}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      # Вход через Google — только у api: колбэк приходит сюда. Без них кнопка
+      # возвращает к форме с ошибкой, остальное работает.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       # Приём донатов. Без адреса кошелька TronWatcher выключается сам и
       # окно доната говорит «не настроено» — остальное работает как обычно,
       # поэтому переменная необязательная.

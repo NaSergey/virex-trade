@@ -74,6 +74,7 @@
     "demoButton": "Посмотреть демо",
     "switchToRegister": "Нет аккаунта? Зарегистрироваться",
     "switchToLogin": "Уже есть аккаунт? Войти",
+    "googleButton": "Продолжить с Google",
     "or": "или",
     "genericError": "Ошибка"
   },
@@ -1477,6 +1478,8 @@
     "TERMINAL_POSITION_NOT_FOUND": "Позиция не найдена — возможно, она уже закрыта",
     "TERMINAL_GRID_PARTIAL": "Выставлено {placed} из {total} ордеров. Остальные отклонены: {reason}",
     "TERMINAL_FOLLOW_NOT_SAVED": "Сетка выставлена, но перенос стопа за тейками не включился. Откройте окно сетки ещё раз.",
+    "GOOGLE_FAILED": "Не удалось войти через Google. Попробуйте ещё раз",
+    "PASSWORD_NOT_SET": "У этого аккаунта нет пароля — войдите через Google",
     "INVALID_CREDENTIALS": "Неверный email или пароль",
     "USER_EXISTS": "Пользователь с таким email уже существует",
     "NAME_NOT_READABLE": "Напишите настоящее имя или ник: хотя бы две буквы, без случайного набора символов",

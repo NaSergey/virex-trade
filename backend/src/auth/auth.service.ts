@@ -14,6 +14,7 @@ import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { demoLocked, isDemoEmail } from './demo-account';
 import { assertReadableName, isRealEmail } from './identity-rules';
+import { GoogleClaims, pickName } from './google-oauth';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { resolveJwtAccessSecret } from './jwt-secret';
 import { isOwnerEmail } from '../admin/owner';
@@ -38,7 +39,21 @@ export interface PublicUser {
   isAdmin: boolean;
   /** Адрес картинки профиля с версией (`profile/avatar.ts`); нет картинки — null. */
   avatar: string | null;
+  /**
+   * Есть ли у аккаунта пароль. Нет у заведённого входом через Google: смены
+   * пароля в настройках у него нет — он входит только через Google.
+   */
+  hasPassword: boolean;
 }
+
+/** Строка `users`, из которой выдаются токены и собирается `PublicUser`. */
+type UserRow = {
+  id: string;
+  email: string;
+  name: string | null;
+  avatarAt: Date | null;
+  password: string | null;
+};
 
 export interface AuthResult {
   user: PublicUser;
@@ -81,41 +96,15 @@ export class AuthService {
       });
     }
 
-    // Ссылка вида /login?mode=register&ref=<userId>: ref — id пригласившего.
-    // Неизвестный или мусорный ref — то же самое, что его отсутствие, а не
-    // повод отклонить регистрацию (см. RegisterDto.ref).
-    const invitedById = dto.ref ? await this.resolveInviter(dto.ref) : null;
-
-    const passwordHash = await bcrypt.hash(dto.password, 10);
-    // Создание пользователя и реферальный бонус пригласившему — одна
-    // транзакция: начисление не должно разойтись с событием, которое его
-    // вызвало (тот же принцип, что у зачёта доната и взносов турнира).
-    const user = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.user.create({
-        data: {
-          email: dto.email,
-          password: passwordHash,
-          // DTO уже обрезал пробелы и потребовал непустое значение. Колонка
-          // остаётся nullable ради тех, кто регистрировался, когда имя было
-          // необязательным, — их записи трогать незачем.
-          name: dto.name,
-          invitedById,
-        },
-      });
-      if (invitedById) {
-        await this.coins.credit(tx, invitedById, REFERRAL_BONUS_COINS, 'REFERRAL_BONUS', created.id);
-        await this.coins.credit(tx, created.id, REFERRAL_WELCOME_COINS, 'REFERRAL_WELCOME', created.id);
-      }
-      return created;
+    const user = await this.createAccount({
+      email: dto.email,
+      password: await bcrypt.hash(dto.password, 10),
+      // DTO уже обрезал пробелы и потребовал непустое значение. Колонка
+      // остаётся nullable ради тех, кто регистрировался, когда имя было
+      // необязательным, — их записи трогать незачем.
+      name: dto.name,
+      ref: dto.ref,
     });
-
-    // Примеры тегов, чтобы первую сделку было чем разметить. Провал не
-    // отменяет регистрацию: аккаунт без примеров рабочий, а несозданный — нет.
-    try {
-      await this.tags.createDefaults(user.id);
-    } catch (e) {
-      this.logger.warn(`не удалось создать стартовые теги для ${user.id}: ${e}`);
-    }
 
     return this.issueTokens(user);
   }
@@ -128,6 +117,15 @@ export class AuthService {
       throw new UnauthorizedException({
         message: 'Неверный email или пароль',
         code: 'INVALID_CREDENTIALS',
+      });
+    }
+
+    // Аккаунт заведён входом через Google. Существование почты это не раскрывает
+    // сверх того, что уже говорит регистрация (USER_EXISTS).
+    if (!user.password) {
+      throw new UnauthorizedException({
+        message: 'У этого аккаунта нет пароля — войдите через Google',
+        code: 'PASSWORD_NOT_SET',
       });
     }
 
@@ -160,6 +158,12 @@ export class AuthService {
       throw new UnauthorizedException({ message: 'Пользователь не найден', code: 'USER_NOT_FOUND' });
     }
     if (isDemoEmail(user.email)) throw demoLocked();
+    if (!user.password) {
+      throw new BadRequestException({
+        message: 'У этого аккаунта нет пароля — он входит через Google',
+        code: 'PASSWORD_NOT_SET',
+      });
+    }
     if (!(await bcrypt.compare(dto.current, user.password))) {
       throw new BadRequestException({ message: 'Текущий пароль неверный', code: 'PASSWORD_WRONG' });
     }
@@ -173,6 +177,99 @@ export class AuthService {
       this.prisma.refreshToken.deleteMany({ where: { userId } }),
     ]);
     return this.issueTokens(user);
+  }
+
+  /**
+   * Вход через Google (спека 2026-11-05): `claims` — из `id_token`, который
+   * сервер сам получил у Google (`google-oauth.ts`), почта подтверждена.
+   *
+   * 1. Привязанный аккаунт Google — вход в него.
+   * 2. Аккаунт с той же почтой — привязка и вход: Google подтвердил, что почта
+   *    этого человека, а второй аккаунт на ту же почту не завести.
+   * 3. Иначе — новый аккаунт без пароля, как у регистрации (`createAccount`):
+   *    приглашение, монеты, стартовые теги.
+   */
+  async signInWithGoogle(claims: GoogleClaims, ref?: string): Promise<AuthResult> {
+    // Google такую почту не подтвердит, но витрина общая — и её не трогают.
+    if (isDemoEmail(claims.email)) throw demoLocked();
+
+    const linked = await this.prisma.googleAccount.findUnique({
+      where: { sub: claims.sub },
+      include: { user: true },
+    });
+    if (linked) return this.issueTokens(linked.user);
+
+    // Без учёта регистра: регистрация почту не приводит, а Google отдаёт её в
+    // нижнем. Самый старый — если когда-то завелись два, различавшихся регистром.
+    const existing = await this.prisma.user.findFirst({
+      where: { email: { equals: claims.email, mode: 'insensitive' } },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (existing) {
+      // По userId, а не create: у аккаунта мог быть привязан прежний аккаунт
+      // Google с той же почтой (удалён и заведён заново) — его место занимает новый.
+      await this.prisma.googleAccount.upsert({
+        where: { userId: existing.id },
+        create: { sub: claims.sub, userId: existing.id },
+        update: { sub: claims.sub },
+      });
+      return this.issueTokens(existing);
+    }
+
+    const user = await this.createAccount({
+      email: claims.email,
+      password: null,
+      name: pickName(claims),
+      ref,
+      googleSub: claims.sub,
+    });
+    return this.issueTokens(user);
+  }
+
+  /**
+   * Новый аккаунт — общий у регистрации и входа через Google.
+   *
+   * Ссылка вида `/?auth=register&ref=<userId>`: ref — id пригласившего.
+   * Неизвестный или мусорный ref — то же самое, что его отсутствие, а не
+   * повод отклонить регистрацию (см. RegisterDto.ref).
+   */
+  private async createAccount(input: {
+    email: string;
+    password: string | null;
+    name: string | null;
+    ref?: string;
+    googleSub?: string;
+  }): Promise<UserRow> {
+    const invitedById = input.ref ? await this.resolveInviter(input.ref) : null;
+
+    // Создание пользователя и реферальный бонус пригласившему — одна
+    // транзакция: начисление не должно разойтись с событием, которое его
+    // вызвало (тот же принцип, что у зачёта доната и взносов турнира).
+    const user = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          email: input.email,
+          password: input.password,
+          name: input.name,
+          invitedById,
+          ...(input.googleSub ? { google: { create: { sub: input.googleSub } } } : {}),
+        },
+      });
+      if (invitedById) {
+        await this.coins.credit(tx, invitedById, REFERRAL_BONUS_COINS, 'REFERRAL_BONUS', created.id);
+        await this.coins.credit(tx, created.id, REFERRAL_WELCOME_COINS, 'REFERRAL_WELCOME', created.id);
+      }
+      return created;
+    });
+
+    // Примеры тегов, чтобы первую сделку было чем разметить. Провал не
+    // отменяет регистрацию: аккаунт без примеров рабочий, а несозданный — нет.
+    try {
+      await this.tags.createDefaults(user.id);
+    } catch (e) {
+      this.logger.warn(`не удалось создать стартовые теги для ${user.id}: ${e}`);
+    }
+    return user;
   }
 
   // Validate the raw refresh token, rotate it (single-use), issue a new pair.
@@ -226,12 +323,7 @@ export class AuthService {
   }
 
   private async issueTokens(
-    user: {
-      id: string;
-      email: string;
-      name: string | null;
-      avatarAt: Date | null;
-    },
+    user: UserRow,
     opts?: { consumeTokenId?: string },
   ): Promise<AuthResult> {
     const payload: JwtPayload = { sub: user.id, email: user.email };
@@ -296,18 +388,14 @@ export class AuthService {
     return inviter?.id ?? null;
   }
 
-  private toPublicUser(user: {
-    id: string;
-    email: string;
-    name: string | null;
-    avatarAt: Date | null;
-  }): PublicUser {
+  private toPublicUser(user: UserRow): PublicUser {
     return {
       id: user.id,
       email: user.email,
       name: user.name,
       isAdmin: isOwnerEmail(user.email),
       avatar: avatarUrl(user.id, user.avatarAt),
+      hasPassword: user.password != null,
     };
   }
 }

@@ -60,6 +60,8 @@ export function RegisterScene({
   const mode = chosen ?? urlMode ?? 'register';
   const next = safeNext(params.get('next'), HOME_OF[useAppPart()]);
   const refCode = params.get('ref') || undefined;
+  // Возврат после сбоя входа через Google (`/?auth=login&error=GOOGLE_FAILED`).
+  const errorCode = params.get('error') || undefined;
 
   // Пришедший с намерением (`?auth=…` — гейт, приглашение) попадает сразу к
   // форме. Один раз при заходе: дальше скроллом управляет он сам. **Якорь в
@@ -67,6 +69,13 @@ export function RegisterScene({
   // перезагрузка на `/?auth=login#platform` кидала к форме вместо «Платформы».
   useEffect(() => {
     if (urlMode && !window.location.hash) root.current?.scrollIntoView();
+    // Ошибка показана формой и живёт в её состоянии; в адресе она показалась бы
+    // снова на перезагрузке.
+    if (errorCode) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('error');
+      window.history.replaceState(window.history.state, '', url);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- только при заходе
   }, []);
 
@@ -105,7 +114,7 @@ export function RegisterScene({
             {invited && <p className="lbl ls-register-invite">{t('registerInvite', { code: refCode })}</p>}
           </div>
           <div className="ls-register-form">
-            <AuthForm mode={mode} onModeChange={onMode} next={next} refCode={refCode} />
+            <AuthForm mode={mode} onModeChange={onMode} next={next} refCode={refCode} errorCode={errorCode} />
           </div>
         </div>
       </Wrap>

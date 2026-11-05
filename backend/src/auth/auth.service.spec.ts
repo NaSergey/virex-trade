@@ -231,3 +231,144 @@ describe('AuthService.changePassword', () => {
     expect(out.refreshToken).toEqual(expect.any(String));
   });
 });
+
+describe('AuthService: аккаунт без пароля (заведён через Google)', () => {
+  const googleOnly = { id: 'g1', email: 'ivan@gmail.com', name: 'Иван', avatarAt: null, password: null };
+
+  it('вход паролем — 401 PASSWORD_NOT_SET: подсказка войти через Google', async () => {
+    const prisma = { user: { findUnique: async () => googleOnly } } as any;
+    const service = new AuthService(prisma, {} as any, {} as any, {} as any);
+
+    const err = await service.login({ email: 'ivan@gmail.com', password: 'whatever' } as any).catch((e) => e);
+    expect(err).toBeInstanceOf(UnauthorizedException);
+    expect(err.getResponse()).toMatchObject({ code: 'PASSWORD_NOT_SET' });
+  });
+
+  it('смена пароля — 400 PASSWORD_NOT_SET, ничего не пишется', async () => {
+    const prisma = {
+      user: { findUnique: async () => googleOnly },
+      $transaction: jest.fn(),
+    } as any;
+    const service = new AuthService(prisma, {} as any, {} as any, {} as any);
+
+    const err = await service.changePassword('g1', { current: 'x', next: 'new-password' }).catch((e) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect(err.getResponse()).toMatchObject({ code: 'PASSWORD_NOT_SET' });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthService.signInWithGoogle', () => {
+  const claims = { sub: 'google-sub-1', email: 'ivan.petrov@gmail.com', name: 'Иван Петров' };
+
+  function makeService(opts: {
+    linked?: { id: string; email: string; name: string | null; avatarAt: null; password: string | null };
+    byEmail?: { id: string; email: string; name: string | null; avatarAt: null; password: string | null };
+    inviters?: Array<{ id: string }>;
+  }) {
+    const created: any[] = [];
+    const creditCalls: any[] = [];
+    const tx = {
+      user: {
+        create: async ({ data }: { data: any }) => {
+          created.push(data);
+          return { id: 'new-user-id', email: data.email, name: data.name, avatarAt: null, password: data.password };
+        },
+      },
+    };
+    const prisma = {
+      googleAccount: {
+        findUnique: jest.fn(async () => (opts.linked ? { sub: claims.sub, user: opts.linked } : null)),
+        upsert: jest.fn(async () => ({})),
+      },
+      user: {
+        findFirst: jest.fn(async ({ where }: { where: any }) => {
+          if (where.OR) return (opts.inviters ?? []).find((u) => where.OR.some((c: any) => c.id === u.id)) ?? null;
+          return opts.byEmail ?? null;
+        }),
+      },
+      refreshToken: { create: jest.fn(async () => ({})) },
+      $transaction: async (cb: (t: any) => Promise<any>) => cb(tx),
+    } as any;
+    const jwt = { signAsync: async () => 'access-token' } as any;
+    const tags = { createDefaults: jest.fn(async () => undefined) } as any;
+    const coins = {
+      credit: async (_tx: any, userId: string, amount: number, kind: string, refId: string) => {
+        creditCalls.push({ userId, amount, kind, refId });
+      },
+    } as any;
+    return { service: new AuthService(prisma, jwt, tags, coins), prisma, created, creditCalls, tags };
+  }
+
+  it('привязанный аккаунт Google — вход в него, ничего не заводится', async () => {
+    const linked = { id: 'u1', email: 'old@gmail.com', name: 'Ваня', avatarAt: null, password: null };
+    const { service, created, prisma } = makeService({ linked });
+
+    const out = await service.signInWithGoogle(claims);
+
+    expect(prisma.googleAccount.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { sub: 'google-sub-1' } }),
+    );
+    expect(created).toHaveLength(0);
+    expect(out.user).toMatchObject({ id: 'u1', hasPassword: false });
+    expect(out.refreshToken).toEqual(expect.any(String));
+  });
+
+  it('аккаунт с той же почтой — привязка к нему и вход; почта без учёта регистра', async () => {
+    const byEmail = { id: 'u2', email: 'Ivan.Petrov@gmail.com', name: 'Иван', avatarAt: null, password: 'hash' };
+    const { service, created, prisma } = makeService({ byEmail });
+
+    const out = await service.signInWithGoogle(claims);
+
+    expect(prisma.user.findFirst).toHaveBeenCalledWith({
+      where: { email: { equals: 'ivan.petrov@gmail.com', mode: 'insensitive' } },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(prisma.googleAccount.upsert).toHaveBeenCalledWith({
+      where: { userId: 'u2' },
+      create: { sub: 'google-sub-1', userId: 'u2' },
+      update: { sub: 'google-sub-1' },
+    });
+    expect(created).toHaveLength(0);
+    expect(out.user).toMatchObject({ id: 'u2', hasPassword: true });
+  });
+
+  it('новый человек — аккаунт без пароля, с именем из Google и привязкой, стартовые теги', async () => {
+    const { service, created, tags } = makeService({});
+
+    const out = await service.signInWithGoogle(claims);
+
+    expect(created).toEqual([
+      {
+        email: 'ivan.petrov@gmail.com',
+        password: null,
+        name: 'Иван Петров',
+        invitedById: null,
+        google: { create: { sub: 'google-sub-1' } },
+      },
+    ]);
+    expect(tags.createDefaults).toHaveBeenCalledWith('new-user-id');
+    expect(out.user).toMatchObject({ id: 'new-user-id', hasPassword: false });
+  });
+
+  it('новый по приглашению — пригласивший закреплён, монеты обоим, как у регистрации', async () => {
+    const { service, created, creditCalls } = makeService({ inviters: [{ id: 'inviter-1' }] });
+
+    await service.signInWithGoogle(claims, 'inviter-1');
+
+    expect(created[0].invitedById).toBe('inviter-1');
+    expect(creditCalls).toEqual([
+      { userId: 'inviter-1', amount: REFERRAL_BONUS_COINS, kind: 'REFERRAL_BONUS', refId: 'new-user-id' },
+      { userId: 'new-user-id', amount: REFERRAL_WELCOME_COINS, kind: 'REFERRAL_WELCOME', refId: 'new-user-id' },
+    ]);
+  });
+
+  it('почта демо-аккаунта — 403, ни входа, ни привязки', async () => {
+    const { service, prisma } = makeService({});
+
+    const err = await service.signInWithGoogle({ ...claims, email: 'demo@example.com' }).catch((e) => e);
+
+    expect(err).toBeInstanceOf(ForbiddenException);
+    expect(prisma.googleAccount.findUnique).not.toHaveBeenCalled();
+  });
+});
