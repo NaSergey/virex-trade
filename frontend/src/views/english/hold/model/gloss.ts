@@ -28,7 +28,7 @@ const EXTRA: Record<string, Gloss> = {
   came: { en: 'come', ru: 'пришёл (come)' },
   went: { en: 'go', ru: 'пошёл (go)' },
   found: { en: 'find', ru: 'нашёл (find)' },
-  saw: { en: 'see', ru: 'увидел (see)' },
+  saw: { en: 'see', ru: 'увидел (от see); также «пила» — инструмент' },
   got: { en: 'get', ru: 'получил (get)' },
   gave: { en: 'give', ru: 'отдал (give)' },
   drove: { en: 'drive', ru: 'прогнал (drive away)' },

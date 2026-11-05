@@ -13,9 +13,11 @@ import { glossOf, tokens, type Gloss } from '../model/gloss';
  * приносят на повторение, как и любое другое.
  */
 
-let open: Gloss | null = null;
+/** Нажатое слово как оно стоит в тексте (`saw`) и его перевод; словарная форма — `en` (`see`). */
+type Shown = Gloss & { form: string };
+let open: Shown | null = null;
 const listeners = new Set<() => void>();
-const show = (g: Gloss | null) => {
+const show = (g: Shown | null) => {
   open = g;
   listeners.forEach((l) => l());
 };
@@ -45,12 +47,12 @@ export function Tap({ text, className }: { text: string; className?: string }): 
             tabIndex={0}
             onClick={(e) => {
               e.stopPropagation();
-              show(g);
+              show({ ...g, form: t.text });
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                show(g);
+                show({ ...g, form: t.text });
               }
             }}
           >
@@ -84,8 +86,8 @@ export function WordCard() {
   return (
     <div className="ah-wordcard" role="dialog" aria-label={`Translation of ${g.en}`}>
       <div className="ah-wordcard-row">
-        <b lang="en">{g.en}</b>
-        <button type="button" className="ah-wordcard-ic" onClick={() => speak(g.en)} aria-label="Say it">
+        <b lang="en">{g.form.replace(/[’']s$/, '')}</b>
+        <button type="button" className="ah-wordcard-ic" onClick={() => speak(g.form)} aria-label="Say it">
           <Volume2 size={18} aria-hidden />
         </button>
         <button type="button" className="ah-wordcard-ic" onClick={() => show(null)} aria-label="Close">
@@ -93,6 +95,11 @@ export function WordCard() {
         </button>
       </div>
       <p>{g.ru}</p>
+      {g.form.toLowerCase() !== g.en.toLowerCase() ? (
+        <p className="ah-wordcard-base">
+          Dictionary form: <b lang="en">{g.en}</b>
+        </p>
+      ) : null}
       <button
         type="button"
         className="ah-wordcard-add"
