@@ -4,6 +4,7 @@ import type { Battle } from './battle';
 import { COND_IDS, CONDS, type CondId } from './conds';
 import { ROLE_PERK, cheerLine, makeCrew, sadLine, type Role, type Trait } from './crew';
 import { rollEvent, type GameEvent } from './events';
+import { findItem, type Items } from './items';
 import {
   ALL_PLACES,
   PLACES,
@@ -152,6 +153,8 @@ export interface Person {
   /** «he» или «she» в строках о человеке; у старых партий все — he, кроме Миры. */
   he?: boolean;
   trait?: Trait;
+  /** Снаряжение, которое человек носит (нож, топор, лук, кирка, плащ). */
+  gear?: string | null;
   /** В разведке: утро возвращения и куда ушёл. Пока человек в пути, приказов ему нет. */
   away?: { back: number; place: PlaceId } | null;
 }
@@ -216,6 +219,8 @@ export interface HoldState {
   cond?: CondId;
   /** Дети, которых приняли в лагерь: едят и пьют, но не работают. */
   kids?: number;
+  /** Вещи лагеря — запасы, ещё не надетые и не потраченные. */
+  items?: Items;
 }
 
 export const faceOf = (p: Person): IconId => p.face ?? (p.id as IconId);
@@ -255,6 +260,7 @@ export function newGame(seed: number, opts: { classic?: boolean } = {}): HoldSta
     day: 1,
     cond,
     kids: 0,
+    items: { bandage: 1 },
     res: { food: cond === 'hunger' ? 11 : 14, water: 10, wood: 10, iron: 2 },
     people: crew.map((p) => ({ ...p, hp: p.trait === 'weak' ? MAX_HP - 1 : MAX_HP, morale: 7, status: 'ok', order: null })),
     buildings: {
@@ -378,7 +384,9 @@ export function endDay(s0: HoldState): HoldState {
       case 'hunt': {
         const n = Math.max(
           1,
-          Math.round((int(r, 3, 5) + (p.role === 'hunter' ? 3 : 0) - (cond === 'hunger' ? 1 : 0)) * tired(p)),
+          Math.round(
+            (int(r, 3, 5) + (p.role === 'hunter' ? 3 : 0) + (p.gear === 'bow' ? 2 : 0) - (cond === 'hunger' ? 1 : 0)) * tired(p),
+          ),
         );
         res.food += n;
         log.push(
@@ -389,6 +397,8 @@ export function endDay(s0: HoldState): HoldState {
             `${p.name} followed a deer all day. ${n} food.`,
           ]),
         );
+        const found = findItem(r, s, p, 0.08);
+        if (found) log.push(found);
         if (chance(r, cond === 'wolves' ? 0.25 : 0.15)) {
           hurt(p, 1);
           log.push(pick(r, [`A wolf bit ${p.name} in the woods.`, `${p.name} fell on the ice and is hurt.`]));
@@ -408,7 +418,7 @@ export function endDay(s0: HoldState): HoldState {
         break;
       }
       case 'wood': {
-        const n = Math.round((int(r, 3, 5) + strong(p)) * tired(p));
+        const n = Math.round((int(r, 3, 5) + strong(p) + (p.gear === 'axe' ? 2 : 0)) * tired(p));
         res.wood += n;
         log.push(
           pick(r, [
@@ -420,7 +430,10 @@ export function endDay(s0: HoldState): HoldState {
         break;
       }
       case 'iron': {
-        const n = Math.round((int(r, 1, 2) + (s.buildings.forge.done ? 1 : 0) + (p.trait === 'strong' ? 1 : 0)) * tired(p));
+        const n = Math.round(
+          (int(r, 1, 2) + (s.buildings.forge.done ? 1 : 0) + (p.trait === 'strong' ? 1 : 0) + (p.gear === 'pickaxe' ? 1 : 0)) *
+            tired(p),
+        );
         res.iron += n;
         log.push(pick(r, [`${p.name} found ${n} iron in the rocks.`, `${p.name} dug in the hills and found ${n} iron.`]));
         break;
@@ -470,6 +483,8 @@ export function endDay(s0: HoldState): HoldState {
           res[place.loot] += n;
           log.push(`${p.name} searched ${name} and brought back ${n} ${place.loot}.`);
         }
+        const found = findItem(r, s, p, 0.75);
+        if (found) log.push(found);
         if (place.danger !== 'none') {
           hurt(p, 2);
           p.morale = clamp(p.morale - 1, 0, MAX_MORALE);
@@ -522,7 +537,7 @@ export function endDay(s0: HoldState): HoldState {
     if (res.wood >= 1) res.wood -= 1;
     else {
       log.push('There was no wood for the fire. Everyone was cold all night.');
-      for (const q of people) q.morale = clamp(q.morale - 1, 0, MAX_MORALE);
+      for (const q of people) if (q.gear !== 'coat') q.morale = clamp(q.morale - 1, 0, MAX_MORALE);
     }
   }
 
@@ -542,7 +557,7 @@ export function endDay(s0: HoldState): HoldState {
       );
       for (const q of people) {
         q.morale = clamp(q.morale - 2, 0, MAX_MORALE);
-        if (lack >= people.length) q.hp -= 1;
+        if (lack >= people.length && q.gear !== 'coat') q.hp -= 1;
       }
     }
   }

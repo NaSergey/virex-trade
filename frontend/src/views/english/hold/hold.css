@@ -1367,7 +1367,7 @@
   bottom: 0;
   z-index: 40;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   padding-bottom: env(safe-area-inset-bottom);
   border-top: 1px solid #3a2c1c;
   background: #0b0806;
@@ -1482,4 +1482,111 @@
 }
 .ah-event-text {
   font-size: 18px;
+}
+
+/* ── вещи и постройки ── */
+.ah-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ah-items-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ah-item {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+}
+.ah-item-ic {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  color: var(--ah-bone);
+}
+.ah-item-ic .ah-ic {
+  width: 34px;
+  height: 34px;
+  fill: currentColor;
+}
+.ah-item-ic b {
+  position: absolute;
+  right: -4px;
+  bottom: -2px;
+  font: 700 13px var(--gar);
+  color: var(--ah-ember);
+}
+.ah-item-tx {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ah-item-tx b {
+  font: 700 17px var(--gar);
+  color: var(--ah-bone);
+}
+.ah-item-tx small {
+  font: 500 14px var(--gar);
+  color: var(--ah-bone-2);
+}
+.ah-item-act {
+  min-height: 44px;
+  padding: 0 14px;
+  font: 700 13px var(--gar);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #1a0e06 !important;
+  background: linear-gradient(145deg, #f3d39a, #d29a4c 60%, #a06a2a);
+  border: 1px solid #1a1714;
+}
+.ah-items-said {
+  margin: 0;
+  padding: 8px 10px;
+  text-align: center;
+  font: 600 16px var(--gar);
+  color: #f0c27a;
+  border: 1px dashed #5a4422;
+}
+.ah-gear {
+  font: 600 13px var(--gar);
+  color: var(--ah-gold);
+}
+button.ah-build {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+button.ah-build:active {
+  transform: translateY(1px);
+}
+.ah-press-card {
+  border-color: #8a6a3a;
+}
+.ah-build-short {
+  opacity: 0.75;
+}
+.ah-build-cost.neg {
+  color: #e07a6a;
+}
+.ah-build-bar {
+  display: block;
+  height: 5px;
+  margin: 4px 0 2px;
+  background: #2a2016;
+}
+.ah-build-bar i {
+  display: block;
+  height: 100%;
+  background: var(--ah-ember);
+  transform-origin: left;
+}
+.ah-build-done {
+  color: var(--ah-good);
 }

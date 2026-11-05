@@ -1,6 +1,7 @@
 import { chance, int, pick, shuffle, type Rand } from '../../game/model/rng';
 import { MAX_HP, MAX_MORALE, present, type HoldState, type Person } from './rules';
 import { word } from './visitors';
+import { addItem, findItem } from './items';
 
 /**
  * События дня — трудные решения. Утром в лагере что-то случается: у ворот замёрзшая девочка,
@@ -321,8 +322,11 @@ export function answerEvent(s0: HoldState, choice: string): { state: HoldState; 
         pay('water', 2);
         if (chance(r, 0.55)) {
           s.res.iron += 4;
+          addItem(s, 'medicine');
           mood(1, { kind: 1 });
-          lines.push('The man gets better. Before he leaves, he gives you four iron. “Thank you. I will remember you.”');
+          lines.push(
+            'The man gets better. Before he leaves, he gives you four iron and some medicine. “Thank you. I will remember you.”',
+          );
         } else {
           if (a) a.morale = clampM(a.morale - 2);
           lines.push(`The man died in the night. ${a?.name} sits next to him for a long time.`);
@@ -339,6 +343,8 @@ export function answerEvent(s0: HoldState, choice: string): { state: HoldState; 
           const n = int(r, 4, 6);
           s.res.food += n;
           lines.push(`${a?.name} found ${word(n)} food in the house!`);
+          const found = a ? findItem(r, s, a, 0.5) : null;
+          if (found) lines.push(found);
         } else {
           hurt(a, 2);
           lines.push(`There was a wolf inside! ${a?.name} is hurt.`);
@@ -350,7 +356,8 @@ export function answerEvent(s0: HoldState, choice: string): { state: HoldState; 
         s.res.iron += 3;
         s.res.food += 2;
         mood(0, { kind: -2, gloomy: -1, greedy: 1 });
-        lines.push('In the bag: three iron and two food. Some of your people do not like this.');
+        addItem(s, 'knife');
+        lines.push('In the bag: three iron, two food and a knife. Some of your people do not like this.');
       } else {
         mood(1, { greedy: -1 });
         lines.push('You bury the man. People feel a little better.');
