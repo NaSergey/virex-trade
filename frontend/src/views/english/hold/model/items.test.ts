@@ -1,11 +1,37 @@
 import { describe, expect, it } from 'vitest';
 import { damageOf, startBattle } from './battle';
-import { countOf, giveGear, spendItem, takeGear } from './items';
+import { ICONS } from '../icons';
+import { ITEM_IDS, atkOf, countOf, defOf, giveGear, itemOf, spendItem, takeGear } from './items';
 import { endDay, giveOrder, newGame, present, type HoldState } from './rules';
 
 describe('вещи', () => {
   it('новая игра начинается с бинтом', () => {
     expect(countOf(newGame(1), 'bandage')).toBe(1);
+    expect(countOf(newGame(1, { classic: true }), 'bandage')).toBe(1);
+  });
+
+  it('вещей много, у каждой своя иконка и описание', () => {
+    expect(ITEM_IDS.length).toBeGreaterThanOrEqual(45);
+    for (const id of ITEM_IDS) {
+      expect(ICONS[itemOf(id).icon]).toBeTruthy();
+      expect(itemOf(id).text.length).toBeGreaterThan(3);
+    }
+  });
+
+  it('доспех снимает урон, оружие против зверей бьёт волков сильнее', () => {
+    const s = newGame(5, { classic: true });
+    const mira = s.people.find((x) => x.id === 'mira')!;
+    expect(atkOf({ ...mira, weapon: 'spear' }, 'beast')).toBe(3);
+    expect(atkOf({ ...mira, weapon: 'spear' }, 'man')).toBe(2);
+    expect(defOf({ ...mira, armor: 'breastplate' })).toBe(2);
+  });
+
+  it('еда из вещей идёт в общий запас, музыка — всем', () => {
+    const s: HoldState = { ...newGame(6), items: { fish: 1, flute: 1 } };
+    const fed = spendItem(s, 'fish')!.state;
+    expect(fed.res.food).toBe(s.res.food + 4);
+    const played = spendItem(s, 'flute')!.state;
+    expect(present(played).every((p, i) => p.morale >= present(s)[i].morale)).toBe(true);
   });
 
   it('бинт лечит и тратится', () => {
@@ -19,16 +45,19 @@ describe('вещи', () => {
   });
 
   it('снаряжение носят по одной вещи, прежняя возвращается в запасы', () => {
-    let s: HoldState = { ...newGame(3), items: { axe: 1, bow: 1 } };
+    let s: HoldState = { ...newGame(3), items: { axe: 1, saw: 1, bow: 1 } };
     const p = present(s)[0];
     s = giveGear(s, 'axe', p.id)!.state;
-    expect(s.people.find((x) => x.id === p.id)!.gear).toBe('axe');
+    expect(s.people.find((x) => x.id === p.id)!.tool).toBe('axe');
     expect(countOf(s, 'axe')).toBe(0);
-    s = giveGear(s, 'bow', p.id)!.state;
+    s = giveGear(s, 'saw', p.id)!.state;
     expect(countOf(s, 'axe')).toBe(1);
-    s = takeGear(s, p.id)!.state;
-    expect(countOf(s, 'bow')).toBe(1);
-    expect(s.people.find((x) => x.id === p.id)!.gear).toBeNull();
+    s = giveGear(s, 'bow', p.id)!.state;
+    expect(s.people.find((x) => x.id === p.id)!.weapon).toBe('bow');
+    expect(s.people.find((x) => x.id === p.id)!.tool).toBe('saw');
+    s = takeGear(s, p.id, 'tool')!.state;
+    expect(countOf(s, 'saw')).toBe(1);
+    expect(s.people.find((x) => x.id === p.id)!.tool).toBeNull();
   });
 
   it('топор даёт больше дерева, нож — сильнее удар', () => {

@@ -13,7 +13,7 @@ import { CONDS } from './model/conds';
 import { TRAIT_TEXT, TRAIT_WORD } from './model/crew';
 import { EventView } from './components/Event';
 import { ItemsView } from './components/Items';
-import { ITEMS, gearOf } from './model/items';
+import { gearList, itemOf } from './model/items';
 import { startBattle } from './model/battle';
 import { CREDIT, ICONS, type IconId } from './icons';
 import {
@@ -228,7 +228,14 @@ function CrewRow({ s, p, onPick }: { s: HoldState; p: Person; onPick: () => void
           {p.name} · <span>{p.role}</span>
           {p.trait ? <span className="ah-trait">{TRAIT_WORD[p.trait]}</span> : null}
         </b>
-        {gearOf(p) ? <small className="ah-gear">with the {ITEMS[gearOf(p)!].name}</small> : null}
+        {gearList(p).length ? (
+          <small className="ah-gear">
+            with{' '}
+            {gearList(p)
+              .map((id) => itemOf(id).name)
+              .join(', ')}
+          </small>
+        ) : null}
         <small>{p.order ? `“${p.order.verb} ${p.order.object}”` : 'waiting for an order'}</small>
       </span>
       <span className="ah-side">

@@ -3,15 +3,30 @@
 import { useState } from 'react';
 import { cn } from '@/shared/lib/utils/css';
 import { ICONS, type IconId } from '../icons';
-import { ITEMS, ITEM_IDS, countOf, gearOf, giveGear, takeGear, spendItem, type ItemId } from '../model/items';
+import {
+  ITEM_IDS,
+  SLOTS,
+  SLOT_NAME,
+  countOf,
+  giveGear,
+  itemOf,
+  needsPerson,
+  slotOf,
+  spendItem,
+  takeGear,
+  type ItemId,
+  type Kind,
+  type Slot,
+} from '../model/items';
 import { faceOf, type HoldState, type Person } from '../model/rules';
 import { saveGame } from '../model/store';
 import { Tap } from './Words';
 
 /**
- * Вкладка «Items» — вещи лагеря. Карточка вещи: значок, имя, что даёт и кнопка — «Use» у
- * расходных, «Give» у снаряжения; дальше выбор человека. Ниже — кто что носит, с «Take back».
- * Что случилось — строкой по-английски над списком.
+ * Вкладка «Items» — вещи лагеря по разделам: оружие, одежда, инструменты, припасы. У снаряжения —
+ * «Give» и выбор человека (вещь встаёт в свой слот), у лекарств и вещей для души — «Use» на человека,
+ * у еды — «Store» в общий запас, у музыки — «Share» на всех. Ниже — что носит каждый, нажатие по
+ * вещи возвращает её в запасы. Что случилось — строкой по-английски сверху.
  */
 
 function Ic({ id }: { id: IconId }) {
@@ -22,113 +37,136 @@ function Ic({ id }: { id: IconId }) {
   );
 }
 
+const KINDS: readonly Kind[] = ['weapon', 'armor', 'tool', 'supply'];
+const SLOT_WORD: Record<Slot, string> = { weapon: 'weapon', armor: 'clothes', tool: 'tool' };
+
+const actionOf = (id: ItemId) => {
+  const d = itemOf(id);
+  if (d.kind !== 'supply') return 'Give';
+  if (needsPerson(id)) return 'Use';
+  return d.food ? 'Store' : 'Share';
+};
+
 export function ItemsView({ s }: { s: HoldState }) {
   const [pick, setPick] = useState<ItemId | null>(null);
   const [said, setSaid] = useState<string | null>(null);
-  const have = ITEM_IDS.filter((id) => countOf(s, id) > 0);
   const crew = s.people.filter((p) => p.status === 'ok');
-  const carrying = crew.filter((p) => gearOf(p));
-  const apply = (id: ItemId, p: Person) => {
-    const r = ITEMS[id].kind === 'use' ? spendItem(s, id, p.id) : giveGear(s, id, p.id);
+  const done = (r: { state: HoldState; line: string } | null) => {
     if (r) {
       saveGame(r.state);
       setSaid(r.line);
     }
+  };
+  const press = (id: ItemId) => {
+    if (itemOf(id).kind === 'supply' && !needsPerson(id)) done(spendItem(s, id));
+    else setPick(id);
+  };
+  const apply = (id: ItemId, p: Person) => {
+    done(itemOf(id).kind === 'supply' ? spendItem(s, id, p.id) : giveGear(s, id, p.id));
     setPick(null);
   };
+  const any = ITEM_IDS.some((id) => countOf(s, id) > 0);
+  const pickDef = pick ? itemOf(pick) : null;
   return (
     <section className="ah-items">
-      <p className="ah-lands-title">
-        <Tap text="Things we have" />
-      </p>
       {said ? (
         <p className="ah-items-said">
           <Tap text={said} />
         </p>
       ) : null}
-      {have.length ? (
-        <div className="ah-items-grid">
-          {have.map((id) => {
-            const def = ITEMS[id];
-            return (
-              <div key={id} className="ah-item ah-frame">
-                <span className="ah-item-ic">
-                  <Ic id={def.icon} />
-                  {countOf(s, id) > 1 ? <b>×{countOf(s, id)}</b> : null}
-                </span>
-                <span className="ah-item-tx">
-                  <b>
-                    <Tap text={def.name} />
-                  </b>
-                  <small>
-                    <Tap text={def.text} />
-                  </small>
-                </span>
-                <button type="button" className="ah-item-act" onClick={() => setPick(id)}>
-                  {def.kind === 'use' ? 'Use' : 'Give'}
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
+      {!any ? (
         <p className="ah-lands-hint">
           <Tap text="We have nothing yet. Search places to find things." />
         </p>
-      )}
-      {carrying.length ? (
-        <>
-          <p className="ah-lands-title">
-            <Tap text="Who carries what" />
-          </p>
-          <div className="ah-items-grid">
-            {carrying.map((p) => {
-              const g = gearOf(p)!;
-              return (
-                <div key={p.id} className="ah-item ah-frame">
-                  <span className="ah-item-ic">
-                    <Ic id={faceOf(p)} />
-                  </span>
-                  <span className="ah-item-tx">
-                    <b>
-                      <Tap text={`${p.name} has the ${ITEMS[g].name}`} />
-                    </b>
-                    <small>
-                      <Tap text={ITEMS[g].text} />
-                    </small>
-                  </span>
-                  <button
-                    type="button"
-                    className="ah-item-act"
-                    onClick={() => {
-                      const r = takeGear(s, p.id);
-                      if (r) {
-                        saveGame(r.state);
-                        setSaid(r.line);
-                      }
-                    }}
-                  >
-                    Take back
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </>
       ) : null}
-      {pick ? (
+      {KINDS.map((kind) => {
+        const ids = ITEM_IDS.filter((id) => itemOf(id).kind === kind && countOf(s, id) > 0);
+        if (!ids.length) return null;
+        return (
+          <div key={kind} className="ah-items-sec">
+            <p className="ah-lands-title">
+              <Tap text={SLOT_NAME[kind]} />
+            </p>
+            <div className="ah-items-grid">
+              {ids.map((id) => {
+                const def = itemOf(id);
+                return (
+                  <div key={id} className={cn('ah-item ah-frame', def.rare && 'ah-item-rare')}>
+                    <span className="ah-item-ic">
+                      <Ic id={def.icon} />
+                      {countOf(s, id) > 1 ? <b>×{countOf(s, id)}</b> : null}
+                    </span>
+                    <span className="ah-item-tx">
+                      <b>
+                        <Tap text={def.name} />
+                      </b>
+                      <small>
+                        <Tap text={def.text} />
+                      </small>
+                    </span>
+                    <button type="button" className="ah-item-act" onClick={() => press(id)}>
+                      {actionOf(id)}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+      <p className="ah-lands-title">
+        <Tap text="What people carry" />
+      </p>
+      <div className="ah-items-grid">
+        {crew.map((p) => (
+          <div key={p.id} className="ah-carry ah-frame">
+            <span className="ah-item-ic">
+              <Ic id={faceOf(p)} />
+            </span>
+            <span className="ah-carry-tx">
+              <b>{p.name}</b>
+              <span className="ah-slots">
+                {SLOTS.map((sl) => {
+                  const g = slotOf(p, sl);
+                  return g ? (
+                    <button
+                      key={sl}
+                      type="button"
+                      className="ah-slot on"
+                      title="Take back"
+                      onClick={() => done(takeGear(s, p.id, sl))}
+                    >
+                      <Ic id={itemOf(g).icon} />
+                      <span>{itemOf(g).name}</span>
+                    </button>
+                  ) : (
+                    <span key={sl} className="ah-slot">
+                      <span>no {SLOT_WORD[sl]}</span>
+                    </span>
+                  );
+                })}
+              </span>
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className="ah-lands-hint">
+        <Tap text="Tap a thing that a person carries to take it back." />
+      </p>
+      {pick && pickDef ? (
         <div className="ah-sheet-back" onClick={() => setPick(null)}>
           <div className="ah-sheet ah-frame" role="dialog" aria-label="Who?" onClick={(e) => e.stopPropagation()}>
             <p className="ah-who-ask">
-              <Tap
-                text={ITEMS[pick].kind === 'use' ? `Who needs the ${ITEMS[pick].name}?` : `Who gets the ${ITEMS[pick].name}?`}
-              />
+              <Tap text={pickDef.kind === 'supply' ? `Who needs the ${pickDef.name}?` : `Who gets the ${pickDef.name}?`} />
+            </p>
+            <p className="ah-lands-hint">
+              <Tap text={pickDef.text} />
             </p>
             <div className="ah-who">
               {crew
                 .filter((p) => !p.away)
                 .map((p) => {
-                  const g = gearOf(p);
+                  const g = pickDef.kind === 'supply' ? null : slotOf(p, pickDef.kind as Slot);
                   return (
                     <button key={p.id} type="button" className="ah-crew ah-frame" onClick={() => apply(pick, p)}>
                       <span className="ah-por">
@@ -139,14 +177,14 @@ export function ItemsView({ s }: { s: HoldState }) {
                           {p.name} · <span>{p.role}</span>
                         </b>
                         <small>
-                          {ITEMS[pick].kind === 'use'
+                          {pickDef.kind === 'supply'
                             ? `health ${p.hp} · mood ${p.morale}`
                             : g
-                              ? `has: ${ITEMS[g].name}`
-                              : 'has nothing'}
+                              ? `has: ${itemOf(g).name}`
+                              : `no ${SLOT_WORD[pickDef.kind as Slot]} yet`}
                         </small>
                       </span>
-                      <span className={cn('ah-hp')} aria-hidden>
+                      <span className="ah-hp" aria-hidden>
                         {Array.from({ length: 5 }, (_, i) => (
                           <i key={i} className={cn(i < p.hp && 'on')} />
                         ))}
