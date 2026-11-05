@@ -15,11 +15,14 @@ import {
   Menu,
   Mic,
   PenLine,
+  Volume2,
+  VolumeX,
   X,
   type LucideIcon,
 } from 'lucide-react';
 import { Wrap } from '@/shared/ui/Wrap';
 import { adminPath } from '@/shared/lib/utils/admin-host';
+import { setSoundOn, soundOn } from './game/sound';
 import './english.css';
 
 type Tab = { href: string; label: string; icon: LucideIcon };
@@ -168,9 +171,36 @@ function Burger({ path }: { path: string }) {
               ))}
             </section>
           ))}
+          <section>
+            <p>Настройки</p>
+            <SoundRow />
+          </section>
         </nav>
       ) : null}
     </div>,
     slot,
+  );
+}
+
+/**
+ * Звук игр — общий у обеих (`virex.english.game.sound`). Строка монтируется с открытым меню и
+ * читает выбор заново: в Mind the Gap он меняется и своим меню.
+ */
+function SoundRow() {
+  const [on, setOn] = useState(soundOn);
+  return (
+    <button
+      type="button"
+      className="en-burger-row"
+      aria-pressed={on}
+      onClick={() => {
+        setSoundOn(!on);
+        setOn(!on);
+      }}
+    >
+      {on ? <Volume2 size={18} aria-hidden /> : <VolumeX size={18} aria-hidden />}
+      Звук в играх
+      <span className="en-burger-state">{on ? 'вкл' : 'выкл'}</span>
+    </button>
   );
 }
