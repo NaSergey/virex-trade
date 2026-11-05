@@ -1,3 +1,4 @@
+import { atkOf, defOf } from './items';
 import { int, pick, type Rand } from '../../game/model/rng';
 import { MAX_HP, MAX_MORALE, present, type HoldState, type PersonId, type ResId, type Role } from './rules';
 
@@ -195,7 +196,7 @@ export const damageOf = (s: HoldState, b: Battle, id: PersonId, e: Enemy): numbe
     (b.guards.includes(id) ? 1 : 0) +
     (s.buildings.forge.done ? 1 : 0) +
     (p.role === 'hunter' && e.kind === 'wolf' ? 1 : 0) +
-    (p.gear === 'knife' || p.gear === 'axe' ? 1 : 0)
+    atkOf(p, e.kind === 'wolf' ? 'beast' : 'man')
   );
 };
 
@@ -248,7 +249,7 @@ export function fight(s0: HoldState): HoldState {
     const guard = cover.get(aim.id);
     const coverer = guard ? s.people.find((x) => x.id === guard && x.hp > 0) : undefined;
     if (coverer) {
-      const dmg = Math.max(0, e.atk - 2 - wall);
+      const dmg = Math.max(0, e.atk - 2 - wall - defOf(coverer));
       coverer.hp -= dmg;
       last.push(dmg > 0 ? `${coverer.name} took the blow for ${aim.name}.` : `${coverer.name} blocked ${e.name} completely.`);
       b.hits.push({ enemy: e.id, verb: e.verb, aim: aim.id, taker: coverer.id, damage: dmg, covered: true, done: true });
@@ -258,7 +259,7 @@ export function fight(s0: HoldState): HoldState {
         verb: e.verb,
         aim: aim.id,
         taker: aim.id,
-        damage: Math.max(1, e.atk - wall),
+        damage: Math.max(1, e.atk - wall - defOf(aim)),
         covered: false,
         done: false,
       });

@@ -4,7 +4,7 @@ import type { Battle } from './battle';
 import { COND_IDS, CONDS, type CondId } from './conds';
 import { ROLE_PERK, cheerLine, makeCrew, sadLine, type Role, type Trait } from './crew';
 import { rollEvent, type GameEvent } from './events';
-import { findItem, type Items } from './items';
+import { bonus, findItem, isWarm, startItems, type Items } from './items';
 import {
   ALL_PLACES,
   PLACES,
@@ -155,6 +155,10 @@ export interface Person {
   trait?: Trait;
   /** Снаряжение, которое человек носит (нож, топор, лук, кирка, плащ). */
   gear?: string | null;
+  /** Слоты снаряжения: оружие, одежда, инструмент (`items.ts`). */
+  weapon?: string | null;
+  armor?: string | null;
+  tool?: string | null;
   /** В разведке: утро возвращения и куда ушёл. Пока человек в пути, приказов ему нет. */
   away?: { back: number; place: PlaceId } | null;
 }
@@ -260,7 +264,7 @@ export function newGame(seed: number, opts: { classic?: boolean } = {}): HoldSta
     day: 1,
     cond,
     kids: 0,
-    items: { bandage: 1 },
+    items: classic ? { bandage: 1 } : startItems(r),
     res: { food: cond === 'hunger' ? 11 : 14, water: 10, wood: 10, iron: 2 },
     people: crew.map((p) => ({ ...p, hp: p.trait === 'weak' ? MAX_HP - 1 : MAX_HP, morale: 7, status: 'ok', order: null })),
     buildings: {
@@ -316,7 +320,12 @@ export function defenseOf(s: HoldState): number {
   const guards = present(s).filter((p) => p.order && taskOf(p.order.verb, p.order.object)?.kind === 'guard');
   const wall = s.buildings.wall.done ? 4 : Math.floor((s.buildings.wall.progress / BUILDINGS.wall.work) * 3);
   const each = s.buildings.forge.done ? 3 : 2;
-  return guards.reduce((n, p) => n + (p.trait === 'brave' ? each + 1 : p.trait === 'coward' ? each - 1 : each), 0) + wall;
+  return (
+    guards.reduce(
+      (n, p) => n + (p.trait === 'brave' ? each + 1 : p.trait === 'coward' ? each - 1 : each) + bonus(p, 'guard'),
+      0,
+    ) + wall
+  );
 }
 
 export type OrderFail = 'nonsense' | 'unknown' | 'empty' | 'absent';
@@ -384,9 +393,7 @@ export function endDay(s0: HoldState): HoldState {
       case 'hunt': {
         const n = Math.max(
           1,
-          Math.round(
-            (int(r, 3, 5) + (p.role === 'hunter' ? 3 : 0) + (p.gear === 'bow' ? 2 : 0) - (cond === 'hunger' ? 1 : 0)) * tired(p),
-          ),
+          Math.round((int(r, 3, 5) + (p.role === 'hunter' ? 3 : 0) + bonus(p, 'hunt') - (cond === 'hunger' ? 1 : 0)) * tired(p)),
         );
         res.food += n;
         log.push(
@@ -406,7 +413,10 @@ export function endDay(s0: HoldState): HoldState {
         break;
       }
       case 'water': {
-        const n = Math.max(1, Math.round((int(r, 4, 6) + (p.role === 'scout' ? 3 : 0) - (cond === 'cold' ? 1 : 0)) * tired(p)));
+        const n = Math.max(
+          1,
+          Math.round((int(r, 4, 6) + (p.role === 'scout' ? 3 : 0) + bonus(p, 'water') - (cond === 'cold' ? 1 : 0)) * tired(p)),
+        );
         res.water += n;
         log.push(
           pick(r, [
@@ -418,7 +428,7 @@ export function endDay(s0: HoldState): HoldState {
         break;
       }
       case 'wood': {
-        const n = Math.round((int(r, 3, 5) + strong(p) + (p.gear === 'axe' ? 2 : 0)) * tired(p));
+        const n = Math.round((int(r, 3, 5) + strong(p) + bonus(p, 'wood')) * tired(p));
         res.wood += n;
         log.push(
           pick(r, [
@@ -431,8 +441,7 @@ export function endDay(s0: HoldState): HoldState {
       }
       case 'iron': {
         const n = Math.round(
-          (int(r, 1, 2) + (s.buildings.forge.done ? 1 : 0) + (p.trait === 'strong' ? 1 : 0) + (p.gear === 'pickaxe' ? 1 : 0)) *
-            tired(p),
+          (int(r, 1, 2) + (s.buildings.forge.done ? 1 : 0) + (p.trait === 'strong' ? 1 : 0) + bonus(p, 'iron')) * tired(p),
         );
         res.iron += n;
         log.push(pick(r, [`${p.name} found ${n} iron in the rocks.`, `${p.name} dug in the hills and found ${n} iron.`]));
@@ -455,7 +464,7 @@ export function endDay(s0: HoldState): HoldState {
           res.iron -= def.iron;
           b.started = true;
         }
-        b.progress = Math.min(def.work, b.progress + (p.role === 'builder' ? 2 : 1) * tired(p));
+        b.progress = Math.min(def.work, b.progress + ((p.role === 'builder' ? 2 : 1) + bonus(p, 'build') * 0.5) * tired(p));
         if (b.progress >= def.work) {
           b.done = true;
           log.push(`${p.name} finished the ${def.name.toLowerCase()}!`);
@@ -479,14 +488,14 @@ export function endDay(s0: HoldState): HoldState {
         const name = PLACES[id].name;
         if (place.loot === 'nothing' || place.amount === 0) log.push(`${p.name} searched ${name} and found nothing.`);
         else {
-          const n = Math.round(place.amount * tired(p));
+          const n = Math.round((place.amount + bonus(p, 'search')) * tired(p));
           res[place.loot] += n;
           log.push(`${p.name} searched ${name} and brought back ${n} ${place.loot}.`);
         }
         const found = findItem(r, s, p, 0.75);
         if (found) log.push(found);
         if (place.danger !== 'none') {
-          hurt(p, 2);
+          hurt(p, bonus(p, 'safe') ? 1 : 2);
           p.morale = clamp(p.morale - 1, 0, MAX_MORALE);
           log.push(`${place.danger === 'wolves' ? 'Wolves' : 'Bandits'} attacked ${p.name} at ${name}.`);
         }
@@ -495,8 +504,8 @@ export function endDay(s0: HoldState): HoldState {
       case 'guard':
         break;
       case 'rest':
-        p.hp = clamp(p.hp + 1, 0, MAX_HP);
-        p.morale = clamp(p.morale + 2, 0, MAX_MORALE);
+        p.hp = clamp(p.hp + 1 + (bonus(p, 'rest') && isWarm(p) ? 1 : 0), 0, MAX_HP);
+        p.morale = clamp(p.morale + 2 + (bonus(p, 'rest') && !isWarm(p) ? 1 : 0), 0, MAX_MORALE);
         if (chance(r, 0.3)) log.push(pick(r, [`${p.name} rested by the fire.`, `${p.name} slept all day.`]));
         break;
     }
@@ -537,7 +546,7 @@ export function endDay(s0: HoldState): HoldState {
     if (res.wood >= 1) res.wood -= 1;
     else {
       log.push('There was no wood for the fire. Everyone was cold all night.');
-      for (const q of people) if (q.gear !== 'coat') q.morale = clamp(q.morale - 1, 0, MAX_MORALE);
+      for (const q of people) if (!isWarm(q)) q.morale = clamp(q.morale - 1, 0, MAX_MORALE);
     }
   }
 
@@ -557,7 +566,7 @@ export function endDay(s0: HoldState): HoldState {
       );
       for (const q of people) {
         q.morale = clamp(q.morale - 2, 0, MAX_MORALE);
-        if (lack >= people.length && q.gear !== 'coat') q.hp -= 1;
+        if (lack >= people.length && !isWarm(q)) q.hp -= 1;
       }
     }
   }
@@ -617,7 +626,7 @@ export function endDay(s0: HoldState): HoldState {
     p.away = null;
     s.reports = [...(s.reports ?? []), makeReport(r, p.id, id, s.places[id]!, s.day)];
     log.push(`${p.name} came back from the ${dirOf(s.places, id)} with a report.`);
-    if (chance(r, 0.1)) {
+    if (!bonus(p, 'scout') && chance(r, 0.1)) {
       p.hp = Math.max(1, p.hp - 1);
       log.push(`${p.name} is tired and a little hurt.`);
     }

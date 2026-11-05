@@ -18,7 +18,7 @@ import {
 import { CONDS } from './conds';
 import { RECRUITS, TRAIT_TEXT, TRAIT_WORD, cheerLine, sadLine } from './crew';
 import { EVENT_TITLE, answerEvent, makeEvent, type EventId } from './events';
-import { ITEMS, ITEM_IDS, giveGear, spendItem, takeGear, withArticle } from './items';
+import { ITEM_IDS, SLOTS, SLOT_NAME, findItem, giveGear, itemOf, spendItem, takeGear, withArticle } from './items';
 import { ALL_PLACES, DIRS, PLACES, makePlaces, makeReport, placesOf } from './scout';
 import { answerVisitor, rollVisitor } from './visitors';
 
@@ -87,24 +87,33 @@ export function allTexts(): string[] {
   }
   for (const n of ALL_PLACES) add(`Now ${PLACES[n].name} is on your map. You can search it.`);
   // Вещи и постройки.
-  add('Things we have', 'Who carries what', 'We have nothing yet. Search places to find things.', 'Build in the camp');
+  add('We have nothing yet. Search places to find things.', 'Build in the camp', 'What people carry');
+  add('Tap a thing that a person carries to take it back.', 'no weapon', 'no clothes', 'no tool');
+  add('no weapon yet', 'no clothes yet', 'no tool yet', ...Object.values(SLOT_NAME));
   add('Tap a building to send someone to build it. The builder works twice as fast.', 'Everything is built. The camp is strong.');
   for (const b of Object.values(BUILDINGS)) add(`needs ${b.wood} wood${b.iron ? ` and ${b.iron} iron` : ''}`);
   for (const id of ITEM_IDS) {
-    const d = ITEMS[id];
-    add(d.name, d.text, `Who needs the ${d.name}?`, `Who gets the ${d.name}?`, `with the ${d.name}`);
-    for (const p of names) add(`${p} has the ${d.name}`, `${p} also found ${withArticle(d.name)}.`);
+    const d = itemOf(id);
+    add(d.name, d.text, `Who needs the ${d.name}?`, `Who gets the ${d.name}?`, `has: ${d.name}`);
+    for (const p of names) add(`${p} also found ${withArticle(d.name)}.`);
+  }
+  const rI = rand(77);
+  for (let i = 0; i < 300; i++) {
+    const g0 = newGame(i + 1);
+    const g: HoldState = { ...g0, items: {} };
+    const line = findItem(rI, g, present(g)[0], 1);
+    add(line);
   }
   for (let seed = 1; seed <= 6; seed++) {
     let g = newGame(seed);
     for (const id of ITEM_IDS) g = { ...g, items: { ...g.items, [id]: 2 } };
     for (const p of present(g))
       for (const id of ITEM_IDS) {
-        const u = spendItem(g, id, p.id) ?? giveGear(g, id, p.id);
-        if (u) add(u.line);
-        const worn = giveGear(g, 'axe', p.id);
+        add((spendItem(g, id, p.id) ?? spendItem(g, id) ?? giveGear(g, id, p.id))?.line);
+        const worn = giveGear(g, id, p.id);
         if (worn) {
-          add(giveGear(worn.state, 'bow', p.id)?.line, takeGear(worn.state, p.id)?.line);
+          for (const other of ITEM_IDS) add(giveGear(worn.state, other, p.id)?.line);
+          for (const sl of SLOTS) add(takeGear(worn.state, p.id, sl)?.line);
         }
       }
   }

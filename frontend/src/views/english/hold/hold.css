@@ -1590,3 +1590,57 @@ button.ah-build:active {
 .ah-build-done {
   color: var(--ah-good);
 }
+
+.ah-items-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ah-item-rare {
+  border-color: #b8862f;
+}
+.ah-carry {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+}
+.ah-carry-tx {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.ah-carry-tx > b {
+  font: 700 17px var(--gar);
+  color: var(--ah-bone);
+}
+.ah-slots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+.ah-slot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 2px 5px;
+  font: 600 12px/1.1 var(--gar);
+  color: #6a5c48;
+  border: 1px dashed #3a2c1c;
+  overflow: hidden;
+}
+.ah-slot.on {
+  color: var(--ah-bone);
+  border: 1px solid #8a6a3a;
+  background: #1a130c;
+  text-align: left;
+}
+.ah-slot .ah-ic {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
