@@ -35,6 +35,11 @@ export interface User {
    * той же причине, что `isAdmin`.
    */
   avatar?: string | null;
+  /**
+   * Есть ли пароль. Нет у аккаунта, заведённого через Google: блока смены
+   * пароля в настройках у него нет. Необязательное по той же причине, что `isAdmin`.
+   */
+  hasPassword?: boolean;
 }
 
 interface AuthContextValue {

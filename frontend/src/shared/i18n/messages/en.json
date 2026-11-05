@@ -74,6 +74,7 @@
     "demoButton": "Try the demo",
     "switchToRegister": "No account? Sign up",
     "switchToLogin": "Already have an account? Log in",
+    "googleButton": "Continue with Google",
     "or": "or",
     "genericError": "Error"
   },
@@ -669,6 +670,8 @@
     "TERMINAL_POSITION_NOT_FOUND": "Position not found — it may already be closed",
     "TERMINAL_GRID_PARTIAL": "{placed} of {total} orders placed. The rest were rejected: {reason}",
     "TERMINAL_FOLLOW_NOT_SAVED": "The grid is placed, but the stop doesn't follow the takes yet. Open the grid window again.",
+    "GOOGLE_FAILED": "Couldn't sign in with Google. Please try again",
+    "PASSWORD_NOT_SET": "This account has no password — sign in with Google",
     "INVALID_CREDENTIALS": "Invalid email or password",
     "USER_EXISTS": "A user with this email already exists",
     "NAME_NOT_READABLE": "Enter a real name or nickname: at least two letters, no random characters",

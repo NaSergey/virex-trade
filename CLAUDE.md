@@ -2729,6 +2729,29 @@ Pearson) и общий словарь на ~3300 слов; вкладки — с
   настоящим ящиком.
 - Защита не зависит от `NODE_ENV`: новый тестовый аккаунт на `@example.com` не заведётся и локально.
 
+## Вход через Google (2026-11-05)
+
+Спека — `docs/superpowers/specs/2026-11-05-google-auth-design.md`. Кнопка «Продолжить с Google» в `AuthForm` (площадка и
+журнал; в админке её нет), одна на вход и регистрацию.
+
+- **Редирект с сервера, а не скрипт Google на странице**: Authorization Code + PKCE, `GET /auth/google` → Google →
+  `GET /auth/google/callback` → та же кука сессии, что у входа паролем, и 302 на `next`. Состояние входа (`state`,
+  `code_verifier`, `next`, `ref`) — в HttpOnly-куке `tp_oauth` на 10 минут; колбэк без неё отказывает (подделка входа).
+  Чистые части — `auth/google-oauth.ts`, новой зависимости нет.
+- **`id_token` подписью не проверяется**: сервер получает его сам от token-эндпоинта по TLS (OIDC Core 3.1.3.7).
+  Проверяются `iss`, `aud`, `exp` и `email_verified === true`. Звать `claimsFromIdToken` с токеном от браузера нельзя.
+- **Адрес возврата — из `FRONTEND_URL`, а не из Host**: из Host берётся только признак «журнал». В Google Console
+  зарегистрированы оба адреса — `https://<домен>/auth/google/callback` и `https://journal.<домен>/auth/google/callback`.
+- **Аккаунт с той же почтой привязывается** (таблица `google_accounts`, `sub` → `userId`), а не заводится второй: Google
+  почту подтвердил. Отдельной таблицей, а не колонкой `User.googleId` — новая уникальная колонка на `users` требует
+  `--accept-data-loss` на проде.
+- **У аккаунта, заведённого через Google, пароля нет** (`User.password` nullable): вход паролем — `PASSWORD_NOT_SET`,
+  блока смены пароля в настройках нет (`PublicUser.hasPassword`). Имя — из Google по правилам регистрации
+  (`pickName`), не прошло — пустое; почту по MX не проверяем.
+- **Кнопка видна всегда**, без флажка с сервера: флажок приходил бы запросом и вставлял кнопку в отрисованную форму.
+  Без `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` (только у `api`) любой сбой ведёт к форме с `error=GOOGLE_FAILED`.
+- **Живым аккаунтом Google не проверялось.** Проход 302 и куки через rewrites Next проверен на standalone-сборке.
+
 ## Демо-аккаунт
 
 `backend/src/scripts/seed-demo.ts` раскладывает учётку `demo@example.com` с историей на

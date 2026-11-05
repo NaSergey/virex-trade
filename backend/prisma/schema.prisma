@@ -13,7 +13,8 @@ datasource db {
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
-  password  String // bcrypt hash
+  /// bcrypt-хэш. Нет у аккаунта, заведённого входом через Google: он входит только им.
+  password  String?
   name      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -105,6 +106,9 @@ model User {
   avatarAt DateTime?
   avatar   UserAvatar?
 
+  /// Привязанный аккаунт Google (вход через Google, спека 2026-11-05).
+  google GoogleAccount?
+
   /// Не читается с 2026-11-03: сделок на профиле больше нет. Снять отдельно: `db push`
   /// не удаляет столбец без `--accept-data-loss`, и API на старте упал бы.
   showTrades Boolean @default(true)
@@ -116,6 +120,19 @@ model User {
   terminalEntryFollows TerminalEntryFollow[]
 
   @@map("users")
+}
+
+/// Аккаунт Google, которым входят в этого пользователя. Отдельной таблицей, а не
+/// колонкой `User.googleId`: новая уникальная колонка на непустой `users` требует
+/// разового `db push --accept-data-loss` на проде, новая таблица — нет.
+model GoogleAccount {
+  /// `sub` из id_token — постоянный id аккаунта Google (почта у него меняется).
+  sub       String   @id
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@map("google_accounts")
 }
 
 /// Байты картинки профиля — уже квадрат 256×256, сжатый клиентом. Тип

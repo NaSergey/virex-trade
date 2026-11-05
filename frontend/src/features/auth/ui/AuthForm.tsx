@@ -3,12 +3,14 @@
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { API_BASE_URL } from '@/shared/config/api';
 import { HOME_OF } from '@/shared/lib/utils/app-part';
 import { useAppPart } from '@/shared/lib/utils/AppPartProvider';
 import { Button } from '@/shared/ui/Button';
 import { Field, Input } from '@/shared/ui/Field';
 import { DEMO_EMAIL, DEMO_PASSWORD } from '../model/demo';
 import { useAuth } from '../model/AuthContext';
+import { GoogleMark } from './GoogleMark';
 
 export type AuthMode = 'login' | 'register';
 
@@ -49,7 +51,12 @@ export function safeNext(raw: string | null | undefined, fallback: string = HOME
  * смена режима не перестраивает форму рывком. Свёрнутое поле выключено и
  * `inert` — не валидируется, не отправляется, фокус в него не попадает.
  *
- * `loginOnly` — вход админки на поддомене: ни регистрации, ни демо там нет.
+ * `loginOnly` — вход админки на поддомене: ни регистрации, ни демо, ни Google там нет.
+ *
+ * «Продолжить с Google» — обычный переход на `/auth/google` (спека 2026-11-05):
+ * сервер уводит на Google, возвращает с кукой сессии на `next`, а сбой — сюда же
+ * с `error=GOOGLE_FAILED` в адресе (`errorCode`). Кнопка одна на оба режима:
+ * аккаунта нет — он заводится.
  */
 export function AuthForm({
   initialMode = 'register',
@@ -58,6 +65,7 @@ export function AuthForm({
   next,
   refCode,
   loginOnly = false,
+  errorCode,
 }: {
   initialMode?: AuthMode;
   mode?: AuthMode;
@@ -67,11 +75,14 @@ export function AuthForm({
   /** Кто пригласил: id из ссылки `?auth=register&ref=<userId>`. */
   refCode?: string;
   loginOnly?: boolean;
+  /** Код ошибки из адреса (`?error=`) — пока только возврат после сбоя входа через Google. */
+  errorCode?: string;
 }) {
   const { user, loading, login, register } = useAuth();
   const home = HOME_OF[useAppPart()];
   const router = useRouter();
   const t = useTranslations('auth');
+  const te = useTranslations('errors');
   const uid = useId();
 
   const [own, setOwn] = useState<AuthMode>(initialMode);
@@ -83,9 +94,22 @@ export function AuthForm({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  // Код из адреса переводится только известный: текст ошибки не берётся из ссылки.
+  const [error, setError] = useState<string | null>(() =>
+    errorCode === 'GOOGLE_FAILED' ? te('GOOGLE_FAILED') : null,
+  );
   const [submitting, setSubmitting] = useState(false);
   const [demoing, setDemoing] = useState(false);
+  const [googling, setGoogling] = useState(false);
+
+  // «Назад» с экрана Google достаёт страницу из bfcache вместе с запертыми кнопками.
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted) setGoogling(false);
+    };
+    window.addEventListener('pageshow', onShow);
+    return () => window.removeEventListener('pageshow', onShow);
+  }, []);
 
   // Сессия жива — форма не нужна. Решает ответ /auth/refresh, а не кука в proxy:
   // мёртвая кука и AuthGuard уводили бы друг на друга. Вход этой формой уводит сам:
@@ -125,7 +149,15 @@ export function AuthForm({
     }
   };
 
-  const busy = submitting || demoing;
+  const onGoogle = () => {
+    setError(null);
+    setGoogling(true);
+    const q = new URLSearchParams({ next: next ?? home });
+    if (refCode) q.set('ref', refCode);
+    window.location.assign(`${API_BASE_URL}/auth/google?${q.toString()}`);
+  };
+
+  const busy = submitting || demoing || googling;
 
   return (
     <div className="auth-form">
@@ -192,7 +224,16 @@ export function AuthForm({
           <p className="auth-or" aria-hidden>
             {t('or')}
           </p>
-          <Button variant="default" style={{ width: '100%' }} onClick={onDemo} disabled={busy}>
+          <Button variant="default" style={{ width: '100%' }} onClick={onGoogle} disabled={busy}>
+            <GoogleMark />
+            {googling ? t('submitting') : t('googleButton')}
+          </Button>
+          <Button
+            variant="default"
+            style={{ marginTop: 'var(--s2)', width: '100%' }}
+            onClick={onDemo}
+            disabled={busy}
+          >
             {demoing ? t('submitting') : t('demoButton')}
           </Button>
 
