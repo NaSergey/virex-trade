@@ -174,6 +174,7 @@ export const GAME_VOCAB = new Set([
   'translate',
   'morale',
   'defense',
+  'tap',
 ]);
 
 /** Откуда слово: книга курса, общий словарь (с местом по частоте) или словарь игры. */

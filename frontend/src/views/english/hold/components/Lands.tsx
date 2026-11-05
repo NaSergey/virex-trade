@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import { cn } from '@/shared/lib/utils/css';
 import { ICONS, type IconId } from '../icons';
-import { spendMorale, type HoldState } from '../model/rules';
+import { spendMorale, type HoldState, type Obj, type Order } from '../model/rules';
 import { PLACES, answerReport, type Danger, type Loot, type PlaceId } from '../model/scout';
 import { saveGame } from '../model/store';
 import { Tap } from './Words';
@@ -55,10 +55,20 @@ const label = (x: number, y: number, text: string, cls: string) => (
   </text>
 );
 
-export function Lands({ s }: { s: HoldState }) {
+/** Нажатие по месту на карте — приказ без человека: туман — разведать сторону, открытое — обыскать. */
+export function Lands({ s, onPick }: { s: HoldState; onPick: (o: Order) => void }) {
   const places = s.places;
   if (!places) return null;
   const away = s.people.filter((p) => p.status === 'ok' && p.away);
+  const goingTo = new Set(away.map((p) => p.away!.place));
+  const press = (o: Order) => ({
+    role: 'button' as const,
+    tabIndex: 0,
+    onClick: () => onPick(o),
+    onKeyDown: (e: KeyboardEvent) => (e.key === 'Enter' || e.key === ' ') && onPick(o),
+  });
+  const fog = (Object.keys(AT) as PlaceId[]).some((id) => !places[id].known && !goingTo.has(id));
+  const open = (Object.keys(AT) as PlaceId[]).some((id) => places[id].known && !places[id].looted);
   return (
     <section className="ah-lands">
       <p className="ah-lands-title">
@@ -81,7 +91,11 @@ export function Lands({ s }: { s: HoldState }) {
           const dir = PLACES[id].dir.toUpperCase();
           if (!p.known)
             return (
-              <g key={id} className="ah-fogged">
+              <g
+                key={id}
+                className={cn('ah-fogged', !goingTo.has(id) && 'ah-press')}
+                {...(goingTo.has(id) ? {} : press({ verb: 'scout', object: `the ${PLACES[id].dir}` as Obj }))}
+              >
                 <circle cx={at.x} cy={at.y} r="24" className="ah-fog" />
                 {label(at.x, at.y + 6, '?', 'ah-q')}
                 {label(at.x, at.y + (id === 'farm' ? -30 : 38), dir, 'ah-dir')}
@@ -90,7 +104,11 @@ export function Lands({ s }: { s: HoldState }) {
           const loot = LOOT_ICON[p.loot];
           const danger = DANGER_ICON[p.danger];
           return (
-            <g key={id} className={cn(p.looted && 'ah-looted')}>
+            <g
+              key={id}
+              className={cn(p.looted ? 'ah-looted' : 'ah-press')}
+              {...(p.looted ? {} : press({ verb: 'search', object: `the ${id}` as Obj }))}
+            >
               <circle cx={at.x} cy={at.y} r="19" className={cn('ah-node', danger && 'ah-node-danger')} />
               <Ico id={at.icon} x={at.x} y={at.y} s={26} fill="url(#ah-bone)" />
               {label(at.x, at.y + (id === 'farm' ? -27 : 34), PLACES[id].name.toUpperCase(), 'ah-dir ah-known')}
@@ -117,8 +135,19 @@ export function Lands({ s }: { s: HoldState }) {
             </g>
           );
         })}
-        <rect width={W} height={H} fill="url(#ah-vig)" />
+        <rect width={W} height={H} fill="url(#ah-vig)" pointerEvents="none" />
       </svg>
+      <p className="ah-lands-hint">
+        <Tap
+          text={
+            fog
+              ? 'Tap a place in the fog to send a scout there.'
+              : open
+                ? 'Tap a place to search it.'
+                : 'There is nothing more to find here.'
+          }
+        />
+      </p>
     </section>
   );
 }

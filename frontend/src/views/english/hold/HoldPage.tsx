@@ -30,6 +30,7 @@ import {
   type BuildingId,
   type HoldState,
   type Obj,
+  type Order,
   type Person,
   type ResId,
   type Verb,
@@ -229,9 +230,53 @@ function fogOf(s: HoldState, o: Obj): 'fog' | 'empty' | null {
   return !p ? null : !p.known ? 'fog' : p.looted ? 'empty' : null;
 }
 
-function OrderSheet({ s, p, onClose }: { s: HoldState; p: Person; onClose: () => void }) {
-  const [verb, setVerb] = useState<Verb | null>(p.order?.verb ?? null);
-  const [object, setObject] = useState<Obj | null>(p.order?.object ?? null);
+/** Кого послать: место выбрано на карте, здесь — человек. Разведчик (scout) стоит первым. */
+function WhoSheet({
+  s,
+  order,
+  onPick,
+  onClose,
+}: {
+  s: HoldState;
+  order: Order;
+  onPick: (id: Person['id']) => void;
+  onClose: () => void;
+}) {
+  const crew = present(s)
+    .filter((p) => !p.away)
+    .sort((a, b) => Number(b.role === 'scout') - Number(a.role === 'scout'));
+  return (
+    <div className="ah-sheet-back" onClick={onClose}>
+      <div className="ah-sheet ah-frame" role="dialog" aria-label="Who goes?" onClick={(e) => e.stopPropagation()}>
+        <p className="ah-who-ask">
+          <Tap text={`Who will ${order.verb} ${order.object}?`} />
+        </p>
+        <div className="ah-who">
+          {crew.map((p) => (
+            <button key={p.id} type="button" className="ah-crew ah-frame" onClick={() => onPick(p.id)}>
+              <span className="ah-por">
+                <Ic id={p.id} />
+              </span>
+              <span className="ah-cn">
+                <b>
+                  {p.name} · <span>{p.role}</span>
+                </b>
+                <small>{p.order ? `now: “${p.order.verb} ${p.order.object}”` : 'free'}</small>
+              </span>
+            </button>
+          ))}
+        </div>
+        <button type="button" className="ah-btn ah-btn-ghost" onClick={onClose}>
+          Back
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function OrderSheet({ s, p, preset, onClose }: { s: HoldState; p: Person; preset?: Order | null; onClose: () => void }) {
+  const [verb, setVerb] = useState<Verb | null>(preset?.verb ?? p.order?.verb ?? null);
+  const [object, setObject] = useState<Obj | null>(preset?.object ?? p.order?.object ?? null);
   const [wrong, setWrong] = useState<string | null>(null);
   const [fix, setFix] = useState<string[]>([]);
   const [hint, setHint] = useState<string | null>(null);
@@ -468,6 +513,9 @@ function GameNav({ view, onView, idle }: { view: View; onView: (v: View) => void
 
 function Camp({ s }: { s: HoldState }) {
   const [picked, setPicked] = useState<Person['id'] | null>(null);
+  // Приказ, начатый с карты: место выбрано, осталось выбрать человека — лист приказа откроется с ним.
+  const [want, setWant] = useState<Order | null>(null);
+  const [preset, setPreset] = useState<Order | null>(null);
   // Доклад утра показывается один раз на день: запомнен день, доклад которого уже прочитан.
   const [readDay, setReadDay] = useState<number | null>(null);
   const [ended, setEnded] = useState(false);
@@ -507,7 +555,7 @@ function Camp({ s }: { s: HoldState }) {
           </div>
         </>
       ) : view === 'lands' ? (
-        <Lands s={s} />
+        <Lands s={s} onPick={setWant} />
       ) : (
         <Buildings s={s} />
       )}
@@ -525,7 +573,23 @@ function Camp({ s }: { s: HoldState }) {
         </button>
       </div>
       <GameNav view={view} onView={setView} idle={idle} />
-      {person ? <OrderSheet key={person.id} s={s} p={person} onClose={() => setPicked(null)} /> : null}
+      {want ? (
+        <WhoSheet
+          s={s}
+          order={want}
+          onPick={(id) => (setPicked(id), setPreset(want), setWant(null))}
+          onClose={() => setWant(null)}
+        />
+      ) : null}
+      {person ? (
+        <OrderSheet
+          key={`${person.id}:${preset?.object ?? ''}`}
+          s={s}
+          p={person}
+          preset={preset}
+          onClose={() => (setPicked(null), setPreset(null))}
+        />
+      ) : null}
       {s.reports?.length ? <ScoutReportView key={`${s.day}:${s.reports.length}`} s={s} /> : null}
       {/* Гость ждёт, пока прочитаны доклады разведчиков: два окна разом не открываются. */}
       {!s.reports?.length && s.visitor ? <GateView key={s.day} s={s} /> : null}

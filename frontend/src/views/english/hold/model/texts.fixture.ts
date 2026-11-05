@@ -64,6 +64,10 @@ export function allTexts(): string[] {
     add(`ORDER FOR ${p.toUpperCase()}`, `${p}! Quick — how do you survive?`, `${p.toUpperCase()}’S REPORT · NORTH`);
     add(`You did not understand ${p}. The mill stays in the fog.`);
   }
+  add('Tap a place in the fog to send a scout there.', 'Tap a place to search it.', 'There is nothing more to find here.');
+  add('free', 'now:');
+  for (const d of ['north', 'east', 'south', 'west']) add(`Who will scout the ${d}?`);
+  for (const n of ['mill', 'ruins', 'farm', 'cave']) add(`Who will search the ${n}?`);
   for (const d of ['north', 'east', 'south', 'west']) add(`scouting the ${d} · back tomorrow`, d.toUpperCase());
   for (const [role, perk] of Object.entries(ROLE_PERK)) add(`${role} · ${perk}`);
   for (const o of OBJECTS)
