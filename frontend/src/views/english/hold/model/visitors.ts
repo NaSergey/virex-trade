@@ -1,6 +1,6 @@
 import { chance, int, pick, shuffle, type Rand } from '../../game/model/rng';
 import { MAX_MORALE, present, type HoldState, type ResId } from './rules';
-import { PLACES, type PlaceId } from './scout';
+import { PLACES, placesOf } from './scout';
 
 /**
  * Гости у ворот (шаг 4, спека docs/superpowers/specs/2026-11-04-ashen-hold-design.md).
@@ -84,28 +84,53 @@ export function rollVisitor(r: Rand, s: HoldState): Visitor | null {
   if (kind === 'trader' || kind === 'liar') {
     const offer = offerOf(r);
     const [detail, detailRu] = pick(r, kind === 'trader' ? HONEST : CLUES);
-    return {
-      kind,
-      speech: `Hello. I sell things. I have ${word(offer.giveN)} ${offer.give} for you. I want ${word(offer.wantN)} ${offer.want}. Can I come in?`,
-      detail,
-      ru: {
-        speech: `Здравствуйте. Я торговец. У меня для вас ${RU_NUM[offer.giveN]} ${RU_RES[offer.give]}. Я хочу ${RU_NUM[offer.wantN]} ${RU_RES[offer.want]}. Можно войти?`,
-        detail: detailRu,
-      },
-      options: TRADE_OPTIONS(offer),
-      offer,
-    };
+    const g = word(offer.giveN);
+    const w = word(offer.wantN);
+    const gr = `${RU_NUM[offer.giveN]} ${RU_RES[offer.give]}`;
+    const wr = `${RU_NUM[offer.wantN]} ${RU_RES[offer.want]}`;
+    const [speech, speechRu] = pick(r, [
+      [
+        `Hello. I sell things. I have ${g} ${offer.give} for you. I want ${w} ${offer.want}. Can I come in?`,
+        `Здравствуйте. Я торговец. У меня для вас ${gr}. Я хочу ${wr}. Можно войти?`,
+      ],
+      [
+        `Good morning! I have ${g} ${offer.give}. Give me ${w} ${offer.want}, and it is yours. Can I come in?`,
+        `Доброе утро! У меня ${gr}. Дайте мне ${wr} — и это ваше. Можно войти?`,
+      ],
+      [
+        `I am a trader from the south. ${g[0].toUpperCase()}${g.slice(1)} ${offer.give} for ${w} ${offer.want}. A good deal! Can I come in?`,
+        `Я торговец с юга. ${gr} за ${wr}. Хорошая сделка! Можно войти?`,
+      ],
+    ] as [string, string][]);
+    return { kind, speech, detail, ru: { speech: speechRu, detail: detailRu }, options: TRADE_OPTIONS(offer), offer };
   }
   if (kind === 'beggar') {
     const n = int(r, 2, 4);
+    const nr = `${RU_NUM[n]} ${RU_RES.food}`;
+    const [speech, speechRu] = pick(r, [
+      [
+        `Please help us. Our children are hungry. Can you give us ${word(n)} food?`,
+        `Пожалуйста, помогите нам. Наши дети голодны. Можете дать нам ${nr}?`,
+      ],
+      [
+        `We walked for five days. We have no food. Please, ${word(n)} food for the children.`,
+        `Мы шли пять дней. У нас нет еды. Пожалуйста, ${nr} для детей.`,
+      ],
+      [
+        `Our village burned. We have nothing now. Can you give us ${word(n)} food?`,
+        `Наша деревня сгорела. У нас теперь ничего нет. Можете дать нам ${nr}?`,
+      ],
+    ] as [string, string][]);
+    const [detail, detailRu] = pick(r, [
+      ['A woman is with two small children.', 'Женщина с двумя маленькими детьми.'],
+      ['An old man holds a little boy.', 'Старик держит маленького мальчика.'],
+      ['A tired family stands in the snow.', 'Усталая семья стоит в снегу.'],
+    ] as [string, string][]);
     return {
       kind,
-      speech: `Please help us. Our children are hungry. Can you give us ${word(n)} food?`,
-      detail: 'A woman is with two small children.',
-      ru: {
-        speech: `Пожалуйста, помогите нам. Наши дети голодны. Можете дать нам ${RU_NUM[n]} ${RU_RES.food}?`,
-        detail: 'Женщина с двумя маленькими детьми.',
-      },
+      speech,
+      detail,
+      ru: { speech: speechRu, detail: detailRu },
       options: [
         { id: 'give', text: '“Yes. Take this food.”' },
         { id: 'deny', text: '“Sorry, we have no food for you.”' },
@@ -113,14 +138,25 @@ export function rollVisitor(r: Rand, s: HoldState): Visitor | null {
       ask: { res: 'food', n },
     };
   }
+  const [speech, speechRu] = pick(r, [
+    [
+      'I am hurt and I am very thirsty. Give me water, please. I know a lot about this land.',
+      'Я ранен, и мне очень хочется пить. Дайте мне воды, пожалуйста. Я много знаю об этих землях.',
+    ],
+    [
+      'Water... please. I walked here from far away. I can tell you what is around your camp.',
+      'Воды... пожалуйста. Я шёл сюда издалека. Я могу рассказать, что вокруг вашего лагеря.',
+    ],
+    [
+      'I need water. I have no money, but I know these hills well.',
+      'Мне нужна вода. Денег у меня нет, но я хорошо знаю эти холмы.',
+    ],
+  ] as [string, string][]);
   return {
     kind,
-    speech: 'I am hurt and I am very thirsty. Give me water, please. I know a lot about this land.',
+    speech,
     detail: 'His leg is hurt.',
-    ru: {
-      speech: 'Я ранен, и мне очень хочется пить. Дайте мне воды, пожалуйста. Я много знаю об этих землях.',
-      detail: 'У него ранена нога.',
-    },
+    ru: { speech: speechRu, detail: 'У него ранена нога.' },
     options: [
       { id: 'give', text: '“Here is some water.”' },
       { id: 'deny', text: '“Go away. We need our water.”' },
@@ -177,11 +213,11 @@ export function answerVisitor(s0: HoldState, answer: Answer): { state: HoldState
         mood(1);
         lines.push('The woman says “Thank you!” Your people are happy.');
       } else {
-        const hidden = (Object.keys(PLACES) as PlaceId[]).filter((id) => s.places && !s.places[id].known);
+        const hidden = placesOf(s.places).filter((x) => !x.p.known);
         if (hidden.length && s.places) {
-          const id = pick(r, hidden);
-          s.places[id] = { ...s.places[id], known: true };
-          lines.push(`He drinks. He tells you about ${PLACES[id].name} in the ${PLACES[id].dir}. Now it is on your map.`);
+          const { id, p, dir } = pick(r, hidden);
+          s.places[id] = { ...p, known: true };
+          lines.push(`He drinks. He tells you about ${PLACES[id].name} in the ${dir}. Now it is on your map.`);
         } else {
           s.res.iron += 3;
           lines.push('He drinks. He gives you three iron. “Thank you!”');
@@ -189,7 +225,10 @@ export function answerVisitor(s0: HoldState, answer: Answer): { state: HoldState
       }
     }
   } else {
-    if (v.kind === 'beggar') mood(-1);
+    if (v.kind === 'beggar') {
+      mood(-1);
+      for (const p of people) if (p.trait === 'kind') p.morale = clamp(p.morale - 1);
+    }
     lines.push(v.kind === 'beggar' ? 'They go away. Your people are sad.' : 'He goes away.');
   }
   s.visitor = null;

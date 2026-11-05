@@ -3,8 +3,8 @@
 import { useState, type KeyboardEvent } from 'react';
 import { cn } from '@/shared/lib/utils/css';
 import { ICONS, type IconId } from '../icons';
-import { spendMorale, type HoldState, type Obj, type Order } from '../model/rules';
-import { PLACES, answerReport, type Danger, type Loot, type PlaceId } from '../model/scout';
+import { faceOf, spendMorale, type HoldState, type Obj, type Order } from '../model/rules';
+import { PLACES, answerReport, dirOf, placesOf, type Danger, type Dir, type Loot } from '../model/scout';
 import { saveGame } from '../model/store';
 import { Tap } from './Words';
 
@@ -18,13 +18,13 @@ import { Tap } from './Words';
 const W = 390;
 const H = 230;
 const CAMP = { x: 195, y: 118 };
-const AT: Record<PlaceId, { x: number; y: number; icon: IconId }> = {
-  mill: { x: 195, y: 34, icon: 'mill' },
-  ruins: { x: 336, y: 118, icon: 'ruins' },
-  farm: { x: 195, y: 200, icon: 'farm' },
-  cave: { x: 54, y: 118, icon: 'cave' },
+const AT: Record<Dir, { x: number; y: number }> = {
+  north: { x: 195, y: 34 },
+  east: { x: 336, y: 118 },
+  south: { x: 195, y: 200 },
+  west: { x: 54, y: 118 },
 };
-const LOOT_ICON: Record<Loot, IconId | null> = { food: 'food', wood: 'wood', iron: 'iron', nothing: null };
+const LOOT_ICON: Record<Loot, IconId | null> = { food: 'food', wood: 'wood', iron: 'iron', water: 'water', nothing: null };
 const DANGER_ICON: Record<Danger, IconId | null> = { none: null, wolves: 'wolf', bandits: 'bandit' };
 
 function Ico({
@@ -67,8 +67,9 @@ export function Lands({ s, onPick }: { s: HoldState; onPick: (o: Order) => void 
     onClick: () => onPick(o),
     onKeyDown: (e: KeyboardEvent) => (e.key === 'Enter' || e.key === ' ') && onPick(o),
   });
-  const fog = (Object.keys(AT) as PlaceId[]).some((id) => !places[id].known && !goingTo.has(id));
-  const open = (Object.keys(AT) as PlaceId[]).some((id) => places[id].known && !places[id].looted);
+  const list = placesOf(places);
+  const fog = list.some((x) => !x.p.known && !goingTo.has(x.id));
+  const open = list.some((x) => x.p.known && !x.p.looted);
   return (
     <section className="ah-lands">
       <p className="ah-lands-title">
@@ -79,26 +80,26 @@ export function Lands({ s, onPick }: { s: HoldState; onPick: (o: Order) => void 
         <rect width={W} height={H} filter="url(#ah-terrain)" opacity=".9" />
         <rect width={W} height={H} fill="#140e09" opacity=".35" />
         <rect width={W} height={H} filter="url(#ah-moss)" opacity=".7" />
-        {(Object.keys(AT) as PlaceId[]).map((id) => (
-          <line key={id} x1={CAMP.x} y1={CAMP.y} x2={AT[id].x} y2={AT[id].y} className="ah-road" />
+        {list.map((x) => (
+          <line key={x.id} x1={CAMP.x} y1={CAMP.y} x2={AT[x.dir].x} y2={AT[x.dir].y} className="ah-road" />
         ))}
         <circle cx={CAMP.x} cy={CAMP.y} r="60" fill="url(#ah-light)" />
         <circle cx={CAMP.x} cy={CAMP.y} r="17" className="ah-node ah-node-camp" />
         <Ico id="tent" x={CAMP.x} y={CAMP.y} s={22} fill="url(#ah-bone)" />
-        {(Object.keys(AT) as PlaceId[]).map((id) => {
-          const p = places[id];
-          const at = AT[id];
-          const dir = PLACES[id].dir.toUpperCase();
+        {list.map(({ id, p, dir: side }) => {
+          const at = AT[side];
+          const dir = side.toUpperCase();
+          const up = side === 'south';
           if (!p.known)
             return (
               <g
                 key={id}
                 className={cn('ah-fogged', !goingTo.has(id) && 'ah-press')}
-                {...(goingTo.has(id) ? {} : press({ verb: 'scout', object: `the ${PLACES[id].dir}` as Obj }))}
+                {...(goingTo.has(id) ? {} : press({ verb: 'scout', object: `the ${side}` as Obj }))}
               >
                 <circle cx={at.x} cy={at.y} r="24" className="ah-fog" />
                 {label(at.x, at.y + 6, '?', 'ah-q')}
-                {label(at.x, at.y + (id === 'farm' ? -30 : 38), dir, 'ah-dir')}
+                {label(at.x, at.y + (up ? -30 : 38), dir, 'ah-dir')}
               </g>
             );
           const loot = LOOT_ICON[p.loot];
@@ -110,10 +111,10 @@ export function Lands({ s, onPick }: { s: HoldState; onPick: (o: Order) => void 
               {...(p.looted ? {} : press({ verb: 'search', object: `the ${id}` as Obj }))}
             >
               <circle cx={at.x} cy={at.y} r="19" className={cn('ah-node', danger && 'ah-node-danger')} />
-              <Ico id={at.icon} x={at.x} y={at.y} s={26} fill="url(#ah-bone)" />
-              {label(at.x, at.y + (id === 'farm' ? -27 : 34), PLACES[id].name.toUpperCase(), 'ah-dir ah-known')}
+              <Ico id={id as IconId} x={at.x} y={at.y} s={26} fill="url(#ah-bone)" />
+              {label(at.x, at.y + (up ? -27 : 34), PLACES[id].name.toUpperCase(), 'ah-dir ah-known')}
               {p.looted ? (
-                label(at.x, at.y + (id === 'farm' ? -40 : 46), 'searched', 'ah-dir')
+                label(at.x, at.y + (up ? -40 : 46), 'searched', 'ah-dir')
               ) : (
                 <g>
                   {loot ? <Ico id={loot} x={at.x + 22} y={at.y - 14} s={16} fill="url(#ah-bone)" /> : null}
@@ -124,14 +125,14 @@ export function Lands({ s, onPick }: { s: HoldState; onPick: (o: Order) => void 
           );
         })}
         {away.map((p) => {
-          const to = AT[p.away!.place];
+          const to = AT[dirOf(places, p.away!.place)];
           // Ближе к лагерю, чем к месту: у места стоит подпись стороны света.
           const x = CAMP.x + (to.x - CAMP.x) * 0.38;
           const y = CAMP.y + (to.y - CAMP.y) * 0.38;
           return (
             <g key={p.id}>
               <circle cx={x} cy={y} r="11" className="ah-node ah-node-scout" />
-              <Ico id={p.id} x={x} y={y} s={16} fill="url(#ah-bone)" />
+              <Ico id={faceOf(p)} x={x} y={y} s={16} fill="url(#ah-bone)" />
             </g>
           );
         })}
@@ -164,7 +165,7 @@ export function ScoutReportView({ s }: { s: HoldState }) {
     <div className="ah-sheet-back ah-report-back">
       <div className="ah-report" role="dialog" aria-label={`${who.name}'s report`}>
         <p className="ah-report-head">
-          <Tap text={`${who.name.toUpperCase()}’S REPORT · ${PLACES[rep.place].dir.toUpperCase()}`} />
+          <Tap text={`${who.name.toUpperCase()}’S REPORT · ${dirOf(s.places, rep.place).toUpperCase()}`} />
         </p>
         <ul>
           {rep.lines.map((l, i) => (

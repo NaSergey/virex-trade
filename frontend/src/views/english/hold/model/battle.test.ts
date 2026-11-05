@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { SAVES, battleOrder, fight, finishBattle, intentOf, react, reactionChoices, startBattle, type BVerb } from './battle';
 import { endDay, newGame, type HoldState, type PersonId } from './rules';
 
-const raid = (kind: 'wolves' | 'bandits', strength: number): HoldState => ({ ...newGame(4), tonight: { kind, strength } });
+const raid = (kind: 'wolves' | 'bandits', strength: number): HoldState => ({
+  ...newGame(4, { classic: true }),
+  tonight: { kind, strength },
+});
 
 const order = (s: HoldState, id: PersonId, verb: BVerb, label: string) => {
   const r = battleOrder(s, id, verb, label);
@@ -22,7 +25,7 @@ describe('начало боя', () => {
   });
 
   it('без набега боя нет', () => {
-    const s = { ...newGame(1), tonight: null };
+    const s = { ...newGame(1, { classic: true }), tonight: null };
     expect(startBattle(s)).toBe(s);
   });
 });
