@@ -1644,3 +1644,7 @@ button.ah-build:active {
   height: 18px;
   fill: currentColor;
 }
+.ah-wordcard-base {
+  font-size: 14px;
+  opacity: 0.8;
+}
