@@ -147,6 +147,9 @@ const EXTRA: Record<string, Gloss> = {
   gloomy: { en: 'gloomy', ru: 'мрачный' },
   swamp: { en: 'swamp', ru: 'болото' },
   neighbors: { en: 'neighbor', ru: 'соседи (neighbor)' },
+  axe: { en: 'axe', ru: 'топор' },
+  bow: { en: 'bow', ru: 'лук (оружие)' },
+  pickaxe: { en: 'pickaxe', ru: 'кирка' },
   cannot: { en: 'can', ru: 'не может, нельзя (can not)' },
   defense: { en: 'defense', ru: 'оборона, защита' },
   fallen: { en: 'fall', ru: 'пал, павший (fall)' },
@@ -224,6 +227,13 @@ export const GAME_VOCAB = new Set([
   'dug',
   'frozen',
   'everywhere',
+  'axe',
+  'bow',
+  'pickaxe',
+  'bandage',
+  'hunger',
+  'medicine',
+  'mood',
 ]);
 
 /** Откуда слово: книга курса, общий словарь (с местом по частоте) или словарь игры. */

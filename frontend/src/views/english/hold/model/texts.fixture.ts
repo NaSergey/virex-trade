@@ -18,6 +18,7 @@ import {
 import { CONDS } from './conds';
 import { RECRUITS, TRAIT_TEXT, TRAIT_WORD, cheerLine, sadLine } from './crew';
 import { EVENT_TITLE, answerEvent, makeEvent, type EventId } from './events';
+import { ITEMS, ITEM_IDS, giveGear, spendItem, takeGear, withArticle } from './items';
 import { ALL_PLACES, DIRS, PLACES, makePlaces, makeReport, placesOf } from './scout';
 import { answerVisitor, rollVisitor } from './visitors';
 
@@ -85,6 +86,28 @@ export function allTexts(): string[] {
           add(wrongOrder(g, 'Mira', { verb: v, object: o }, r).text);
   }
   for (const n of ALL_PLACES) add(`Now ${PLACES[n].name} is on your map. You can search it.`);
+  // Вещи и постройки.
+  add('Things we have', 'Who carries what', 'We have nothing yet. Search places to find things.', 'Build in the camp');
+  add('Tap a building to send someone to build it. The builder works twice as fast.', 'Everything is built. The camp is strong.');
+  for (const b of Object.values(BUILDINGS)) add(`needs ${b.wood} wood${b.iron ? ` and ${b.iron} iron` : ''}`);
+  for (const id of ITEM_IDS) {
+    const d = ITEMS[id];
+    add(d.name, d.text, `Who needs the ${d.name}?`, `Who gets the ${d.name}?`, `with the ${d.name}`);
+    for (const p of names) add(`${p} has the ${d.name}`, `${p} also found ${withArticle(d.name)}.`);
+  }
+  for (let seed = 1; seed <= 6; seed++) {
+    let g = newGame(seed);
+    for (const id of ITEM_IDS) g = { ...g, items: { ...g.items, [id]: 2 } };
+    for (const p of present(g))
+      for (const id of ITEM_IDS) {
+        const u = spendItem(g, id, p.id) ?? giveGear(g, id, p.id);
+        if (u) add(u.line);
+        const worn = giveGear(g, 'axe', p.id);
+        if (worn) {
+          add(giveGear(worn.state, 'bow', p.id)?.line, takeGear(worn.state, p.id)?.line);
+        }
+      }
+  }
   const rr = rand(9);
   for (let i = 0; i < 200; i++) for (const p of RECRUITS) add(sadLine(rr, p.name, p.he), cheerLine(rr, p.name));
   // События: каждое — с каждым ответом, на разных людях и запасах.

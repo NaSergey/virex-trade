@@ -12,6 +12,8 @@ import { dirOf, type PlaceId } from './model/scout';
 import { CONDS } from './model/conds';
 import { TRAIT_TEXT, TRAIT_WORD } from './model/crew';
 import { EventView } from './components/Event';
+import { ItemsView } from './components/Items';
+import { ITEMS, gearOf } from './model/items';
 import { startBattle } from './model/battle';
 import { CREDIT, ICONS, type IconId } from './icons';
 import {
@@ -226,6 +228,7 @@ function CrewRow({ s, p, onPick }: { s: HoldState; p: Person; onPick: () => void
           {p.name} · <span>{p.role}</span>
           {p.trait ? <span className="ah-trait">{TRAIT_WORD[p.trait]}</span> : null}
         </b>
+        {gearOf(p) ? <small className="ah-gear">with the {ITEMS[gearOf(p)!].name}</small> : null}
         <small>{p.order ? `“${p.order.verb} ${p.order.object}”` : 'waiting for an order'}</small>
       </span>
       <span className="ah-side">
@@ -246,7 +249,7 @@ function fogOf(s: HoldState, o: Obj): 'fog' | 'empty' | null {
   return !p ? null : !p.known ? 'fog' : p.looted ? 'empty' : null;
 }
 
-/** Кого послать: место выбрано на карте, здесь — человек. Разведчик (scout) стоит первым. */
+/** Кого послать: дело выбрано на карте или в постройках, здесь — человек. Лучший для дела — первым. */
 function WhoSheet({
   s,
   order,
@@ -258,9 +261,11 @@ function WhoSheet({
   onPick: (id: Person['id']) => void;
   onClose: () => void;
 }) {
+  // Тот, кто сделает это лучше, — первым: разведчик для разведки, строитель для стройки.
+  const best = order.verb === 'build' ? 'builder' : order.verb === 'scout' ? 'scout' : order.verb === 'search' ? 'hunter' : null;
   const crew = present(s)
     .filter((p) => !p.away)
-    .sort((a, b) => Number(b.role === 'scout') - Number(a.role === 'scout'));
+    .sort((a, b) => Number(b.role === best) - Number(a.role === best));
   return (
     <div className="ah-sheet-back" onClick={onClose}>
       <div className="ah-sheet ah-frame" role="dialog" aria-label="Who goes?" onClick={(e) => e.stopPropagation()}>
@@ -406,33 +411,75 @@ function OrderSheet({ s, p, preset, onClose }: { s: HoldState; p: Person; preset
   );
 }
 
-function Buildings({ s }: { s: HoldState }) {
+/**
+ * Постройки: карточка нажимается — кого послать строить. Видно, чего не хватает (дерево, железо),
+ * сколько работы осталось и что уже стоит. Материалы списываются в первый день стройки.
+ */
+function Buildings({ s, onPick }: { s: HoldState; onPick: (o: Order) => void }) {
+  const ids = Object.keys(BUILDINGS) as BuildingId[];
+  const open = ids.some((id) => !s.buildings[id].done);
   return (
-    <div className="ah-builds">
-      {(Object.keys(BUILDINGS) as BuildingId[]).map((id) => {
-        const def = BUILDINGS[id];
-        const b = s.buildings[id];
-        return (
-          <div key={id} className={cn('ah-build ah-frame', b.done && 'done')}>
-            <b>
-              <Tap text={def.name} />
-            </b>
-            <small>
-              <Tap text={def.gives} />
-            </small>
-            <Tap
-              text={
-                b.done
-                  ? 'built'
-                  : b.started
-                    ? `work ${Math.floor(b.progress)} / ${def.work}`
-                    : `${def.wood} wood${def.iron ? ` · ${def.iron} iron` : ''}`
-              }
-            />
-          </div>
-        );
-      })}
-    </div>
+    <section className="ah-items">
+      <p className="ah-lands-title">
+        <Tap text="Build in the camp" />
+      </p>
+      <div className="ah-builds">
+        {ids.map((id) => {
+          const def = BUILDINGS[id];
+          const b = s.buildings[id];
+          const short = !b.started && (s.res.wood < def.wood || s.res.iron < def.iron);
+          const builders = present(s).filter((p) => p.order?.verb === 'build' && p.order.object === `the ${id}`);
+          const body = (
+            <>
+              <b>
+                <Tap text={def.name} />
+              </b>
+              <small>
+                <Tap text={def.gives} />
+              </small>
+              {b.done ? (
+                <Tap className="ah-build-done" text="built" />
+              ) : b.started ? (
+                <>
+                  <span className="ah-build-bar">
+                    <i style={{ transform: `scaleX(${b.progress / def.work})` }} />
+                  </span>
+                  <Tap text={`work ${Math.floor(b.progress)} / ${def.work}`} />
+                </>
+              ) : (
+                <span className={cn('ah-build-cost', short && 'neg')}>
+                  <Tap text={`needs ${def.wood} wood${def.iron ? ` and ${def.iron} iron` : ''}`} />
+                </span>
+              )}
+              {builders.length ? <small className="ah-gear">{builders.map((p) => p.name).join(', ')} will build</small> : null}
+            </>
+          );
+          return b.done ? (
+            <div key={id} className="ah-build ah-frame done">
+              {body}
+            </div>
+          ) : (
+            <button
+              key={id}
+              type="button"
+              className={cn('ah-build ah-frame ah-press-card', short && 'ah-build-short')}
+              onClick={() => onPick({ verb: 'build', object: `the ${id}` as Obj })}
+            >
+              {body}
+            </button>
+          );
+        })}
+      </div>
+      <p className="ah-lands-hint">
+        <Tap
+          text={
+            open
+              ? 'Tap a building to send someone to build it. The builder works twice as fast.'
+              : 'Everything is built. The camp is strong.'
+          }
+        />
+      </p>
+    </section>
   );
 }
 
@@ -504,12 +551,13 @@ function End({ s }: { s: HoldState }) {
   );
 }
 
-type View = 'camp' | 'lands' | 'build';
+type View = 'camp' | 'lands' | 'build' | 'items';
 
 const VIEWS: { id: View; label: string; icon: IconId }[] = [
   { id: 'camp', label: 'Camp', icon: 'fire' },
   { id: 'lands', label: 'Lands', icon: 'spyglass' },
   { id: 'build', label: 'Build', icon: 'tower' },
+  { id: 'items', label: 'Items', icon: 'bag' },
 ];
 
 /** Навигация самой игры — внизу экрана, где у раздела раньше стояли вкладки учебника. */
@@ -577,8 +625,10 @@ function Camp({ s }: { s: HoldState }) {
         </>
       ) : view === 'lands' ? (
         <Lands s={s} onPick={setWant} />
+      ) : view === 'build' ? (
+        <Buildings s={s} onPick={setWant} />
       ) : (
-        <Buildings s={s} />
+        <ItemsView s={s} />
       )}
       <div className="ah-endbar">
         <button

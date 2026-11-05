@@ -191,7 +191,11 @@ export function battleOrder(s: HoldState, id: PersonId, verb: BVerb, label: stri
 export const damageOf = (s: HoldState, b: Battle, id: PersonId, e: Enemy): number => {
   const p = s.people.find((x) => x.id === id)!;
   return (
-    2 + (b.guards.includes(id) ? 1 : 0) + (s.buildings.forge.done ? 1 : 0) + (p.role === 'hunter' && e.kind === 'wolf' ? 1 : 0)
+    2 +
+    (b.guards.includes(id) ? 1 : 0) +
+    (s.buildings.forge.done ? 1 : 0) +
+    (p.role === 'hunter' && e.kind === 'wolf' ? 1 : 0) +
+    (p.gear === 'knife' || p.gear === 'axe' ? 1 : 0)
   );
 };
 
