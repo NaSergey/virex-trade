@@ -4,7 +4,7 @@
 
    Тёмное фэнтези: поле всегда чёрное, кость и пергамент — текст, кровь — угроза,
    жар — выбор и действие. Рамки — двойная обводка «ковкой», плитки слов — камень.
-   Шрифты — Cinzel (заголовки) и EB Garamond (речь), свои файлы в `fonts/` (OFL).
+   Шрифт — EB Garamond прямым начертанием (заголовки и речь), свой файл в `fonts/` (OFL).
    Иконки — game-icons.net (CC BY 3.0), подпись внизу экрана обязательна.
    ═══════════════════════════════════════════════════════════════ */
 
@@ -15,7 +15,8 @@
   --ah-ember: #e8913c;
   --ah-gold: #c9a24a;
   --ah-good: #6fbf7a;
-  --cin: var(--ah-cin), Georgia, serif;
+  /* Заголовки — тот же Garamond прямым начертанием: Cinzel и курсив читались с трудом (владелец 2026-11-05). */
+  --cin: var(--ah-gar), Georgia, serif;
   --gar: var(--ah-gar), Georgia, serif;
   position: relative;
   display: flex;
@@ -218,7 +219,7 @@
   gap: 10px;
   align-items: center;
   padding: 8px 12px;
-  font: italic 500 15px var(--gar);
+  font: 500 15px var(--gar);
 }
 .ah-night .ah-ic {
   width: 24px;
@@ -303,7 +304,7 @@
   font-weight: 400;
 }
 .ah-cn small {
-  font: italic 500 15px var(--gar);
+  font: 500 15px var(--gar);
   color: var(--ah-bone-2);
 }
 .ah-crew-idle .ah-cn small {
@@ -365,7 +366,7 @@
   letter-spacing: 0.1em;
 }
 .ah-build small {
-  font: italic 500 13px var(--gar);
+  font: 500 13px var(--gar);
   color: var(--ah-bone-2);
   line-height: 1.2;
 }
@@ -428,7 +429,7 @@
   color: var(--ah-ember);
 }
 .ah-sheet-head small {
-  font: italic 500 15px var(--gar);
+  font: 500 15px var(--gar);
   color: var(--ah-bone-2);
 }
 .ah-phrase {
@@ -462,7 +463,7 @@
 .ah-wrong {
   margin: 0;
   text-align: center;
-  font: italic 600 16px var(--gar);
+  font: 600 16px var(--gar);
   color: #e07a6a;
 }
 .ah-tiles {
@@ -532,7 +533,7 @@
   list-style: none;
 }
 .ah-report li {
-  font: italic 600 19px/1.3 var(--gar);
+  font: 600 19px/1.3 var(--gar);
   animation: ah-in 300ms ease-out backwards;
 }
 .ah-report .ah-btn {
@@ -569,7 +570,7 @@
 .ah-lede {
   margin: 0;
   max-width: 380px;
-  font: italic 500 19px/1.35 var(--gar);
+  font: 500 19px/1.35 var(--gar);
   color: var(--ah-bone);
 }
 .ah-title .ah-btn {
@@ -581,7 +582,7 @@
   margin: 0;
   padding: 0;
   list-style: none;
-  font: italic 14px var(--gar);
+  font: 14px var(--gar);
   color: var(--ah-bone-2);
 }
 .ah-stats li {
@@ -720,14 +721,6 @@
     border-radius: 50% !important;
   }
 }
-.ah-back {
-  align-self: flex-start;
-  font: 700 11px var(--cin);
-  letter-spacing: 0.16em;
-  color: var(--ah-bone-2);
-  text-decoration: none;
-}
-
 /* ── ночной бой ── */
 .ah-battle {
   display: flex;
@@ -798,7 +791,7 @@
   grid-column: 1 / -1;
   margin: 0;
   padding: 5px 8px 6px;
-  font: italic 700 15px/1.2 var(--gar);
+  font: 700 15px/1.2 var(--gar);
   color: #24160c;
   background: linear-gradient(#efe2c2, #d6c49a);
   clip-path: polygon(0 6%, 4% 0, 96% 4%, 100% 0, 99% 94%, 95% 100%, 5% 96%, 0 100%);
@@ -819,7 +812,7 @@
   padding: 6px 10px;
   list-style: none;
   border-left: 2px solid #5a3a1a;
-  font: italic 500 15px var(--gar);
+  font: 500 15px var(--gar);
   color: var(--ah-bone-2);
 }
 .ah-fighters {
@@ -958,7 +951,7 @@
   text-transform: uppercase;
 }
 .ah-act small {
-  font: italic 500 13px var(--gar);
+  font: 500 13px var(--gar);
   color: var(--ah-bone-2);
   text-align: center;
   line-height: 1.15;
@@ -975,7 +968,7 @@
   max-width: 88vw;
   padding: 14px 20px;
   text-align: center;
-  font: italic 700 22px/1.25 var(--gar);
+  font: 700 22px/1.25 var(--gar);
   color: #24160c;
   background: linear-gradient(#efe2c2, #cdb98c);
   animation: ah-up 180ms ease-out;
@@ -1075,7 +1068,7 @@
 .ah-answer {
   min-height: 46px;
   padding: 6px 12px;
-  font: italic 700 18px var(--gar) !important;
+  font: 700 18px var(--gar) !important;
   color: #24160c !important;
   background: rgb(255 255 255 / 0.35);
   border: 1px solid #a08a5a;
@@ -1092,7 +1085,7 @@
 .ah-q-result {
   margin: 0;
   text-align: center;
-  font: italic 700 16px var(--gar);
+  font: 700 16px var(--gar);
 }
 .ah-report .pos {
   color: #2e6a34;
@@ -1130,7 +1123,7 @@
   position: relative;
   padding: 12px 14px 14px;
   text-align: center;
-  font: italic 700 19px/1.3 var(--gar);
+  font: 700 19px/1.3 var(--gar);
   color: #24160c;
   background: linear-gradient(#efe2c2, #cdb98c);
   clip-path: polygon(0 4%, 3% 0, 97% 4%, 100% 0, 99% 96%, 96% 100%, 4% 96%, 0 100%);
@@ -1146,7 +1139,7 @@
 .ah-gate-detail {
   margin: 0;
   text-align: center;
-  font: italic 600 17px var(--gar);
+  font: 600 17px var(--gar);
   color: #d8a090;
 }
 .ah-gate-answers {
@@ -1165,7 +1158,7 @@
 .ah-gate-answer {
   min-height: 52px;
   padding: 8px 14px;
-  font: italic 600 18px var(--gar) !important;
+  font: 600 18px var(--gar) !important;
   text-align: center;
 }
 .ah-gate-answer:active {
@@ -1179,7 +1172,7 @@
   padding: 10px 12px;
   list-style: none;
   border-left: 2px solid var(--ah-ember);
-  font: italic 600 17px/1.3 var(--gar);
+  font: 600 17px/1.3 var(--gar);
   color: var(--ah-bone);
 }
 /* Силуэт гостя на тёмном проёме ворот виден по отсвету факелов на контуре. */
@@ -1284,7 +1277,7 @@
   min-height: 1.4em;
   margin: 0;
   text-align: center;
-  font: italic 500 15px var(--gar);
+  font: 500 15px var(--gar);
   color: var(--ah-bone-2);
 }
 .ah-tilehint b {
@@ -1296,25 +1289,6 @@
     box-shadow: 0 10px 30px rgb(0 0 0 / 0.8) !important;
   }
 }
-.ah-topline {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.ah-sound {
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 1px solid #3a2c1c;
-  color: var(--ah-bone-2) !important;
-}
-.ah-sound[aria-pressed='false'] {
-  opacity: 0.5;
-}
-
 /* ── компактный лист приказа ── */
 .ah-tiles-grid {
   display: grid;

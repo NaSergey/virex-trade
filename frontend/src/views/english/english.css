@@ -848,7 +848,7 @@ a.en-ins-type-label:hover,
     display: flex;
     flex-direction: column;
     gap: var(--s3);
-    max-height: calc(100dvh - 60px - env(safe-area-inset-top));
+    max-height: calc(100dvh - 49px - env(safe-area-inset-top));
     overflow-y: auto;
     padding: var(--s3) var(--s4) calc(var(--s4) + env(safe-area-inset-bottom));
     border-bottom: 1px solid var(--rule);
@@ -864,7 +864,8 @@ a.en-ins-type-label:hover,
     letter-spacing: 0.14em;
     text-transform: uppercase;
   }
-  .en-burger-menu a {
+  .en-burger-menu a,
+  .en-burger-row {
     display: flex;
     align-items: center;
     gap: var(--s3);
@@ -875,5 +876,8 @@ a.en-ins-type-label:hover,
     text-decoration: none;
     -webkit-tap-highlight-color: transparent;
   }
+  .en-burger-row { width: 100%; text-align: left; -webkit-tap-highlight-color: transparent; }
+  .en-burger-state { margin-left: auto; color: var(--ink-3); font-family: var(--font-mono); font-size: var(--t-xs); letter-spacing: 0.14em; text-transform: uppercase; }
+  .en-burger-row[aria-pressed="false"] { color: var(--ink-3); }
   .en-burger-menu a[aria-current="page"] { color: var(--ink); box-shadow: inset 2px 0 0 var(--ink); padding-left: var(--s2); }
 }

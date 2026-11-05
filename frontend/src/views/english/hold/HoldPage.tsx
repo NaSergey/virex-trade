@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useSyncExternalStore } from 'react';
-import Link from 'next/link';
+import { useState } from 'react';
 import localFont from 'next/font/local';
 import { cn } from '@/shared/lib/utils/css';
 import { BattleView } from './components/Battle';
@@ -36,16 +35,10 @@ import {
   type Verb,
 } from './model/rules';
 import { saveGame, useGame } from './model/store';
-import { setSoundOn, soundOn } from '../game/sound';
-import { Volume2, VolumeX } from 'lucide-react';
 import './hold.css';
 
-const cinzel = localFont({ src: './fonts/cinzel.woff2', weight: '400 900', variable: '--ah-cin', display: 'swap' });
 const garamond = localFont({
-  src: [
-    { path: './fonts/garamond.woff2', style: 'normal' },
-    { path: './fonts/garamond-italic.woff2', style: 'italic' },
-  ],
+  src: './fonts/garamond.woff2',
   weight: '400 800',
   variable: '--ah-gar',
   display: 'swap',
@@ -80,46 +73,12 @@ const ROMAN = (n: number) => {
 export function HoldPage() {
   const game = useGame();
   return (
-    <div className={cn('ah', cinzel.variable, garamond.variable)}>
+    <div className={cn('ah', garamond.variable)}>
       <HoldDefs />
-      <div className="ah-topline">
-        <Link href="/english/game" className="ah-back">
-          ← Mind the Gap
-        </Link>
-        <SoundToggle />
-      </div>
       {game === undefined ? null : game === null ? <Title /> : <Camp s={game} />}
       <WordCard />
       <p className="ah-credit">{CREDIT}</p>
     </div>
-  );
-}
-
-/** Звук — общий выключатель с первой игрой (`virex.english.game.sound`). */
-const soundListeners = new Set<() => void>();
-const subscribeSound = (l: () => void) => {
-  soundListeners.add(l);
-  return () => soundListeners.delete(l);
-};
-
-function SoundToggle() {
-  const on = useSyncExternalStore(subscribeSound, soundOn, () => true);
-  const setOn = (v: boolean) => {
-    setSoundOn(v);
-    soundListeners.forEach((l) => l());
-  };
-  return (
-    <button
-      type="button"
-      className="ah-sound"
-      aria-pressed={on}
-      aria-label={on ? 'Sound on' : 'Sound off'}
-      onClick={() => {
-        setOn(!on);
-      }}
-    >
-      {on ? <Volume2 size={18} aria-hidden /> : <VolumeX size={18} aria-hidden />}
-    </button>
   );
 }
 
