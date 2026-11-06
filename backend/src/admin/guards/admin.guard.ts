@@ -7,13 +7,14 @@ import {
 import { Request } from 'express';
 import { AuthUser } from '../../auth/strategies/jwt.strategy';
 import { PrismaService } from '../../prisma/prisma.service';
-import { isOwnerEmail } from '../owner';
+import { isOwnerUser } from '../owner';
 
 /**
  * Пускает к аналитике по пользователям только владельца сервиса (см. owner.ts).
  *
- * Почта сверяется с БД по userId, а не берётся из токена: адрес в JWT — снимок
- * на момент выдачи, и переживать смену почты на пятнадцать минут он не должен.
+ * Сверяется id аккаунта владельца из БД (`isOwnerUser`), а не почта из
+ * токена: адрес в JWT — снимок на момент выдачи, а совпадение почты без учёта
+ * регистра давало права любому, кто завёл её вариант (`WXTX.NS@…`).
  */
 @Injectable()
 export class AdminGuard implements CanActivate {
@@ -26,11 +27,7 @@ export class AdminGuard implements CanActivate {
     const userId = req.user?.userId;
     if (!userId) throw new ForbiddenException('Admin access required');
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { email: true },
-    });
-    if (!isOwnerEmail(user?.email))
+    if (!(await isOwnerUser(this.prisma, userId)))
       throw new ForbiddenException('Admin access required');
 
     return true;

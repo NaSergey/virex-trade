@@ -17,7 +17,7 @@ import { assertReadableName, isRealEmail } from './identity-rules';
 import { GoogleClaims, pickName } from './google-oauth';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { resolveJwtAccessSecret } from './jwt-secret';
-import { isOwnerEmail } from '../admin/owner';
+import { isOwnerEmail, isOwnerUser } from '../admin/owner';
 import { TagsService } from '../tags/tags.service';
 import { CoinsService } from '../coins/coins.service';
 import { REFERRAL_BONUS_COINS, REFERRAL_WELCOME_COINS } from '../coins/coins.config';
@@ -79,15 +79,21 @@ export class AuthService {
 
   async register(dto: RegisterDto): Promise<AuthResult> {
     assertReadableName(dto.name);
-    if (!(await isRealEmail(dto.email))) {
+    // Почта хранится в нижнем регистре, а занятость проверяется без учёта
+    // регистра: уникальный индекс Postgres регистр различает, и до 2026-11-06
+    // `WXTX.NS@…` заводился вторым аккаунтом рядом с `wxtx.ns@…` — с правами
+    // владельца (owner.ts) и с привязкой его входа через Google.
+    const email = dto.email.trim().toLowerCase();
+    if (!(await isRealEmail(email))) {
       throw new BadRequestException({
         message: 'Укажите настоящую почту: на этот адрес нельзя отправить письмо',
         code: 'EMAIL_NOT_REAL',
       });
     }
 
-    const existing = await this.prisma.user.findUnique({
-      where: { email: dto.email },
+    const existing = await this.prisma.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      select: { id: true },
     });
     if (existing) {
       throw new ConflictException({
@@ -97,7 +103,7 @@ export class AuthService {
     }
 
     const user = await this.createAccount({
-      email: dto.email,
+      email,
       password: await bcrypt.hash(dto.password, 10),
       // DTO уже обрезал пробелы и потребовал непустое значение. Колонка
       // остаётся nullable ради тех, кто регистрировался, когда имя было
@@ -110,9 +116,17 @@ export class AuthService {
   }
 
   async login(dto: LoginDto): Promise<AuthResult> {
-    const user = await this.prisma.user.findUnique({
-      where: { email: dto.email },
-    });
+    // Сначала точное совпадение: у аккаунтов, заведённых до 2026-11-06, почта
+    // лежит как её набрали, и два варианта одного адреса — два разных аккаунта.
+    // Нет точного — без учёта регистра, самый старый: новые хранятся в нижнем,
+    // а человек набирает адрес как угодно.
+    const typed = dto.email.trim();
+    const user =
+      (await this.prisma.user.findUnique({ where: { email: typed } })) ??
+      (await this.prisma.user.findFirst({
+        where: { email: { equals: typed, mode: 'insensitive' } },
+        orderBy: { createdAt: 'asc' },
+      }));
     if (!user) {
       throw new UnauthorizedException({
         message: 'Неверный email или пароль',
@@ -208,12 +222,29 @@ export class AuthService {
     if (existing) {
       // По userId, а не create: у аккаунта мог быть привязан прежний аккаунт
       // Google с той же почтой (удалён и заведён заново) — его место занимает новый.
-      await this.prisma.googleAccount.upsert({
+      const link = this.prisma.googleAccount.upsert({
         where: { userId: existing.id },
         create: { sub: claims.sub, userId: existing.id },
         update: { sub: claims.sub },
       });
-      return this.issueTokens(existing);
+      if (!existing.password) {
+        await link;
+        return this.issueTokens(existing);
+      }
+      // Пароль у аккаунта, который Google видит впервые, ставил кто угодно:
+      // регистрация почту не подтверждает. Тот, кто завёл чужой адрес раньше
+      // хозяина, сохранил бы вход паролем в аккаунт, где хозяин потом
+      // подключит ключ биржи. Google подтвердил хозяина — пароль и все сессии
+      // снимаются одной транзакцией с привязкой; вход дальше — через Google.
+      const [, owner] = await this.prisma.$transaction([
+        link,
+        this.prisma.user.update({
+          where: { id: existing.id },
+          data: { password: null },
+        }),
+        this.prisma.refreshToken.deleteMany({ where: { userId: existing.id } }),
+      ]);
+      return this.issueTokens(owner);
     }
 
     const user = await this.createAccount({
@@ -365,7 +396,10 @@ export class AuthService {
     }
 
     return {
-      user: this.toPublicUser(user),
+      user: this.toPublicUser(
+        user,
+        isOwnerEmail(user.email) && (await isOwnerUser(this.prisma, user.id)),
+      ),
       accessToken,
       refreshToken,
     };
@@ -388,12 +422,12 @@ export class AuthService {
     return inviter?.id ?? null;
   }
 
-  private toPublicUser(user: UserRow): PublicUser {
+  private toPublicUser(user: UserRow, isAdmin: boolean): PublicUser {
     return {
       id: user.id,
       email: user.email,
       name: user.name,
-      isAdmin: isOwnerEmail(user.email),
+      isAdmin,
       avatar: avatarUrl(user.id, user.avatarAt),
       hasPassword: user.password != null,
     };
