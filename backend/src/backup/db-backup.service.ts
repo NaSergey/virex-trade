@@ -6,7 +6,7 @@ import { join } from 'path';
 import { promisify } from 'util';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramService } from '../telegram/telegram.service';
-import { OWNER_EMAIL } from '../admin/owner';
+import { findOwner } from '../admin/owner';
 import { runsBackgroundJobs } from '../role';
 import { isDue, lastSlot, partNames, pgEnvOf } from './backup-schedule';
 
@@ -78,10 +78,9 @@ export class DbBackupService implements OnApplicationBootstrap, OnModuleDestroy 
       const last = await this.prisma.dbBackup.findFirst({ orderBy: { sentAt: 'desc' }, select: { sentAt: true } });
       if (!isDue(last?.sentAt ?? null, now)) return;
 
-      const owner = await this.prisma.user.findFirst({
-        where: { email: { equals: OWNER_EMAIL, mode: 'insensitive' } },
-        select: { telegramChatId: true },
-      });
+      // Самый старый аккаунт с почтой владельца, а не первый попавшийся:
+      // вариант почты в другом регистре — чужой человек, дамп базы не ему.
+      const owner = await findOwner(this.prisma);
       const chatId = owner?.telegramChatId;
       if (!chatId) {
         this.logger.warn('бэкап базы ждёт: у владельца не привязан Telegram');

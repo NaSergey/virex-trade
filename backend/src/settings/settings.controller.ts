@@ -9,6 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { DemoLockedGuard } from '../auth/guards/demo-locked.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { CredentialsService } from '../credentials/credentials.service';
 import { ExchangeRegistry } from '../exchanges/exchange-registry.service';
@@ -70,6 +71,7 @@ export class SettingsController {
    * permissions is caught here rather than on the first sync.
    */
   @Put('exchanges/:exchange')
+  @UseGuards(DemoLockedGuard)
   async connect(
     @CurrentUser('userId') userId: string,
     @Param('exchange') exchange: string,
@@ -180,6 +182,7 @@ export class SettingsController {
 
   /** Switch which connected exchange drives sync, positions and trading. */
   @Put('active-exchange/:exchange')
+  @UseGuards(DemoLockedGuard)
   async setActive(
     @CurrentUser('userId') userId: string,
     @Param('exchange') exchange: string,

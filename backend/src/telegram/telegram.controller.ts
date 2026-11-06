@@ -1,5 +1,6 @@
 import { Controller, Delete, Get, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { DemoLockedGuard } from '../auth/guards/demo-locked.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { TelegramService } from './telegram.service';
 
@@ -15,7 +16,9 @@ export class TelegramController {
   }
 
   // One-time deep link (t.me/<bot>?start=<code>) to link the user's chat.
+  // Демо общий: его Telegram получал бы сигналы чужому посетителю.
   @Post('link')
+  @UseGuards(DemoLockedGuard)
   link(@CurrentUser('userId') userId: string) {
     return this.telegram.createLinkCode(userId);
   }
@@ -27,6 +30,7 @@ export class TelegramController {
 
   // Manual delivery check from the app UI.
   @Post('test')
+  @UseGuards(DemoLockedGuard)
   test(@CurrentUser('userId') userId: string) {
     return this.telegram.sendTest(userId);
   }
