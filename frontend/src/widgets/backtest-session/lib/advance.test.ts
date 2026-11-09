@@ -29,6 +29,21 @@ describe('advanceTo', () => {
     expect(r.exits).toEqual([]);
   });
 
+  // Плечо 50 от 100: ликвидация на 98, стоп 90 дальше — цена на 97 ликвидирует, до стопа не доходит.
+  it('ликвидация ближе стопа — позиция закрывается по ней, а не живёт до стопа', () => {
+    const minutes = mins(at(0), 5, 100);
+    minutes[2] = { ...minutes[2], l: 97 };
+    const r = advanceTo({
+      from: at(0),
+      target: at(5),
+      minutes,
+      loadedUntil: at(5),
+      positions: [{ tradeId: 'a', direction: 'long', stopLoss: 90, takeProfit: null, liqPrice: 98, entryTime: at(0) }],
+    });
+    expect(r.exits).toEqual([{ tradeId: 'a', reason: 'liquidation', price: 98, time: at(3) }]);
+    expect(r.reach).toBe(at(3));
+  });
+
   it('стоп сработал внутри окна — exit возвращается с id сделки', () => {
     const minutes = mins(at(0), 5, 100);
     minutes[2] = { ...minutes[2], l: 89 };

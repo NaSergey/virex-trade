@@ -21,7 +21,16 @@ export const SCALED_MIN = 100;
 export const SCALED_MAX = 1000;
 
 export type Direction = 'long' | 'short';
-export type ExitReason = 'stop' | 'take' | 'manual' | 'finish' | 'limit';
+export type ExitReason = 'stop' | 'take' | 'manual' | 'finish' | 'limit' | 'liquidation';
+
+/**
+ * Ликвидация — упрощённо, без поддерживающей маржи и комиссий: long ниже входа, short выше,
+ * на 1/плечо. Та же формула, что у фронта (`liquidationPrice` в `lib/money.ts`): по ней
+ * линия на графике и исполнение в движке эфира.
+ */
+export function liquidationPrice(direction: Direction, entry: number, leverage: number): number {
+  return direction === 'long' ? entry * (1 - 1 / leverage) : entry * (1 + 1 / leverage);
+}
 
 export function positionSize(balance: number, riskPct: number, entry: number, stop: number) {
   const riskUsdt = (balance * riskPct) / 100;

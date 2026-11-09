@@ -2,7 +2,7 @@ import type { TagItem } from '@/entities/tag';
 import type { Direction } from '../lib/fills';
 
 export type { Direction };
-export type ExitReason = 'stop' | 'take' | 'manual' | 'finish' | 'limit';
+export type ExitReason = 'stop' | 'take' | 'manual' | 'finish' | 'limit' | 'liquidation';
 
 /**
  * Откуда свечи сессии: отрезок истории BTC, сгенерированный рынок тренажёра

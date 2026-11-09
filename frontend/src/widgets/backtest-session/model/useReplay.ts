@@ -10,6 +10,7 @@ import {
   DEFAULT_TIMEFRAME,
   MINUTE,
   TIMEFRAMES,
+  aggregate,
   bucketStart,
   currentBucket,
   lastPrice,
@@ -19,10 +20,27 @@ import {
   type Candle,
 } from '../lib/candles';
 import { isPartialExit, type CloseOrder, type EntryFill, type Exit } from '../lib/fills';
+import { liquidationPrice } from '../lib/money';
+import { clampSpeed, paceOf, reanchor, tickTarget, type ClosedSet } from '../lib/playback';
 import { createInFlight } from './inFlight';
+
+export { SPEEDS } from '../lib/playback';
 
 /** Сколько минуток держать загруженными впереди момента сессии. */
 const LOOKAHEAD_MS = 3 * DAY;
+/**
+ * На автопрокрутке впереди держится ещё и столько секунд хода: на быстрой скорости
+ * старшего ТФ трёх суток хватает на секунду, и тик вставал бы ждать сеть.
+ */
+const PREFETCH_SEC = 4;
+/** Фоновая подгрузка упала — следующая попытка не раньше чем через столько. */
+const PREFETCH_RETRY_MS = 2000;
+/**
+ * Больше стольких минуток (~70 суток) — минутки до суток момента выбрасываются,
+ * а свечи из них становятся закрытыми (`reanchor`). Дневка на ×4 проходит четыре
+ * дня истории в секунду, и без подрезки вкладка копила бы их сотнями тысяч.
+ */
+const TRIM_AT = 100_000;
 /** Потолок эндпоинта свечей на один запрос. */
 const CHUNK = 5000;
 /** Сколько закрытых свечей таймфрейма брать в прошлое. */
@@ -35,14 +53,6 @@ const MAX_FILL_FAILURES = 3;
 const HISTORY_CHUNK = 500;
 /** Момент сохраняется на сервер не чаще, чем раз в столько. */
 const SAVE_EVERY_MS = 10000;
-/** Скорости автопрокрутки — шагов в секунду. */
-export const SPEEDS = [1, 4, 16, 32] as const;
-
-interface ClosedSet {
-  /** До какого момента загружена история этого таймфрейма; дальше свечи собираются из минуток. */
-  anchor: number;
-  candles: Candle[];
-}
 
 export interface Replay {
   cursor: number;
@@ -72,7 +82,9 @@ export interface Replay {
   price: number | null;
   ready: boolean;
   step: () => Promise<void>;
+  /** Свечей выбранного ТФ в секунду (`lib/playback.ts`); null — пауза. */
   speed: number | null;
+  /** Скорость, которой выбранный ТФ не тянет (`allowedSpeed`), сводится к самой быстрой доступной. */
   setSpeed: (speed: number | null) => void;
   /** Минутки кончились — дальше крутить нечего. */
   ended: boolean;
@@ -119,10 +131,10 @@ export function useReplay(
   const symbol = dataSource === 'real' ? detail.session.symbol : undefined;
   const source = useMemo(() => ({ id: sessionId, dataSource, symbol }), [sessionId, dataSource, symbol]);
   const [cursor, setCursor] = useState(() => Date.parse(detail.session.cursorTime));
-  const [tf, setTf] = useState<number>(DEFAULT_TIMEFRAME);
+  const [tf, setTfState] = useState<number>(DEFAULT_TIMEFRAME);
   const [minutes, setMinutes] = useState<Candle[]>([]);
   const [closed, setClosed] = useState<Record<number, ClosedSet>>({});
-  const [speed, setSpeed] = useState<number | null>(null);
+  const [speed, setSpeedState] = useState<number | null>(null);
   const [ended, setEnded] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
@@ -131,6 +143,17 @@ export function useReplay(
   const cursorRef = useRef(cursor);
   const tfRef = useRef(tf);
   tfRef.current = tf;
+
+  // Скорость — в свечах выбранного ТФ, поэтому смена ТФ на старший сбавляет её до
+  // того, что он тянет: дневка на ×32 просила бы истории больше потолка.
+  const setSpeed = useCallback((s: number | null) => {
+    setSpeedState(s == null ? null : clampSpeed(s, tfRef.current));
+  }, []);
+  const setTf = useCallback((t: number) => {
+    tfRef.current = t;
+    setTfState(t);
+    setSpeedState((s) => (s == null ? null : clampSpeed(s, t)));
+  }, []);
   const pendingRef = useRef(pending);
   useLayoutEffect(() => {
     pendingRef.current = pending;
@@ -139,6 +162,7 @@ export function useReplay(
   const minutesFrom = useRef(bucketStart(cursor - MINUTE, 1440));
   const exhausted = useRef(false);
   const loading = useRef<Promise<void> | null>(null);
+  const prefetchPausedUntil = useRef(0);
   const busy = useRef(false);
   const endedRef = useRef(false);
   /** Сделки, чьё полное закрытие уже отправлено: пока сессия не перечитана, второй раз их не закрываем. */
@@ -194,17 +218,27 @@ export function useReplay(
   // из минуток, поэтому перегружать при шаге не нужно. Отметка о запросе — в рефе, а
   // не по наличию в `closed`: запрос в полёте иначе ушёл бы второй раз.
   const requestedTf = useRef(new Set<number>());
+  /** Минутки раньше этого момента выброшены подрезкой (`TRIM_AT`). */
+  const trimmedTo = useRef(-Infinity);
   const loadClosed = useCallback((t: number) => {
     if (requestedTf.current.has(t)) return;
     requestedTf.current.add(t);
-    const anchor = currentBucket(cursorRef.current, t);
-    fetchCandles(source, t, { to: anchor - 1, limit: CLOSED_LIMIT }, source.symbol)
-      .then((candles) => setClosed((prev) => (prev[t] ? prev : { ...prev, [t]: { anchor, candles } })))
-      .catch((e) => {
-        // Снятая отметка — чтобы повторный выбор этого ТФ попробовал снова.
-        requestedTf.current.delete(t);
-        setError(e);
-      });
+    const load = () => {
+      const anchor = currentBucket(cursorRef.current, t);
+      fetchCandles(source, t, { to: anchor - 1, limit: CLOSED_LIMIT }, source.symbol)
+        .then((candles) => {
+          // Пока шёл запрос, минутки после его опоры подрезали — свечи между опорой и
+          // подрезкой собрать не из чего. Заново, от нынешнего момента.
+          if (anchor < trimmedTo.current) return load();
+          setClosed((prev) => (prev[t] ? prev : { ...prev, [t]: { anchor, candles } }));
+        })
+        .catch((e) => {
+          // Снятая отметка — чтобы повторный выбор этого ТФ попробовал снова.
+          requestedTf.current.delete(t);
+          setError(e);
+        });
+    };
+    load();
   }, [source]);
   // Выбранный — первым, и заново при выборе, если прошлый запрос упал.
   useEffect(() => {
@@ -222,6 +256,10 @@ export function useReplay(
   // рендере (adjust state while rendering), без лишнего кадра со старым ТФ.
   const [shownTf, setShownTf] = useState(tf);
   if (shownTf !== tf && closed[tf]) setShownTf(tf);
+  const shownTfRef = useRef(shownTf);
+  useLayoutEffect(() => {
+    shownTfRef.current = shownTf;
+  });
 
   /** Какие ТФ сейчас догружают историю — на каждый таймфрейм свой флаг, а не один общий:
    * иначе фетч для ТФ=60 в полёте держал бы заблокированным вызов для только что
@@ -267,6 +305,29 @@ export function useReplay(
     }
   }, [closed, shownTf, source]);
 
+  /**
+   * Подрезка минуток (`TRIM_AT`): всё до суток момента уходит в закрытые свечи
+   * наборов на экране и выбранного, прочие наборы выбрасываются — их загрузит
+   * выбор ТФ. Отметки о запросе у выброшенных снимаются, иначе выбор не загрузил бы.
+   */
+  const trimMinutes = useCallback((moment: number) => {
+    const all = minutesRef.current;
+    if (all.length <= TRIM_AT) return;
+    const cut = bucketStart(moment - MINUTE, 1440);
+    const from = all.findIndex((m) => m.t >= cut);
+    if (from <= 0) return;
+    const keep = new Set([shownTfRef.current, tfRef.current]);
+    for (const t of TIMEFRAMES) {
+      if (keep.has(t)) continue;
+      requestedTf.current.delete(t);
+      historyExhausted.current[t] = false;
+    }
+    trimmedTo.current = cut;
+    setClosed((prev) => reanchor(prev, all, cut, keep));
+    minutesRef.current = all.slice(from);
+    setMinutes(minutesRef.current);
+  }, []);
+
   const candles = useMemo(() => {
     const set = closed[shownTf];
     if (!set) return [];
@@ -284,19 +345,31 @@ export function useReplay(
    * разошлись бы, и молча.
    */
   const advance = useCallback(
-    async (target: number, onLanded?: (from: number, reach: number) => void) => {
+    async (target: number, lookahead: number, onLanded?: (from: number, reach: number) => void) => {
       if (busy.current || endedRef.current || pendingRef.current) return;
       busy.current = true;
       setError(null);
       try {
         const from = cursorRef.current;
-        await ensureMinutes(target + LOOKAHEAD_MS);
+        // Ждём только минутки до цели, запас впереди грузится фоном: на быстрой
+        // скорости старшего ТФ ожидание запаса ставило бы тик на каждом куске.
+        // Ошибку фоновой загрузки скажет следующий тик, которому минуток не хватит.
+        await ensureMinutes(target);
+        if (Date.now() >= prefetchPausedUntil.current) {
+          // Упавшая фоновая загрузка не повторяется на каждом тике: на 16 тиках в
+          // секунду без паузы сеть, которая лежит, получала бы 16 запросов в секунду.
+          void ensureMinutes(target + lookahead).catch(() => {
+            prefetchPausedUntil.current = Date.now() + PREFETCH_RETRY_MS;
+          });
+        }
         const openTrades = openTradesRef.current.filter((t) => !closing.has(t.id));
         const positions: OpenPosition[] = openTrades.map((t) => ({
           tradeId: t.id,
           direction: t.direction,
           stopLoss: t.stopLoss,
           takeProfit: t.takeProfit,
+          // Та же цена, что на линии ликвидации графика и в таблице позиций.
+          liqPrice: liquidationPrice(t.direction, t.entryPrice, t.leverage),
           entryTime: Date.parse(t.entryTime),
         }));
         const pendingEntryOrders = entryOrdersRef.current.filter((o) => !filling.has(o.id));
@@ -334,6 +407,7 @@ export function useReplay(
           cursorRef.current = reach;
           setCursor(reach);
           onLanded?.(from, reach);
+          trimMinutes(reach);
         }
         // Не дошли до цели — минутки кончились, дальше крутить нечего.
         if (!complete) {
@@ -348,28 +422,34 @@ export function useReplay(
         busy.current = false;
       }
     },
-    [ensureMinutes, closing, filling, firedCloseOrders],
+    [ensureMinutes, closing, filling, firedCloseOrders, setSpeed, trimMinutes],
   );
 
   /** Мгновенный прыжок до закрытия текущей свечи ТФ — без анимации, для ручного разбора. */
-  const step = useCallback(() => advance(nextStop(cursorRef.current, tfRef.current)), [advance]);
+  const step = useCallback(() => advance(nextStop(cursorRef.current, tfRef.current), LOOKAHEAD_MS), [advance]);
 
   const [glide, setGlide] = useState<{ minute: Candle; durationMs: number } | null>(null);
 
   /**
-   * Тик автопрокрутки — ровно одна настоящая минутка, не вся свеча ТФ:
-   * скорость (шагов в секунду) стала «минут симуляции в секунду» и не зависит
-   * от выбранного таймфрейма. `speedNow` — из замыкания эффекта интервала, а
-   * не из состояния `speed`, чтобы длительность анимации не разошлась со
-   * ставкой, на которой тик на самом деле случился.
+   * Тик автопрокрутки — кусок истории по темпу `paceOf`: скорость — свечей
+   * выбранного ТФ в секунду, одинаково на любом ТФ. Свеча крупнее шага собирается
+   * из нескольких тиков по настоящим кускам минуток, а не по выдуманному пути.
+   * Шаг и период — из замыкания эффекта интервала, а не из состояния, чтобы
+   * длительность анимации не разошлась с темпом, на котором тик на самом деле случился.
    */
   const tick = useCallback(
-    (speedNow: number) =>
-      advance(cursorRef.current + MINUTE, (from) => {
-        const landed = minutesRef.current.find((m) => m.t === from);
-        // Минутки может не быть — дыра в истории биржи; тогда просто без анимации.
-        if (landed) setGlide({ minute: landed, durationMs: 1000 / speedNow });
-      }),
+    (stepMin: number, periodMs: number) => {
+      const lookahead = Math.max(LOOKAHEAD_MS, (PREFETCH_SEC * 1000 * stepMin * MINUTE) / periodMs);
+      return advance(tickTarget(cursorRef.current, stepMin), lookahead, (from, reach) => {
+        // Анимируется формирующаяся свеча графика — та часть тика, что легла в её
+        // корзину; свечи целиком внутри тика встают сразу. ТФ — тот, что на экране:
+        // пока история выбранного грузится, график ещё на прежнем.
+        const tf = shownTfRef.current;
+        const [landed] = aggregate(minutesRef.current, tf, Math.max(from, bucketStart(reach - MINUTE, tf)), reach);
+        // Минуток может не быть — дыра в истории биржи; тогда просто без анимации.
+        if (landed) setGlide({ minute: landed, durationMs: periodMs });
+      });
+    },
     [advance],
   );
 
@@ -378,19 +458,20 @@ export function useReplay(
   useEffect(() => {
     if (!speed) {
       // Доигрывать анимацию формирующейся свечи после паузы не по замыслу
-      // (см. комментарий у Replay.glide) — доигрывала бы до `1000/предыдущая
-      // скорость` мс, и на ×1 пауза выглядела бы так, будто не сработала.
+      // (см. комментарий у Replay.glide) — доигрывала бы до конца периода
+      // прошлого тика, и на ×1 пауза выглядела бы так, будто не сработала.
       setGlide(null);
       return;
     }
-    // Первый тик — сразу, а не через `1000/speed`: setInterval всегда ждёт
-    // полный период до первого срабатывания, и при переключении на низкую
-    // скорость (особенно ×1) это читалось бы как секундная задержка отклика
+    const { stepMin, periodMs } = paceOf(speed, tf);
+    // Первый тик — сразу, а не через период: setInterval всегда ждёт полный
+    // период до первого срабатывания, и при переключении на низкую скорость
+    // (особенно ×1 на минутках) это читалось бы как секундная задержка отклика
     // на нажатие, хотя обработчик уже отработал.
-    void tickRef.current(speed);
-    const h = setInterval(() => void tickRef.current(speed), 1000 / speed);
+    void tickRef.current(stepMin, periodMs);
+    const h = setInterval(() => void tickRef.current(stepMin, periodMs), periodMs);
     return () => clearInterval(h);
-  }, [speed]);
+  }, [speed, tf]);
 
   // Прокрутка стоит между шагами: момент действия — тот же, что на экране.
   const moment = useCallback(() => cursor, [cursor]);

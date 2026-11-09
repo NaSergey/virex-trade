@@ -1,4 +1,4 @@
-import { MINUTE, type Candle } from './candles';
+import { MINUTE, firstFrom, type Candle } from './candles';
 
 /**
  * Срабатывание стопа и тейка. Проверяется по минуткам, какой бы таймфрейм ни
@@ -16,6 +16,11 @@ export interface Position {
   direction: Direction;
   stopLoss: number;
   takeProfit: number | null;
+  /**
+   * Цена ликвидации (`liquidationPrice`): плечо, при котором она ближе стопа, закрывает
+   * позицию раньше него. Нет — ликвидация не проверяется.
+   */
+  liqPrice?: number | null;
 }
 
 export interface CloseOrder {
@@ -26,7 +31,7 @@ export interface CloseOrder {
 }
 
 export interface Exit {
-  reason: 'stop' | 'take' | 'limit';
+  reason: 'stop' | 'take' | 'limit' | 'liquidation';
   price: number;
   /** Закрытие минутки, в которой сработало. */
   time: number;
@@ -74,11 +79,18 @@ export function checkMinute(p: Position, m: Candle, closeOrders: CloseOrder[] = 
   const s = p.stopLoss;
   const tp = p.takeProfit;
   const time = m.t + MINUTE;
+  const liq = p.liqPrice != null && p.liqPrice > 0 ? p.liqPrice : null;
 
+  // 0. Гэп за ликвидацией — по её цене, а не по открытию, даже если стоп ближе:
+  // маржа изолированная, и больше неё позиция потерять не может.
+  if (liq != null && (long ? m.o <= liq : m.o >= liq)) return { reason: 'liquidation', price: liq, time };
   // 1. Гэп за стопом — по открытию, то есть хуже стопа, как на бирже.
   if (long ? m.o <= s : m.o >= s) return { reason: 'stop', price: m.o, time };
   // 2. Гэп за тейком — по тейку: лучше заявленного тейк не исполняется.
   if (tp != null && (long ? m.o >= tp : m.o <= tp)) return { reason: 'take', price: tp, time };
+  // 2a. Касание ликвидации, стоящей ближе стопа: цена дошла до неё раньше. С тейком
+  // в той же минутке — ликвидация, как стоп: худшее.
+  if (liq != null && (long ? liq > s && m.l <= liq : liq < s && m.h >= liq)) return { reason: 'liquidation', price: liq, time };
   // 3 и 5. Касание стопа — стоп, даже если в той же минутке задет и тейк:
   // порядок внутри минутки не восстановить, честнее предполагать худшее.
   if (long ? m.l <= s : m.h >= s) return { reason: 'stop', price: s, time };
@@ -95,8 +107,8 @@ export function checkMinute(p: Position, m: Candle, closeOrders: CloseOrder[] = 
 
 /** Первая сработавшая минутка среди открытых не раньше from и закрытых не позже to. */
 export function findExit(p: Position, minutes: Candle[], from: number, to: number, closeOrders: CloseOrder[] = []): Exit | null {
-  for (const m of minutes) {
-    if (m.t < from) continue;
+  for (let i = firstFrom(minutes, from); i < minutes.length; i++) {
+    const m = minutes[i];
     if (m.t + MINUTE > to) break;
     const exit = checkMinute(p, m, closeOrders);
     if (exit) return exit;
@@ -112,8 +124,8 @@ export function findExit(p: Position, minutes: Candle[], from: number, to: numbe
  */
 export function findEntryFill(orders: EntryOrder[], minutes: Candle[], from: number, to: number): EntryFill | null {
   if (orders.length === 0) return null;
-  for (const m of minutes) {
-    if (m.t < from) continue;
+  for (let i = firstFrom(minutes, from); i < minutes.length; i++) {
+    const m = minutes[i];
     if (m.t + MINUTE > to) break;
     const touched = orders.filter((o) => o.price <= m.h && o.price >= m.l);
     const fired = closestToOpen(touched, m.o);

@@ -1318,6 +1318,9 @@
     "step": "Step",
     "speed": "Autoplay",
     "pause": "Pause",
+    "pauseHint": "Pause and resume — Space",
+    "speedHint": "{n, plural, one {# candle} other {# candles}} per second on any timeframe — key {key}",
+    "speedTooFast": "Too fast for this timeframe: history can't load fast enough",
     "backToList": "Back to list",
     "backToTournament": "Back to tournament",
     "liveBadge": "Live",
@@ -1408,7 +1411,9 @@
         "delete": "Delete drawing",
         "hideAll": "Hide drawings",
         "resetChart": "Reset chart view",
-        "cancel": "Drop tool"
+        "cancel": "Drop tool",
+        "speed": "Autoplay speed ×1 … ×32",
+        "pause": "Pause and resume"
       }
     },
     "orderType": "Market order",
@@ -1465,6 +1470,7 @@
       "manual": "market",
       "finish": "finish",
       "limit": "limit",
+      "liquidation": "liquidation",
       "open": "open"
     },
     "closeFailed": "The trade close wasn't saved.",
@@ -1526,6 +1532,7 @@
     "botReason_manual": "position closed manually",
     "botReason_take": "position take hit",
     "botReason_finish": "session finished",
+    "botReason_liquidation": "position liquidated",
     "botReason_limit": "position closed by limit",
     "botReason_hopeless": "the bot's buy can't be executed (deposit, margin or stop side)",
     "botOwnsLong": "This coin's long side belongs to the bot",

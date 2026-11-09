@@ -26,6 +26,7 @@ const EXIT: Record<ExitReason, TerminalSound | null> = {
   take: 'take',
   manual: 'fill',
   limit: 'fill',
+  liquidation: 'stop',
   finish: null,
 };
 
