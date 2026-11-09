@@ -7,6 +7,8 @@ export interface OpenPosition {
   direction: Direction;
   stopLoss: number;
   takeProfit: number | null;
+  /** Цена ликвидации (`liquidationPrice`); стоящая ближе стопа закрывает позицию раньше него. */
+  liqPrice?: number | null;
   entryTime: number;
 }
 

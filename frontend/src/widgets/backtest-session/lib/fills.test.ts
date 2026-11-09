@@ -54,6 +54,44 @@ describe('checkMinute', () => {
   });
 });
 
+describe('checkMinute — ликвидация', () => {
+  // Плечо 25: ликвидация лонга от 100 — на 96, стоп 98 ближе к цене; плечо 100 — на 99, дальше стопа.
+  const LONG_LIQ_FAR: Position = { ...LONG, liqPrice: 96 };
+  const LONG_LIQ_NEAR: Position = { ...LONG, liqPrice: 99 };
+  const SHORT_LIQ_NEAR: Position = { ...SHORT, liqPrice: 101 };
+
+  it('ликвидация ближе стопа — касание ликвидирует по её цене', () => {
+    expect(checkMinute(LONG_LIQ_NEAR, m(100, 101, 98.5, 99.5))).toMatchObject({ reason: 'liquidation', price: 99 });
+  });
+
+  it('стоп ближе ликвидации — срабатывает стоп, ликвидации нет', () => {
+    expect(checkMinute(LONG_LIQ_FAR, m(100, 101, 95, 96))).toMatchObject({ reason: 'stop', price: 98 });
+  });
+
+  // Изолированная маржа: убыток не больше маржи, поэтому гэп — по цене ликвидации, а не по открытию.
+  it('гэп за ликвидацией — по цене ликвидации, даже если стоп ближе', () => {
+    expect(checkMinute(LONG_LIQ_FAR, m(94, 95, 93, 94))).toMatchObject({ reason: 'liquidation', price: 96 });
+  });
+
+  it('ликвидация и тейк в одной минутке — ликвидация, как стоп', () => {
+    expect(checkMinute(LONG_LIQ_NEAR, m(100, 106, 98.9, 101))?.reason).toBe('liquidation');
+  });
+
+  it('ликвидация важнее лимита закрытия в той же минутке', () => {
+    const orders = [{ id: 'c1', price: 101, qty: 1, tradeId: 't' }];
+    expect(checkMinute(LONG_LIQ_NEAR, m(100, 101.5, 98.9, 100), orders)?.reason).toBe('liquidation');
+  });
+
+  it('шорт зеркально', () => {
+    expect(checkMinute(SHORT_LIQ_NEAR, m(100, 101.2, 99, 100))).toMatchObject({ reason: 'liquidation', price: 101 });
+    expect(checkMinute({ ...SHORT, liqPrice: 104 }, m(105, 106, 104.5, 105))).toMatchObject({ reason: 'liquidation', price: 104 });
+  });
+
+  it('ликвидацию не задело — как без неё', () => {
+    expect(checkMinute(LONG_LIQ_NEAR, m(100, 101, 99.5, 100))).toBeNull();
+  });
+});
+
 describe('checkMinute — лимит-ордера на закрытие', () => {
   const LONG_WIDE: Position = { direction: 'long', stopLoss: 90, takeProfit: 120 };
 

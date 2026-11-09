@@ -28,6 +28,7 @@ import {
 import { Button } from '@/shared/ui/Button';
 import { cn } from '@/shared/lib/utils/css';
 import { TOOL_KEYS, toolShortcut } from '../../lib/drawings/hotkeys';
+import { SPEEDS } from '../../lib/playback';
 import type { ToolId } from '../../lib/drawings/types';
 import { ChannelIcon, FibIcon, HRayIcon } from './FibIcon';
 
@@ -89,6 +90,12 @@ const GENERAL_KEYS = [
   ['Esc', 'cancel'],
 ] as const;
 
+/** Клавиши прокрутки бектеста — только там, где она есть (`useReplayKeys`). */
+const REPLAY_KEYS = [
+  [`1 … ${SPEEDS.length}`, 'speed'],
+  ['Space', 'pause'],
+] as const;
+
 /** Номер «группы» шпаргалки в общем состоянии открытого списка. */
 const KEYS_MENU = -1;
 
@@ -110,6 +117,7 @@ export function DrawingToolbar({
   onHidden,
   canClear,
   onClear,
+  replayKeys = false,
 }: {
   tool: ToolId | null;
   onTool: (tool: ToolId | null) => void;
@@ -119,6 +127,8 @@ export function DrawingToolbar({
   onHidden: (v: boolean) => void;
   canClear: boolean;
   onClear: () => void;
+  /** В шпаргалке — клавиши скорости и паузы: у прокрутки бектеста, не в эфире и не на бирже. */
+  replayKeys?: boolean;
 }) {
   const t = useTranslations('backtest.drawings');
   const [lastOf, setLastOf] = useState<Record<number, ToolId>>({});
@@ -237,6 +247,13 @@ export function DrawingToolbar({
                 <kbd className="draw-kbd">{key ?? t('keys.shiftClick')}</kbd>
               </div>
             ))}
+            {replayKeys &&
+              REPLAY_KEYS.map(([key, id]) => (
+                <div key={id} className="draw-keys-row">
+                  <span>{t(`keys.${id}`)}</span>
+                  <kbd className="draw-kbd">{key}</kbd>
+                </div>
+              ))}
           </div>
         )}
       </div>

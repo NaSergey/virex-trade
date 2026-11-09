@@ -25,6 +25,11 @@ export interface Position {
   direction: Direction;
   stopLoss: number;
   takeProfit: number | null;
+  /**
+   * Цена ликвидации (`liquidationPrice`): плечо, при котором она ближе стопа, закрывает
+   * позицию раньше него. Нет — ликвидация не проверяется.
+   */
+  liqPrice?: number | null;
 }
 
 export interface CloseOrder {
@@ -34,7 +39,7 @@ export interface CloseOrder {
 }
 
 export interface Exit {
-  reason: 'stop' | 'take' | 'limit';
+  reason: 'stop' | 'take' | 'limit' | 'liquidation';
   price: number;
   /** Только у 'limit' — частичный выход на объём ордера, а не весь остаток. */
   qty?: number;
@@ -52,11 +57,18 @@ export function checkMinute(p: Position, m: Bar, closeOrders: CloseOrder[] = [])
   const long = p.direction === 'long';
   const s = p.stopLoss;
   const tp = p.takeProfit;
+  const liq = p.liqPrice != null && p.liqPrice > 0 ? p.liqPrice : null;
 
+  // 0. Гэп за ликвидацией — по её цене, а не по открытию, даже если стоп ближе:
+  // маржа изолированная, и больше неё позиция потерять не может.
+  if (liq != null && (long ? m.o <= liq : m.o >= liq)) return { reason: 'liquidation', price: liq };
   // 1. Гэп за стопом — по открытию, то есть хуже стопа, как на бирже.
   if (long ? m.o <= s : m.o >= s) return { reason: 'stop', price: m.o };
   // 2. Гэп за тейком — по тейку: лучше заявленного тейк не исполняется.
   if (tp != null && (long ? m.o >= tp : m.o <= tp)) return { reason: 'take', price: tp };
+  // 2a. Касание ликвидации, стоящей ближе стопа: цена дошла до неё раньше. С тейком
+  // в той же минутке — ликвидация, как стоп: худшее.
+  if (liq != null && (long ? liq > s && m.l <= liq : liq < s && m.h >= liq)) return { reason: 'liquidation', price: liq };
   // 3 и 5. Касание стопа — стоп, даже если задет и тейк: порядок внутри отрезка
   // не восстановить, честнее предполагать худшее.
   if (long ? m.l <= s : m.h >= s) return { reason: 'stop', price: s };

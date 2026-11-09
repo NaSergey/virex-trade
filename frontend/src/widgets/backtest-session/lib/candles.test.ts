@@ -5,6 +5,7 @@ import {
   candlesPath,
   currentBucket,
   dayNumber,
+  firstFrom,
   lastPrice,
   loadedUntil,
   nextStop,
@@ -54,6 +55,19 @@ describe('aggregate', () => {
   it('берёт только минутки из [from, to)', () => {
     const out = aggregate(mins(at(11), 180), 60, at(12), at(13));
     expect(out.map((x) => x.t)).toEqual([at(12)]);
+  });
+});
+
+describe('firstFrom', () => {
+  const ts = [10, 20, 20, 30].map((t) => ({ t }));
+  it('первая не раньше from, равные — первая из них', () => {
+    expect(firstFrom(ts, 5)).toBe(0);
+    expect(firstFrom(ts, 20)).toBe(1);
+    expect(firstFrom(ts, 21)).toBe(3);
+  });
+  it('позже всех и пустой ряд — длина ряда', () => {
+    expect(firstFrom(ts, 31)).toBe(4);
+    expect(firstFrom([], 0)).toBe(0);
   });
 });
 

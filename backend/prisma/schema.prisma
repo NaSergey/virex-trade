@@ -535,7 +535,7 @@ model BacktestTrade {
   botId      String?
   exitTime   DateTime?
   exitPrice  Float?
-  exitReason String? // 'stop' | 'take' | 'manual' | 'finish' | 'limit'
+  exitReason String? // 'stop' | 'take' | 'manual' | 'finish' | 'limit' | 'liquidation'
   fee        Float?
   pnl        Float?
   r          Float?

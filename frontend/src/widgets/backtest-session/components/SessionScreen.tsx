@@ -63,6 +63,8 @@ import { useDefaultLeverage } from '../model/useDefaultLeverage';
 import { useDrawingTools } from '../model/useDrawingTools';
 import { SESSION_SOURCE, useLiveFeed, type LiveSource } from '../model/useLiveFeed';
 import { SPEEDS, useReplay } from '../model/useReplay';
+import { useReplayKeys } from '../model/useReplayKeys';
+import { allowedSpeed } from '../lib/playback';
 import { sessionSounds, useSnapshotSound, useTerminalSoundOn } from '../model/useTerminalSound';
 import { DrawingStyleBar } from './drawings/DrawingStyleBar';
 import { DrawingToolbar } from './drawings/DrawingToolbar';
@@ -474,6 +476,13 @@ export function Terminal({
   );
   const liveFeed = useLiveFeed(detail, isLive, symbol, source, paused, entryAnchors);
   const replay = isLive ? liveFeed : replayFeed;
+  // Клавиши — там же, где кнопки скорости: в эфире время ведут часы.
+  useReplayKeys({
+    enabled: !isLive && replay.ready && !replay.ended,
+    speed: replay.speed,
+    tf: replay.tf,
+    setSpeed: replay.setSpeed,
+  });
   // Рисунки — у каждой монеты свои: линия по цене ETH на графике BTC ничего не
   // значит. Ключ BTC прежний — рисунки, сделанные до монет, не теряются.
   const drawings = useDrawingTools(
@@ -1350,9 +1359,18 @@ export function Terminal({
   };
 
   const tfOptions: SegOption<number>[] = TIMEFRAMES.map((tf) => ({ value: tf, label: t(`tf.${tf}`) }));
+  // Скорость — свечей выбранного ТФ в секунду; чего ТФ не тянет — выключено, а не тихо медленнее.
   const speedOptions: SegOption<number>[] = [
-    { value: 0, label: t('pause') },
-    ...SPEEDS.map((s) => ({ value: s, label: `×${s}` })),
+    { value: 0, label: t('pause'), title: t('pauseHint') },
+    ...SPEEDS.map((s, i) => {
+      const on = allowedSpeed(s, replay.tf);
+      return {
+        value: s,
+        label: `×${s}`,
+        title: on ? t('speedHint', { n: s, key: i + 1 }) : t('speedTooFast'),
+        disabled: !on,
+      };
+    }),
   ];
 
   // Один переключатель на два места: строка шага и, на телефоне, над таблицей.
@@ -1429,6 +1447,7 @@ export function Terminal({
             </div>
             <div className="chart-tools">
               <DrawingToolbar
+                replayKeys={!isLive}
                 tool={drawings.tool}
                 onTool={drawings.setTool}
                 magnet={drawings.magnet}

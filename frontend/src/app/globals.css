@@ -2206,6 +2206,8 @@
   }
   .seg button:first-child { border-left: 0; }
   .seg button:hover { color: var(--ink); }
+  .seg button:disabled { opacity: 0.35; cursor: default; }
+  .seg button:disabled:hover { color: var(--ink-2); }
   /* Тумблер ТФ в колонке условий тянется на всю её ширину: он относится ко
      всей группе, а не к одному условию в ней, и короткий ряд кнопок посреди
      колонки читался бы как ещё одно условие. Деления равные — ни одно из пяти

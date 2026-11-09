@@ -8,6 +8,8 @@ export interface SegOption<T extends string | number> {
   value: T;
   label: string;
   title?: string;
+  /** Выбрать нельзя — например, скорость, которой таймфрейм не тянет. */
+  disabled?: boolean;
 }
 
 /**
@@ -39,6 +41,7 @@ function SegInner<T extends string | number>({
           key={opt.value}
           variant="none"
           title={opt.title}
+          disabled={opt.disabled}
           aria-pressed={value === opt.value}
           onClick={() => onChange(opt.value)}
         >

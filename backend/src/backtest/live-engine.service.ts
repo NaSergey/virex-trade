@@ -3,7 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { LiveMarketService } from '../market-data/live-market.service';
 import type { Candle } from '../market-data/market-data.service';
 import { PrismaService } from '../prisma/prisma.service';
-import type { Direction } from './backtest-math';
+import { liquidationPrice, type Direction } from './backtest-math';
 import { BacktestService } from './backtest.service';
 import { checkMinute, touchedEntries } from './fills';
 import { barForTrade, buildSegments, type Bar, type Segment, type Snapshot } from './live-segments';
@@ -157,6 +157,7 @@ export class LiveEngineService {
       direction: string;
       entryTime: Date;
       entryPrice: number;
+      leverage: number;
       stopLoss: number;
       takeProfit: number | null;
       closeOrders: { id: string; price: number; qty: number }[];
@@ -169,8 +170,14 @@ export class LiveEngineService {
     // Ограничение на число проходов — страховка от неожиданного зацикливания:
     // ордеров у сделки конечное число, и каждый проход снимает хотя бы один.
     for (let pass = 0; pass <= orders.length; pass++) {
+      const direction = trade.direction as Direction;
       const exit = checkMinute(
-        { direction: trade.direction as Direction, stopLoss: trade.stopLoss, takeProfit: trade.takeProfit },
+        {
+          direction,
+          stopLoss: trade.stopLoss,
+          takeProfit: trade.takeProfit,
+          liqPrice: liquidationPrice(direction, trade.entryPrice, trade.leverage),
+        },
         bar,
         orders,
       );
@@ -186,7 +193,7 @@ export class LiveEngineService {
       });
       // Сделку успели закрыть иначе — перечитается на следующем тике.
       if (!closed) return;
-      // Стоп и тейк закрывают позицию целиком: проверять дальше нечего.
+      // Стоп, тейк и ликвидация закрывают позицию целиком: проверять дальше нечего.
       if (exit.reason !== 'limit') return;
       orders = orders.filter((o) => o.id !== exit.closeOrderId);
     }

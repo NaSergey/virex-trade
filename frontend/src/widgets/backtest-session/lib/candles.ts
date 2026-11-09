@@ -57,12 +57,28 @@ export const currentBucket = (cursor: number, tf: number) => bucketStart(cursor 
 /** Куда ведёт «Шаг»: до закрытия текущей свечи таймфрейма, а если она уже закрыта — следующей. */
 export const nextStop = (cursor: number, tf: number) => bucketStart(cursor, tf) + tfMs(tf);
 
+/**
+ * Номер первой свечи с `t >= from` в отсортированном ряду (длина ряда — нет такой).
+ * Бинарным поиском: тики автопрокрутки обходят окно у самого момента, а минуток
+ * за ним — десятки тысяч, и перебор с начала шёл бы на каждом тике.
+ */
+export function firstFrom(candles: { t: number }[], from: number): number {
+  let lo = 0;
+  let hi = candles.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (candles[mid].t < from) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
 /** Сворачивает отсортированные минутки с from ≤ t < to в свечи таймфрейма. */
 export function aggregate(minutes: Candle[], tf: number, from: number, to: number): Candle[] {
   const out: Candle[] = [];
   let cur: Candle | null = null;
-  for (const m of minutes) {
-    if (m.t < from) continue;
+  for (let i = firstFrom(minutes, from); i < minutes.length; i++) {
+    const m = minutes[i];
     if (m.t >= to) break;
     const b = bucketStart(m.t, tf);
     if (!cur || cur.t !== b) {

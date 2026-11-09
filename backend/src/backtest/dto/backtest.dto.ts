@@ -178,7 +178,7 @@ export class CloseTradeDto {
   @IsPositive()
   exitPrice: number;
 
-  @IsIn(['stop', 'take', 'manual', 'finish', 'limit'])
+  @IsIn(['stop', 'take', 'manual', 'finish', 'limit', 'liquidation'])
   reason: ExitReason;
 
   @IsOptional()
