@@ -681,8 +681,8 @@ export function Machine({ config }: { config: SlotsConfig }) {
                 <span key={i} className="sl-bulb" style={{ ['--i' as string]: i }} />
               ))}
             </div>
-            <div className="sl-logo" data-text="LUCKY SEVENS">
-              LUCKY SEVENS
+            <div className="sl-logo" data-text="TO THE MOON">
+              TO THE MOON
             </div>
             <div className="sl-sub">
               {free ? t('free.left', { n: free.left, win: fmt(free.win) }) : t('subtitle')}

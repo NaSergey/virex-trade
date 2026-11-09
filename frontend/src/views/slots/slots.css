@@ -1398,20 +1398,242 @@
   opacity: 0.85;
 }
 
-/* ── Узкий экран: рычага нет, пульт в две строки ── */
-@media (max-width: 720px) {
-  .sl-page { padding: 4px 8px 16px; }
+/* ══ Крипто-тема (2026-11-09) ═══════════════════════════════════════
+   Под трейдеров: графитовый корпус с неоном вместо красного лака, тёмная
+   лента барабанов с сеткой графика, зелёный — «памп». Перекрывает базовые
+   цвета выше; раскладка и движение — те же. */
+.sl-root {
+  --neo: #3dffb0;
+  --neo-2: #9945ff;
+  --neo-3: #14f1c6;
+  --sl-gold: #3dffb0;
+  background: #04060b;
+}
+.sl-room {
+  background:
+    radial-gradient(ellipse 60% 45% at 50% 38%, rgb(153 69 255 / 0.3), transparent 70%),
+    radial-gradient(ellipse 80% 60% at 50% 110%, rgb(20 241 198 / 0.14), transparent 70%),
+    repeating-linear-gradient(0deg, transparent 0 47px, rgb(61 255 176 / 0.05) 47px 48px),
+    repeating-linear-gradient(90deg, transparent 0 47px, rgb(61 255 176 / 0.05) 47px 48px),
+    linear-gradient(180deg, #070b14, #03050a);
+}
+.sl-bokeh {
+  background:
+    radial-gradient(circle at 8% 22%, rgb(61 255 176 / 0.22) 0 22px, transparent 40px),
+    radial-gradient(circle at 18% 64%, rgb(153 69 255 / 0.25) 0 30px, transparent 52px),
+    radial-gradient(circle at 30% 12%, rgb(20 241 198 / 0.18) 0 16px, transparent 30px),
+    radial-gradient(circle at 74% 18%, rgb(255 159 28 / 0.2) 0 26px, transparent 46px),
+    radial-gradient(circle at 88% 52%, rgb(153 69 255 / 0.25) 0 34px, transparent 58px),
+    radial-gradient(circle at 92% 86%, rgb(61 255 176 / 0.18) 0 24px, transparent 44px),
+    radial-gradient(circle at 6% 92%, rgb(20 241 198 / 0.16) 0 28px, transparent 50px);
+}
+.sl-chip-btn { border-color: rgb(61 255 176 / 0.4); background: rgb(61 255 176 / 0.08); color: var(--neo); }
+.sl-chip-btn:hover { background: rgb(61 255 176 / 0.16); }
+.sl-cab {
+  background:
+    linear-gradient(90deg, rgb(255 255 255 / 0.06), transparent 12%, transparent 88%, rgb(0 0 0 / 0.4)),
+    linear-gradient(180deg, #171d2c 0%, #0b0f1a 45%, #05070d 100%);
+}
+.sl-marquee {
+  background: radial-gradient(ellipse 70% 120% at 50% 50%, #1c1040, #05060f 75%);
+  border-color: var(--neo-2);
+}
+.sl-bulb { --on: var(--neo); background: radial-gradient(circle at 35% 35%, #fff, var(--on) 45%, #0a5a3a 80%, #02160e); }
+.sl-bulbs-b .sl-bulb { --on: #c08bff; background: radial-gradient(circle at 35% 35%, #fff, var(--on) 45%, #4a1a9a 80%, #14052e); }
+@keyframes sl-chase {
+  0%, 30% { opacity: 1; filter: drop-shadow(0 0 4px var(--on, #3dffb0)); }
+  45%, 100% { opacity: 0.3; filter: none; }
+}
+@keyframes sl-blink {
+  from { opacity: 1; filter: drop-shadow(0 0 5px var(--on, #3dffb0)); }
+  to { opacity: 0.25; filter: none; }
+}
+.sl-logo { background: linear-gradient(180deg, #ffffff 0%, #c8fff0 28%, var(--neo) 50%, var(--neo-3) 62%, #7a3aff 100%); background-clip: text; -webkit-background-clip: text; }
+.sl-logo::before {
+  color: #140a30;
+  text-shadow:
+    1px 1px 0 #2a1060,
+    2px 2px 0 #22104e,
+    3px 3px 0 #1a0a3e,
+    4px 4px 0 #120630,
+    5px 5px 8px rgb(0 0 0 / 0.8),
+    0 0 28px rgb(61 255 176 / 0.45);
+}
+.sl-sub { color: #9ef5d8; }
+.sl-window { background: linear-gradient(180deg, #0a0f1c, #03050b 30%, #0a0f1c); }
+.sl-reels { background: #02040a; }
+.sl-reel {
+  background:
+    repeating-linear-gradient(0deg, transparent 0 calc(100% / 6 - 1px), rgb(61 255 176 / 0.07) calc(100% / 6 - 1px) calc(100% / 6)),
+    linear-gradient(180deg, #02040a 0%, #0c1426 18%, #16213a 50%, #0c1426 82%, #02040a 100%);
+}
+.sl-cell.is-win::before { background: radial-gradient(circle, rgb(61 255 176 / 0.75), rgb(20 241 198 / 0.25) 45%, transparent 70%); }
+.sl-cell.is-scatter::before { background: radial-gradient(circle, rgb(192 139 255 / 0.85), rgb(20 241 198 / 0.3) 45%, transparent 70%); }
+@keyframes sl-frame {
+  from { opacity: 0.4; border-color: var(--neo-2); }
+  to { opacity: 1; border-color: var(--neo); }
+}
+.sl-hotframe { border-color: var(--neo); background: linear-gradient(180deg, rgb(61 255 176 / 0.3), transparent 30%, transparent 70%, rgb(61 255 176 / 0.3)); }
+@keyframes sl-hot {
+  from { border-color: #c8fff0; opacity: 1; }
+  to { border-color: var(--neo-2); opacity: 0.55; }
+}
+.sl-reel[data-hot] { filter: drop-shadow(0 0 14px rgb(61 255 176 / 0.9)); }
+.sl-msg { color: #c8fff0; text-shadow: 0 0 10px rgb(61 255 176 / 0.6); }
+.sl-meter { background: linear-gradient(180deg, #010604, #04120c); border-color: #0f3a2a; }
+.sl-meter small { color: #5fbf9a; }
+.sl-meter b { color: var(--neo); text-shadow: 0 0 6px rgb(61 255 176 / 0.85), 0 0 18px rgb(61 255 176 / 0.35); }
+.sl-meter[data-hot] b { color: #fff6c8; text-shadow: 0 0 8px rgb(255 220 90 / 0.9), 0 0 24px rgb(255 180 40 / 0.6); }
+.sl-deck { background: linear-gradient(180deg, #121624, #070910); border-top-color: #2a2f45; }
+.sl-spin { background: conic-gradient(from 20deg, #fff, #8b929c, #fff, #5e6670, #fff, #8b929c, #fff); }
+.sl-spin-face {
+  background: radial-gradient(circle at 38% 28%, #d8fff0 0%, #19e08c 26%, #0a8a52 62%, #02301c 100%);
+  text-shadow: 0 2px 0 #04301c;
+}
+.sl-spin-ring { background: conic-gradient(from 0deg, transparent 0 70%, var(--neo) 85%, #fff 92%, transparent 100%); }
+.sl-lamp[data-on] {
+  color: #02160e;
+  background: linear-gradient(180deg, #d8fff0, var(--neo) 50%, #0a9a5a);
+  border-color: #d8fff0;
+  filter: drop-shadow(0 0 8px rgb(61 255 176 / 0.8));
+}
+.sl-lever-ball { background: radial-gradient(circle at 35% 30%, #efe0ff, #9945ff 32%, #4a1a9a 70%, #14052e); }
+.sl-legal { color: #6f7f95; }
+
+/* ══ Адаптивность ═══════════════════════════════════════════════════
+   Три раскладки:
+   - высокий экран (десктоп, планшет стоя): автомат столбцом, ширина
+     подобрана так, чтобы он целиком влезал по высоте;
+   - низкий и широкий (ноутбук 1280×800, 1366×768, телефон боком): барабаны
+     слева во всю высоту, табло и пульт — колонкой справа, вывески нет;
+   - телефон стоя: столбцом во всю ширину, без рычага и значков линий,
+     пульт одной строкой. */
+.sl-cab { --w: min(100%, 860px, calc((100dvh - var(--top-h-safe) - var(--tab-h, 0px) - 520px) * 1.6667 + 110px)); }
+
+@media (min-aspect-ratio: 13/10) and (max-height: 960px) {
+  .sl-page { padding-top: 0; }
+  .sl-top { min-height: 36px; margin-bottom: 6px; }
+  .sl-back { padding: 6px 0; }
+  .sl-chip-btn { min-height: 30px; }
+  /* Автомат по центру высоты: широкий экран упирает его в ширину, снизу оставалось пусто. */
+  .sl-stage { flex: 1; align-items: center; padding-bottom: 12px; }
+  .sl-cab {
+    --w: min(100% - 60px, 1320px, calc((100dvh - var(--top-h-safe) - 100px) * 1.6667 + 330px));
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 250px;
+    grid-template-rows: auto auto 1fr auto;
+    grid-template-areas: 'win msg' 'win meters' 'win deck' 'win legal';
+    column-gap: 14px;
+    align-items: start;
+  }
+  .sl-marquee { display: none; }
+  .sl-window { grid-area: win; }
+  .sl-msg { grid-area: msg; margin: 0 0 8px; min-height: 40px; display: grid; place-items: center; font-size: 13px; }
+  .sl-meters { grid-area: meters; grid-template-columns: 1fr; gap: 6px; }
+  .sl-deck {
+    grid-area: deck;
+    margin-top: 10px;
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 10px;
+    border-top: 0;
+  }
+  .sl-bet { justify-content: center; flex-wrap: wrap; }
+  .sl-toggles { justify-content: center; }
+  .sl-legal { grid-area: legal; margin-top: 6px; font-size: 10px; }
+  .sl-lever { margin-top: 40px; height: 220px; }
+  .sl-streak { right: auto; left: 22px; }
+}
+
+@media (max-width: 720px) and (max-aspect-ratio: 13/10) {
+  .sl-page { padding: 2px 8px 12px; }
+  .sl-top { min-height: 40px; margin-bottom: 4px; }
+  .sl-chip-btn { min-height: 34px; padding: 0 10px; font-size: 12px; }
   .sl-lever { display: none; }
-  .sl-cab { width: 100%; padding: 8px; }
-  .sl-window { grid-template-columns: 14px 1fr 14px; gap: 3px; padding: 6px 4px; }
-  .sl-badge { height: 12px; font-size: 7px; }
+  .sl-cab { width: 100%; padding: 8px 8px 10px; }
+  .sl-marquee { margin-bottom: 8px; padding: 0 6px 2px; }
+  .sl-bulb { width: 6px; height: 6px; }
+  .sl-bulbs { padding: 3px 2px; }
+  .sl-sub { font-size: 9px; letter-spacing: 0.14em; }
+  .sl-window { grid-template-columns: 1fr; padding: 5px; }
+  .sl-badges { display: none; }
   .sl-reels { gap: 3px; }
-  .sl-deck { grid-template-columns: 1fr auto; grid-template-areas: 'bet spin' 'tog spin'; gap: 8px; }
-  .sl-bet { grid-area: bet; flex-wrap: wrap; }
-  .sl-toggles { grid-area: tog; justify-content: flex-start; }
-  .sl-spin { grid-area: spin; width: 92px; height: 92px; }
+  .sl-msg { margin: 6px 0; font-size: 12px; min-height: 20px; line-height: 20px; }
+  .sl-meters { gap: 5px; }
+  .sl-meter { padding: 4px 4px 5px; }
+  .sl-meter small { font-size: 8px; letter-spacing: 0.1em; }
+  .sl-deck {
+    grid-template-columns: 1fr auto 1fr;
+    grid-template-areas: none;
+    gap: 6px;
+    margin-top: 8px;
+    padding: 8px 6px;
+  }
+  .sl-bet { flex-wrap: nowrap; gap: 2px; }
+  .sl-bet-v { min-width: 44px; }
+  .sl-bet-v b { font-size: 15px; }
+  .sl-key { min-width: 36px; height: 44px; font-size: 18px; }
+  .sl-key-wide { display: none; }
+  .sl-spin { width: 84px; height: 84px; padding: 6px; }
+  .sl-spin-face { font-size: 13px; }
+  .sl-spin-ico { width: 20px; height: 20px; }
+  .sl-toggles { flex-direction: column; align-items: flex-end; gap: 4px; }
+  .sl-lamp { min-width: 64px; min-height: 40px; padding: 0 8px; font-size: 10px; letter-spacing: 0.1em; }
+  .sl-legal { margin-top: 8px; font-size: 10px; }
   .sl-pt-grid { grid-template-columns: 1fr; }
-  .sl-meter small { font-size: 9px; letter-spacing: 0.1em; }
+  .sl-streak { top: -12px; right: 12px; font-size: 11px; padding: 4px 8px; }
+  .sl-big-amount { gap: 8px; }
+}
+/* Телефон боком: та же раскладка «барабаны слева», только теснее. */
+@media (min-aspect-ratio: 13/10) and (max-height: 500px) {
+  .sl-top { position: absolute; left: 12px; right: 12px; top: 0; width: auto; z-index: 6; min-height: 32px; pointer-events: none; }
+  .sl-top > * { pointer-events: auto; }
+  .sl-back { font-size: 12px; }
+  .sl-page { padding: 0 8px 6px; }
+  .sl-stage { padding-top: 34px; padding-bottom: 0; }
+  .sl-lever, .sl-legal, .sl-badges { display: none; }
+  .sl-window { grid-template-columns: 1fr; padding: 5px; }
+  .sl-cab {
+    --w: min(100%, calc((100dvh - var(--top-h-safe) - 64px) * 1.6667 + 230px));
+    grid-template-columns: minmax(0, 1fr) 200px;
+    padding: 8px;
+    column-gap: 10px;
+  }
+  .sl-msg { min-height: 24px; font-size: 11px; margin-bottom: 4px; }
+  .sl-meters { grid-template-columns: 1fr 1fr; gap: 4px; }
+  .sl-meters > :first-child { grid-column: 1 / -1; }
+  .sl-meter { padding: 2px 6px 3px; }
+  .sl-meter small { font-size: 8px; }
+  .sl-meter b { font-size: 14px; }
+  .sl-deck {
+    margin-top: 6px;
+    padding: 6px;
+    gap: 6px;
+    grid-template-columns: auto auto;
+    grid-template-areas: 'bet bet' 'spin tog';
+    align-items: center;
+  }
+  .sl-bet { grid-area: bet; }
+  .sl-spin { grid-area: spin; }
+  .sl-toggles { grid-area: tog; flex-direction: column; gap: 4px; }
+  .sl-key { min-width: 34px; height: 36px; }
+  .sl-key-wide { display: none; }
+  .sl-spin { width: 70px; height: 70px; padding: 5px; }
+  .sl-spin-face { font-size: 11px; }
+  .sl-spin-ico { width: 16px; height: 16px; }
+  .sl-lamp { min-width: 60px; min-height: 34px; font-size: 10px; }
+}
+
+/* Низкий телефон стоя (iPhone SE): без подписи вывески и строки внизу. */
+@media (max-width: 720px) and (max-aspect-ratio: 13/10) and (max-height: 640px) {
+  .sl-sub, .sl-legal { display: none; }
+  .sl-marquee { margin-bottom: 6px; }
+}
+
+@media (max-width: 380px) {
+  .sl-bet-v small { display: none; }
+  .sl-key { min-width: 32px; }
+  .sl-spin { width: 76px; height: 76px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1441,9 +1663,10 @@
   .sl-root .sl-cab {
     box-shadow:
       0 30px 60px rgb(0 0 0 / 0.7),
-      0 0 0 2px #6b3d00,
-      0 0 0 4px #e3b04a,
-      0 0 0 5px #6b3d00,
+      0 0 0 2px #1a0a3e,
+      0 0 0 4px #9945ff,
+      0 0 22px rgb(153 69 255 / 0.55),
+      0 0 0 5px #1a0a3e,
       inset 0 2px 0 rgb(255 255 255 / 0.25),
       inset 0 -6px 18px rgb(0 0 0 / 0.6) !important;
   }

@@ -3810,11 +3810,11 @@
   /* ── Сцена слотов на витрине (`SlotsScene`): три барабана встают на «777».
      Лента — HTML-слой, ход — `translate`; первый и последний символ ленты —
      семёрка, кадр 0 % и 100 % одинаковы, шва нет. ── */
-  .slsc { background: radial-gradient(ellipse 80% 60% at 50% 45%, #3a0614, #0a0306 70%); }
+  .slsc { background: radial-gradient(ellipse 80% 60% at 50% 45%, #1c1040, #04060b 70%); }
   .slsc-glow {
     position: absolute;
     inset: 15% 0 25%;
-    background: radial-gradient(ellipse 50% 45% at 50% 50%, rgb(255 180 50 / 0.45), transparent 70%);
+    background: radial-gradient(ellipse 50% 45% at 50% 50%, rgb(61 255 176 / 0.35), rgb(153 69 255 / 0.2) 45%, transparent 70%);
     animation: slsc-breathe 3s ease-in-out infinite;
   }
   @keyframes slsc-breathe { 50% { opacity: 0.55; } }
@@ -3824,8 +3824,8 @@
     right: 5%;
     top: 31%;
     padding: calc(14 * var(--u)) calc(12 * var(--u)) calc(16 * var(--u));
-    background: linear-gradient(115deg, rgb(255 255 255 / 0.14), transparent 30%), linear-gradient(180deg, #7a0a1c, #2a0208);
-    border: calc(4 * var(--u)) solid #c98a0c;
+    background: linear-gradient(115deg, rgb(255 255 255 / 0.1), transparent 30%), linear-gradient(180deg, #171d2c, #05070d);
+    border: calc(4 * var(--u)) solid #9945ff;
   }
   .slsc-lamps {
     display: flex;
@@ -3835,7 +3835,7 @@
   .slsc-lamps span {
     width: calc(11 * var(--u));
     height: calc(11 * var(--u));
-    background: radial-gradient(circle at 35% 35%, #fff, #ffe48a 40%, #b06d00 80%);
+    background: radial-gradient(circle at 35% 35%, #fff, #3dffb0 40%, #0a5a3a 80%);
     opacity: 0.3;
     animation: slsc-lamp 1.4s linear infinite;
     animation-delay: calc(var(--i) * -0.155s);
@@ -3858,7 +3858,7 @@
     position: relative;
     aspect-ratio: 1 / 1.2;
     overflow: hidden;
-    background: linear-gradient(180deg, #2a1a0c, #d9cdb4 18%, #fffaf0 50%, #d9cdb4 82%, #2a1a0c);
+    background: linear-gradient(180deg, #02040a, #0c1426 18%, #16213a 50%, #0c1426 82%, #02040a);
   }
   .slsc-reel::after {
     content: '';
@@ -3900,7 +3900,7 @@
     top: 50%;
     height: calc(5 * var(--u));
     translate: 0 -50%;
-    background: #ffd34a;
+    background: #3dffb0;
     opacity: 0;
     animation: slsc-line 5.2s linear infinite;
   }
