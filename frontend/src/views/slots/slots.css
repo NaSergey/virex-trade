@@ -1291,6 +1291,45 @@
   to { filter: drop-shadow(0 0 18px rgb(14 203 129 / 0.75)); }
 }
 
+/* ── Автомат: пять стеклянных колонок с переливающейся кромкой ──────
+   Каждый барабан — отдельная колонка с зазором, кромка — градиент
+   фиолетовый → бирюза (маской по краю, без рамки), средняя строка — светлее:
+   это линия 1. Монеты — объёмные (`SlotSymbols`). Во время спина кромки
+   разгораются. */
+.sl-reels {
+  gap: 8px;
+  padding: 8px;
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 50%, rgb(139 92 246 / 0.1), transparent 70%),
+    repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), rgb(132 142 156 / 0.05) calc(10% - 1px) 10%),
+    #07090d;
+}
+.sl-reel {
+  isolation: isolate;
+  background:
+    linear-gradient(180deg, transparent 33.2%, rgb(14 203 129 / 0.06) 33.4%, rgb(14 203 129 / 0.06) 66.6%, transparent 66.8%),
+    linear-gradient(180deg, rgb(28 33 44 / 0.95), rgb(14 17 23 / 0.55) 50%, rgb(28 33 44 / 0.95));
+}
+.sl-reel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  padding: 1.5px;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgb(139 92 246 / 0.85), rgb(20 241 198 / 0.4) 50%, rgb(139 92 246 / 0.85));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  opacity: 0.55;
+  transition: opacity 0.3s;
+}
+.sl-page[data-mode='spinning'] .sl-reel::before { opacity: 1; animation: sl-reelglow 0.5s ease-in-out infinite alternate; }
+@keyframes sl-reelglow { to { filter: brightness(1.6) drop-shadow(0 0 6px rgb(139 92 246 / 0.9)); } }
+.sl-cell > svg { width: 80%; height: 80%; }
+.sl-cyl { background: linear-gradient(180deg, rgb(7 9 13 / 0.9) 0%, transparent 16%, transparent 84%, rgb(7 9 13 / 0.9) 100%); }
+.sl-chartbg { inset: 6% 0; opacity: 0.16; }
+
 /* ══ Адаптивность ═══════════════════════════════════════════════════
    Широкий экран — график слева, ордер справа, история под графиком. До
    900 px — одна колонка: лента, пара, график, ордер, история. Телефон
@@ -1394,7 +1433,10 @@
 @layer base {
   .sl-root .sl-term { border-radius: 8px !important; overflow: clip; }
   .sl-root :is(.sl-spin, .sl-size-box, .sl-row-win, .sl-tool, .sl-chips button, .sl-order-tabs, .sl-reels) { border-radius: 6px !important; }
-  .sl-root :is(.sl-order-tabs button, .sl-badge, .sl-streak, .sl-cell::after, .sl-hotframe, .sl-pt-sym, .sl-back) { border-radius: 4px !important; }
+  .sl-root :is(.sl-order-tabs button, .sl-badge, .sl-streak, .sl-pt-sym, .sl-back) { border-radius: 4px !important; }
+  .sl-root :is(.sl-reel, .sl-reel::before, .sl-hotframe) { border-radius: 12px !important; }
+  .sl-root :is(.sl-cell::after) { border-radius: 10px !important; }
+  .sl-root .sl-reels { border-radius: 10px !important; }
   .sl-root .sl-live { border-radius: 50% !important; }
   .sl-root :is(.sl-pt-card, .sl-pt-row, .sl-big-glow) { border-radius: 8px !important; }
   .sl-root .sl-big-glow,

@@ -2,17 +2,17 @@ import { SlotDefs, symHref, type SlotSymbol } from '@/shared/ui/SlotSymbols';
 
 /**
  * Сцена слотов на витрине: три барабана в окне автомата крутятся и встают на
- * «777», лампы вывески бегут, под курсором — быстрее и с монетами.
+ * три биткоина, лампы вывески бегут, под курсором — быстрее и с монетами.
  *
  * Лента каждого барабана — HTML-слой с готовыми символами, двигается
  * `transform` (правило сцен витрины: внутри SVG ничего не анимируется).
  * Первый и последний символ ленты — семёрка, поэтому конец цикла совпадает
- * с началом, и шва нет; под reduced-motion сцена стоит на «777».
+ * с началом, и шва нет; под reduced-motion сцена стоит на трёх биткоинах.
  */
 const STRIPS: SlotSymbol[][] = [
-  ['seven', 'cherry', 'bar', 'lemon', 'diamond', 'plum', 'bell', 'grapes', 'seven'],
-  ['seven', 'plum', 'bell', 'cherry', 'wild', 'lemon', 'bar', 'diamond', 'seven'],
-  ['seven', 'grapes', 'diamond', 'bar', 'cherry', 'scatter', 'lemon', 'bell', 'seven'],
+  ['diamond', 'cherry', 'bar', 'lemon', 'seven', 'plum', 'bell', 'grapes', 'diamond'],
+  ['diamond', 'plum', 'bell', 'cherry', 'wild', 'lemon', 'bar', 'seven', 'diamond'],
+  ['diamond', 'grapes', 'seven', 'bar', 'cherry', 'scatter', 'lemon', 'bell', 'diamond'],
 ];
 
 export function SlotsScene() {

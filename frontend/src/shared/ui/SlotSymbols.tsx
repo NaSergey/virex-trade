@@ -1,3 +1,5 @@
+import { COIN_ICONS } from './coinIcons';
+
 /** Символы слотов. Тип живёт здесь, а не в `entities/slots`: рисунки нужны и карточке витрины. */
 export type SlotSymbol =
   | 'cherry'
@@ -19,11 +21,11 @@ export type SlotSymbol =
  * барабанов немного, но символ рисуется сложно (градиенты, блики, грани), и
  * держать его разметку в каждой клетке незачем.
  *
- * Набор — крипто (2026-11-09, для трейдеров): свечи «памп», монеты Ð, ₿ и
- * октаэдр, косые плашки, ракета, HODL, бриллиант («алмазные руки»), Луна (WILD),
- * аирдроп (скаттер). id остались прежними (`cherry` — свечи, `seven` — ₿ …):
- * сервер знает символы по ним, и правка картинки его не трогает.
- * Знаки — свои рисунки, не логотипы проектов.
+ * Набор — крипто (2026-11-09, для трейдеров): восемь обычных символов — настоящие
+ * монеты по ценности (DOGE, TRX, LTC, XRP, SOL, BNB, ETH, BTC — `coinIcons.ts`,
+ * CC0), плюс свои рисунки: Луна (WILD), аирдроп (скаттер), сейф и колесо.
+ * id остались прежними (`cherry` — DOGE, `diamond` — BTC …): сервер знает
+ * символы по ним, и правка картинки его не трогает.
  *
  * Свет у всех символов один — сверху слева: блик там, тень справа снизу.
  * Разный свет у соседних символов читался бы коллажем, а не одной лентой.
@@ -214,95 +216,27 @@ export function SlotDefs() {
           <stop offset="1" stopColor="#ff3b1f" stopOpacity="0" />
         </linearGradient>
 
-        {/* ── Свечи «памп»: красная, зелёная, зелёная выше ── */}
-        <symbol id="sl-s-cherry" viewBox="0 0 100 100">
-          <circle cx="50" cy="50" r="46" fill="url(#sl-g-halo)" />
-          <path d="M24 46 L24 82 M50 30 L50 84 M76 8 L76 70" stroke="#d8dde8" strokeWidth="2.4" />
-          <rect x="16" y="54" width="16" height="22" rx="2" fill="url(#sl-g-down)" />
-          <rect x="42" y="40" width="16" height="36" rx="2" fill="url(#sl-g-up)" />
-          <rect x="68" y="16" width="16" height="46" rx="2" fill="url(#sl-g-up)" />
-          <path d="M44 42 L44 72 M70 18 L70 58" stroke="#d0ffe9" strokeWidth="1.6" opacity="0.7" />
-          <path d="M14 92 L86 92" stroke="#3dffb0" strokeWidth="1.2" opacity="0.4" />
-        </symbol>
-
-        {/* ── Ð — монета мемов ── */}
-        <symbol id="sl-s-lemon" viewBox="0 0 100 100">
-          <ellipse cx="50" cy="92" rx="30" ry="4" fill="url(#sl-g-drop)" />
-          <circle cx="50" cy="50" r="40" fill="url(#sl-g-doge)" />
-          <circle cx="50" cy="50" r="34" fill="none" stroke="#7a5a00" strokeWidth="2.2" />
-          <text x="51" y="66" textAnchor="middle" fontFamily="Impact, 'Arial Black', system-ui, sans-serif" fontSize="46" fill="#5a4200" opacity="0.5">Ð</text>
-          <text x="49" y="64" textAnchor="middle" fontFamily="Impact, 'Arial Black', system-ui, sans-serif" fontSize="46" fill="#fff6cf" stroke="#8a6a00" strokeWidth="1">Ð</text>
-          <ellipse cx="36" cy="30" rx="12" ry="6" fill="url(#sl-g-shine)" transform="rotate(-35 36 30)" opacity="0.7" />
-        </symbol>
-
-        {/* ── Три косые плашки с переливом фиолетовый → бирюза ── */}
-        <symbol id="sl-s-plum" viewBox="0 0 100 100">
-          <circle cx="50" cy="50" r="46" fill="url(#sl-g-halo)" />
-          <path d="M26 24 L84 24 L74 36 L16 36 Z" fill="url(#sl-g-sol)" />
-          <path d="M16 44 L74 44 L84 56 L26 56 Z" fill="url(#sl-g-sol)" />
-          <path d="M26 64 L84 64 L74 76 L16 76 Z" fill="url(#sl-g-sol)" />
-          <path d="M28 26 L80 26 M28 66 L80 66" stroke="#fff" strokeWidth="1.2" opacity="0.6" />
-        </symbol>
-
-        {/* ── Ракета «на Луну» ── */}
-        <symbol id="sl-s-grapes" viewBox="0 0 100 100">
-          <circle cx="50" cy="50" r="46" fill="url(#sl-g-halo)" />
-          <g transform="rotate(35 50 50)">
-            <path d="M42 70 L58 70 L54 96 L46 96 Z" fill="url(#sl-g-flame)" />
-            <path d="M50 6 C64 18 66 40 62 70 L38 70 C34 40 36 18 50 6 Z" fill="url(#sl-g-chrome)" stroke="#2a2e34" strokeWidth="1.2" />
-            <path d="M38 52 L26 72 L38 70 Z M62 52 L74 72 L62 70 Z" fill="#ff3b5c" stroke="#5a0010" strokeWidth="1" />
-            <circle cx="50" cy="34" r="7" fill="#14b8ff" stroke="#2a2e34" strokeWidth="2" />
-            <circle cx="48" cy="32" r="2.4" fill="#fff" />
-            <path d="M44 14 C42 24 42 40 43 60" stroke="#fff" strokeWidth="2" opacity="0.6" fill="none" />
-          </g>
-        </symbol>
-
-        {/* ── Гранёный октаэдр ── */}
-        <symbol id="sl-s-bell" viewBox="0 0 100 100">
-          <ellipse cx="50" cy="94" rx="22" ry="3.5" fill="url(#sl-g-drop)" />
-          <circle cx="50" cy="50" r="46" fill="url(#sl-g-halo)" />
-          <polygon points="50,4 76,48 50,62" fill="url(#sl-g-eth-b)" />
-          <polygon points="50,4 24,48 50,62" fill="url(#sl-g-eth-a)" />
-          <polygon points="50,68 76,54 50,94" fill="url(#sl-g-eth-b)" />
-          <polygon points="50,68 24,54 50,94" fill="url(#sl-g-eth-a)" />
-          <polyline points="50,4 76,48 50,62 24,48 50,4" fill="none" stroke="#fff" strokeWidth="0.8" opacity="0.7" />
-        </symbol>
-
-        {/* ── HODL: плашка в хромовой рамке, неоновые буквы ── */}
-        <symbol id="sl-s-bar" viewBox="0 0 100 100">
-          <ellipse cx="50" cy="84" rx="40" ry="5" fill="url(#sl-g-drop)" />
-          <rect x="6" y="28" width="88" height="46" rx="6" fill="url(#sl-g-chrome)" />
-          <rect x="11" y="33" width="78" height="36" rx="3" fill="#06110c" />
-          <text x="50" y="62" textAnchor="middle" fontFamily="Impact, 'Arial Black', system-ui, sans-serif" fontWeight="900" fontSize="27" letterSpacing="2" fill="#3dffb0" stroke="#0a5a3a" strokeWidth="0.8">HODL</text>
-          <path d="M14 36 L86 36" stroke="#fff" strokeWidth="1.4" opacity="0.3" />
-        </symbol>
-
-        {/* ── ₿ — главная монета ── */}
-        <symbol id="sl-s-seven" viewBox="0 0 100 100">
-          <ellipse cx="50" cy="93" rx="32" ry="4" fill="url(#sl-g-drop)" />
-          <circle cx="50" cy="50" r="42" fill="url(#sl-g-btc)" />
-          <circle cx="50" cy="50" r="40" fill="none" stroke="#7a3a00" strokeWidth="3" strokeDasharray="2 2.2" />
-          <circle cx="50" cy="50" r="33" fill="none" stroke="#ffe2b0" strokeWidth="1.6" opacity="0.7" />
-          <text x="52" y="69" textAnchor="middle" fontFamily="Impact, 'Arial Black', system-ui, sans-serif" fontSize="50" fill="#6a2a00" opacity="0.55" transform="rotate(14 52 50)">₿</text>
-          <text x="50" y="67" textAnchor="middle" fontFamily="Impact, 'Arial Black', system-ui, sans-serif" fontSize="50" fill="#fff8ec" stroke="#a04a00" strokeWidth="1" transform="rotate(14 50 50)">₿</text>
-          <ellipse cx="34" cy="28" rx="14" ry="7" fill="url(#sl-g-shine)" transform="rotate(-35 34 28)" opacity="0.75" />
-        </symbol>
-
-        {/* ── Бриллиант: грани разным тоном, блик-звезда ── */}
-        <symbol id="sl-s-diamond" viewBox="0 0 100 100">
-          <ellipse cx="50" cy="94" rx="26" ry="4" fill="url(#sl-g-drop)" />
-          <polygon points="26,20 74,20 94,40 50,92 6,40" fill="url(#sl-g-gem-c)" />
-          <polygon points="26,20 50,20 38,40 6,40" fill="url(#sl-g-gem-a)" />
-          <polygon points="50,20 74,20 62,40 38,40" fill="#bdf2ff" />
-          <polygon points="74,20 94,40 62,40" fill="url(#sl-g-gem-b)" />
-          <polygon points="6,40 38,40 50,92" fill="url(#sl-g-gem-b)" />
-          <polygon points="38,40 62,40 50,92" fill="#6fd6ff" />
-          <polygon points="62,40 94,40 50,92" fill="url(#sl-g-gem-c)" />
-          <polyline points="26,20 74,20 94,40 50,92 6,40 26,20" fill="none" stroke="#e8fbff" strokeWidth="1.2" strokeLinejoin="round" />
-          <path d="M6 40 L94 40" stroke="#e8fbff" strokeWidth="0.8" opacity="0.7" />
-          <path d="M30 10 L32 18 L40 20 L32 22 L30 30 L28 22 L20 20 L28 18 Z" fill="#fff" />
-          <circle cx="30" cy="20" r="6" fill="url(#sl-g-shine)" />
-        </symbol>
+        {/* ── Монеты: настоящие знаки (`coinIcons.ts`) на объёмной монете — ребро
+             снизу, тень, блик сверху слева, светлая кромка. ── */}
+        <radialGradient id="sl-g-coinshade" cx="0.5" cy="0.3" r="0.75">
+          <stop offset="0.55" stopColor="#000" stopOpacity="0" />
+          <stop offset="1" stopColor="#000" stopOpacity="0.35" />
+        </radialGradient>
+        {Object.entries(COIN_ICONS).map(([id, c]) => (
+          <symbol key={id} id={`sl-s-${id}`} viewBox="0 0 100 100">
+            <ellipse cx="50" cy="93" rx="30" ry="4" fill="url(#sl-g-drop)" />
+            <circle cx="50" cy="53" r="40" fill={c!.edge} />
+            <g transform="translate(10 8) scale(2.5)">
+              <circle cx="16" cy="16" r="16" fill={c!.fill} />
+              {c!.paths.map((p, i) => (
+                <path key={i} d={p.d} fill="#fff" fillOpacity={p.o} fillRule={c!.rule} />
+              ))}
+            </g>
+            <circle cx="50" cy="48" r="40" fill="url(#sl-g-coinshade)" />
+            <circle cx="50" cy="48" r="38.6" fill="none" stroke="#fff" strokeOpacity="0.35" strokeWidth="1.4" />
+            <ellipse cx="34" cy="26" rx="17" ry="8" fill="url(#sl-g-shine)" opacity="0.4" transform="rotate(-35 34 26)" />
+          </symbol>
+        ))}
 
         {/* ── WILD: Луна с лентой ── */}
         <symbol id="sl-s-wild" viewBox="0 0 100 100">

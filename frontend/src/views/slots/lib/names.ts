@@ -2,14 +2,14 @@ import type { SlotSymbol } from '@/entities/slots';
 
 /** Тикер символа — как он подписан на ленте котировок и в истории. */
 export const TICKER: Record<SlotSymbol, string> = {
-  cherry: 'PUMP',
-  lemon: 'DOGE',
-  plum: 'SOL',
-  grapes: 'ROCKET',
-  bell: 'ETH',
-  bar: 'HODL',
-  seven: 'BTC',
-  diamond: 'GEM',
+  cherry: 'DOGE',
+  lemon: 'TRX',
+  plum: 'LTC',
+  grapes: 'XRP',
+  bell: 'SOL',
+  bar: 'BNB',
+  seven: 'ETH',
+  diamond: 'BTC',
   wild: 'MOON',
   scatter: 'AIRDROP',
   chest: 'VAULT',

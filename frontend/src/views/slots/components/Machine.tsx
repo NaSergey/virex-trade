@@ -675,10 +675,10 @@ export function Machine({ config }: { config: SlotsConfig }) {
           </Link>
           <div className="sl-pair-name">
             <svg viewBox="0 0 100 100" aria-hidden className="sl-pair-ico">
-              <use href="#sl-s-seven" />
+              <use href="#sl-s-diamond" />
             </svg>
             <div>
-              <b>MOON/COIN</b>
+              <b>BTC/MOON</b>
               <small>{free ? t('free.left', { n: free.left, win: fmt(free.win) }) : t('subtitle')}</small>
             </div>
           </div>
