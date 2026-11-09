@@ -35,6 +35,8 @@ const KINDS = new Set([
   'RACE_STAKE',
   'RACE_WIN',
   'RACE_REFUND',
+  'SLOTS_BET',
+  'SLOTS_WIN',
 ]);
 
 /**

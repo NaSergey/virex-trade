@@ -7,6 +7,7 @@ import { BlackjackScene } from './BlackjackScene';
 import { JetpackScene } from './JetpackScene';
 import { PokerScene } from './PokerScene';
 import { RaceScene } from './RaceScene';
+import { SlotsScene } from './SlotsScene';
 import { TradingScene } from './TradingScene';
 import type { Game, GameScene } from '../model/games';
 
@@ -21,6 +22,7 @@ const SCENES: Record<GameScene, ComponentType> = {
   blackjack: BlackjackScene,
   jetpack: JetpackScene,
   race: RaceScene,
+  slots: SlotsScene,
 };
 
 /**

@@ -11,13 +11,23 @@ import { JetpackModule } from './jetpack/jetpack.module';
 import { PokerModule } from './poker/poker.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RaceModule } from './race/race.module';
+import { SlotsModule } from './slots/slots.module';
 
 /**
  * Игры с состоянием в памяти процесса: столы покера и блэкджека, раунд
  * джетпака, гонки, их общий сокет и возврат прерванного на старте. Входят только в
- * граф роли игр (`runsGames`): здесь и в `AppModule` при `ROLE=all`.
+ * граф роли игр (`runsGames`): здесь и в `AppModule` при `ROLE=all`. Слоты
+ * состояния не держат и живут здесь потому, что их адрес — под `/api/games/*`,
+ * который Caddy и rewrites Next ведут в процесс игр.
  */
-export const GAME_MODULES = [GamesModule, PokerModule, BlackjackModule, JetpackModule, RaceModule];
+export const GAME_MODULES = [
+  GamesModule,
+  PokerModule,
+  BlackjackModule,
+  JetpackModule,
+  RaceModule,
+  SlotsModule,
+];
 
 /**
  * Корень процесса `ROLE=games` (спека `2026-10-02-games-role-design.md`).

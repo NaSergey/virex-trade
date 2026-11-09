@@ -1701,6 +1701,10 @@
       "race": {
         "title": "Racing",
         "description": "Three on the track, mines and falling pylons. The first at the finish takes the pot."
+      },
+      "slots": {
+        "title": "Slots",
+        "description": "Five reels, ten lines and a diamond jackpot."
       }
     },
     "promo": {
@@ -1849,7 +1853,9 @@
       "JETPACK_REFUND": "Jetpack bet refund",
       "RACE_STAKE": "Race stake",
       "RACE_WIN": "Race win",
-      "RACE_REFUND": "Race stake refund"
+      "RACE_REFUND": "Race stake refund",
+      "SLOTS_BET": "Slots bet",
+      "SLOTS_WIN": "Slots win"
     },
     "games": "Games",
     "colGame": "Game",
@@ -2367,5 +2373,41 @@
     "colT": "t-stat",
     "fT": "Reliability t",
     "tHint": "Weekly-return t-statistic: how far the profit is from luck. 2 is about a 1-in-40 chance; steady strategies score higher, lumpy ones lower."
+  },
+  "slots": {
+    "back": "Games",
+    "loading": "Powering up…",
+    "loadFailed": "Couldn't load slots",
+    "subtitle": "5 reels · 10 lines · played for coins",
+    "paytable": "Paytable",
+    "close": "Close",
+    "credit": "Credit",
+    "bet": "Bet",
+    "win": "Win",
+    "spin": "Spin",
+    "stop": "Stop",
+    "auto": "Auto",
+    "turbo": "Turbo",
+    "maxBet": "Max",
+    "betUp": "Raise bet",
+    "betDown": "Lower bet",
+    "noCoins": "Not enough coins for this bet",
+    "failed": "Spin failed",
+    "goodLuck": "Good luck!",
+    "placeBet": "Space or lever to spin",
+    "lineWin": "Line {line}: {n} in a row!",
+    "linesWin": "Win on {n} lines!",
+    "bonus": "Bonus: {n} crowns!",
+    "tapToContinue": "Tap to continue",
+    "legal": "Played for in-app coins. Account money is never involved.",
+    "wildInfo": "WILD substitutes for any symbol except the crown. Appears on reels 2–4 only.",
+    "scatterInfo": "The crown pays anywhere in the window, times the spin bet:",
+    "lines": "Lines",
+    "rules": "Lines pay left to right from the first reel. The best combination on each line pays, and line wins add up. Return to player — {rtp}%.",
+    "tier": {
+      "big": "BIG WIN",
+      "mega": "MEGA WIN",
+      "epic": "EPIC WIN"
+    }
   }
 }

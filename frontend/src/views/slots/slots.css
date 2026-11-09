@@ -1,0 +1,978 @@
+/* ═══════════════════════════════════════════════════════════════
+   СЛОТЫ (/games/slots) — автомат «Lucky Sevens».
+
+   Тёмный зал в обеих темах, как остальные экраны игр. Автомат — предмет:
+   лаковый корпус, хромовые кромки, вывеска с лампами, барабаны-цилиндры за
+   стеклом с бликом. Поэтому здесь — четвёртое исключение из нулевого радиуса
+   и теней продукта (стол, витрина, джетпак); оно в `@layer base`, как у них:
+   глобальный сброс стоит там с !important, и из обычного слоя проиграл бы.
+
+   Двигаются только transform и opacity узлов (ленты барабанов, лампы,
+   лучи), плюс холст частиц. Внутри SVG символов ничего не анимируется.
+   ═══════════════════════════════════════════════════════════════ */
+
+.sl-root {
+  --sl-gold: #ffd34a;
+  --sl-gold-2: #c98a0c;
+  --sl-red: #a3061c;
+  --sl-ink: #f6eedd;
+  --top-h-safe: var(--top-h, 48px);
+  position: relative;
+  min-height: calc(100dvh - var(--top-h-safe) - var(--tab-h, 0px));
+  background: #07040a;
+  color: var(--sl-ink);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* clip, а не hidden: hidden заводит область прокрутки, и огни зала за
+     краем давали ей что прокручивать — фокус и клики уводили автомат вбок. */
+  overflow: clip;
+  isolation: isolate;
+}
+.sl-root button { font-family: inherit; }
+
+.sl-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.sl-wait {
+  padding: 48px 16px;
+  text-align: center;
+  color: #a99f8c;
+}
+
+.sl-page {
+  position: relative;
+  min-height: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 16px 20px;
+}
+
+/* ── Зал: огни казино в расфокусе и прожектор над автоматом ── */
+.sl-room {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 60% 45% at 50% 38%, rgb(150 20 60 / 0.35), transparent 70%),
+    radial-gradient(ellipse 80% 60% at 50% 110%, rgb(255 170 40 / 0.12), transparent 70%),
+    linear-gradient(180deg, #0c0612, #050307);
+}
+.sl-bokeh {
+  position: absolute;
+  inset: -10%;
+  background:
+    radial-gradient(circle at 8% 22%, rgb(255 190 80 / 0.28) 0 22px, transparent 40px),
+    radial-gradient(circle at 18% 64%, rgb(255 60 120 / 0.22) 0 30px, transparent 52px),
+    radial-gradient(circle at 30% 12%, rgb(120 160 255 / 0.18) 0 16px, transparent 30px),
+    radial-gradient(circle at 74% 18%, rgb(255 210 120 / 0.25) 0 26px, transparent 46px),
+    radial-gradient(circle at 88% 52%, rgb(200 80 255 / 0.22) 0 34px, transparent 58px),
+    radial-gradient(circle at 92% 86%, rgb(255 120 60 / 0.2) 0 24px, transparent 44px),
+    radial-gradient(circle at 6% 92%, rgb(80 220 255 / 0.16) 0 28px, transparent 50px);
+  filter: blur(6px);
+  animation: sl-drift 26s ease-in-out infinite alternate;
+}
+.sl-bokeh-2 {
+  transform: scale(1.3) rotate(8deg);
+  opacity: 0.6;
+  animation-duration: 38s;
+  animation-direction: alternate-reverse;
+}
+@keyframes sl-drift {
+  from { translate: -2% -1%; }
+  to { translate: 2% 1.5%; }
+}
+.sl-spot {
+  position: absolute;
+  left: 50%;
+  top: -10%;
+  width: 90vmin;
+  height: 120%;
+  translate: -50% 0;
+  background: conic-gradient(from 180deg at 50% 0%, transparent 160deg, rgb(255 240 210 / 0.07) 172deg 188deg, transparent 200deg);
+  animation: sl-spot 6s ease-in-out infinite;
+}
+@keyframes sl-spot {
+  50% { opacity: 0.55; }
+}
+
+/* ── Верхняя строка ── */
+.sl-top {
+  width: min(100%, 1040px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  margin-bottom: 6px;
+}
+.sl-back {
+  color: #cbbfa6;
+  text-decoration: none;
+  font-size: 14px;
+  padding: 10px 0;
+}
+.sl-back:hover { color: #fff; }
+.sl-top-r {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sl-chip-btn {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid rgb(255 211 74 / 0.35);
+  background: rgb(255 211 74 / 0.08);
+  color: var(--sl-gold);
+  font-size: 13px;
+  cursor: pointer;
+}
+.sl-chip-btn:hover { background: rgb(255 211 74 / 0.16); }
+
+/* ── Сцена: автомат и рычаг ── */
+.sl-stage {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+}
+
+.sl-cab {
+  /* Автомат целиком в окне: всё, кроме барабанов, занимает ~560 px по
+     высоте, барабаны — 5 : 3, поля по бокам окна — ~110 px. */
+  --w: min(100%, 860px, calc((100dvh - var(--top-h-safe) - var(--tab-h, 0px) - 560px) * 1.6667 + 110px));
+  position: relative;
+  width: max(300px, var(--w));
+  padding: 14px 14px 12px;
+  background:
+    linear-gradient(90deg, rgb(255 255 255 / 0.08), transparent 12%, transparent 88%, rgb(0 0 0 / 0.35)),
+    linear-gradient(180deg, #7a0a1c 0%, #4a0410 40%, #2a0208 100%);
+}
+/* Лак: длинный мягкий блик сверху слева. */
+.sl-cab::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, rgb(255 255 255 / 0.14), transparent 28%, transparent 70%, rgb(255 255 255 / 0.05) 85%, transparent);
+}
+.sl-cab[data-shake] { animation: sl-shake 0.7s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+@keyframes sl-shake {
+  10%, 90% { translate: -2px 1px; }
+  20%, 80% { translate: 4px -2px; }
+  30%, 50%, 70% { translate: -7px 2px; rotate: -0.4deg; }
+  40%, 60% { translate: 7px -2px; rotate: 0.4deg; }
+}
+
+/* ── Вывеска ── */
+.sl-marquee {
+  position: relative;
+  text-align: center;
+  padding: 4px 8px 6px;
+  margin-bottom: 12px;
+  background:
+    radial-gradient(ellipse 70% 120% at 50% 50%, #3a0612, #12020a 75%),
+    #12020a;
+  border: 2px solid #c98a0c;
+  overflow: hidden;
+}
+.sl-bulbs {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 2px;
+}
+.sl-bulb {
+  --on: #fff2b0;
+  width: 10px;
+  height: 10px;
+  background: radial-gradient(circle at 35% 35%, #fff, var(--on) 40%, #b06d00 75%, #4a2a00);
+  opacity: 0.35;
+  animation: sl-chase var(--sl-chase, 1.6s) linear infinite;
+  animation-delay: calc(var(--i) * var(--sl-chase, 1.6s) / -11);
+}
+@keyframes sl-chase {
+  0%, 30% { opacity: 1; filter: drop-shadow(0 0 4px #ffd34a); }
+  45%, 100% { opacity: 0.3; filter: none; }
+}
+.sl-page[data-mode='spinning'] { --sl-chase: 0.45s; }
+.sl-page[data-mode='win'] .sl-bulb,
+.sl-page[data-mode='big'] .sl-bulb {
+  animation: sl-blink 0.24s steps(2, jump-none) infinite;
+  animation-delay: calc(var(--i) % 2 * -0.12s);
+}
+@keyframes sl-blink {
+  from { opacity: 1; filter: drop-shadow(0 0 5px #ffd34a); }
+  to { opacity: 0.25; filter: none; }
+}
+
+/* Объёмные буквы: стопка теней вниз и вправо — торец; поверх — золото с
+   переливом, который пробегает по надписи. */
+.sl-logo {
+  position: relative;
+  display: inline-block;
+  font: 900 clamp(24px, 4.6vw, 44px) / 1 Impact, 'Arial Black', system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  color: transparent;
+  background: linear-gradient(180deg, #fff6c8 0%, #ffd75a 30%, #c98a0c 52%, #ffe48a 60%, #8a5600 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  padding: 2px 4px;
+}
+.sl-logo::before {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  padding: inherit;
+  z-index: -1;
+  color: #3a1600;
+  text-shadow:
+    1px 1px 0 #5a2a00,
+    2px 2px 0 #4a2000,
+    3px 3px 0 #3a1600,
+    4px 4px 0 #2a0e00,
+    5px 5px 8px rgb(0 0 0 / 0.8),
+    0 0 26px rgb(255 160 40 / 0.45);
+}
+.sl-logo::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  padding: inherit;
+  color: transparent;
+  background: linear-gradient(105deg, transparent 40%, rgb(255 255 255 / 0.95) 50%, transparent 60%);
+  background-size: 250% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: sl-shimmer 3.4s ease-in-out infinite;
+}
+.sl-page[data-mode='win'] .sl-logo::after,
+.sl-page[data-mode='big'] .sl-logo::after { animation-duration: 0.9s; }
+@keyframes sl-shimmer {
+  0% { background-position: 150% 0; }
+  60%, 100% { background-position: -100% 0; }
+}
+.sl-sub {
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #e9c97a;
+  opacity: 0.8;
+  margin-top: 2px;
+}
+
+/* ── Окно барабанов ── */
+.sl-window {
+  position: relative;
+  display: grid;
+  grid-template-columns: 26px 1fr 26px;
+  gap: 6px;
+  padding: 10px 8px;
+  background: linear-gradient(180deg, #1a0308, #08010a 30%, #1a0308);
+}
+
+.sl-reels {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 5px;
+  aspect-ratio: 5 / 3;
+  background: #0a0306;
+}
+.sl-reel {
+  position: relative;
+  overflow: hidden;
+  /* Лента — бумага на цилиндре: светлее посередине, темнеет к краям окна. */
+  background: linear-gradient(180deg, #2a1a0c 0%, #c9b994 12%, #f7efdc 32%, #fffaf0 50%, #f7efdc 68%, #c9b994 88%, #2a1a0c 100%);
+}
+.sl-cell {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: calc(100% / 3);
+  will-change: transform;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sl-cell > svg {
+  width: 84%;
+  height: 84%;
+  overflow: visible;
+  transition: opacity 0.35s, filter 0.35s;
+}
+/* Тень цилиндра поверх символов: верх и низ окна уходят за изгиб. */
+.sl-cyl {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgb(0 0 0 / 0.72) 0%, rgb(0 0 0 / 0.18) 16%, transparent 30%, transparent 70%, rgb(0 0 0 / 0.18) 84%, rgb(0 0 0 / 0.72) 100%),
+    repeating-linear-gradient(90deg, transparent 0 calc(20% - 5px), rgb(0 0 0 / 0.5) calc(20% - 5px) 20%);
+}
+/* Стекло: косой блик и отражение лампы сверху. */
+.sl-glass {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(125deg, rgb(255 255 255 / 0.16) 0%, rgb(255 255 255 / 0.04) 22%, transparent 23%, transparent 60%, rgb(255 255 255 / 0.05) 61%, transparent 72%),
+    radial-gradient(ellipse 60% 14% at 50% 0%, rgb(255 255 255 / 0.18), transparent);
+}
+
+/* Удар об упор: светлая полоса проходит по барабану сверху вниз. */
+.sl-reel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(180deg, transparent 0%, rgb(255 255 255 / 0.65) 50%, transparent 100%);
+  background-size: 100% 40%;
+  background-repeat: no-repeat;
+}
+.sl-reel[data-land]::after { animation: sl-land 0.42s ease-out; }
+@keyframes sl-land {
+  0% { opacity: 1; background-position: 0 -60%; }
+  100% { opacity: 0; background-position: 0 160%; }
+}
+
+/* Предвкушение: барабан в золотой рамке, рамка дышит, лента светится. */
+.sl-hotframe {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  border: 3px solid var(--sl-gold);
+  background: linear-gradient(180deg, rgb(255 200 60 / 0.35), transparent 30%, transparent 70%, rgb(255 200 60 / 0.35));
+  transition: opacity 0.2s;
+}
+.sl-reel[data-hot] .sl-hotframe {
+  opacity: 1;
+  animation: sl-hot 0.32s ease-in-out infinite alternate;
+}
+.sl-reel[data-hot] { filter: drop-shadow(0 0 14px rgb(255 190 40 / 0.9)); z-index: 1; }
+@keyframes sl-hot {
+  from { border-color: #fff2b0; opacity: 1; }
+  to { border-color: #ff8a1f; opacity: 0.55; }
+}
+
+/* Выигрыш: остальные символы гаснут, выигравшие бьются и светятся. */
+.sl-reels[data-dim] .sl-cell:not(.is-win) > svg {
+  opacity: 0.32;
+  filter: grayscale(0.7) brightness(0.7);
+}
+.sl-cell.is-win::before {
+  content: '';
+  position: absolute;
+  inset: 4%;
+  background: radial-gradient(circle, rgb(255 215 90 / 0.85), rgb(255 150 30 / 0.3) 45%, transparent 70%);
+  animation: sl-glow 0.9s ease-in-out infinite alternate;
+}
+.sl-cell.is-win::after {
+  content: '';
+  position: absolute;
+  inset: 3%;
+  border: 3px solid var(--sl-gold);
+  animation: sl-frame 0.9s ease-in-out infinite alternate;
+}
+.sl-cell.is-win > svg {
+  position: relative;
+  animation: sl-pop 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) infinite alternate;
+}
+.sl-cell.is-scatter::before { background: radial-gradient(circle, rgb(120 220 255 / 0.85), rgb(160 80 255 / 0.35) 45%, transparent 70%); }
+.sl-cell.is-scatter > svg { animation-name: sl-pop-spin; }
+@keyframes sl-glow {
+  from { opacity: 0.35; scale: 0.9; }
+  to { opacity: 1; scale: 1.05; }
+}
+@keyframes sl-frame {
+  from { opacity: 0.4; border-color: #ff8a1f; }
+  to { opacity: 1; border-color: #fff2b0; }
+}
+@keyframes sl-pop {
+  from { scale: 1; }
+  to { scale: 1.14; }
+}
+@keyframes sl-pop-spin {
+  from { scale: 1; rotate: -6deg; }
+  to { scale: 1.18; rotate: 6deg; }
+}
+/* Скаттер встал — короткий удар. */
+.sl-cell[data-pop] > svg { animation: sl-land-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); }
+@keyframes sl-land-pop {
+  0% { scale: 1.45; filter: brightness(2); }
+  100% { scale: 1; filter: none; }
+}
+
+/* Линии выигрыша. */
+.sl-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+.sl-line,
+.sl-line-glow {
+  fill: none;
+  stroke: var(--c);
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.sl-line {
+  stroke-width: 6;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: sl-draw 0.45s ease-out forwards;
+}
+.sl-line-glow {
+  stroke-width: 20;
+  opacity: 0;
+  animation: sl-line-glow 0.9s ease-in-out 0.3s infinite alternate;
+}
+.sl-line-preview {
+  stroke-width: 4;
+  stroke-dasharray: 10 8;
+  stroke-dashoffset: 0;
+  opacity: 0.85;
+  animation: none;
+}
+@keyframes sl-draw { to { stroke-dashoffset: 0; } }
+@keyframes sl-line-glow {
+  from { opacity: 0.1; }
+  to { opacity: 0.38; }
+}
+
+/* Значки линий по краям. */
+.sl-badges {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+.sl-badge {
+  display: grid;
+  place-items: center;
+  height: 18px;
+  font: 700 10px/1 system-ui, sans-serif;
+  color: #1a0a00;
+  background: color-mix(in srgb, var(--c) 55%, #222);
+  opacity: 0.75;
+  cursor: default;
+  transition: opacity 0.2s, scale 0.2s;
+}
+.sl-badge:hover { opacity: 1; scale: 1.15; }
+.sl-badge[data-on] {
+  opacity: 1;
+  background: var(--c);
+  animation: sl-badge 0.45s ease-in-out infinite alternate;
+}
+@keyframes sl-badge {
+  to { scale: 1.2; filter: brightness(1.4) drop-shadow(0 0 6px var(--c)); }
+}
+
+/* ── Табло ── */
+.sl-msg {
+  margin: 10px 0 8px;
+  min-height: 22px;
+  text-align: center;
+  font: 700 14px/22px system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ffe9a8;
+  text-shadow: 0 0 10px rgb(255 190 40 / 0.6);
+}
+.sl-page[data-mode='win'] .sl-msg { animation: sl-msg 0.5s ease-in-out infinite alternate; }
+.sl-msg-err { color: #ff8a8a; text-shadow: none; animation: none; }
+@keyframes sl-msg { to { color: #fff; scale: 1.05; } }
+
+.sl-meters {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.sl-meter {
+  padding: 6px 10px 8px;
+  background: linear-gradient(180deg, #050102, #160308);
+  border: 2px solid #3a0a12;
+  text-align: center;
+}
+.sl-meter small {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #c7955a;
+}
+.sl-meter b {
+  display: block;
+  font: 700 clamp(16px, 2.6vw, 24px) / 1.2 var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  color: #ff5a3c;
+  text-shadow: 0 0 6px rgb(255 60 30 / 0.85), 0 0 18px rgb(255 60 30 / 0.4);
+}
+.sl-meter[data-hot] b {
+  color: #ffd34a;
+  text-shadow: 0 0 8px rgb(255 200 50 / 0.9), 0 0 24px rgb(255 160 30 / 0.6);
+  animation: sl-meter 0.3s ease-in-out infinite alternate;
+}
+@keyframes sl-meter { to { scale: 1.06; } }
+
+/* ── Пульт ── */
+.sl-deck {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px;
+  background: linear-gradient(180deg, #1c1c22, #0b0b0f);
+  border-top: 2px solid #5e6670;
+}
+.sl-bet {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.sl-bet-v {
+  min-width: 58px;
+  text-align: center;
+}
+.sl-bet-v small {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #9a8f7d;
+}
+.sl-bet-v b {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: 700 18px/1.3 var(--font-mono, ui-monospace, monospace);
+  color: #fff;
+}
+.sl-coin-i { width: 14px; height: 14px; }
+.sl-key {
+  min-width: 44px;
+  height: 44px;
+  font: 700 20px/1 system-ui, sans-serif;
+  color: #1a1a1a;
+  background: linear-gradient(180deg, #ffffff, #c9ced6 45%, #8b929c 55%, #d7dce2);
+  border: 1px solid #2a2e34;
+  cursor: pointer;
+  transition: translate 0.06s, filter 0.15s;
+}
+.sl-key-wide { padding: 0 8px; margin-left: 4px; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
+.sl-key:hover:not(:disabled) { filter: brightness(1.1); }
+.sl-key:active:not(:disabled) { translate: 0 2px; filter: brightness(0.9); }
+.sl-key:disabled { opacity: 0.4; cursor: default; }
+
+/* Кнопка спина — красный купол в хромовом кольце; пока крутится — «Стоп»,
+   вокруг бежит огонь. */
+.sl-spin {
+  position: relative;
+  width: 104px;
+  height: 104px;
+  padding: 7px;
+  border: 0;
+  cursor: pointer;
+  background: conic-gradient(from 20deg, #fff, #8b929c, #fff, #5e6670, #fff, #8b929c, #fff);
+  -webkit-tap-highlight-color: transparent;
+}
+.sl-spin-ring {
+  position: absolute;
+  inset: -6px;
+  background: conic-gradient(from 0deg, transparent 0 70%, #ffd34a 85%, #fff 92%, transparent 100%);
+  opacity: 0;
+  animation: sl-ring 0.8s linear infinite;
+  -webkit-mask: radial-gradient(closest-side, transparent 86%, #000 88%);
+  mask: radial-gradient(closest-side, transparent 86%, #000 88%);
+}
+.sl-spin[data-state='stop'] .sl-spin-ring { opacity: 1; }
+.sl-page[data-mode='idle'] .sl-spin-ring { opacity: 0.55; animation-duration: 2.4s; }
+@keyframes sl-ring { to { rotate: 360deg; } }
+.sl-spin-face {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+  font: 900 16px/1 Impact, 'Arial Black', system-ui, sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 2px 0 #5c000c;
+  background: radial-gradient(circle at 38% 28%, #ffb3b3 0%, #ff2a3c 26%, #b3001a 62%, #4a0008 100%);
+  transition: translate 0.08s, filter 0.2s;
+}
+.sl-spin-face::after {
+  content: '';
+  position: absolute;
+  left: 18%;
+  top: 8%;
+  width: 46%;
+  height: 26%;
+  background: radial-gradient(ellipse, rgb(255 255 255 / 0.75), transparent 70%);
+}
+.sl-spin-ico { width: 26px; height: 26px; }
+.sl-spin[data-state='stop'] .sl-spin-face {
+  background: radial-gradient(circle at 38% 28%, #fff1b3 0%, #ffb02a 26%, #c46a00 62%, #4a2600 100%);
+  text-shadow: 0 2px 0 #5a3200;
+}
+.sl-spin[data-state='stop'] .sl-spin-ico { animation: sl-ring 0.5s linear infinite; }
+.sl-spin:hover .sl-spin-face { filter: brightness(1.12); }
+.sl-spin:active .sl-spin-face { translate: 0 3px; filter: brightness(0.85); }
+.sl-page[data-mode='idle'] .sl-spin-face { animation: sl-breathe 1.6s ease-in-out infinite; }
+@keyframes sl-breathe { 50% { filter: brightness(1.18); } }
+
+.sl-toggles {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.sl-lamp {
+  min-width: 70px;
+  min-height: 44px;
+  padding: 0 12px;
+  font: 700 12px/1 system-ui, sans-serif;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #8a7c66;
+  background: linear-gradient(180deg, #2a2a30, #121216);
+  border: 2px solid #3a3a42;
+  cursor: pointer;
+}
+.sl-lamp[data-on] {
+  color: #1a0e00;
+  background: linear-gradient(180deg, #fff2b0, #ffc23a 50%, #d48a00);
+  border-color: #fff2b0;
+  filter: drop-shadow(0 0 8px rgb(255 190 40 / 0.8));
+}
+
+.sl-legal {
+  margin: 10px 0 0;
+  font-size: 11px;
+  text-align: center;
+  color: #a08a78;
+}
+
+/* ── Рычаг ── */
+.sl-lever {
+  position: relative;
+  width: 46px;
+  height: 260px;
+  margin: 140px 0 0 -2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: grab;
+  -webkit-tap-highlight-color: transparent;
+}
+.sl-lever-base {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 30px;
+  height: 70px;
+  background: linear-gradient(90deg, #3a4048, #d7dce2 40%, #ffffff 50%, #8b929c 70%, #3a4048);
+}
+.sl-lever-arm {
+  position: absolute;
+  left: 11px;
+  bottom: 40px;
+  width: 10px;
+  height: 200px;
+  transform-origin: 50% 100%;
+  background: linear-gradient(90deg, #5e6670, #ffffff 45%, #8b929c);
+}
+.sl-lever-ball {
+  position: absolute;
+  left: 50%;
+  top: -22px;
+  width: 44px;
+  height: 44px;
+  translate: -50% 0;
+  background: radial-gradient(circle at 35% 30%, #ffd0d0, #ff1a2e 30%, #9a0014 70%, #3a0006);
+}
+.sl-lever:hover .sl-lever-ball { filter: brightness(1.15); }
+/* Рывок: рычаг идёт вниз, перспективой «на зрителя», и пружинит обратно. */
+.sl-lever[data-pulled] .sl-lever-arm { animation: sl-pull 0.75s cubic-bezier(0.3, 0.7, 0.4, 1); }
+@keyframes sl-pull {
+  0% { transform: perspective(400px) rotateX(0); }
+  30% { transform: perspective(400px) rotateX(-160deg) scaleY(0.92); }
+  55% { transform: perspective(400px) rotateX(-150deg); }
+  80% { transform: perspective(400px) rotateX(12deg); }
+  100% { transform: perspective(400px) rotateX(0); }
+}
+
+/* ── Частицы и вспышка ── */
+.sl-fx {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 60;
+}
+.sl-page::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 55;
+  opacity: 0;
+  background: radial-gradient(circle at 50% 45%, rgb(255 240 200 / 0.75), rgb(255 180 60 / 0.25) 40%, transparent 70%);
+}
+.sl-page[data-flash]::after { animation: sl-flash 0.6s ease-out; }
+@keyframes sl-flash {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ── Крупный выигрыш ── */
+.sl-big {
+  position: fixed;
+  inset: 0;
+  z-index: 58;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 50%, rgb(60 10 30 / 0.55), rgb(0 0 0 / 0.85) 70%);
+  cursor: pointer;
+  animation: sl-fade 0.35s ease-out;
+}
+@keyframes sl-fade { from { opacity: 0; } }
+.sl-big-rays {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 180vmax;
+  height: 180vmax;
+  translate: -50% -50%;
+  background: repeating-conic-gradient(from 0deg, rgb(255 210 90 / 0.22) 0deg 7deg, transparent 7deg 18deg);
+  -webkit-mask: radial-gradient(circle, #000 0%, transparent 55%);
+  mask: radial-gradient(circle, #000 0%, transparent 55%);
+  animation: sl-ring 14s linear infinite;
+}
+.sl-big-rays-2 {
+  background: repeating-conic-gradient(from 5deg, rgb(255 120 200 / 0.12) 0deg 4deg, transparent 4deg 24deg);
+  animation-duration: 22s;
+  animation-direction: reverse;
+}
+.sl-big[data-tier='mega'] .sl-big-rays { background: repeating-conic-gradient(rgb(120 220 255 / 0.25) 0deg 7deg, transparent 7deg 18deg); }
+.sl-big[data-tier='epic'] .sl-big-rays { background: repeating-conic-gradient(rgb(220 120 255 / 0.3) 0deg 7deg, transparent 7deg 16deg); animation-duration: 8s; }
+.sl-big-glow {
+  position: absolute;
+  width: 70vmin;
+  height: 70vmin;
+  background: radial-gradient(circle, rgb(255 210 90 / 0.55), transparent 65%);
+  animation: sl-glow 0.8s ease-in-out infinite alternate;
+}
+.sl-big-body {
+  position: relative;
+  text-align: center;
+  padding: 16px;
+  animation: sl-big-in 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes sl-big-in {
+  0% { scale: 0.2; opacity: 0; rotate: -8deg; }
+  100% { scale: 1; opacity: 1; rotate: 0deg; }
+}
+.sl-big-title {
+  --sl-face: linear-gradient(180deg, #fffbe0 0%, #ffe066 28%, #e09a00 50%, #fff2b0 58%, #a86200 100%);
+  position: relative;
+  font: 900 clamp(40px, 10vw, 112px) / 0.95 Impact, 'Arial Black', system-ui, sans-serif;
+  letter-spacing: 0.02em;
+  /* Сам узел — торец букв; лицо — слой поверх. Наоборот нельзя: анимация
+     масштаба делает узел контекстом наложения, и слой с z-index −1 лёг бы
+     поверх его фона, то есть поверх золотых букв. */
+  color: #2a0e00;
+  text-shadow:
+    2px 2px 0 #4a2000,
+    4px 4px 0 #3a1600,
+    6px 6px 0 #2a0e00,
+    8px 8px 16px rgb(0 0 0 / 0.9),
+    0 0 50px rgb(255 170 40 / 0.7);
+  animation: sl-big-pulse 0.6s ease-in-out infinite alternate;
+}
+.sl-big[data-tier='mega'] .sl-big-title { --sl-face: linear-gradient(180deg, #f0ffff 0%, #8ff0ff 30%, #1b9bd8 52%, #d0f8ff 60%, #0a4f8a 100%); }
+.sl-big[data-tier='epic'] .sl-big-title { --sl-face: linear-gradient(180deg, #fff0ff 0%, #ff9cf0 30%, #a42ad8 52%, #ffd0ff 60%, #4a0a7a 100%); }
+.sl-big-title::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  color: transparent;
+  text-shadow: none;
+  background: var(--sl-face);
+  background-clip: text;
+  -webkit-background-clip: text;
+}
+@keyframes sl-big-pulse { to { scale: 1.06; } }
+.sl-big-amount {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+  font: 800 clamp(34px, 7vw, 76px) / 1 var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  text-shadow: 0 0 18px rgb(255 200 60 / 0.9), 0 4px 0 #7a4a00;
+}
+.sl-big-coin { width: 0.8em; height: 0.8em; color: #ffd34a; }
+.sl-big-hint {
+  margin-top: 22px;
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #e9d6aa;
+  animation: sl-breathe 1.4s ease-in-out infinite;
+  opacity: 0.8;
+}
+
+/* ── Таблица выплат ── */
+.sl-pt {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 0.72);
+  animation: sl-fade 0.2s ease-out;
+}
+.sl-pt-card {
+  width: min(680px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  padding: 18px 20px 20px;
+  background: linear-gradient(180deg, #2a0410, #12020a);
+  border: 2px solid #c98a0c;
+  color: var(--sl-ink);
+  animation: sl-big-in 0.35s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+.sl-pt-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.sl-pt-head h2,
+.sl-pt-card h3 {
+  margin: 0;
+  font: 900 22px/1.2 Impact, 'Arial Black', system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  color: var(--sl-gold);
+  text-transform: uppercase;
+  border: 0;
+}
+.sl-pt-card h3 { font-size: 16px; margin: 16px 0 8px; }
+.sl-pt-x {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: none;
+  color: #e9c97a;
+  font-size: 18px;
+  cursor: pointer;
+}
+.sl-pt-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+}
+.sl-pt-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  background: rgb(255 255 255 / 0.04);
+}
+.sl-pt-sym {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  background: linear-gradient(180deg, #d9cdb4, #fffaf0 50%, #d9cdb4);
+}
+.sl-pt-row dl { margin: 0; display: grid; gap: 2px; font-size: 13px; }
+.sl-pt-row dl > div { display: flex; gap: 10px; }
+.sl-pt-row dt { color: #c7955a; width: 22px; }
+.sl-pt-row dd { margin: 0; display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono, monospace); }
+.sl-pt-coin { width: 11px; height: 11px; }
+.sl-pt-row p { margin: 0; font-size: 13px; line-height: 1.45; color: #e2d6bd; }
+.sl-pt-special { display: grid; gap: 8px; margin-top: 8px; }
+.sl-pt-lines { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.sl-pt-line { width: 100%; }
+.sl-pt-cell { fill: rgb(255 255 255 / 0.08); }
+.sl-pt-note { margin: 14px 0 0; font-size: 12px; line-height: 1.5; color: #a99f8c; }
+
+/* ── Узкий экран: рычага нет, пульт в две строки ── */
+@media (max-width: 720px) {
+  .sl-page { padding: 4px 8px 16px; }
+  .sl-lever { display: none; }
+  .sl-cab { width: 100%; padding: 8px; }
+  .sl-window { grid-template-columns: 14px 1fr 14px; gap: 3px; padding: 6px 4px; }
+  .sl-badge { height: 12px; font-size: 7px; }
+  .sl-reels { gap: 3px; }
+  .sl-deck { grid-template-columns: 1fr auto; grid-template-areas: 'bet spin' 'tog spin'; gap: 8px; }
+  .sl-bet { grid-area: bet; flex-wrap: wrap; }
+  .sl-toggles { grid-area: tog; justify-content: flex-start; }
+  .sl-spin { grid-area: spin; width: 92px; height: 92px; }
+  .sl-pt-grid { grid-template-columns: 1fr; }
+  .sl-meter small { font-size: 9px; letter-spacing: 0.1em; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sl-bokeh, .sl-spot, .sl-logo::after { animation: none; }
+  .sl-cab[data-shake] { animation: none; }
+}
+
+/* ── Исключение из нулевого радиуса и теней — в слое base, иначе проигрывает
+   глобальному сбросу. ── */
+@layer base {
+  .sl-root :is(.sl-cab) { border-radius: 18px 18px 10px 10px !important; }
+  .sl-root .sl-marquee { border-radius: 60px 60px 8px 8px / 30px 30px 8px 8px !important; }
+  .sl-root :is(.sl-bulb, .sl-spin, .sl-spin-face, .sl-spin-ring, .sl-lever-ball) { border-radius: 50% !important; }
+  .sl-root :is(.sl-reel, .sl-window, .sl-meter, .sl-pt-card, .sl-pt-row, .sl-big-glow) { border-radius: 8px !important; }
+  .sl-root :is(.sl-key, .sl-lamp, .sl-chip-btn, .sl-badge, .sl-cell::after, .sl-hotframe, .sl-pt-sym) { border-radius: 6px !important; }
+  .sl-root :is(.sl-lever-arm) { border-radius: 5px !important; }
+  .sl-root .sl-lever-base { border-radius: 8px 8px 0 0 !important; }
+  .sl-root .sl-big-glow,
+  .sl-root .sl-cell.is-win::before { border-radius: 50% !important; }
+  .sl-root .sl-cab {
+    box-shadow:
+      0 30px 60px rgb(0 0 0 / 0.7),
+      0 0 0 2px #6b3d00,
+      0 0 0 4px #e3b04a,
+      0 0 0 5px #6b3d00,
+      inset 0 2px 0 rgb(255 255 255 / 0.25),
+      inset 0 -6px 18px rgb(0 0 0 / 0.6) !important;
+  }
+  .sl-root .sl-window {
+    box-shadow:
+      0 0 0 2px #3a4048,
+      0 0 0 5px #c9ced6,
+      0 0 0 6px #5e6670,
+      inset 0 6px 14px rgb(0 0 0 / 0.9) !important;
+  }
+  .sl-root .sl-reels { box-shadow: inset 0 8px 20px rgb(0 0 0 / 0.9) !important; }
+  .sl-root .sl-reel { box-shadow: inset 0 0 18px rgb(0 0 0 / 0.55) !important; }
+  .sl-root .sl-meter { box-shadow: inset 0 3px 10px rgb(0 0 0 / 0.9) !important; }
+  .sl-root .sl-spin { box-shadow: 0 8px 22px rgb(0 0 0 / 0.7), 0 0 30px rgb(255 40 60 / 0.35) !important; }
+  .sl-root .sl-spin-face { box-shadow: inset 0 -8px 16px rgb(0 0 0 / 0.5), inset 0 4px 10px rgb(255 255 255 / 0.3) !important; }
+  .sl-root .sl-key { box-shadow: 0 3px 0 #2a2e34, inset 0 1px 0 #fff !important; }
+  .sl-root .sl-key:active:not(:disabled) { box-shadow: 0 1px 0 #2a2e34 !important; }
+  .sl-root .sl-lamp { box-shadow: inset 0 2px 6px rgb(0 0 0 / 0.7) !important; }
+  .sl-root .sl-lever-ball { box-shadow: inset -4px -6px 10px rgb(0 0 0 / 0.5), 0 6px 14px rgb(0 0 0 / 0.6) !important; }
+  .sl-root .sl-marquee { box-shadow: inset 0 0 30px rgb(255 120 40 / 0.25) !important; }
+}

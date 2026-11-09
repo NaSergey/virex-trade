@@ -25,6 +25,7 @@ const ICONS: Record<Tab, LucideIcon> = {
 const isImmersive = (pathname: string) =>
   pathname === '/games/jetpack' ||
   pathname === '/games/race' ||
+  pathname === '/games/slots' ||
   /^\/games\/(poker|blackjack)\/[^/]+$/.test(pathname);
 
 /**
