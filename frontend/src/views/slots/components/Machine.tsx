@@ -5,7 +5,14 @@ import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useCoinBalance } from '@/entities/coins';
-import { useSlotsSpin, type SlotsConfig, type SlotsSpin, type SlotSymbol } from '@/entities/slots';
+import {
+  useSlotsSpin,
+  type SlotsBonus,
+  type SlotsConfig,
+  type SlotsLineWin,
+  type SlotsSpin,
+  type SlotSymbol,
+} from '@/entities/slots';
 import { audioContext } from '@/shared/lib/sound/player';
 import { useAudioChannel } from '@/shared/lib/sound/useAudioChannel';
 import { cn } from '@/shared/lib/utils/css';
@@ -16,7 +23,10 @@ import { countMs, fillerSymbol, randomGrid, stopPlan, tierOf, type StopPlan, typ
 import { Reel } from '../lib/reel';
 import * as sound from '../lib/sound';
 import { BigWin } from './BigWin';
+import { BonusSplash, type Splash } from './BonusSplash';
 import { Paytable } from './Paytable';
+import { PickBonus } from './PickBonus';
+import { WheelBonus } from './WheelBonus';
 import { LINE_COLORS, WinLines } from './WinLines';
 
 const REELS = 5;
@@ -24,7 +34,12 @@ const POOL = 5;
 const BULBS = 22;
 const fmt = (n: number) => Math.round(n).toLocaleString('ru-RU');
 
-type Phase = 'idle' | 'spinning' | 'present';
+type Phase = 'idle' | 'spinning' | 'present' | 'bonus';
+/** Бесплатные спины идут: осталось, сыграно, выигрыш бонуса. */
+type FreeState = { left: number; played: number; total: number; win: number; mult: number };
+/** Окно сундуков или колеса и обещание, которое оно закрывает. */
+type Overlay = { bonus: Extract<SlotsBonus, { kind: 'pick' | 'wheel' }>; done: () => void };
+const SPECIAL: SlotSymbol[] = ['scatter', 'chest', 'wheel'];
 type BigTier = Exclude<WinTier, 'none' | 'small' | 'nice'>;
 
 /** Перезапустить CSS-анимацию по атрибуту: снять, дать браузеру заметить, поставить. */
@@ -48,6 +63,11 @@ const reducedMotion = () =>
  * только проигрывает его — барабаны начинают крутиться сразу по нажатию, а
  * встают, когда ответ пришёл и прошло минимальное время раскрутки.
  *
+ * Спин — цепочка шагов с обещаниями: барабаны встали → показ выигрыша →
+ * бонусы по очереди (бесплатные спины крутят те же барабаны по полям из
+ * ответа, сундуки и колесо — свои окна) → итог. Все суммы уже начислены
+ * сервером одной транзакцией; экран их только досчитывает.
+ *
  * Всё, что двигается каждый кадр (ленты барабанов, счётчики, частицы), пишется
  * в DOM и на холст напрямую. Состояние React меняется только на событиях
  * спина: пуск, предвкушение, итог.
@@ -64,7 +84,11 @@ export function Machine({ config }: { config: SlotsConfig }) {
   const [auto, setAuto] = useState(false);
   const [phase, setPhase] = useState<Phase>('idle');
   const [hot, setHot] = useState(-1);
-  const [shown, setShown] = useState<SlotsSpin | null>(null);
+  const [shown, setShown] = useState<{ id: number; lines: SlotsLineWin[]; text: string } | null>(null);
+  const [splash, setSplash] = useState<Splash | null>(null);
+  const [overlay, setOverlay] = useState<Overlay | null>(null);
+  const [free, setFree] = useState<FreeState | null>(null);
+  const [bonusTone, setBonusTone] = useState<'free' | 'pick' | 'wheel' | null>(null);
   const [tier, setTier] = useState<WinTier>('none');
   const [cycling, setCycling] = useState(false);
   const [big, setBig] = useState<{ tier: BigTier; win: number } | null>(null);
@@ -95,6 +119,9 @@ export function Machine({ config }: { config: SlotsConfig }) {
   const timers = useRef<number[]>([]);
   const lastGrid = useRef<SlotSymbol[][] | null>(null);
   const credit = useRef<number | null>(null);
+  /** Выигрыш спина, накопленный на табло: базовый и все бонусы. */
+  const won = useRef(0);
+  const shownId = useRef(0);
   const audible = useRef(sfx.audible);
   const bigDone = useRef<() => void>(() => {});
 
@@ -165,6 +192,18 @@ export function Machine({ config }: { config: SlotsConfig }) {
     raf.current = requestAnimationFrame(step);
   }, []);
 
+  const wait = (ms: number) => new Promise<void>((r) => later(r, ms));
+  const showSplash = (sp: Omit<Splash, 'onDone'>) =>
+    new Promise<void>((r) =>
+      setSplash({
+        ...sp,
+        onDone: () => {
+          setSplash(null);
+          r();
+        },
+      }),
+    );
+
   /** Снять подсветку прошлого выигрыша. */
   const clearWin = () => {
     reelsBox.current?.removeAttribute('data-dim');
@@ -172,55 +211,73 @@ export function Machine({ config }: { config: SlotsConfig }) {
     setShown(null);
     setTier('none');
     setCycling(false);
-    if (winMeter.current) winMeter.current.textContent = '0';
   };
 
-  const finish = (res: SlotsSpin | null) => {
-    presenting.current = null;
-    busy.current = false;
-    setPhase('idle');
-    setCycling(true);
-    setCredit(null);
-    if (res && winMeter.current) winMeter.current.textContent = fmt(res.win);
-    void qc.invalidateQueries({ queryKey: ['coins'] });
-    if (autoRef.current) later(() => autoRef.current && spinRef.current(), turboRef.current ? 250 : 700);
-  };
+  /** Досчитать `amount` на табло выигрыша и кредита за `ms`. Пропуск — сразу до конца. */
+  const countUp = (amount: number, ms: number) =>
+    new Promise<void>((resolve) => {
+      const meter = winMeter.current;
+      const from = credit.current ?? 0;
+      const wonFrom = won.current;
+      won.current += amount;
+      credit.current = from + amount;
+      const t0 = performance.now();
+      let lastTick = 0;
+      let stopped = false;
+      const done = () => {
+        if (stopped) return;
+        stopped = true;
+        if (meter) meter.textContent = fmt(won.current);
+        if (creditMeter.current) creditMeter.current.textContent = fmt(from + amount);
+        presenting.current = null;
+        resolve();
+      };
+      presenting.current = done;
+      const step = (now: number) => {
+        if (stopped) return;
+        const u = ms > 0 ? Math.min(1, (now - t0) / ms) : 1;
+        const e = 1 - (1 - u) ** 2;
+        if (meter) meter.textContent = fmt(wonFrom + amount * e);
+        if (creditMeter.current) creditMeter.current.textContent = fmt(from + amount * e);
+        if (now - lastTick > 75 && u < 1) {
+          lastTick = now;
+          if (audible.current) sound.countTick(u);
+          if (audible.current && Math.random() < 0.4) sound.coin();
+        }
+        if (u < 1) requestAnimationFrame(step);
+        else done();
+      };
+      requestAnimationFrame(step);
+    });
 
-  /** Показ итога: подсветка, линии, частицы, счёт. */
-  const present = (res: SlotsSpin) => {
-    const tr = tierOf(res.win, res.bet);
-    lastGrid.current = res.grid;
-    if (tr === 'none') {
-      finish(null);
-      return;
-    }
-    setPhase('present');
-    setShown(res);
+  /**
+   * Показ выигрыша поля: подсветка линий и символов бонуса, частицы, счёт.
+   * Крупный — ещё и свой экран. Без выигрыша и без бонуса — сразу.
+   */
+  const presentWin = async (grid: SlotSymbol[][], lines: SlotsLineWin[], win: number, triggers: SlotSymbol[]) => {
+    const tr = tierOf(win, bet);
+    if (tr === 'none' && !triggers.length) return;
     setTier(tr);
     const f = fx.current;
-    const box = reelsBox.current;
-    box?.setAttribute('data-dim', '');
+    reelsBox.current?.setAttribute('data-dim', '');
 
     const cells = new Map<string, HTMLElement>();
-    for (const w of res.lines) {
+    for (const w of lines) {
       const rows = config.paylines[w.line];
       for (let r = 0; r < w.count; r++) {
         const el = reels.current[r].cellAt(rows[r]);
         if (el) cells.set(`${r}:${rows[r]}`, el);
       }
     }
-    if (res.scatterWin > 0) {
-      res.grid.forEach((col, r) =>
-        col.forEach((s, row) => {
-          if (s !== 'scatter') return;
-          const el = reels.current[r].cellAt(row);
-          if (el) {
-            el.classList.add('is-scatter');
-            cells.set(`${r}:${row}`, el);
-          }
-        }),
-      );
-    }
+    grid.forEach((col, r) =>
+      col.forEach((s, row) => {
+        if (!triggers.includes(s)) return;
+        const el = reels.current[r].cellAt(row);
+        if (!el) return;
+        el.classList.add('is-scatter');
+        cells.set(`${r}:${row}`, el);
+      }),
+    );
     let i = 0;
     for (const el of cells.values()) {
       el.classList.add('is-win');
@@ -231,74 +288,72 @@ export function Machine({ config }: { config: SlotsConfig }) {
         f?.burst(c.x, c.y, tr === 'small' ? 6 : 12, 260);
       }, delay);
     }
+    const id = ++shownId.current;
+    setShown({
+      id,
+      lines,
+      text:
+        lines.length === 0
+          ? ''
+          : lines.length === 1
+            ? t('lineWin', { line: lines[0].line + 1, n: lines[0].count })
+            : t('linesWin', { n: lines.length }),
+    });
 
-    if (sfx.audible) sound.winChime({ none: 0, small: 3, nice: 5, big: 6, mega: 7, epic: 8 }[tr]);
+    if (tr === 'none') {
+      if (audible.current) sound.bonusStart();
+      kick(page.current, 'data-flash');
+      await wait(1300);
+      return;
+    }
+    setPhase((p) => (p === 'bonus' ? p : 'present'));
+    if (audible.current) sound.winChime({ none: 0, small: 3, nice: 5, big: 6, mega: 7, epic: 8 }[tr]);
     const meter = winMeter.current;
     if (meter && f) {
       const m = centerOf(meter);
-      const n = { none: 0, small: 8, nice: 26, big: 50, mega: 70, epic: 90 }[tr];
-      f.fountain(m.x, m.y, n, tr === 'small' ? 0.7 : 1);
+      f.fountain(m.x, m.y, { none: 0, small: 8, nice: 26, big: 50, mega: 70, epic: 90 }[tr], tr === 'small' ? 0.7 : 1);
     }
-    if (tr === 'big' || tr === 'mega' || tr === 'epic') {
+    const isBig = tr === 'big' || tr === 'mega' || tr === 'epic';
+    if (isBig) {
       if (!reducedMotion()) kick(cab.current, 'data-shake');
       kick(page.current, 'data-flash');
+      await wait(450);
+      await new Promise<void>((r) => {
+        bigDone.current = () => {
+          setBig(null);
+          r();
+        };
+        setBig({ tier: tr as BigTier, win });
+      });
+      await countUp(win, 0);
+      return;
     }
-
-    // Счёт выигрыша и кредита — вместе: монеты переливаются из одного в другое.
-    const dur = countMs(tr) * (turboRef.current ? 0.5 : 1);
-    const from = credit.current ?? 0;
-    const t0 = performance.now();
-    let lastTick = 0;
-    let stopped = false;
-    const done = () => {
-      if (stopped) return;
-      stopped = true;
-      if (meter) meter.textContent = fmt(res.win);
-      setCredit(from + res.win);
-    };
-    const step = (now: number) => {
-      if (stopped) return;
-      const u = Math.min(1, (now - t0) / dur);
-      const e = 1 - (1 - u) ** 2;
-      if (meter) meter.textContent = fmt(res.win * e);
-      if (creditMeter.current) creditMeter.current.textContent = fmt(from + res.win * e);
-      if (now - lastTick > 75 && u < 1) {
-        lastTick = now;
-        if (audible.current) sound.countTick(u);
-        if (audible.current && Math.random() < 0.4) sound.coin();
-      }
-      if (u < 1) requestAnimationFrame(step);
-      else done();
-    };
-    const isBig = tr === 'big' || tr === 'mega' || tr === 'epic';
-    if (!isBig) requestAnimationFrame(step);
-
-    // Крупный — свой экран со своим счётом; автомат ждёт, пока его закроют.
-    if (isBig) later(() => setBig({ tier: tr as BigTier, win: res.win }), 450);
-    else later(() => presenting.current === skip && finish(res), dur + 250);
-
-    const skip = () => {
-      done();
-      finish(res);
-    };
-    presenting.current = skip;
-    if (isBig) bigDone.current = () => {
-      done();
-      setBig(null);
-      finish(res);
-    };
+    await countUp(win, countMs(tr) * (turboRef.current ? 0.5 : 1));
+    if (triggers.length) await wait(600);
   };
 
-  const onLand = (i: number, res: SlotsSpin, plan: StopPlan) => {
+  /** Символы бонусов, что сработали на этом поле. */
+  const triggersOf = (grid: SlotSymbol[][], scatters: number): SlotSymbol[] => {
+    const on = (s: SlotSymbol) => [0, 2, 4].every((r) => grid[r].includes(s));
+    return [...(scatters >= 3 ? (['scatter'] as const) : []), ...(on('chest') ? (['chest'] as const) : []), ...(on('wheel') ? (['wheel'] as const) : [])];
+  };
+
+  const onLand = (i: number, grid: SlotSymbol[][], plan: StopPlan, landed: () => void) => {
     if (audible.current) sound.reelStop(i);
-    const reel = reelEls.current[i];
-    kick(reel, 'data-land');
-    const scattersSoFar = res.grid.slice(0, i + 1).flat().filter((s) => s === 'scatter').length;
-    const here = res.grid[i].filter((s) => s === 'scatter').length;
-    if (here > 0) {
-      if (audible.current) sound.scatterLand(scattersSoFar);
-      res.grid[i].forEach((s, row) => {
-        if (s !== 'scatter') return;
+    kick(reelEls.current[i], 'data-land');
+    for (const sym of SPECIAL) {
+      const here = grid[i].filter((s) => s === sym).length;
+      if (!here) continue;
+      // Сундук и колесо считаются только на барабанах 1, 3 и 5.
+      if (sym !== 'scatter' && i % 2) continue;
+      const soFar = grid
+        .slice(0, i + 1)
+        .filter((_, r) => sym === 'scatter' || r % 2 === 0)
+        .flat()
+        .filter((s) => s === sym).length;
+      if (audible.current) sound.scatterLand(soFar);
+      grid[i].forEach((s, row) => {
+        if (s !== sym) return;
         const el = reels.current[i].cellAt(row);
         if (!el) return;
         kick(el, 'data-pop');
@@ -312,32 +367,11 @@ export function Machine({ config }: { config: SlotsConfig }) {
     } else if (i < REELS - 1) setHot(-1);
     if (i === REELS - 1) {
       setHot(-1);
-      later(() => present(res), 300);
+      later(landed, 300);
     }
   };
 
-  /** Спин. Во время спина — ускорить остановку, во время показа — досчитать и крутить снова. */
-  const doSpin = () => {
-    if (big) return;
-    if (busy.current) {
-      if (presenting.current) presenting.current();
-      else {
-        const now = performance.now();
-        reels.current.forEach((r) => r.hurry(now));
-        return;
-      }
-    }
-    if (balance !== null && balance < bet) {
-      setError(t('noCoins'));
-      setAuto(false);
-      return;
-    }
-    busy.current = true;
-    setError(null);
-    clearWin();
-    setPhase('spinning');
-    setPulled((n) => n + 1);
-    setCredit((credit.current ?? balance ?? 0) - bet);
+  const startReels = () => {
     if (audible.current) {
       sound.spinStart();
       hum.current?.stop();
@@ -347,25 +381,142 @@ export function Machine({ config }: { config: SlotsConfig }) {
     const speed = turboRef.current ? 34 : 24;
     reels.current.forEach((r, i) => r.start(t0 + i * (turboRef.current ? 20 : 55), speed));
     loop();
+    return t0;
+  };
 
-    const minSpin = turboRef.current ? 380 : 950;
+  const stopReels = (grid: SlotSymbol[][], notBefore: number) =>
+    new Promise<void>((resolve) => {
+      const plan = stopPlan(grid, turboRef.current);
+      const base = Math.max(performance.now() + 60, notBefore);
+      reels.current.forEach((r, i) => {
+        r.onLand = () => onLand(i, grid, plan, resolve);
+        r.stop(grid[i], base + plan.at[i]);
+      });
+    });
+
+  /** Бесплатные спины: те же барабаны по полям из ответа, свой свет и счётчик. */
+  const playFree = async (b: Extract<SlotsBonus, { kind: 'free' }>) => {
+    if (audible.current) sound.bonusStart();
+    await showSplash({
+      kind: 'intro',
+      tone: 'free',
+      title: t('free.title'),
+      sub: t('free.sub', { n: b.awarded, x: b.mult }),
+      autoMs: autoRef.current ? 2400 : 7000,
+    });
+    setBonusTone('free');
+    let left = b.awarded;
+    let total = b.awarded;
+    let bonusWin = 0;
+    setFree({ left, played: 0, total, win: 0, mult: b.mult });
+    for (const [k, s] of b.spins.entries()) {
+      clearWin();
+      left--;
+      setFree({ left, played: k + 1, total, win: bonusWin, mult: b.mult });
+      const t0 = startReels();
+      await stopReels(s.grid, t0 + (turboRef.current ? 320 : 650));
+      lastGrid.current = s.grid;
+      await presentWin(s.grid, s.lines, s.win, s.added ? ['scatter'] : []);
+      bonusWin += s.win;
+      if (s.added) {
+        left += s.added;
+        total += s.added;
+        setSplash({ kind: 'toast', tone: 'free', title: t('free.more', { n: s.added }), autoMs: 1800, onDone: () => setSplash(null) });
+      }
+      setFree({ left, played: k + 1, total, win: bonusWin, mult: b.mult });
+      await wait(turboRef.current ? 150 : 450);
+    }
+    clearWin();
+    await showSplash({
+      kind: 'total',
+      tone: 'free',
+      title: t('free.total'),
+      sub: t('free.played', { n: b.spins.length }),
+      amount: b.win,
+      autoMs: autoRef.current ? 3000 : 8000,
+    });
+    setFree(null);
+    setBonusTone(null);
+  };
+
+  /** Сундуки и колесо: заставка, своё окно, потом сумма на табло. */
+  const playOverlay = async (b: Extract<SlotsBonus, { kind: 'pick' | 'wheel' }>) => {
+    if (audible.current) sound.bonusStart();
+    await showSplash({
+      kind: 'intro',
+      tone: b.kind,
+      title: t(`${b.kind}.title`),
+      sub: t(`${b.kind}.sub`),
+      autoMs: autoRef.current ? 2200 : 7000,
+    });
+    setBonusTone(b.kind);
+    await new Promise<void>((r) =>
+      setOverlay({
+        bonus: b,
+        done: () => {
+          setOverlay(null);
+          r();
+        },
+      }),
+    );
+    setBonusTone(null);
+    await countUp(b.win, 900);
+  };
+
+  const finish = () => {
+    presenting.current = null;
+    busy.current = false;
+    setPhase('idle');
+    setCycling(true);
+    setCredit(null);
+    void qc.invalidateQueries({ queryKey: ['coins'] });
+    if (autoRef.current) later(() => autoRef.current && spinRef.current(), turboRef.current ? 250 : 700);
+  };
+
+  const run = async (res: SlotsSpin, t0: number) => {
+    await stopReels(res.grid, t0 + (turboRef.current ? 380 : 950));
+    lastGrid.current = res.grid;
+    await presentWin(res.grid, res.lines, res.baseWin, triggersOf(res.grid, res.scatters));
+    if (res.bonuses.length) setPhase('bonus');
+    for (const b of res.bonuses) {
+      if (b.kind === 'free') await playFree(b);
+      else await playOverlay(b);
+    }
+    if (res.bonuses.length && winMeter.current) winMeter.current.textContent = fmt(res.win);
+    finish();
+  };
+
+  /** Спин. Во время спина — ускорить остановку, во время счёта — досчитать сразу. */
+  const doSpin = () => {
+    if (big || splash || overlay) return;
+    if (busy.current) {
+      if (presenting.current) presenting.current();
+      else if (phase === 'spinning') {
+        const now = performance.now();
+        reels.current.forEach((r) => r.hurry(now));
+      }
+      return;
+    }
+    if (balance !== null && balance < bet) {
+      setError(t('noCoins'));
+      setAuto(false);
+      return;
+    }
+    busy.current = true;
+    setError(null);
+    clearWin();
+    won.current = 0;
+    if (winMeter.current) winMeter.current.textContent = '0';
+    setPhase('spinning');
+    setPulled((n) => n + 1);
+    setCredit((credit.current ?? balance ?? 0) - bet);
+    const t0 = startReels();
     spinReq.mutateAsync(bet).then(
-      (res) => {
-        const plan = stopPlan(res.grid, turboRef.current);
-        const base = Math.max(performance.now() + 60, t0 + minSpin);
-        reels.current.forEach((r, i) => {
-          r.onLand = () => onLand(i, res, plan);
-          r.stop(res.grid[i], base + plan.at[i]);
-        });
-      },
+      (res) => void run(res, t0),
       (e: unknown) => {
         // Спин не принят — барабаны встают на прежнее поле, ставка не ушла.
         const grid = lastGrid.current ?? randomGrid();
-        const base = Math.max(performance.now(), t0 + 300);
-        reels.current.forEach((r, i) => {
-          r.onLand = i === REELS - 1 ? () => finish(null) : null;
-          r.stop(grid[i], base + i * 80);
-        });
+        void stopReels(grid, t0 + 300).then(finish);
         setError(e instanceof Error ? e.message : t('failed'));
         setAuto(false);
       },
@@ -412,18 +563,22 @@ export function Machine({ config }: { config: SlotsConfig }) {
   const winSet = new Set(winLines.map((w) => w.line));
   const message = error
     ? error
-    : shown && shown.win > 0
-      ? shown.scatterWin > 0
-        ? t('bonus', { n: shown.scatters })
-        : winLines.length === 1
-          ? t('lineWin', { line: winLines[0].line + 1, n: winLines[0].count })
-          : t('linesWin', { n: winLines.length })
-      : spinning
-        ? t('goodLuck')
-        : t('placeBet');
+    : free
+      ? t('free.counter', { n: free.played, total: free.total, x: free.mult })
+      : shown?.text
+        ? shown.text
+        : spinning
+          ? t('goodLuck')
+          : t('placeBet');
 
   return (
-    <div className="sl-page" ref={page} data-mode={big ? 'big' : phase === 'present' ? 'win' : phase} data-tier={tier}>
+    <div
+      className="sl-page"
+      ref={page}
+      data-mode={big ? 'big' : phase === 'present' ? 'win' : phase}
+      data-tier={tier}
+      data-bonus={bonusTone ?? undefined}
+    >
       <div className="sl-room" aria-hidden>
         <div className="sl-bokeh" />
         <div className="sl-bokeh sl-bokeh-2" />
@@ -454,7 +609,9 @@ export function Machine({ config }: { config: SlotsConfig }) {
             <div className="sl-logo" data-text="LUCKY SEVENS">
               LUCKY SEVENS
             </div>
-            <div className="sl-sub">{t('subtitle')}</div>
+            <div className="sl-sub">
+              {free ? t('free.left', { n: free.left, win: fmt(free.win) }) : t('subtitle')}
+            </div>
             <div className="sl-bulbs sl-bulbs-b" aria-hidden>
               {Array.from({ length: BULBS }, (_, i) => (
                 <span key={i} className="sl-bulb" style={{ ['--i' as string]: BULBS - i }} />
@@ -497,7 +654,7 @@ export function Machine({ config }: { config: SlotsConfig }) {
                 </div>
               ))}
               <div className="sl-cyl" aria-hidden />
-              <WinLines key={shown?.id ?? 'none'} paylines={config.paylines} wins={winLines} cycling={cycling} preview={preview} />
+              <WinLines key={shown?.id ?? 0} paylines={config.paylines} wins={winLines} cycling={cycling} preview={preview} />
               <div className="sl-glass" aria-hidden />
             </div>
             <LineBadges
@@ -614,6 +771,13 @@ export function Machine({ config }: { config: SlotsConfig }) {
           audible={sfx.audible}
           onDone={() => bigDone.current()}
         />
+      )}
+      {splash && <BonusSplash key={`${splash.kind}:${splash.title}`} splash={splash} />}
+      {overlay?.bonus.kind === 'pick' && (
+        <PickBonus bonus={overlay.bonus} fx={fxReady} audible={sfx.audible} auto={auto} onDone={overlay.done} />
+      )}
+      {overlay?.bonus.kind === 'wheel' && (
+        <WheelBonus bonus={overlay.bonus} fx={fxReady} audible={sfx.audible} auto={auto} onDone={overlay.done} />
       )}
       {paytable && <Paytable config={config} bet={bet} onClose={() => setPaytable(false)} />}
     </div>

@@ -9,7 +9,9 @@ export type SlotSymbol =
   | 'seven'
   | 'diamond'
   | 'wild'
-  | 'scatter';
+  | 'scatter'
+  | 'chest'
+  | 'wheel';
 
 /**
  * Рисунки символов слотов — один раз на страницу, `<symbol>` в скрытом SVG; клетки
@@ -39,6 +41,8 @@ export const SYMBOL_IDS: readonly SlotSymbol[] = [
   'diamond',
   'wild',
   'scatter',
+  'chest',
+  'wheel',
 ];
 
 export const symHref = (s: SlotSymbol, blur = false) => `#sl-${blur ? 'b' : 's'}-${s}`;
@@ -54,6 +58,8 @@ function Sphere({ id, light, mid, dark }: { id: string; light: string; mid: stri
     </radialGradient>
   );
 }
+
+const WHEEL_COLORS = ['#e8173a', '#ffb81c', '#1b9bd8', '#2fbf4a', '#a42ad8', '#ff6a1f', '#e8173a', '#1b9bd8'];
 
 const GRAPES: [number, number, number][] = [
   [38, 40, 11],
@@ -353,6 +359,55 @@ export function SlotDefs() {
             BONUS
           </text>
           <ellipse cx="34" cy="28" rx="14" ry="7" fill="url(#sl-g-shine)" transform="rotate(-35 34 28)" opacity="0.7" />
+        </symbol>
+
+
+        {/* ── Сундук: дерево с золотыми оковками, из щели — свет ── */}
+        <linearGradient id="sl-g-wood" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#b5672a" />
+          <stop offset="0.5" stopColor="#7a3a12" />
+          <stop offset="1" stopColor="#3f1a06" />
+        </linearGradient>
+        <radialGradient id="sl-g-glow" cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0" stopColor="#fff6c8" />
+          <stop offset="0.4" stopColor="#ffd34a" stopOpacity="0.8" />
+          <stop offset="1" stopColor="#ff9a1f" stopOpacity="0" />
+        </radialGradient>
+        <symbol id="sl-s-chest" viewBox="0 0 100 100">
+          <ellipse cx="50" cy="90" rx="40" ry="5" fill="url(#sl-g-drop)" />
+          <ellipse cx="50" cy="46" rx="40" ry="14" fill="url(#sl-g-glow)" />
+          <path d="M12 46 L88 46 L86 86 L14 86 Z" fill="url(#sl-g-wood)" stroke="#2a1004" strokeWidth="1.4" />
+          <path d="M12 46 C12 22 88 22 88 46 Z" fill="url(#sl-g-wood)" stroke="#2a1004" strokeWidth="1.4" />
+          <path d="M18 40 C24 30 76 30 82 40" stroke="#d48a4a" strokeWidth="2" fill="none" opacity="0.6" />
+          <rect x="12" y="44" width="76" height="6" fill="url(#sl-g-gold-h)" stroke="#5a3200" strokeWidth="0.8" />
+          <path d="M24 28 L24 86 M76 28 L76 86" stroke="url(#sl-g-gold)" strokeWidth="6" />
+          <rect x="12" y="80" width="76" height="6" fill="url(#sl-g-gold-h)" stroke="#5a3200" strokeWidth="0.8" />
+          <rect x="41" y="44" width="18" height="20" rx="2" fill="url(#sl-g-gold)" stroke="#5a3200" strokeWidth="1" />
+          <circle cx="50" cy="52" r="3" fill="#3a1600" />
+          <path d="M50 54 L50 60" stroke="#3a1600" strokeWidth="2.4" />
+          <path d="M30 44 L36 40 M64 40 L70 44 M46 42 L50 38 L54 42" stroke="#fff6c8" strokeWidth="1.6" opacity="0.9" />
+          <ellipse cx="34" cy="32" rx="10" ry="4" fill="url(#sl-g-shine)" opacity="0.45" transform="rotate(-12 34 32)" />
+        </symbol>
+
+        {/* ── Колесо фортуны: цветные секторы, золотой обод, лампы ── */}
+        <symbol id="sl-s-wheel" viewBox="0 0 100 100">
+          <ellipse cx="50" cy="94" rx="30" ry="4" fill="url(#sl-g-drop)" />
+          <circle cx="50" cy="50" r="44" fill="url(#sl-g-gold)" />
+          <circle cx="50" cy="50" r="38" fill="#2a0612" />
+          {WHEEL_COLORS.map((c, i) => {
+            const a0 = (i * Math.PI * 2) / WHEEL_COLORS.length - Math.PI / 2;
+            const a1 = ((i + 1) * Math.PI * 2) / WHEEL_COLORS.length - Math.PI / 2;
+            const p = (a: number, r: number) => `${(50 + Math.cos(a) * r).toFixed(2)} ${(50 + Math.sin(a) * r).toFixed(2)}`;
+            return <path key={i} d={`M50 50 L${p(a0, 36)} A36 36 0 0 1 ${p(a1, 36)} Z`} fill={c} stroke="#fff2b0" strokeWidth="0.8" />;
+          })}
+          {Array.from({ length: 12 }, (_, i) => {
+            const a = (i * Math.PI * 2) / 12;
+            return <circle key={i} cx={50 + Math.cos(a) * 41} cy={50 + Math.sin(a) * 41} r="1.8" fill="#fffbe0" />;
+          })}
+          <circle cx="50" cy="50" r="9" fill="url(#sl-g-gold)" stroke="#5a3200" strokeWidth="1" />
+          <circle cx="50" cy="50" r="3.4" fill="#ff2245" />
+          <path d="M50 2 L58 14 L42 14 Z" fill="url(#sl-g-chrome)" stroke="#2a2e34" strokeWidth="1" />
+          <ellipse cx="34" cy="28" rx="16" ry="7" fill="url(#sl-g-shine)" transform="rotate(-35 34 28)" opacity="0.35" />
         </symbol>
 
         {SYMBOL_IDS.map((s) => (

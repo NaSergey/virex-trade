@@ -59,11 +59,40 @@ export function Paytable({ config, bet, onClose }: { config: SlotsConfig; bet: n
             <Sym s="wild" />
             <p>{t('wildInfo')}</p>
           </div>
+        </div>
+        <h3>{t('bonuses')}</h3>
+        <div className="sl-pt-special">
           <div className="sl-pt-row">
             <Sym s="scatter" />
             <p>
-              {t('scatterInfo')}{' '}
-              {config.scatterPays.map((x, i) => `${i + 3}× — ${(x * bet).toLocaleString('ru-RU')}`).join(' · ')}
+              <b>{t('free.title')}.</b>{' '}
+              {t('free.rule', {
+                a: config.freeSpins[0],
+                b: config.freeSpins[1],
+                c: config.freeSpins[2],
+                x: config.freeMult,
+              })}
+            </p>
+          </div>
+          <div className="sl-pt-row">
+            <Sym s="chest" />
+            <p>
+              <b>{t('pick.title')}.</b>{' '}
+              {t('pick.rule', {
+                n: config.pickBoxes,
+                max: (Math.max(...config.pickPrizes) * bet).toLocaleString('ru-RU'),
+              })}
+            </p>
+          </div>
+          <div className="sl-pt-row">
+            <Sym s="wheel" />
+            <p>
+              <b>{t('wheel.title')}.</b>{' '}
+              {t('wheel.rule', {
+                n: config.wheel.length,
+                min: (Math.min(...config.wheel) * bet).toLocaleString('ru-RU'),
+                max: (Math.max(...config.wheel) * bet).toLocaleString('ru-RU'),
+              })}
             </p>
           </div>
         </div>

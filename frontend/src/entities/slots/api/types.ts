@@ -9,8 +9,14 @@ export interface SlotsConfig {
   paylines: number[][];
   /** Выплата за 3, 4, 5 подряд — в ставках на линию. */
   linePays: Partial<Record<SlotSymbol, [number, number, number]>>;
-  /** Скаттер за 3, 4, 5 штук — в ставках на спин. */
-  scatterPays: [number, number, number];
+  /** Бесплатных спинов за 3, 4, 5 корон. */
+  freeSpins: [number, number, number];
+  freeMult: number;
+  pickBoxes: number;
+  /** Призы сундуков в ставках спина. */
+  pickPrizes: number[];
+  /** Секторы колеса в ставках спина. */
+  wheel: number[];
   /** Отдача, проценты. */
   rtp: number;
 }
@@ -23,6 +29,20 @@ export interface SlotsLineWin {
   win: number;
 }
 
+export interface SlotsFreeSpin {
+  grid: SlotSymbol[][];
+  lines: SlotsLineWin[];
+  win: number;
+  /** Спинов добавили короны этого спина. */
+  added: number;
+}
+
+/** Бонусы разыграны сервером целиком; суммы — в монетах. */
+export type SlotsBonus =
+  | { kind: 'free'; awarded: number; mult: number; spins: SlotsFreeSpin[]; win: number }
+  | { kind: 'pick'; picks: number[]; rest: number[]; win: number }
+  | { kind: 'wheel'; segments: number[]; index: number; win: number };
+
 export interface SlotsSpin {
   id: string;
   bet: number;
@@ -30,7 +50,10 @@ export interface SlotsSpin {
   grid: SlotSymbol[][];
   lines: SlotsLineWin[];
   scatters: number;
-  scatterWin: number;
+  /** Выигрыш линий самого спина. */
+  baseWin: number;
+  bonuses: SlotsBonus[];
+  /** Всё вместе, с бонусами. */
   win: number;
   balance: number;
 }

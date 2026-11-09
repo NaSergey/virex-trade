@@ -18,6 +18,11 @@ describe('план остановки', () => {
   });
 });
 
+it('сундуки на 1-м и 3-м — пятый горит', () => {
+  const p = stopPlan([col('chest'), col('bar'), col('chest'), col('bar'), col('bar')], false);
+  expect(p.hot).toEqual([false, false, false, false, true]);
+});
+
 describe('сила выигрыша', () => {
   it('по множителю ставки', () => {
     expect(tierOf(0, 10)).toBe('none');

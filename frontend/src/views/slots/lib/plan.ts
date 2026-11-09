@@ -3,8 +3,9 @@ import type { SlotSymbol } from '@/entities/slots';
 /**
  * План остановки барабанов: когда каждый встаёт и где «предвкушение».
  * Два скаттера на уже вставших барабанах — следующий крутится дольше и
- * горит: третий скаттер даёт бонус, и автомат даёт его подождать. Так ведут
- * себя настоящие автоматы, и это половина напряжения спина.
+ * горит: третий скаттер даёт бонус, и автомат даёт его подождать. То же у
+ * сундука и колеса: они на барабанах 1 и 3 — пятый горит. Так ведут себя
+ * настоящие автоматы, и это половина напряжения спина.
  */
 export interface StopPlan {
   /** Задержка остановки барабана от первой, мс. */
@@ -20,8 +21,11 @@ export function stopPlan(grid: SlotSymbol[][], turbo: boolean): StopPlan {
   const hot: boolean[] = [];
   let t = 0;
   let scatters = 0;
+  const on = (sym: SlotSymbol, r: number) => grid[r].includes(sym);
   grid.forEach((col, i) => {
-    const isHot = i > 0 && scatters >= 2;
+    const isHot =
+      (i > 0 && scatters >= 2) ||
+      (i === 4 && ((on('chest', 0) && on('chest', 2)) || (on('wheel', 0) && on('wheel', 2))));
     if (i > 0) t += isHot ? tease : gap;
     at.push(t);
     hot.push(isHot);
@@ -63,6 +67,8 @@ const FILLER: [SlotSymbol, number][] = [
   ['diamond', 6],
   ['wild', 5],
   ['scatter', 4],
+  ['chest', 3],
+  ['wheel', 3],
 ];
 const FILLER_TOTAL = FILLER.reduce((s, [, w]) => s + w, 0);
 

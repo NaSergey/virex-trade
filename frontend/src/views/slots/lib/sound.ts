@@ -231,3 +231,36 @@ export function fanfare(level: number) {
   // Удар литавры под первый аккорд.
   tone('sine', 90, t, 0.6, 0.6, 40);
 }
+
+/** Вход в бонус: восходящий глиссандо и удар — свет в зале меняется. */
+export function bonusStart() {
+  const t = now();
+  if (!t) return;
+  for (let i = 0; i < 12; i++) tone('triangle', 330 * 2 ** (i / 6), t + i * 0.045, 0.12, 0.25);
+  tone('sine', 70, t + 0.55, 0.7, 0.8, 35);
+  winChime(6);
+}
+
+/** Сундук открылся: скрип крышки и звон. */
+export function chestOpen(value: number) {
+  const t = now();
+  if (!t) return;
+  tone('sawtooth', 180, t, 0.05, 0.18, 320);
+  const step = Math.min(5, Math.floor(Math.log2(1 + value)));
+  for (let i = 0; i <= step; i++) tone('sine', 880 * 2 ** (i / 4), t + 0.12 + i * 0.06, 0.18, 0.35);
+}
+
+/** «Забрать» — сундук пуст, бонус кончился: два тона вниз. */
+export function collect() {
+  const t = now();
+  if (!t) return;
+  tone('square', 520, t, 0.08, 0.18);
+  tone('square', 390, t + 0.16, 0.08, 0.3);
+}
+
+/** Язычок колеса задел штырь. */
+export function wheelTick() {
+  const t = now();
+  if (!t) return;
+  tone('square', 2200, t, 0.05, 0.018);
+}

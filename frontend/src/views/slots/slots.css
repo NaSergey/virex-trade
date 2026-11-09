@@ -916,6 +916,292 @@
 .sl-pt-cell { fill: rgb(255 255 255 / 0.08); }
 .sl-pt-note { margin: 14px 0 0; font-size: 12px; line-height: 1.5; color: #a99f8c; }
 
+/* ══ Бонусы ══════════════════════════════════════════════════════
+   Каждый бонус меняет свет зала и корпуса: бесплатные спины — синий неон,
+   сокровищница — изумруд с золотом, колесо — фиолетовый. Смена — переходом,
+   автомат «перекрашивается», а не мигает. */
+.sl-room, .sl-cab { transition: filter 0.8s, background 0.8s; }
+.sl-page[data-bonus='free'] .sl-cab {
+  background:
+    linear-gradient(90deg, rgb(255 255 255 / 0.08), transparent 12%, transparent 88%, rgb(0 0 0 / 0.35)),
+    linear-gradient(180deg, #0a2a7a 0%, #06144a 45%, #030824 100%);
+}
+.sl-page[data-bonus='free'] .sl-room { filter: hue-rotate(200deg) saturate(1.4); }
+.sl-page[data-bonus='free'] .sl-bulb { --on: #9fe8ff; animation-duration: 0.6s; }
+.sl-page[data-bonus='free'] .sl-sub { color: #9fe8ff; font-size: 13px; opacity: 1; }
+.sl-page[data-bonus='free'] .sl-reels { outline: 3px solid #5ad0ff; outline-offset: 3px; animation: sl-free-glow 1.2s ease-in-out infinite alternate; }
+@keyframes sl-free-glow { to { outline-color: #c46bff; } }
+.sl-page[data-bonus='pick'] .sl-room { filter: hue-rotate(110deg); }
+.sl-page[data-bonus='wheel'] .sl-room { filter: hue-rotate(260deg) saturate(1.3); }
+
+/* Заставка бонуса. */
+.sl-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 58;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  cursor: pointer;
+  --tone: #5ad0ff;
+  --tone-2: #c46bff;
+  background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--tone) 22%, transparent), rgb(0 0 0 / 0.88) 70%);
+  animation: sl-fade 0.35s ease-out;
+}
+.sl-splash[data-tone='pick'] { --tone: #ffd34a; --tone-2: #2fdf7a; }
+.sl-splash[data-tone='wheel'] { --tone: #ff5adf; --tone-2: #ffd34a; }
+.sl-splash .sl-big-rays {
+  background: repeating-conic-gradient(color-mix(in srgb, var(--tone) 30%, transparent) 0deg 6deg, transparent 6deg 15deg);
+}
+.sl-splash-body {
+  position: relative;
+  text-align: center;
+  padding: 16px;
+  animation: sl-big-in 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.sl-splash-title,
+.sl-bonus-title {
+  position: relative;
+  font: 900 clamp(38px, 8.5vw, 96px) / 0.95 Impact, 'Arial Black', system-ui, sans-serif;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #120220;
+  text-shadow:
+    2px 2px 0 #2a0a40,
+    4px 4px 0 #1a0630,
+    6px 6px 14px rgb(0 0 0 / 0.9),
+    0 0 50px color-mix(in srgb, var(--tone, #ffd34a) 70%, transparent);
+  animation: sl-big-pulse 0.7s ease-in-out infinite alternate;
+}
+.sl-splash-title::after,
+.sl-bonus-title::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  color: transparent;
+  text-shadow: none;
+  background: linear-gradient(180deg, #ffffff 0%, var(--tone, #ffd34a) 40%, var(--tone-2, #c98a0c) 75%, #ffffff 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+}
+.sl-splash-sub {
+  margin-top: 16px;
+  font: 700 clamp(16px, 2.4vw, 24px) / 1.3 system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 0 14px var(--tone);
+}
+.sl-splash[data-kind='intro'] .sl-splash-title { animation: sl-big-pulse 0.7s ease-in-out infinite alternate, sl-intro-flicker 0.9s steps(6) 1; }
+@keyframes sl-intro-flicker {
+  0%, 30%, 60% { opacity: 0.2; }
+  15%, 45%, 100% { opacity: 1; }
+}
+
+/* «+4 спина» — плашка над автоматом. */
+.sl-toast {
+  position: fixed;
+  left: 50%;
+  top: 22%;
+  z-index: 57;
+  translate: -50% 0;
+  padding: 10px 26px;
+  font: 900 clamp(22px, 4vw, 40px) / 1 Impact, 'Arial Black', system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  color: #fff;
+  background: linear-gradient(180deg, #2a7aff, #6b1fd6);
+  text-shadow: 0 2px 0 #1a0a50;
+  pointer-events: none;
+  animation: sl-toast 1.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@keyframes sl-toast {
+  0% { scale: 0.3; opacity: 0; }
+  15% { scale: 1.1; opacity: 1; }
+  25%, 80% { scale: 1; opacity: 1; }
+  100% { scale: 1; opacity: 0; translate: -50% -30px; }
+}
+
+/* Окно бонуса (сундуки, колесо). */
+.sl-bonus {
+  position: fixed;
+  inset: 0;
+  z-index: 58;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: calc(var(--top-h, 48px) + 8px) 16px 16px;
+  overflow: hidden;
+  animation: sl-fade 0.4s ease-out;
+}
+.sl-bonus-head { position: relative; text-align: center; }
+.sl-bonus-head p {
+  margin: 8px 0 0;
+  font: 600 15px/1.4 system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #f4e6c0;
+}
+.sl-bonus-title { font-size: clamp(28px, min(6vw, 7dvh), 60px); }
+.sl-bonus-total {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font: 800 clamp(26px, 4vw, 44px) / 1 var(--font-mono, ui-monospace, monospace);
+  color: #fff;
+  text-shadow: 0 0 16px rgb(255 200 60 / 0.9), 0 3px 0 #7a4a00;
+}
+.sl-bonus-go {
+  position: relative;
+  min-height: 48px;
+  min-width: 180px;
+  padding: 0 28px;
+  border: 0;
+  cursor: pointer;
+  font: 900 18px/1 Impact, 'Arial Black', system-ui, sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #2a1400;
+  background: linear-gradient(180deg, #fff2b0, #ffc23a 50%, #d48a00);
+  animation: sl-breathe 1.2s ease-in-out infinite;
+}
+.sl-bonus-go:disabled { opacity: 0.4; cursor: default; animation: none; }
+.sl-bonus-go-big { min-height: 64px; min-width: 240px; font-size: 26px; }
+.sl-bonus-foot { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+
+/* Сокровищница: тёмный изумрудный зал, сундуки в золотом свете. */
+.sl-pick {
+  --tone: #ffd34a;
+  --tone-2: #2fdf7a;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 55%, rgb(255 190 60 / 0.25), transparent 70%),
+    radial-gradient(ellipse at 50% 120%, #0d4a2a, #02120a 70%);
+}
+.sl-chests {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(8px, 2vw, 18px);
+  width: min(680px, 100%, calc((100dvh - 330px) * 1.55));
+}
+.sl-chest {
+  position: relative;
+  aspect-ratio: 1.15;
+  padding: 0;
+  border: 0;
+  background: radial-gradient(ellipse at 50% 70%, rgb(255 210 90 / 0.18), transparent 65%);
+  cursor: pointer;
+  animation: sl-chest-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) backwards, sl-chest-idle 2.4s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 0.05s), calc(var(--i) * -0.37s);
+  transition: scale 0.15s, filter 0.15s;
+}
+.sl-chest:hover:not(:disabled) { scale: 1.08; filter: brightness(1.2) drop-shadow(0 0 14px #ffd34a); }
+.sl-chest:disabled { cursor: default; }
+.sl-chest-art { position: absolute; inset: 4%; width: 92%; height: 92%; overflow: visible; }
+@keyframes sl-chest-in { from { scale: 0.2; opacity: 0; } }
+@keyframes sl-chest-idle { 50% { translate: 0 -4px; } }
+.sl-chest.is-prize { animation: sl-chest-open 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.sl-chest.is-prize .sl-chest-art { filter: brightness(1.35) drop-shadow(0 0 16px #ffd34a); }
+.sl-chest.is-collect { animation: sl-chest-shake 0.5s; }
+.sl-chest.is-collect .sl-chest-art { filter: grayscale(0.8) brightness(0.6); }
+.sl-chest.is-missed { animation: none; }
+.sl-chest.is-missed .sl-chest-art { filter: grayscale(1) brightness(0.45); }
+@keyframes sl-chest-open {
+  0% { scale: 1; }
+  30% { scale: 1.25; rotate: -4deg; }
+  60% { rotate: 3deg; }
+  100% { scale: 1; rotate: 0deg; }
+}
+@keyframes sl-chest-shake {
+  20%, 60% { translate: -6px 0; }
+  40%, 80% { translate: 6px 0; }
+}
+.sl-chest-prize {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  translate: -50% -50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  white-space: nowrap;
+  font: 800 clamp(14px, 2.4vw, 22px) / 1 var(--font-mono, ui-monospace, monospace);
+  color: #fff;
+  background: rgb(0 0 0 / 0.7);
+  text-shadow: 0 0 10px #ffd34a;
+  animation: sl-prize-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.sl-chest.is-collect .sl-chest-prize { color: #ffb3b3; text-shadow: 0 0 10px #ff2a3c; background: rgb(60 0 10 / 0.85); text-transform: uppercase; }
+.sl-chest.is-missed .sl-chest-prize { color: #9a8f7d; text-shadow: none; animation-duration: 0.3s; }
+@keyframes sl-prize-pop {
+  from { scale: 0.2; translate: -50% 10%; opacity: 0; }
+}
+
+/* Колесо фортуны. */
+.sl-wheel {
+  --tone: #ff5adf;
+  --tone-2: #ffd34a;
+  background: radial-gradient(ellipse at 50% 55%, #3a0a52, #0a0212 70%);
+}
+.sl-wheel .sl-big-rays {
+  background: repeating-conic-gradient(rgb(255 90 223 / 0.14) 0deg 6deg, transparent 6deg 15deg);
+}
+.sl-wheel-box {
+  position: relative;
+  width: min(62vmin, 500px, calc(100dvh - 360px));
+  min-width: 240px;
+  aspect-ratio: 1;
+}
+.sl-wheel-rim {
+  position: absolute;
+  inset: -4%;
+  background: conic-gradient(#fff6c8, #c98a0c, #fff2b0, #8a5600, #ffe48a, #c98a0c, #fff6c8);
+}
+.sl-wheel-rim span {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4%;
+  height: 4%;
+  margin: -2% 0 0 -2%;
+  background: radial-gradient(circle at 35% 35%, #fff, #ffe48a 45%, #b06d00);
+  transform: rotate(calc(var(--i) * 15deg)) translateY(-1250%);
+  animation: sl-chase 0.9s linear infinite;
+  animation-delay: calc(var(--i) * -0.0375s);
+}
+.sl-wheel[data-state='spinning'] .sl-wheel-rim span { animation-duration: 0.3s; animation-delay: calc(var(--i) * -0.0125s); }
+.sl-wheel[data-state='won'] .sl-wheel-rim span { animation: sl-blink 0.2s steps(2, jump-none) infinite; animation-delay: calc(var(--i) % 2 * -0.1s); }
+.sl-wheel-disc { position: absolute; inset: 0; will-change: transform; }
+.sl-wheel-disc svg { width: 100%; height: 100%; display: block; }
+.sl-wheel-win { animation: sl-wheel-win 0.35s ease-in-out infinite alternate; }
+@keyframes sl-wheel-win { to { fill: #fff2b0; } }
+.sl-wheel-glass {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.22), transparent 40%, transparent 70%, rgb(0 0 0 / 0.25));
+}
+/* Язычок сверху: красная стрелка, бьётся о штыри. */
+.sl-wheel-flap {
+  position: absolute;
+  left: 50%;
+  top: -7%;
+  width: 9%;
+  height: 14%;
+  margin-left: -4.5%;
+  transform-origin: 50% 15%;
+  background: linear-gradient(90deg, #8a0014, #ff2a3c 45%, #8a0014);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  filter: drop-shadow(0 4px 6px rgb(0 0 0 / 0.6));
+}
+
+@media (max-width: 720px) {
+  .sl-chests { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .sl-wheel-box { width: 84vw; }
+}
+
 /* ── Узкий экран: рычага нет, пульт в две строки ── */
 @media (max-width: 720px) {
   .sl-page { padding: 4px 8px 16px; }
@@ -948,7 +1234,14 @@
   .sl-root :is(.sl-lever-arm) { border-radius: 5px !important; }
   .sl-root .sl-lever-base { border-radius: 8px 8px 0 0 !important; }
   .sl-root .sl-big-glow,
-  .sl-root .sl-cell.is-win::before { border-radius: 50% !important; }
+  .sl-root .sl-cell.is-win::before,
+  .sl-root .sl-wheel-rim,
+  .sl-root .sl-wheel-rim span,
+  .sl-root .sl-wheel-disc,
+  .sl-root .sl-wheel-glass { border-radius: 50% !important; }
+  .sl-root :is(.sl-bonus-go, .sl-toast, .sl-chest, .sl-chest-prize) { border-radius: 10px !important; }
+  .sl-root .sl-bonus-go { box-shadow: 0 6px 0 #7a4a00, 0 0 30px rgb(255 190 40 / 0.6) !important; }
+  .sl-root .sl-toast { box-shadow: 0 0 40px rgb(90 160 255 / 0.8) !important; }
   .sl-root .sl-cab {
     box-shadow:
       0 30px 60px rgb(0 0 0 / 0.7),

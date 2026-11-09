@@ -1,2 +1,2 @@
 export { useSlotsConfig, useSlotsSpin } from './api/hooks';
-export type { SlotsConfig, SlotsLineWin, SlotsSpin, SlotSymbol } from './api/types';
+export type { SlotsBonus, SlotsConfig, SlotsFreeSpin, SlotsLineWin, SlotsSpin, SlotSymbol } from './api/types';

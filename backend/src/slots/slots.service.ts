@@ -6,33 +6,30 @@ import { CoinsService } from '../coins/coins.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { BETS } from './slots.config';
 import {
-  drawGrid,
-  evaluate,
   expectedReturn,
+  FREE_MULT,
+  FREE_SPINS,
   LINE_PAYS,
   PAYLINES,
-  SCATTER_PAYS,
-  winOf,
-  type Grid,
-  type LineWin,
+  PICK_BOXES,
+  PICK_PRIZES,
+  play,
+  WHEEL,
+  type Outcome,
 } from './slots';
 
-export interface SlotsSpin {
+export interface SlotsSpin extends Outcome {
   id: string;
   bet: number;
-  grid: Grid;
-  lines: (LineWin & { win: number })[];
-  scatters: number;
-  scatterWin: number;
-  win: number;
   balance: number;
 }
 
 /**
  * Слоты против заведения: спин — одна транзакция «списать ставку, начислить
- * выигрыш, опыт». Состояния между спинами нет вовсе — ни раунда, ни стола, —
- * поэтому и возвращать после перезапуска нечего. Исход решает сервер
- * (`crypto.randomInt`), браузер только проигрывает его.
+ * выигрыш вместе со всеми бонусами, опыт». Бонусные раунды разыгрываются
+ * здесь же целиком (`play`), экран их только проигрывает: закрытая посреди
+ * бонуса вкладка ничего не теряет, а в базе нет полуигранного состояния.
+ * Исход решает `crypto.randomInt`.
  */
 @Injectable()
 export class SlotsService {
@@ -42,26 +39,28 @@ export class SlotsService {
     private readonly battlePass: BattlePassService,
   ) {}
 
-  /** Правила для экрана: таблица выплат и линии едут отсюда, своей копии у фронта нет. */
+  /** Правила для экрана: своей копии таблицы выплат у фронта нет. */
   config() {
     return {
       bets: BETS,
       paylines: PAYLINES,
       linePays: LINE_PAYS,
-      scatterPays: SCATTER_PAYS,
+      freeSpins: FREE_SPINS,
+      freeMult: FREE_MULT,
+      pickBoxes: PICK_BOXES,
+      pickPrizes: PICK_PRIZES.map(([v]) => v),
+      wheel: WHEEL,
       rtp: Math.round(expectedReturn() * 1000) / 10,
     };
   }
 
   async spin(userId: string, bet: number): Promise<SlotsSpin> {
     const id = randomUUID();
-    const grid = drawGrid((n) => randomInt(n));
-    const ev = evaluate(grid);
-    const win = winOf(ev, bet);
-    const lineBet = bet / PAYLINES.length;
+    const out = play((n) => randomInt(n), bet);
     await this.prisma.$transaction(async (tx) => {
       await this.coins.charge(tx, userId, bet, 'SLOTS_BET', id);
-      if (win > 0) await this.coins.credit(tx, userId, win, 'SLOTS_WIN', id);
+      if (out.win > 0)
+        await this.coins.credit(tx, userId, out.win, 'SLOTS_WIN', id);
       await this.battlePass.award(
         tx,
         userId,
@@ -70,15 +69,6 @@ export class SlotsService {
         XP_SOURCES['game.slots'].base,
       );
     });
-    return {
-      id,
-      bet,
-      grid,
-      lines: ev.lines.map((l) => ({ ...l, win: l.pay * lineBet })),
-      scatters: ev.scatters,
-      scatterWin: ev.scatterPay * bet,
-      win,
-      balance: await this.coins.balance(userId),
-    };
+    return { id, bet, ...out, balance: await this.coins.balance(userId) };
   }
 }
