@@ -87,10 +87,6 @@ const VPAN_THRESHOLD_PX = 4;
 /** Сколько экранных пикселей вертикального драга по полосе цены меняют размах
     в e раз. Чем больше, тем спокойнее шкала отзывается на жест. */
 const PRICE_DRAG_PX = 260;
-/** Дальше этого числа маркеров в кадре подписи не рисуются — только стрелки:
-    на плотной сессии подписи сливаются в сплошную полосу и мешают читать
-    сами свечи, ради которых график и открыт. */
-const MARKER_LABELS_MAX = 8;
 /** Панель RSI — доля высоты холста, как у TradingView: около четверти. */
 const RSI_FRAC = 0.24;
 /** Не ниже и не выше этого, в экранных пикселях: на низком экране линия не сплющится в полоску. */
@@ -150,7 +146,8 @@ export interface Marker {
   direction: 'long' | 'short';
   /** Итог сделки — только у выхода: он и красит стрелку. */
   tone?: 'profit' | 'loss' | null;
-  label: string;
+  /** Подпись — только у заметки. У стрелок входа и выхода текста нет (снят владельцем 2026-11-09). */
+  label?: string;
 }
 
 export interface Level {
@@ -1427,7 +1424,6 @@ export const ReplayChart = memo(function ReplayChart({
   const shownMarkers = markerIdx.filter(
     ({ m, idx }) => idx >= startIdx - 1 && idx < endIdx + 1 && m.price >= lo && m.price <= hi,
   );
-  const markerLabels = shownMarkers.length <= MARKER_LABELS_MAX;
 
   const shownDrawings = drawing
     ? [
@@ -1640,26 +1636,13 @@ export const ReplayChart = memo(function ReplayChart({
               const tip = up ? yy + px(4) : yy - px(4);
               const tail = up ? tip + px(7) : tip - px(7);
               return (
-                <g key={m.id}>
-                  <polygon
-                    points={`${x},${tip} ${x - px(4.5)},${tail} ${x + px(4.5)},${tail}`}
-                    fill={color}
-                    stroke="var(--color-background)"
-                    strokeWidth={px(0.75)}
-                  />
-                  {markerLabels && (
-                    <text
-                      x={x}
-                      y={up ? tail + px(9) : tail - px(3.5)}
-                      fill={color}
-                      fontSize={px(9)}
-                      fontFamily="var(--font-mono)"
-                      textAnchor="middle"
-                    >
-                      {m.label}
-                    </text>
-                  )}
-                </g>
+                <polygon
+                  key={m.id}
+                  points={`${x},${tip} ${x - px(4.5)},${tail} ${x + px(4.5)},${tail}`}
+                  fill={color}
+                  stroke="var(--color-background)"
+                  strokeWidth={px(0.75)}
+                />
               );
             })}
 

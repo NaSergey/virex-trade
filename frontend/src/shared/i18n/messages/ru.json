@@ -948,11 +948,7 @@
       "gridStep": "ордер",
       "gridTake": "тейк",
       "pendingEntry": "лимит"
-    },
-    "marker": {
-      "entry": "вход",
-      "exit": "выход"
-    },
+    },
     "drawings": {
       "toolbar": "Инструменты рисования",
       "tool": {
