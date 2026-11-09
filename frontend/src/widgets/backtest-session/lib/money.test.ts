@@ -3,6 +3,8 @@ import {
   applyEntryChange,
   applyStopChange,
   averageIn,
+  closePart,
+  floorToLot,
   checkEntrySide,
   checkLevels,
   closeImpact,
@@ -40,7 +42,20 @@ describe('previewSize', () => {
       notional: 5000,
       margin: 500,
       liqPrice: 90,
+      tooSmall: false,
     });
+  });
+
+  it('с шагом лота — объём вниз до шага, риск — встающего объёма (как сервер)', () => {
+    // 100 / 2880 = 0.0347… BTC → 0.034, риск 0.034 · 2880 = 97.92.
+    const p = previewSize(10_000, 1, 60_000, 57_120, 10, 'long', 0.001)!;
+    expect(p.qty).toBe(0.034);
+    expect(p.riskUsdt).toBeCloseTo(97.92, 9);
+    expect(p.tooSmall).toBe(false);
+  });
+
+  it('меньше шага лота — tooSmall: сервер такой ордер отклонит', () => {
+    expect(previewSize(10_000, 1, 300_000, 100_000, 10, 'long', 0.001)!.tooSmall).toBe(true);
   });
 
   it('стоп на цене входа — размера нет', () => {
@@ -524,5 +539,21 @@ describe('roundLevel — цена отпущенного уровня', () => {
 
   it('без знаков — шесть значащих, как у ползунков', () => {
     expect(roundLevel(43289.95283968977)).toBe(43290);
+  });
+});
+
+describe('floorToLot', () => {
+  it('вниз до шага лота, без хвоста двоичной дроби', () => {
+    expect(floorToLot(0.00347, 0.001)).toBe(0.003);
+    expect(floorToLot(12.98, 0.1)).toBe(12.9);
+    expect(floorToLot(0.0029999999, 0.001)).toBe(0.003);
+    expect(floorToLot(0.00347, 0)).toBe(0.00347);
+  });
+});
+
+describe('closePart', () => {
+  it('часть позиции — вниз до шага лота, весь остаток — как есть', () => {
+    expect(closePart(0.0347, 50, 0.001)).toBe(0.017);
+    expect(closePart(0.0347, 100, 0.001)).toBe(0.0347);
   });
 });

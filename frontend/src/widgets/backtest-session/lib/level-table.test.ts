@@ -183,3 +183,31 @@ describe('распределение объёма по цене', () => {
     expect(gridAvgEntry(args)).toBeCloseTo(notional / qty, 9);
   });
 });
+
+describe('entryGridTable с шагом лота', () => {
+  const base = {
+    prices: [60_000, 59_000, 58_000],
+    direction: 'long' as const,
+    stop: 57_000,
+    riskPct: 1,
+    balance: 10_000,
+    qtyPins: {},
+    stopTargets: {},
+    stopFollow: false,
+  };
+
+  it('объём уровня — вниз до шага, риск уровня — ровно этот объём на сервере', () => {
+    const t = entryGridTable({ ...base, qtyStep: 0.001 });
+    // Без шага: общий объём 100 / (⅓·(3000+2000+1000)) = 0.05, на уровень 0.0166(6) BTC.
+    expect(t.rows.map((r) => r.qty)).toEqual([0.016, 0.016, 0.016]);
+    t.riskPcts.forEach((pct, i) => {
+      const dist = t.prices[i] - base.stop;
+      expect(Math.floor((base.balance * pct) / 100 / dist / 0.001 + 1e-6) * 0.001).toBeCloseTo(0.016, 12);
+    });
+    expect(t.tooSmall).toBe(false);
+  });
+
+  it('уровень меньше шага — tooSmall', () => {
+    expect(entryGridTable({ ...base, riskPct: 0.05, qtyStep: 0.001 }).tooSmall).toBe(true);
+  });
+});

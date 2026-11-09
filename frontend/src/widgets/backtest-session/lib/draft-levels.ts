@@ -34,6 +34,8 @@ export interface DraftLevelsInput {
   scale: number;
   /** Индикатор «Шанс тейка» включён — у тейков «Маркета» и «Лимита» есть `oddsAt`. */
   oddsOn?: boolean;
+  /** Шаг лота монеты графика: объёмы на линиях — те, что поставит биржа. */
+  qtyStep?: number;
 }
 
 /**
@@ -49,7 +51,20 @@ export interface DraftLevelsInput {
  * тейк, и линии закрытых вкладок висели бы на графике уровнями ордера,
  * которого никто не собирается отправлять.
  */
-export function draftLevels({ tab, market, limit, scaled, bot, livePrice, screenPrice, balance, leverage, scale, oddsOn }: DraftLevelsInput): Level[] {
+export function draftLevels({
+  tab,
+  market,
+  limit,
+  scaled,
+  bot,
+  livePrice,
+  screenPrice,
+  balance,
+  leverage,
+  scale,
+  oddsOn,
+  qtyStep = 0,
+}: DraftLevelsInput): Level[] {
   const list: Level[] = [];
 
   if (tab === 'market' && market.stop > 0 && livePrice != null && screenPrice != null) {
@@ -58,12 +73,12 @@ export function draftLevels({ tab, market, limit, scaled, bot, livePrice, screen
       kind: 'stop',
       price: market.stop,
       draggable: true,
-      qty: previewSize(balance, market.risk, livePrice, fromScreen(market.stop, scale), leverage, 'long')?.qty,
+      qty: previewSize(balance, market.risk, livePrice, fromScreen(market.stop, scale), leverage, 'long', qtyStep)?.qty,
       // Размер позиции зависит от самого стопа, а сторона — от того, по какую
       // сторону цены он стоит: на цене под курсором считается и то и другое.
       impactAt: (p) => {
         const dir = p < screenPrice ? 'long' : 'short';
-        const qty = previewSize(balance, market.risk, livePrice, fromScreen(p, scale), leverage, dir)?.qty;
+        const qty = previewSize(balance, market.risk, livePrice, fromScreen(p, scale), leverage, dir, qtyStep)?.qty;
         return qty != null ? levelMove(dir, livePrice, fromScreen(p, scale), qty) : null;
       },
     });
@@ -81,7 +96,7 @@ export function draftLevels({ tab, market, limit, scaled, bot, livePrice, screen
     draftTakeFits(market.stop, market.take, screenPrice)
   ) {
     const stop = market.stop;
-    const qty = stop > 0 ? previewSize(balance, market.risk, livePrice, fromScreen(stop, scale), leverage, 'long')?.qty : null;
+    const qty = stop > 0 ? previewSize(balance, market.risk, livePrice, fromScreen(stop, scale), leverage, 'long', qtyStep)?.qty : null;
     list.push({
       id: 'draft-take',
       kind: 'take',
@@ -103,7 +118,7 @@ export function draftLevels({ tab, market, limit, scaled, bot, livePrice, screen
     // Результат уровня — от цены самого лимита: сделка откроется по ней.
     const limitQty =
       entryReal != null && limit.stop > 0
-        ? previewSize(balance, limit.risk, entryReal, fromScreen(limit.stop, scale), leverage, 'long')?.qty
+        ? previewSize(balance, limit.risk, entryReal, fromScreen(limit.stop, scale), leverage, 'long', qtyStep)?.qty
         : undefined;
     if (limit.entry != null && limit.entry > 0) {
       list.push({ id: 'draft-limit-entry', kind: 'limitEntry', price: limit.entry, draggable: true, qty: limitQty });
@@ -112,7 +127,7 @@ export function draftLevels({ tab, market, limit, scaled, bot, livePrice, screen
       if (entryReal == null) return null;
       const levelReal = fromScreen(p, scale);
       const dir = levelReal < entryReal ? 'long' : 'short';
-      const qty = previewSize(balance, limit.risk, entryReal, levelReal, leverage, dir)?.qty;
+      const qty = previewSize(balance, limit.risk, entryReal, levelReal, leverage, dir, qtyStep)?.qty;
       return qty != null ? levelMove(dir, entryReal, levelReal, qty) : null;
     };
     if (limit.stop > 0) list.push({ id: 'draft-limit-stop', kind: 'stop', price: limit.stop, draggable: true, qty: limitQty, impactAt });
@@ -170,6 +185,7 @@ export function draftLevels({ tab, market, limit, scaled, bot, livePrice, screen
         stopTargets: {},
         stopFollow: false,
         tilt: scaled.tilt,
+        qtyStep,
       });
       return { direction, rows };
     };

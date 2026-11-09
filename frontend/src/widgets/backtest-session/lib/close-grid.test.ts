@@ -9,6 +9,7 @@ import {
   closeGridLevels,
   closeGridPlan,
   closeGridPrices,
+  closeGridLots,
   closeGridQtys,
   distributionWeights,
   initCloseGrid,
@@ -226,5 +227,22 @@ describe('распределение объёма сетки фиксации', 
     expect(qtys[0]).toBeCloseTo(5, 10);
     expect(qtys[1]).toBeGreaterThan(qtys[2]);
     expect(qtys.reduce((a, b) => a + b, 0)).toBeCloseTo(10, 10);
+  });
+});
+
+describe('closeGridLots', () => {
+  it('уровни — вниз до шага лота, последний забирает остаток округления', () => {
+    const { qtys, tooSmall } = closeGridLots(closeGridQtys(0.01, 3, {}), 0.01, 0.001);
+    expect(qtys.slice(0, 2)).toEqual([0.003, 0.003]);
+    expect(qtys[2]).toBeCloseTo(0.004, 12);
+    expect(tooSmall).toBe(false);
+  });
+
+  it('уровень меньше шага — tooSmall', () => {
+    expect(closeGridLots(closeGridQtys(0.002, 3, {}), 0.002, 0.001).tooSmall).toBe(true);
+  });
+
+  it('шаг 0 — без округления', () => {
+    expect(closeGridLots(closeGridQtys(0.01, 3, {}), 0.01, 0).qtys[0]).toBeCloseTo(0.01 / 3, 12);
   });
 });

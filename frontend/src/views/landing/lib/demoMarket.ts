@@ -20,18 +20,21 @@ const BINANCE = 'https://data-api.binance.vision/api/v3';
  * с серверным.
  */
 export const DEMO_SYMBOLS: LiveSymbol[] = [
-  { symbol: 'BTCUSDT', base: 'BTC', decimals: 2 },
-  { symbol: 'ETHUSDT', base: 'ETH', decimals: 2 },
-  { symbol: 'SOLUSDT', base: 'SOL', decimals: 2 },
-  { symbol: 'BNBUSDT', base: 'BNB', decimals: 2 },
-  { symbol: 'XRPUSDT', base: 'XRP', decimals: 4 },
-  { symbol: 'DOGEUSDT', base: 'DOGE', decimals: 5 },
-  { symbol: 'ADAUSDT', base: 'ADA', decimals: 4 },
-  { symbol: 'AVAXUSDT', base: 'AVAX', decimals: 3 },
-  { symbol: 'LINKUSDT', base: 'LINK', decimals: 3 },
+  { symbol: 'BTCUSDT', base: 'BTC', decimals: 2, qtyStep: 0.001 },
+  { symbol: 'ETHUSDT', base: 'ETH', decimals: 2, qtyStep: 0.01 },
+  { symbol: 'SOLUSDT', base: 'SOL', decimals: 2, qtyStep: 0.1 },
+  { symbol: 'BNBUSDT', base: 'BNB', decimals: 2, qtyStep: 0.01 },
+  { symbol: 'XRPUSDT', base: 'XRP', decimals: 4, qtyStep: 0.1 },
+  { symbol: 'DOGEUSDT', base: 'DOGE', decimals: 5, qtyStep: 1 },
+  { symbol: 'ADAUSDT', base: 'ADA', decimals: 4, qtyStep: 1 },
+  { symbol: 'AVAXUSDT', base: 'AVAX', decimals: 3, qtyStep: 0.1 },
+  { symbol: 'LINKUSDT', base: 'LINK', decimals: 3, qtyStep: 0.1 },
 ];
 
 export const demoDecimalsOf = (symbol: string) => DEMO_SYMBOLS.find((s) => s.symbol === symbol)?.decimals;
+
+/** Шаг лота монеты — из той же копии (`qtyStep` серверного списка). */
+export const demoQtyStepOf = (symbol: string) => DEMO_SYMBOLS.find((s) => s.symbol === symbol)?.qtyStep ?? 0;
 
 const INTERVAL: Record<number, string> = { 1: '1m', 5: '5m', 15: '15m', 30: '30m', 60: '1h', 240: '4h', 1440: '1d' };
 /** Больше Binance за раз не отдаёт. */

@@ -8,7 +8,7 @@ import { Field, Input } from '@/shared/ui/Field';
 import { Slider } from '@/shared/ui/Slider';
 import { formatMoney, formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
 import type { PositionLike } from '../api/types';
-import { closeImpact } from '../lib/money';
+import { closeImpact, closePart } from '../lib/money';
 
 const clampPct = (v: number) => Math.max(0, Math.min(100, v));
 
@@ -25,6 +25,8 @@ export function MarketCloseModal({
   error,
   decimals,
   showSymbol = true,
+  qtyStep = 0,
+  minOrderHint,
 }: {
   trade: PositionLike;
   remaining: number;
@@ -43,11 +45,17 @@ export function MarketCloseModal({
   decimals?: number;
   /** Монета в подзаголовке; снимается у истории со случайной монетой — она скрыта до итога. */
   showSymbol?: boolean;
+  /** Шаг лота монеты: часть позиции — вниз до него, как поставит биржа. */
+  qtyStep?: number;
+  /** Текст «меньше минимального ордера биржи». */
+  minOrderHint?: string;
 }) {
   const t = useTranslations('backtest');
   const { closing, close } = useDialogFade(onClose);
   const [pct, setPct] = useState(100);
-  const qty = (remaining * pct) / 100;
+  const qty = closePart(remaining, pct, qtyStep);
+  // Часть меньше шага лота биржа не примет — окно говорит это, а не молчит выключенной кнопкой.
+  const tooSmall = pct > 0 && pct < 100 && qtyStep > 0 && qty < qtyStep - 1e-12;
   // Итог закрытия сейчас — от входа позиции по текущей цене, с комиссиями.
   const impact = closeImpact(trade, scale, screenPrice, qty);
 
@@ -74,12 +82,13 @@ export function MarketCloseModal({
           <p className="muted">{t('marketCloseHint', { qty: formatQty(qty), pnl: formatMoney(impact.usdt) })}</p>
           {/* Кнопка выключена — окно говорит почему, а не молчит (QA 2026-10-23). */}
           {!canClose && <p className="muted">{t('marketCloseTooSoon')}</p>}
+          {tooSmall && minOrderHint && <p className="neg">{minOrderHint}</p>}
           <ErrorNote error={error} fallback={t('actionFailed')} />
         </DialogBody>
         <DialogActions
           confirmLabel={t('marketCloseConfirm')}
           confirmVariant="risk"
-          confirmDisabled={isPending || !(qty > 0) || !canClose}
+          confirmDisabled={isPending || !(qty > 0) || tooSmall || !canClose}
           onConfirm={() => onSubmit(qty)}
           onCancel={close}
         />

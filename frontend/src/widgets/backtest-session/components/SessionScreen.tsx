@@ -13,7 +13,16 @@ import { SectionHead } from '@/shared/ui/SectionHead';
 import { Seg, type SegOption } from '@/shared/ui/Seg';
 import { Wrap } from '@/shared/ui/Wrap';
 import { formatPriceGrouped } from '@/shared/lib/utils/format';
-import { fetchCandles, useBacktestSession, isLiveSession, useDecimalsOf, useFinishSession, useLivePrices, useLiveSymbols } from '../api/hooks';
+import {
+  fetchCandles,
+  useBacktestSession,
+  isLiveSession,
+  useDecimalsOf,
+  useFinishSession,
+  useLivePrices,
+  useLiveSymbols,
+  useQtyStepOf,
+} from '../api/hooks';
 import {
   DEFAULT_SYMBOL,
   coinBase,
@@ -198,6 +207,8 @@ export interface TerminalProps {
   symbols?: LiveSymbol[];
   /** Знаков цены монеты; не задано — по списку монет эфира. */
   decimalsOf?: (symbol: string) => number | undefined;
+  /** Шаг лота монеты (0 — не округлять); не задано — по списку монет эфира. */
+  qtyStepOf?: (symbol: string) => number;
   /** Цена монеты, которой нет на графике; не задано — цены эфира с сервера. */
   priceOf?: (symbol: string) => number | null;
   /** Подпись у переключателя таблиц вместо «Эфир»; `false` — без подписи (терминал на главной). */
@@ -258,6 +269,7 @@ export function Terminal({
   source,
   symbols,
   decimalsOf: decimalsOfProp,
+  qtyStepOf: qtyStepOfProp,
   priceOf: priceOfProp,
   badge,
   soundsOf,
@@ -514,6 +526,16 @@ export function Terminal({
   const liveDecimalsOf = useDecimalsOf(coinDecimals && !decimalsOfProp);
   const decimalsOf = decimalsOfProp ?? liveDecimalsOf;
   const chartDecimals = decimalsOf(symbol);
+  // Шаг лота — у любой сессии (история и тренажёр тоже торгуют BTC): объёмы панели,
+  // таблиц и линий — те, что поставит биржа, а не 0.00347 BTC.
+  const liveQtyStepOf = useQtyStepOf(!qtyStepOfProp);
+  const qtyStepOf = qtyStepOfProp ?? liveQtyStepOf;
+  const chartQtyStep = qtyStepOf(symbol);
+  /** Подсказка «меньше минимального ордера биржи» — с шагом лота монеты; скрытую монету не называет. */
+  const minOrderHint = (sym: string) =>
+    symbolShown && qtyStepOf(sym) > 0
+      ? t('qtyBelowMin', { min: String(qtyStepOf(sym)), coin: coinBase(sym) })
+      : t('qtyBelowMinHidden');
   // Цены монет, по которым есть позиции, но которых нет на графике: отметка
   // позиции и окна её закрытия берут цену своей монеты, а не графика.
   const otherSymbols = useMemo(
@@ -691,6 +713,7 @@ export function Terminal({
           leverage: draftLeverage,
           scale,
           oddsOn: takeOddsOn,
+          qtyStep: chartQtyStep,
         });
 
     // Уровни уже открытых сделок монеты графика — от их собственных
@@ -770,7 +793,7 @@ export function Terminal({
       const ownStop = o.botId != null || o.stopAfter != null;
       const stop = beforeStop && !ownStop ? posStop : o.stopLoss;
       // У лимита биржи объём уже зафиксирован — пересчитывать его от риска нечего.
-      const qty = o.qty ?? previewSize(balance, o.riskPct, o.price, stop, o.leverage, o.direction)?.qty;
+      const qty = o.qty ?? previewSize(balance, o.riskPct, o.price, stop, o.leverage, o.direction, qtyStepOf(o.symbol))?.qty;
       const price = pendingOrder?.id === o.id ? pendingOrder.price : toScreen(o.price, scale);
       list.push({ id: o.id, kind: 'pendingEntry', price, draggable: true, qty });
     }
@@ -784,7 +807,7 @@ export function Terminal({
       const standing = list.filter((l) => l.kind === 'limitClose' && l.tradeId === gridTrade.id);
       return [
         ...list.filter((l) => !standing.includes(l)),
-        ...closeGridLevels(gridTrade, closeGrid, scale),
+        ...closeGridLevels(gridTrade, closeGrid, scale, qtyStepOf(gridTrade.symbol)),
         ...standing.map((l) => ({ ...l, draggable: false })),
       ];
     }
@@ -825,6 +848,8 @@ export function Terminal({
     detail.entryOrders,
     pendingLevel,
     takeOddsOn,
+    chartQtyStep,
+    qtyStepOf,
   ]);
 
   // Отметки сделок на графике: где вошли и где вышли. Своим useMemo — по той
@@ -1126,9 +1151,14 @@ export function Terminal({
       stopTargets: Object.fromEntries(Object.entries(scaledDraft.stopPins).map(([k, v]) => [k, fromScreen(v, scale)])),
       stopFollow: actions.gridStopAfter === true && scaledDraft.stopFollow,
       tilt: scaledDraft.tilt,
+      qtyStep: chartQtyStep,
     });
     if (table.over) {
       setScaledHint(t('closeGridPinnedOver'));
+      return;
+    }
+    if (table.tooSmall) {
+      setScaledHint(minOrderHint(symbol));
       return;
     }
     if (table.blocked) {
@@ -1581,6 +1611,8 @@ export function Terminal({
                 screenPrice={screenPriceOf(gridTrade.symbol)}
                 closeOrdersCount={detail.closeOrders.filter((o) => o.tradeId === gridTrade.id).length}
                 decimals={decimalsOf(gridTrade.symbol)}
+                qtyStep={qtyStepOf(gridTrade.symbol)}
+                minOrderHint={minOrderHint(gridTrade.symbol)}
                 onSubmit={(grid) => closeGridM.mutate({ tradeId: gridTrade.id, ...grid }, { onSuccess: () => setCloseGrid(null) })}
                 onCancel={() => setCloseGrid(null)}
                 isPending={closeGridM.isPending}
@@ -1592,6 +1624,8 @@ export function Terminal({
                   tab={orderTab}
                   onTab={switchOrderTab}
                   maxRisk={maxRisk}
+                  qtyStep={chartQtyStep}
+                  minOrderHint={minOrderHint(symbol)}
                   draft={marketDraft}
                   onDraft={setDraft}
                   limitDraft={limitDraft}
@@ -1750,6 +1784,8 @@ export function Terminal({
             scale={scale}
             screenPrice={tradePrice}
             decimals={decimalsOf(trade.symbol)}
+            qtyStep={qtyStepOf(trade.symbol)}
+            minOrderHint={minOrderHint(trade.symbol)}
             showSymbol={symbolShown}
             onSubmit={(price, qty) => submitLimit(trade, price, qty)}
             onClose={() => setLimitModalFor(null)}
@@ -1768,6 +1804,8 @@ export function Terminal({
             scale={scale}
             screenPrice={tradePrice}
             decimals={decimalsOf(trade.symbol)}
+            qtyStep={qtyStepOf(trade.symbol)}
+            minOrderHint={minOrderHint(trade.symbol)}
             showSymbol={symbolShown}
             canClose={canClose(trade)}
             onSubmit={(qty) => submitMarket(trade, qty)}

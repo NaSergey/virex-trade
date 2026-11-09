@@ -119,6 +119,15 @@ export function useDecimalsOf(enabled: boolean): (symbol: string) => number | un
   );
 }
 
+/**
+ * Шаг лота монеты сессии (у монет продукта он же минимальный ордер). Список
+ * ещё не пришёл — 0: объём не округляется, решит сервер.
+ */
+export function useQtyStepOf(enabled: boolean): (symbol: string) => number {
+  const { data } = useLiveSymbols(enabled);
+  return useCallback((symbol: string) => (enabled ? (data?.symbols.find((s) => s.symbol === symbol)?.qtyStep ?? 0) : 0), [data, enabled]);
+}
+
 /** Как часто обновлять цены монет, которых нет на графике: столько же, сколько хвост графика. */
 const PRICES_MS = 2000;
 

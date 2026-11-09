@@ -157,6 +157,8 @@ function ExchangeTerminal({ state, stale }: { state: TerminalState; stale: boole
 
   const decimals = useMemo(() => new Map((symbolsData?.symbols ?? []).map((s) => [s.symbol, s.decimals])), [symbolsData]);
   const decimalsOf = useCallback((symbol: string) => decimals.get(symbol), [decimals]);
+  const qtySteps = useMemo(() => new Map((symbolsData?.symbols ?? []).map((s) => [s.symbol, s.qtyStep])), [symbolsData]);
+  const qtyStepOf = useCallback((symbol: string) => qtySteps.get(symbol) ?? 0, [qtySteps]);
   // Цена монеты, которой нет на графике, — маркировка биржи из того же снимка счёта.
   const priceOf = (symbol: string) => state.positions.find((p) => p.symbol === symbol)?.markPrice ?? null;
 
@@ -171,6 +173,7 @@ function ExchangeTerminal({ state, stale }: { state: TerminalState; stale: boole
         source={EXCHANGE_SOURCE}
         symbols={symbolsData?.symbols ?? NO_SYMBOLS}
         decimalsOf={decimalsOf}
+        qtyStepOf={qtyStepOf}
         priceOf={priceOf}
         // Какой это счёт (настоящий или демо Bybit) — сказано словами: экран тот же, что у бектеста, и спутать их можно ровно один раз.
         badge={badge}

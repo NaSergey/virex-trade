@@ -35,6 +35,8 @@ export interface TerminalSymbol {
   base: string;
   /** Знаков цены — по шагу цены биржи. */
   decimals: number;
+  /** Шаг лота биржи: объём ордера кратен ему; предпросмотр панели округляет так же. */
+  qtyStep: number;
   maxLeverage: number;
   /** Оборот за 24 часа в USDT — на момент кэша списка; 0, если биржа не ответила. */
   turnover24h: number;
@@ -148,6 +150,7 @@ export class TerminalMarketService {
         symbol: i.symbol,
         base: i.base,
         decimals: stepDecimals(i.tickSize),
+        qtyStep: Number(i.qtyStep),
         maxLeverage: i.maxLeverage,
         turnover24h: turnover.get(i.symbol) ?? 0,
       }))

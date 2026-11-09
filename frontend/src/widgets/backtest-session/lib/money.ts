@@ -9,18 +9,67 @@ import type { Direction } from './fills';
 /** Та же ставка, что на сервере (`FEE_RATE` в backtest-math.ts). */
 export const FEE_RATE = 0.00055;
 
+/** Самый маленький ордер на вход, USDT, — `minNotionalValue` Bybit; копия `MIN_ORDER_USDT` сервера (`backtest-math.ts`). */
+export const MIN_ORDER_USDT = 5;
+
+/** Знаков после запятой у шага лота: 0.001 → 3, 1 → 0. */
+export const lotDecimals = (step: number) => {
+  const s = String(step);
+  const dot = s.indexOf('.');
+  return dot < 0 ? 0 : s.length - dot - 1;
+};
+
+/**
+ * Объём вниз до шага лота монеты, как у биржи и сервера (`floorToLot` в
+ * `backtest-math.ts`): 0.00347 BTC ордером не встанет, встанет 0.003. Допуск —
+ * на двоичную дробь. Шаг 0 — без округления.
+ */
+export function floorToLot(qty: number, step: number): number {
+  if (!(step > 0)) return qty;
+  if (!(qty > 0)) return 0;
+  return Number((Math.floor(qty / step + 1e-6) * step).toFixed(lotDecimals(step)));
+}
+
+/**
+ * Часть позиции к закрытию по проценту: весь остаток — как есть (позицию закрыть
+ * целиком можно всегда), часть — вниз до шага лота, как сервер (`closeQtyOf`).
+ */
+export const closePart = (remaining: number, pct: number, step: number) =>
+  pct >= 100 ? remaining : floorToLot((remaining * pct) / 100, step);
+
+/** Ордер, которого биржа не примет: меньше шага лота (он же минимальный ордер) или дешевле `MIN_ORDER_USDT`. */
+export const belowMinOrder = (qty: number, price: number, step: number) =>
+  (step > 0 && qty < step - 1e-12) || !(qty > 0) || qty * price < MIN_ORDER_USDT;
+
 /**
  * Предпросмотр размера и маржи — те же формулы, что на сервере при открытии
  * (`positionSize`/margin-проверка в `backtest.service.ts`), чтобы число до
- * отправки не расходилось с тем, что вернётся.
+ * отправки не расходилось с тем, что вернётся. С шагом лота (`step`) объём —
+ * вниз до него, риск — встающего объёма; `tooSmall` — сервер откажет.
  */
-export function previewSize(balance: number, riskPct: number, entry: number, stop: number, leverage: number, direction: Direction) {
+export function previewSize(
+  balance: number,
+  riskPct: number,
+  entry: number,
+  stop: number,
+  leverage: number,
+  direction: Direction,
+  step = 0,
+) {
   const dist = Math.abs(entry - stop);
   if (!(dist > 0) || !(balance > 0) || !(riskPct > 0)) return null;
-  const riskUsdt = (balance * riskPct) / 100;
-  const qty = riskUsdt / dist;
+  const planned = (balance * riskPct) / 100;
+  const qty = step > 0 ? floorToLot(planned / dist, step) : planned / dist;
+  const riskUsdt = step > 0 ? qty * dist : planned;
   const notional = qty * entry;
-  return { riskUsdt, qty, notional, margin: notional / leverage, liqPrice: liquidationPrice(direction, entry, leverage) };
+  return {
+    riskUsdt,
+    qty,
+    notional,
+    margin: notional / leverage,
+    liqPrice: liquidationPrice(direction, entry, leverage),
+    tooSmall: belowMinOrder(qty, entry, step),
+  };
 }
 
 /** N цен уровней сетки, равномерно на отрезке [lower, upper] включительно. N=1 — середина отрезка. */

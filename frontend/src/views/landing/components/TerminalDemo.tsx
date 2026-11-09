@@ -4,7 +4,7 @@ import { startTransition, useEffect, useLayoutEffect, useRef, useState, useSyncE
 import { useLocale } from 'next-intl';
 import { Wrap } from '@/shared/ui/Wrap';
 import { Terminal, TerminalSkeleton, terminalIntl, timeLabelFormats } from '@/widgets/backtest-session';
-import { DEMO_SOURCE, DEMO_SYMBOLS, demoDecimalsOf } from '../lib/demoMarket';
+import { DEMO_SOURCE, DEMO_SYMBOLS, demoDecimalsOf, demoQtyStepOf } from '../lib/demoMarket';
 import { useDemoTerminal } from '../model/useDemoTerminal';
 import { TerminalHints } from './TerminalHints';
 
@@ -119,6 +119,7 @@ function DemoTerminal({ paused }: { paused: boolean }) {
         source={DEMO_SOURCE}
         symbols={DEMO_SYMBOLS}
         decimalsOf={demoDecimalsOf}
+        qtyStepOf={demoQtyStepOf}
         priceOf={priceOf}
         badge={false}
         tags={false}

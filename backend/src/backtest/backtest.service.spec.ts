@@ -383,6 +383,30 @@ describe('BacktestService — сделки', () => {
     );
   });
 
+  it('объём — вниз до шага лота BTC (0.001), риск — встающего объёма', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+
+    // 100 / 2880 = 0.0347… BTC — на бирже встанет 0.034.
+    await service.openTrade('u1', 's1', { ...OPEN, entryPrice: 60_000, stopLoss: 57_120 });
+
+    const data = prisma.backtestTrade.create.mock.calls[0][0].data;
+    expect(data.qty).toBe(0.034);
+    expect(data.riskUsdt).toBeCloseTo(97.92, 9);
+    expect(data.riskPct).toBeCloseTo(0.9792, 9);
+  });
+
+  it('объём меньше минимального ордера — отказ, а не округление вверх', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+
+    // 1 % от 10 000 при стопе за 200 000 — 0.0005 BTC.
+    const err = await rejection(service.openTrade('u1', 's1', { ...OPEN, entryPrice: 300_000, stopLoss: 100_000, leverage: 100 }));
+
+    expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_QTY_TOO_SMALL' });
+    expect(prisma.backtestTrade.create).not.toHaveBeenCalled();
+  });
+
   it('открывает сделку: сохраняет плечо', async () => {
     const { service, prisma } = makeService();
     prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
@@ -1088,6 +1112,27 @@ describe('BacktestService — сделки', () => {
       expect(rows.map((r: any) => r.qty).slice(0, 2)).toEqual([0.5, 0.2]);
       expect(rows.map((r: any) => r.qty).reduce((a: number, b: number) => a + b, 0)).toBe(0.9);
       expect(rows.map((r: any) => r.stopAfter)).toEqual([100, 104, null]);
+    });
+
+    it('объёмы уровней — вниз до шага лота монеты, последний забирает остаток округления', async () => {
+      const { service, prisma } = makeService();
+      prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, symbol: 'BTCUSDT', qty: 0.01, closedQty: 0 });
+
+      await service.createCloseGrid('u1', 't1', { prices: [105, 110, 115], stopFollow: false });
+
+      const qtys = prisma.backtestCloseOrder.create.mock.calls.map((c: any[]) => c[0].data.qty);
+      expect(qtys.slice(0, 2)).toEqual([0.003, 0.003]);
+      expect(qtys[2]).toBeCloseTo(0.004, 12);
+    });
+
+    it('уровень меньше шага лота — отказ', async () => {
+      const { service, prisma } = makeService();
+      prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, symbol: 'BTCUSDT', qty: 0.002, closedQty: 0 });
+
+      const err = await rejection(service.createCloseGrid('u1', 't1', { prices: [105, 110, 115], stopFollow: false }));
+
+      expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_QTY_TOO_SMALL' });
+      expect(prisma.backtestCloseOrder.create).not.toHaveBeenCalled();
     });
 
     it('объёмы меньше остатка — так и ставятся: остаток остаётся под стопом', async () => {
@@ -2791,11 +2836,11 @@ describe('BacktestService — таблица уровней: доли и «ст�
     // Доли 10/20/30/40 %, депозит 10 000, риск 2 % = 200; Σ доля·(уровень − 90) = 1+4+9+16 = 30 → Q = 200/30.
     await service.startBot('u1', 's1', { ...START, shares: [0.1, 0.2, 0.3, 0.4] });
 
-    const Q = 200 / 30;
+    // Объём продажи — вниз до шага лота BTC (0.001): 0.3·Q = 2, 0.4·Q = 2.666(6).
     const sells = prisma.backtestCloseOrder.create.mock.calls.map((c: any[]) => c[0].data);
     expect(sells.map((x: any) => x.botBuyPrice)).toEqual([120, 130]);
-    expect(sells[0].qty).toBeCloseTo(0.3 * Q, 9);
-    expect(sells[1].qty).toBeCloseTo(0.4 * Q, 9);
+    expect(sells[0].qty).toBe(2);
+    expect(sells[1].qty).toBe(2.666);
     const buys = prisma.backtestEntryOrder.create.mock.calls.map((c: any[]) => c[0].data);
     // Риск уровня 100: 2 % · 0.1·10 / 30.
     expect(buys[0].riskPct).toBeCloseTo((2 * 0.1 * 10) / 30, 9);

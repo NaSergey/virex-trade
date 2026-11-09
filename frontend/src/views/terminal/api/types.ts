@@ -48,6 +48,8 @@ export interface TerminalSymbol {
   symbol: string;
   base: string;
   decimals: number;
+  /** Шаг лота Bybit — объём ордера кратен ему. */
+  qtyStep: number;
   maxLeverage: number;
   /** Оборот за 24 часа в USDT (Bybit), на момент загрузки списка. */
   turnover24h: number;

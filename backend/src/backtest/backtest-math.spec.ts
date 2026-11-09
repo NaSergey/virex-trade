@@ -1,6 +1,8 @@
 import {
   averageIn,
+  belowMinOrder,
   DAY_MS,
+  floorToLot,
   maxDrawdownPct,
   pickPriceScale,
   pickStart,
@@ -38,6 +40,41 @@ describe('positionSize', () => {
 
   it('одинаков для лонга и шорта — важно только расстояние', () => {
     expect(positionSize(10_000, 1, 100, 102)).toEqual({ riskUsdt: 100, qty: 50 });
+  });
+
+  it('с шагом лота — объём вниз до шага, риск — встающего объёма', () => {
+    // 100 / 2880 = 0.0347… BTC → 0.034; риск 0.034 · 2880 = 97.92.
+    const { qty, riskUsdt } = positionSize(10_000, 1, 60_000, 57_120, 0.001);
+    expect(qty).toBe(0.034);
+    expect(riskUsdt).toBeCloseTo(97.92, 9);
+  });
+});
+
+describe('floorToLot', () => {
+  it('вниз до шага, без хвоста двоичной дроби', () => {
+    expect(floorToLot(0.00347, 0.001)).toBe(0.003);
+    expect(floorToLot(12.98, 0.1)).toBe(12.9);
+    expect(floorToLot(7.9, 1)).toBe(7);
+  });
+
+  it('объём, собранный обратно из риска ровно этого объёма, не теряет шаг', () => {
+    const dist = 2880;
+    const riskPct = (0.003 * dist * 100) / 10_000;
+    expect(floorToLot((10_000 * riskPct) / 100 / dist, 0.001)).toBe(0.003);
+  });
+
+  it('шаг 0 — без округления', () => {
+    expect(floorToLot(0.00347, 0)).toBe(0.00347);
+  });
+});
+
+describe('belowMinOrder', () => {
+  it('меньше шага лота или дешевле 5 USDT — не встанет', () => {
+    expect(belowMinOrder(0, 60_000, 0.001)).toBe(true);
+    expect(belowMinOrder(0.0009, 60_000, 0.001)).toBe(true);
+    expect(belowMinOrder(0.001, 60_000, 0.001)).toBe(false);
+    expect(belowMinOrder(1, 0.2, 1)).toBe(true); // 1 DOGE по 0.2 — 0.2 USDT
+    expect(belowMinOrder(25, 0.2, 1)).toBe(false);
   });
 });
 

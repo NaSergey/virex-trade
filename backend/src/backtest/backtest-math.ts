@@ -32,9 +32,50 @@ export function liquidationPrice(direction: Direction, entry: number, leverage: 
   return direction === 'long' ? entry * (1 - 1 / leverage) : entry * (1 + 1 / leverage);
 }
 
-export function positionSize(balance: number, riskPct: number, entry: number, stop: number) {
-  const riskUsdt = (balance * riskPct) / 100;
-  return { riskUsdt, qty: riskUsdt / Math.abs(entry - stop) };
+/**
+ * Самый маленький ордер на вход, USDT: `minNotionalValue` перпов Bybit, у всех
+ * монет продукта один (сверено 2026-11-10). Копия — `MIN_ORDER_USDT` во фронте
+ * (`lib/money.ts`).
+ */
+export const MIN_ORDER_USDT = 5;
+
+/** Знаков после запятой у шага лота: 0.001 → 3, 1 → 0. */
+const lotDecimals = (step: number) => {
+  const s = String(step);
+  const dot = s.indexOf('.');
+  return dot < 0 ? 0 : s.length - dot - 1;
+};
+
+/**
+ * Объём вниз до шага лота монеты (`qtyStepOf`), как у биржи: 0.00347 BTC
+ * ордером не встанет, встанет 0.003. Вниз, а не к ближайшему: вверх — больше
+ * выбранного риска. Допуск — на двоичную дробь: объём, собранный обратно из
+ * риска ровно этого объёма, бывает 0.0029999999, и без допуска три шага стали
+ * бы двумя. Шаг 0 — без округления.
+ */
+export function floorToLot(qty: number, step: number): number {
+  if (!(step > 0)) return qty;
+  if (!(qty > 0)) return 0;
+  return Number((Math.floor(qty / step + 1e-6) * step).toFixed(lotDecimals(step)));
+}
+
+/**
+ * Ордер, которого биржа не примет: объём меньше шага лота (у всех монет списка
+ * шаг и есть минимальный ордер) или на сумму меньше `MIN_ORDER_USDT`.
+ */
+export const belowMinOrder = (qty: number, price: number, step: number) =>
+  (step > 0 && qty < step - 1e-12) || !(qty > 0) || qty * price < MIN_ORDER_USDT;
+
+/**
+ * Объём от риска: `риск / |вход − стоп|`, вниз до шага лота. Риск — того
+ * объёма, что встал, а не запрошенный: стоп и есть −1R, как у ордера на бирже.
+ */
+export function positionSize(balance: number, riskPct: number, entry: number, stop: number, step = 0) {
+  const planned = (balance * riskPct) / 100;
+  const dist = Math.abs(entry - stop);
+  if (!(step > 0)) return { riskUsdt: planned, qty: planned / dist };
+  const qty = floorToLot(planned / dist, step);
+  return { riskUsdt: qty * dist, qty };
 }
 
 export function tradeResult(t: {

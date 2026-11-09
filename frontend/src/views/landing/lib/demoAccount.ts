@@ -6,6 +6,8 @@ import type {
   SessionDetail,
   TerminalActions,
 } from '@/widgets/backtest-session';
+import { belowMinOrder, floorToLot } from '@/widgets/backtest-session';
+import { demoQtyStepOf } from './demoMarket';
 
 /**
  * Демо-счёт терминала на главной: позиции и ордера живут в браузере гостя, на
@@ -43,7 +45,7 @@ const DEFAULT_SYMBOL = 'BTCUSDT';
 const SESSION_ID = 'landing-demo';
 
 /** Отказ демо-счёта — код, а текст подставляет вызывающий на языке страницы. */
-export type DemoErrorCode = 'noBalance' | 'stopSide' | 'takeSide' | 'margin' | 'qty' | 'gone';
+export type DemoErrorCode = 'noBalance' | 'stopSide' | 'takeSide' | 'margin' | 'qty' | 'minOrder' | 'gone';
 export class DemoError extends Error {
   constructor(readonly code: DemoErrorCode) {
     super(code);
@@ -122,9 +124,13 @@ export function openTrade(s0: DemoState, v: OpenVars): DemoState {
   // Лимит со «стопом после»: объём — от стопа самого ордера (`sizeStopOf` сервера), а не от подтянутого стопа позиции.
   if (open) return tightenStop(addInto(s, open, v, order?.stopAfter != null ? order.stopLoss : undefined), open.id, order?.stopAfter, v.entryPrice);
   if (s.balance <= 0) throw new DemoError('noBalance');
-  const riskUsdt = (s.balance * v.riskPct) / 100;
-  const qty = riskUsdt / Math.abs(v.entryPrice - v.stopLoss);
+  // Объём — вниз до шага лота монеты, риск — встающего объёма, как у сервера (`positionSize`).
+  const step = demoQtyStepOf(symbol);
+  const dist = Math.abs(v.entryPrice - v.stopLoss);
+  const qty = floorToLot((s.balance * v.riskPct) / 100 / dist, step);
+  const riskUsdt = qty * dist;
   if ((qty * v.entryPrice) / v.leverage > s.balance) throw new DemoError('margin');
+  if (belowMinOrder(qty, v.entryPrice, step)) throw new DemoError('minOrder');
   const [id, s1] = nextId(s);
   const trade: BacktestTrade = {
     id,
@@ -135,7 +141,7 @@ export function openTrade(s0: DemoState, v: OpenVars): DemoState {
     entryPrice: v.entryPrice,
     stopLoss: v.stopLoss,
     takeProfit: v.takeProfit ?? null,
-    riskPct: v.riskPct,
+    riskPct: (riskUsdt / s.balance) * 100,
     riskUsdt,
     qty,
     leverage: v.leverage,
@@ -182,13 +188,16 @@ function addInto(
   sizeStop?: number,
 ): DemoState {
   if (s.balance <= 0) throw new DemoError('noBalance');
-  const addRisk = (s.balance * v.riskPct) / 100;
-  const addQty = addRisk / Math.abs(v.entryPrice - (sizeStop ?? trade.stopLoss));
+  const step = demoQtyStepOf(trade.symbol);
+  const dist = Math.abs(v.entryPrice - (sizeStop ?? trade.stopLoss));
+  const addQty = floorToLot((s.balance * v.riskPct) / 100 / dist, step);
+  const addRisk = addQty * dist;
   const remaining = trade.qty - trade.closedQty;
   const qty = trade.qty + addQty;
   const entryPrice = (remaining * trade.entryPrice + addQty * v.entryPrice) / (remaining + addQty);
   checkSides(trade.direction, entryPrice, trade.stopLoss, trade.takeProfit);
   if (((remaining + addQty) * entryPrice) / trade.leverage > s.balance) throw new DemoError('margin');
+  if (belowMinOrder(addQty, v.entryPrice, step)) throw new DemoError('minOrder');
   const riskUsdt = trade.riskUsdt + addRisk;
   return replaceTrade(s, {
     ...trade,
