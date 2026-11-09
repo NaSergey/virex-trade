@@ -2378,7 +2378,7 @@
     "back": "Games",
     "loading": "Powering up…",
     "loadFailed": "Couldn't load slots",
-    "subtitle": "5 reels · 10 lines · played for coins",
+    "subtitle": "Slots · 5×3 · 10 lines · played for coins",
     "paytable": "Paytable",
     "close": "Close",
     "credit": "Credit",
@@ -2394,7 +2394,7 @@
     "noCoins": "Not enough coins for this bet",
     "failed": "Spin failed",
     "goodLuck": "WAGMI!",
-    "placeBet": "Space or lever to spin",
+    "placeBet": "Press Space or “Spin”",
     "lineWin": "Line {line}: {n} in a row!",
     "linesWin": "Win on {n} lines!",
     "tapToContinue": "Tap to continue",
@@ -2440,6 +2440,33 @@
     },
     "streak": "Streak ×{n}!",
     "streakBadge": "Streak ×{n}",
-    "bonusStamp": "BONUS!"
+    "bonusStamp": "BONUS!",
+    "stat": {
+      "last": "Last",
+      "pnl": "Session PnL",
+      "spins": "Spins"
+    },
+    "order": {
+      "manual": "Manual",
+      "auto": "Auto",
+      "autoGo": "Start auto",
+      "stopHint": "stop the reels",
+      "hint": "bet {n}"
+    },
+    "hist": {
+      "title": "Spin history",
+      "note": "this session",
+      "time": "Time",
+      "bet": "Bet",
+      "payout": "Payout",
+      "result": "Result",
+      "x": "Mult.",
+      "empty": "No spins yet — make the first one",
+      "bonus": {
+        "free": "airdrop",
+        "pick": "vault",
+        "wheel": "wheel"
+      }
+    }
   }
 }

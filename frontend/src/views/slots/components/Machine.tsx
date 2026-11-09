@@ -28,11 +28,13 @@ import { BonusSplash, type Splash } from './BonusSplash';
 import { Paytable } from './Paytable';
 import { PickBonus } from './PickBonus';
 import { WheelBonus } from './WheelBonus';
+import { ChartBackdrop } from './ChartBackdrop';
+import { SpinHistory } from './SpinHistory';
+import { Ticker } from './Ticker';
 import { LINE_COLORS, WinLines } from './WinLines';
 
 const REELS = 5;
 const POOL = 5;
-const BULBS = 22;
 const fmt = (n: number) => Math.round(n).toLocaleString('ru-RU');
 
 type Phase = 'idle' | 'spinning' | 'present' | 'bonus';
@@ -101,7 +103,8 @@ export function Machine({ config }: { config: SlotsConfig }) {
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<number | null>(null);
   const [paytable, setPaytable] = useState(false);
-  const [pulled, setPulled] = useState(0);
+  /** История спинов сессии — таблица под графиком и лента котировок. */
+  const [history, setHistory] = useState<{ id: string; at: number; bet: number; win: number; bonus: string }[]>([]);
 
   const bet = config.bets[betIdx];
   const balance = coins?.balance ?? null;
@@ -544,6 +547,12 @@ export function Machine({ config }: { config: SlotsConfig }) {
       else await playOverlay(b);
     }
     if (res.bonuses.length && winMeter.current) winMeter.current.textContent = fmt(res.win);
+    setHistory((h) =>
+      [
+        { id: res.id, at: Date.now(), bet: res.bet, win: res.win, bonus: res.bonuses.map((b) => b.kind).join(' ') },
+        ...h,
+      ].slice(0, 40),
+    );
     const next = res.win > res.bet ? streakRef.current + 1 : 0;
     streakRef.current = next;
     setStreak(next);
@@ -556,7 +565,9 @@ export function Machine({ config }: { config: SlotsConfig }) {
 
   /** Спин. Во время спина — ускорить остановку, во время счёта — досчитать сразу. */
   const doSpin = () => {
-    if (big || splash || overlay) return;
+    // Плашка «+N спинов» / «Серия» — только надпись поверх: спин она не держит
+    // (иначе и автоспин вставал бы, пока она видна).
+    if (big || overlay || (splash && splash.kind !== 'toast')) return;
     if (busy.current) {
       if (presenting.current) presenting.current();
       else if (phase === 'spinning') {
@@ -576,7 +587,6 @@ export function Machine({ config }: { config: SlotsConfig }) {
     won.current = 0;
     if (winMeter.current) winMeter.current.textContent = '0';
     setPhase('spinning');
-    setPulled((n) => n + 1);
     setCredit((credit.current ?? balance ?? 0) - bet);
     const t0 = startReels();
     spinReq.mutateAsync(bet).then(
@@ -639,6 +649,10 @@ export function Machine({ config }: { config: SlotsConfig }) {
           ? t('goodLuck')
           : t('placeBet');
 
+  const pnl = history.reduce((sum, h) => sum + h.win - h.bet, 0);
+  const lastWin = history[0] ? history[0].win : null;
+  const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${fmt(Math.abs(n))}`;
+
   return (
     <div
       className="sl-page"
@@ -649,60 +663,64 @@ export function Machine({ config }: { config: SlotsConfig }) {
       data-tease={hot >= 0 ? '' : undefined}
       data-streak={streak >= 3 ? '' : undefined}
     >
-      <div className="sl-room" aria-hidden>
-        <div className="sl-bokeh" />
-        <div className="sl-bokeh sl-bokeh-2" />
-        <div className="sl-spot" />
-      </div>
+      <div className="sl-room" aria-hidden />
 
-      <header className="sl-top">
-        <Link href="/games" className="sl-back">
-          ← {t('back')}
-        </Link>
-        <div className="sl-top-r">
-          <button type="button" className="sl-chip-btn" onClick={() => setPaytable(true)}>
-            {t('paytable')}
-          </button>
-          <AudioControl kind="sound" channel={sfx} />
-        </div>
-      </header>
+      <div className="sl-term" ref={cab}>
+        <Ticker config={config} last={history.slice(0, 8)} />
 
-      <div className="sl-stage">
-        <div className="sl-cab" ref={cab}>
-          {streak >= 2 && (
-            <div key={streak} className="sl-streak">
-              {t('streakBadge', { n: streak })}
-            </div>
-          )}
-          {/* ── Вывеска ── */}
-          <div className="sl-marquee">
-            <div className="sl-bulbs" aria-hidden>
-              {Array.from({ length: BULBS }, (_, i) => (
-                <span key={i} className="sl-bulb" style={{ ['--i' as string]: i }} />
-              ))}
-            </div>
-            <div className="sl-logo" data-text="TO THE MOON">
-              TO THE MOON
-            </div>
-            <div className="sl-sub">
-              {free ? t('free.left', { n: free.left, win: fmt(free.win) }) : t('subtitle')}
-            </div>
-            <div className="sl-bulbs sl-bulbs-b" aria-hidden>
-              {Array.from({ length: BULBS }, (_, i) => (
-                <span key={i} className="sl-bulb" style={{ ['--i' as string]: BULBS - i }} />
-              ))}
+        {/* ── Пара и статистика сессии — шапка графика ── */}
+        <header className="sl-pair">
+          <Link href="/games" className="sl-back" aria-label={t('back')}>
+            ←
+          </Link>
+          <div className="sl-pair-name">
+            <svg viewBox="0 0 100 100" aria-hidden className="sl-pair-ico">
+              <use href="#sl-s-seven" />
+            </svg>
+            <div>
+              <b>MOON/COIN</b>
+              <small>{free ? t('free.left', { n: free.left, win: fmt(free.win) }) : t('subtitle')}</small>
             </div>
           </div>
+          <dl className="sl-stats">
+            <div>
+              <dt>{t('stat.last')}</dt>
+              <dd className={lastWin === null ? '' : lastWin > (history[0]?.bet ?? 0) ? 'up' : 'down'}>
+                {lastWin === null ? '—' : fmt(lastWin)}
+              </dd>
+            </div>
+            <div>
+              <dt>{t('stat.pnl')}</dt>
+              <dd className={pnl > 0 ? 'up' : pnl < 0 ? 'down' : ''}>{signed(pnl)}</dd>
+            </div>
+            <div className="sl-stat-hide">
+              <dt>{t('stat.spins')}</dt>
+              <dd>{history.length}</dd>
+            </div>
+            <div className="sl-stat-hide">
+              <dt>RTP</dt>
+              <dd>{config.rtp}%</dd>
+            </div>
+          </dl>
+          <div className="sl-pair-tools">
+            {streak >= 2 && (
+              <span key={streak} className="sl-streak">
+                {t('streakBadge', { n: streak })}
+              </span>
+            )}
+            <button type="button" className="sl-tool" onClick={() => setPaytable(true)}>
+              {t('paytable')}
+            </button>
+            <AudioControl kind="sound" channel={sfx} />
+          </div>
+        </header>
 
-          {/* ── Окно барабанов ── */}
+        {/* ── График: барабаны на свечах ── */}
+        <section className="sl-chart">
           <div className="sl-window">
-            <LineBadges
-              side="l"
-              wins={winSet}
-              onHover={setPreview}
-              ids={[1, 3, 5, 7, 9, 0, 8, 6, 4, 2]}
-            />
+            <LineBadges side="l" wins={winSet} onHover={setPreview} ids={[1, 3, 5, 7, 9, 0, 8, 6, 4, 2]} />
             <div className="sl-reels" ref={reelsBox}>
+              <ChartBackdrop />
               {Array.from({ length: REELS }, (_, i) => (
                 <div
                   key={i}
@@ -753,111 +771,90 @@ export function Machine({ config }: { config: SlotsConfig }) {
                 </span>
               ))}
               <WinLines key={shown?.id ?? 0} paylines={config.paylines} wins={winLines} cycling={cycling} preview={preview} />
-              <div className="sl-glass" aria-hidden />
             </div>
-            <LineBadges
-              side="r"
-              wins={winSet}
-              onHover={setPreview}
-              ids={[1, 3, 5, 7, 9, 0, 8, 6, 4, 2]}
-            />
+            <LineBadges side="r" wins={winSet} onHover={setPreview} ids={[1, 3, 5, 7, 9, 0, 8, 6, 4, 2]} />
           </div>
-
-          {/* ── Табло ── */}
           <div className={cn('sl-msg', error && 'sl-msg-err')} aria-live="polite">
+            <span className="sl-live" aria-hidden />
             {message}
           </div>
-          <div className="sl-meters">
-            <Meter label={t('credit')}>
-              <span ref={creditMeter}>{balance === null ? '—' : fmt(balance)}</span>
-            </Meter>
-            <Meter label={t('bet')}>{fmt(bet)}</Meter>
-            <Meter label={t('win')} hot={tier !== 'none'}>
-              <span ref={winMeter}>0</span>
-            </Meter>
-          </div>
+        </section>
 
-          {/* ── Пульт ── */}
-          <div className="sl-deck">
-            <div className="sl-bet">
-              <button
-                type="button"
-                className="sl-key"
-                onClick={() => changeBet(-1)}
-                disabled={phase !== 'idle' || betIdx === 0}
-                aria-label={t('betDown')}
-              >
+        {/* ── Ордер: баланс, размер, кнопка ── */}
+        <aside className="sl-order">
+          <div className="sl-order-tabs" role="tablist">
+            <button type="button" role="tab" aria-selected={!auto} data-on={!auto ? '' : undefined} onClick={() => setAuto(false)}>
+              {t('order.manual')}
+            </button>
+            <button type="button" role="tab" aria-selected={auto} data-on={auto ? '' : undefined} onClick={() => setAuto(true)}>
+              {t('order.auto')}
+            </button>
+          </div>
+          <div className="sl-row">
+            <span>{t('credit')}</span>
+            <b>
+              <span ref={creditMeter}>{balance === null ? '—' : fmt(balance)}</span>
+              <CoinIcon className="sl-coin-i" />
+            </b>
+          </div>
+          <label className="sl-size">
+            <span>{t('bet')}</span>
+            <div className="sl-size-box">
+              <button type="button" onClick={() => changeBet(-1)} disabled={phase !== 'idle' || betIdx === 0} aria-label={t('betDown')}>
                 −
               </button>
-              <div className="sl-bet-v">
-                <small>{t('bet')}</small>
-                <b>
-                  {fmt(bet)}
-                  <CoinIcon className="sl-coin-i" />
-                </b>
-              </div>
+              <output>
+                {fmt(bet)}
+                <CoinIcon className="sl-coin-i" />
+              </output>
               <button
                 type="button"
-                className="sl-key"
                 onClick={() => changeBet(1)}
                 disabled={phase !== 'idle' || betIdx === config.bets.length - 1}
                 aria-label={t('betUp')}
               >
                 +
               </button>
+            </div>
+          </label>
+          <div className="sl-chips">
+            {config.bets.map((b, i) => (
               <button
+                key={b}
                 type="button"
-                className="sl-key sl-key-wide"
-                onClick={() => !busy.current && setBetIdx(config.bets.length - 1)}
+                data-on={i === betIdx ? '' : undefined}
                 disabled={phase !== 'idle'}
+                onClick={() => setBetIdx(i)}
               >
-                {t('maxBet')}
+                {i === config.bets.length - 1 ? t('maxBet') : fmt(b)}
               </button>
-            </div>
-
-            <button
-              type="button"
-              className="sl-spin"
-              data-state={spinning ? 'stop' : 'spin'}
-              onClick={() => spinRef.current()}
-              aria-label={spinning ? t('stop') : t('spin')}
-            >
-              <span className="sl-spin-ring" aria-hidden />
-              <span className="sl-spin-face">
-                <svg viewBox="0 0 24 24" aria-hidden className="sl-spin-ico">
-                  <path d="M12 4a8 8 0 1 1-7.4 5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
-                  <path d="M3 4l1.6 5L9.4 7.4" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                <span>{spinning ? t('stop') : t('spin')}</span>
-              </span>
-            </button>
-
-            <div className="sl-toggles">
-              <button type="button" className="sl-lamp" data-on={auto ? '' : undefined} onClick={() => setAuto((v) => !v)}>
-                {t('auto')}
-              </button>
-              <button type="button" className="sl-lamp" data-on={turbo ? '' : undefined} onClick={() => setTurbo((v) => !v)}>
-                {t('turbo')}
-              </button>
-            </div>
+            ))}
           </div>
+          <div className="sl-row sl-row-win" data-hot={tier !== 'none' ? '' : undefined}>
+            <span>{t('win')}</span>
+            <b>
+              <span ref={winMeter}>0</span>
+              <CoinIcon className="sl-coin-i" />
+            </b>
+          </div>
+          <label className="sl-check">
+            <input type="checkbox" checked={turbo} onChange={(e) => setTurbo(e.target.checked)} />
+            <span>{t('turbo')}</span>
+          </label>
+          <button
+            type="button"
+            className="sl-spin"
+            data-state={spinning ? 'stop' : 'spin'}
+            onClick={() => spinRef.current()}
+          >
+            {spinning ? t('stop') : auto ? t('order.autoGo') : t('spin')}
+            <small>{spinning ? t('order.stopHint') : t('order.hint', { n: fmt(bet) })}</small>
+          </button>
           <p className="sl-legal">{t('legal')}</p>
-        </div>
+        </aside>
 
-        {/* ── Рычаг ── */}
-        <button
-          type="button"
-          className="sl-lever"
-          key={pulled}
-          data-pulled={pulled > 0 ? '' : undefined}
-          onClick={() => spinRef.current()}
-          aria-label={t('spin')}
-        >
-          <span className="sl-lever-base" />
-          <span className="sl-lever-arm">
-            <span className="sl-lever-ball" />
-          </span>
-        </button>
+        {/* ── История спинов — как история сделок ── */}
+        <SpinHistory rows={history} />
       </div>
 
       <canvas className="sl-fx" ref={canvas} aria-hidden />
@@ -897,15 +894,6 @@ function zigzag(pts: { x: number; y: number }[]) {
     }
   });
   return out.join(' ');
-}
-
-function Meter({ label, hot, children }: { label: string; hot?: boolean; children: React.ReactNode }) {
-  return (
-    <div className="sl-meter" data-hot={hot ? '' : undefined}>
-      <small>{label}</small>
-      <b>{children}</b>
-    </div>
-  );
 }
 
 /** Значки линий по краям окна: горят у выигравших, под курсором показывают линию. */
