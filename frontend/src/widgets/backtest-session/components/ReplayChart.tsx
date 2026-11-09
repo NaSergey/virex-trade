@@ -150,6 +150,13 @@ export interface Marker {
   label?: string;
 }
 
+/** Под свечой — стрелка вверх (вход лонга, выход шорта) и заметка лонга; остальное — над ней. */
+const markerBelow = (m: Marker) =>
+  m.kind === 'note' ? m.direction === 'long' : (m.kind === 'entry') === (m.direction === 'long');
+/** Место отметки от края свечи, в px до масштаба: следующая с той же стороны встаёт дальше. */
+const ARROW_SLOT = 13;
+const NOTE_SLOT = 18;
+
 export interface Level {
   /** Ключ строки — не kind: лимит-ордеров одного kind может быть несколько. */
   id: string;
@@ -1417,10 +1424,19 @@ export const ReplayChart = memo(function ReplayChart({
   // место.
   // Свеча каждого маркера ищется бинарным поиском — один раз на смену сделок
   // или свечей, а не в каждом кадре пана по всем сделкам сессии.
-  const markerIdx = useMemo(
-    () => markers.map((m) => ({ m, idx: Math.floor(frameAtTime(candles, m.time)) })),
-    [markers, candles],
-  );
+  // Отметки одной свечи с одной стороны встают друг за другом от её края, а не в
+  // одну точку: доборы сеткой в одной свече, вход лонга и выход шорта, вход и свип.
+  const markerIdx = useMemo(() => {
+    const used = new Map<string, number>();
+    return markers.map((m) => {
+      const idx = Math.floor(frameAtTime(candles, m.time));
+      const below = markerBelow(m);
+      const key = `${idx}${below ? 'b' : 'a'}`;
+      const offset = used.get(key) ?? 0;
+      used.set(key, offset + (m.kind === 'note' ? NOTE_SLOT : ARROW_SLOT));
+      return { m, idx, below, offset };
+    });
+  }, [markers, candles]);
   const shownMarkers = markerIdx.filter(
     ({ m, idx }) => idx >= startIdx - 1 && idx < endIdx + 1 && m.price >= lo && m.price <= hi,
   );
@@ -1600,18 +1616,23 @@ export const ReplayChart = memo(function ReplayChart({
 
             {/* Отметки сделок — внутри сдвигаемой группы: они привязаны к своим
                 свечам и обязаны ехать вместе с ними, а не висеть над полем.
-                Стрелка стоит СНАРУЖИ своей цены и смотрит на неё: у лонга вход
-                снизу, выход сверху, у шорта наоборот — две отметки на одной
-                свече не сходятся в одну точку. */}
-            {shownMarkers.map(({ m, idx }) => {
+                Стрелка стоит СНАРУЖИ свечи, как у TradingView (belowbar/abovebar):
+                у лонга вход под минимумом, выход над максимумом, у шорта наоборот.
+                От цены сделки она ложилась на тело и тени (владелец 2026-11-10). */}
+            {shownMarkers.map(({ m, idx, below, offset }) => {
+              const bar = candles[idx] as Candle | undefined;
+              // Цена за краем свечи (исполнение вне её) — край по цене: отметка не ложится на неё.
+              const edge = y(below ? Math.min(bar?.l ?? m.price, m.price) : Math.max(bar?.h ?? m.price, m.price));
+              const side = below ? 1 : -1;
+              const x = cx(idx);
               if (m.kind === 'note') {
-                const below = m.direction === 'long';
+                const dot = edge + side * px(offset > 0 ? offset + 3 : 0);
                 return (
                   <g key={m.id}>
-                    <circle cx={cx(idx)} cy={y(m.price)} r={px(2.5)} fill="var(--color-muted)" />
+                    <circle cx={x} cy={dot} r={px(2.5)} fill="var(--color-muted)" />
                     <text
-                      x={cx(idx)}
-                      y={below ? y(m.price) + px(13) : y(m.price) - px(6)}
+                      x={x}
+                      y={below ? dot + px(13) : dot - px(6)}
                       fill="var(--color-muted)"
                       fontSize={px(9)}
                       fontFamily="var(--font-mono)"
@@ -1622,7 +1643,6 @@ export const ReplayChart = memo(function ReplayChart({
                   </g>
                 );
               }
-              const up = (m.kind === 'entry') === (m.direction === 'long');
               const color =
                 m.kind === 'entry'
                   ? 'var(--color-fg)'
@@ -1631,10 +1651,8 @@ export const ReplayChart = memo(function ReplayChart({
                     : m.tone === 'profit'
                       ? 'var(--profit)'
                       : 'var(--color-muted)';
-              const x = cx(idx);
-              const yy = y(m.price);
-              const tip = up ? yy + px(4) : yy - px(4);
-              const tail = up ? tip + px(7) : tip - px(7);
+              const tip = edge + side * px(offset + 4);
+              const tail = tip + side * px(7);
               return (
                 <polygon
                   key={m.id}
