@@ -86,7 +86,7 @@ export function TradeDialog({ trade, onClose }: { trade: TradeRow; onClose: () =
 
   const markers = useMemo<Marker[]>(() => {
     const out: Marker[] = [
-      { id: 'entry', kind: 'entry', time: trade.fillMs, price: trade.entries[0], direction, label: 'Вход' },
+      { id: 'entry', kind: 'entry', time: trade.fillMs, price: trade.entries[0], direction },
       {
         id: 'exit',
         kind: 'exit',
@@ -94,7 +94,6 @@ export function TradeDialog({ trade, onClose }: { trade: TradeRow; onClose: () =
         price: trade.exit,
         direction,
         tone: trade.rNet > 0 ? 'profit' : 'loss',
-        label: `Выход ${fmtR(trade.rNet)}`,
       },
     ];
     if (!candles?.length) return out;

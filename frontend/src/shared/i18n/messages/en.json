@@ -1338,11 +1338,7 @@
       "gridStep": "order",
       "gridTake": "take",
       "pendingEntry": "limit"
-    },
-    "marker": {
-      "entry": "entry",
-      "exit": "exit"
-    },
+    },
     "drawings": {
       "toolbar": "Drawing tools",
       "tool": {

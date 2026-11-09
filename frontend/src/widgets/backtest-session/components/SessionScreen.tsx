@@ -850,7 +850,6 @@ export function Terminal({
           time: Date.parse(entry.time),
           price: toScreen(entry.price, scale),
           direction: trade.direction,
-          label: t('marker.entry'),
         });
       }
       if (trade.exitTime != null && trade.exitPrice != null) {
@@ -862,12 +861,11 @@ export function Terminal({
           direction: trade.direction,
           // Ноль — не прибыль и не убыток: у такой сделки нейтральный цвет.
           tone: trade.pnl == null || trade.pnl === 0 ? null : trade.pnl > 0 ? 'profit' : 'loss',
-          label: t('marker.exit'),
         });
       }
     }
     return list;
-  }, [trades, scale, symbol, t]);
+  }, [trades, scale, symbol]);
 
   // Скрытая дата: день недели и время суток видны (биржевые сессии, выходные),
   // год и число — нет; вместо даты — номер дня от старта. useCallback по той же
