@@ -34,22 +34,41 @@ export function stopPlan(grid: SlotSymbol[][], turbo: boolean): StopPlan {
   return { at, hot };
 }
 
-export type WinTier = 'none' | 'small' | 'nice' | 'big' | 'mega' | 'epic';
+export type WinTier = 'none' | 'tiny' | 'small' | 'nice' | 'big' | 'mega' | 'epic' | 'legendary';
+export type BigTier = 'big' | 'mega' | 'epic' | 'legendary';
 
-/** Сила выигрыша — от неё весь набор эффектов: от искр до салюта на весь экран. */
+/**
+ * Ступени крупного выигрыша, в ставках. Экран крупного выигрыша проходит их по
+ * мере счёта: начинает с BIG и «повышается» на каждой — так делают настоящие
+ * автоматы, и это самый сильный момент игры.
+ */
+export const BIG_STEPS: readonly [BigTier, number][] = [
+  ['big', 10],
+  ['mega', 30],
+  ['epic', 80],
+  ['legendary', 200],
+];
+
+/**
+ * Сила выигрыша — от неё весь набор эффектов: от искр до салюта на весь экран.
+ * `tiny` — выиграно меньше ставки, то есть спин в минусе: его не празднуют
+ * монетами и фанфарами (подсветка линии остаётся). Праздник проигрыша —
+ * известный приём выдавать потерю за победу, и автомат его не делает.
+ */
 export function tierOf(win: number, bet: number): WinTier {
   if (win <= 0) return 'none';
   const x = win / bet;
-  if (x >= 80) return 'epic';
-  if (x >= 30) return 'mega';
-  if (x >= 10) return 'big';
+  for (let i = BIG_STEPS.length - 1; i >= 0; i--) if (x >= BIG_STEPS[i][1]) return BIG_STEPS[i][0];
   if (x >= 2) return 'nice';
-  return 'small';
+  if (x > 1) return 'small';
+  return 'tiny';
 }
+
+export const isBigTier = (t: WinTier): t is BigTier => t === 'big' || t === 'mega' || t === 'epic' || t === 'legendary';
 
 /** Длина счёта выигрыша, мс: мелочь — мигом, крупное — дольше, чтобы его прожить. */
 export function countMs(tier: WinTier): number {
-  return { none: 0, small: 700, nice: 1300, big: 3200, mega: 4600, epic: 6200 }[tier];
+  return { none: 0, tiny: 500, small: 800, nice: 1400, big: 3600, mega: 5600, epic: 7600, legendary: 9800 }[tier];
 }
 
 /**

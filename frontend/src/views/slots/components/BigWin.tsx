@@ -1,35 +1,42 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { CoinIcon } from '@/shared/ui/CoinIcon';
-import { countMs, type WinTier } from '../lib/plan';
+import { BIG_STEPS, countMs, tierOf, type BigTier } from '../lib/plan';
 import type { Fx } from '../lib/fx';
+import { buzz } from '../lib/haptics';
 import * as sound from '../lib/sound';
 
 const fmt = (n: number) => Math.round(n).toLocaleString('ru-RU');
 
 /**
- * Экран крупного выигрыша: лучи, золотая надпись, сумма считается вверх,
- * сверху сыплются монеты. Каждые четверть секунды — новая горсть монет и
- * звон; на трети и двух третях счёта — залп конфетти. Клик или пробел
- * досчитывает сразу, второй — закрывает.
+ * Экран крупного выигрыша. Начинается с BIG и **повышается по ходу счёта**:
+ * сумма переходит ×30 — MEGA, ×80 — EPIC, ×200 — LEGENDARY. На каждой ступени
+ * надпись взрывается новой, бьёт фанфара, взлетает фейерверк, экран
+ * вздрагивает, а лучи раскручиваются быстрее. Между ступенями — дождь монет,
+ * звон и фейерверк тем чаще, чем выше ступень.
+ *
+ * Клик или пробел досчитывает сразу (до итоговой ступени), второй — закрывает.
  */
 export function BigWin({
-  tier,
   win,
+  bet,
   fx,
   audible,
   onDone,
 }: {
-  tier: Exclude<WinTier, 'none' | 'small' | 'nice'>;
   win: number;
+  bet: number;
   fx: Fx | null;
   audible: boolean;
   onDone: () => void;
 }) {
   const t = useTranslations('slots');
+  const final = tierOf(win, bet) as BigTier;
+  const [stage, setStage] = useState<BigTier>('big');
   const amount = useRef<HTMLSpanElement>(null);
+  const box = useRef<HTMLDivElement>(null);
   const skip = useRef(false);
   const done = useRef(false);
   const finish = useRef(onDone);
@@ -38,47 +45,73 @@ export function BigWin({
   });
 
   useEffect(() => {
-    const dur = countMs(tier);
+    const dur = countMs(final);
     const t0 = performance.now();
     let raf = 0;
+    let timer = 0;
     let lastTick = 0;
     let lastRain = 0;
-    let volleys = 0;
-    if (audible) sound.fanfare(tier === 'big' ? 0 : tier === 'mega' ? 1 : 2);
-    fx?.confetti(tier === 'epic' ? 260 : 160);
-    const step = (now: number) => {
-      const u = skip.current ? 1 : Math.min(1, (now - t0) / dur);
-      // Медленнее к концу: последние цифры набегают, как у настоящего счётчика.
-      const e = 1 - (1 - u) ** 2.4;
-      if (amount.current) amount.current.textContent = fmt(win * e);
-      if (now - lastTick > 70 && u < 1) {
-        lastTick = now;
-        if (audible) sound.countTick(u);
-      }
-      if (now - lastRain > 260 && u < 1) {
-        lastRain = now;
-        fx?.rain(tier === 'epic' ? 14 : tier === 'mega' ? 10 : 6);
-        if (audible) sound.coin();
-      }
-      if (volleys < 2 && u > (volleys + 1) / 3) {
-        volleys++;
-        fx?.confetti(90);
-      }
-      if (u < 1) raf = requestAnimationFrame(step);
-      else {
-        done.current = true;
-        if (audible) sound.winChime(8);
-        fx?.burst(window.innerWidth / 2, window.innerHeight / 2, 60, 700);
-        timer = window.setTimeout(() => finish.current(), 2200);
+    let lastRocket = 0;
+    let level = 0;
+    if (audible) sound.fanfare(0);
+    buzz([60, 40, 60]);
+    fx?.confetti(140);
+    fx?.fireworks(3);
+
+    const up = (next: number) => {
+      level = next;
+      setStage(BIG_STEPS[next][0]);
+      if (audible) sound.levelUp(next);
+      buzz([90, 50, 90, 50, 140]);
+      fx?.fireworks(3 + next * 2);
+      fx?.confetti(80 + next * 40);
+      fx?.burst(window.innerWidth / 2, window.innerHeight / 2, 50 + next * 20, 800);
+      const el = box.current;
+      if (el) {
+        el.removeAttribute('data-up');
+        void el.offsetWidth;
+        el.setAttribute('data-up', '');
       }
     };
-    let timer = 0;
+
+    const step = (now: number) => {
+      const u = skip.current ? 1 : Math.min(1, (now - t0) / dur);
+      const value = win * (1 - (1 - u) ** 2.2);
+      if (amount.current) amount.current.textContent = fmt(value);
+      // Ступени — по сумме на счётчике, а не по времени: повышение видно на числе.
+      let reached = 0;
+      for (let i = 0; i < BIG_STEPS.length; i++) if (value >= BIG_STEPS[i][1] * bet) reached = i;
+      if (reached > level) up(reached);
+      if (u < 1) {
+        if (now - lastTick > 65) {
+          lastTick = now;
+          if (audible) sound.countTick(u);
+        }
+        if (now - lastRain > 240) {
+          lastRain = now;
+          fx?.rain(6 + level * 4);
+          if (audible) sound.coin();
+        }
+        if (level >= 1 && now - lastRocket > 1100 - level * 250) {
+          lastRocket = now;
+          fx?.fireworks(1 + level);
+          if (audible) sound.pop();
+        }
+        raf = requestAnimationFrame(step);
+      } else {
+        done.current = true;
+        if (audible) sound.winChime(8);
+        fx?.burst(window.innerWidth / 2, window.innerHeight / 2, 80, 900);
+        fx?.fireworks(4 + level * 2);
+        timer = window.setTimeout(() => finish.current(), 2600);
+      }
+    };
     raf = requestAnimationFrame(step);
     return () => {
       cancelAnimationFrame(raf);
       clearTimeout(timer);
     };
-  }, [tier, win, fx, audible]);
+  }, [final, win, bet, fx, audible]);
 
   const click = () => {
     if (done.current) finish.current();
@@ -97,18 +130,19 @@ export function BigWin({
   });
 
   return (
-    <div className="sl-big" data-tier={tier} onClick={click} role="dialog" aria-live="assertive">
+    <div className="sl-big" data-tier={stage} onClick={click} role="dialog" aria-live="assertive" ref={box}>
       <div className="sl-big-rays" aria-hidden />
       <div className="sl-big-rays sl-big-rays-2" aria-hidden />
       <div className="sl-big-glow" aria-hidden />
       <div className="sl-big-body">
-        <div className="sl-big-title" data-text={t(`tier.${tier}`)}>
-          {t(`tier.${tier}`)}
+        <div key={stage} className="sl-big-title" data-text={t(`tier.${stage}`)}>
+          {t(`tier.${stage}`)}
         </div>
         <div className="sl-big-amount">
           <CoinIcon className="sl-big-coin" />
           <span ref={amount}>0</span>
         </div>
+        <div className="sl-big-x">×{Math.floor(win / bet)}</div>
         <div className="sl-big-hint">{t('tapToContinue')}</div>
       </div>
     </div>

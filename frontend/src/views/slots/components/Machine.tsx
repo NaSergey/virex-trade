@@ -19,7 +19,8 @@ import { cn } from '@/shared/lib/utils/css';
 import { AudioControl } from '@/shared/ui/AudioControl';
 import { CoinIcon } from '@/shared/ui/CoinIcon';
 import { Fx } from '../lib/fx';
-import { countMs, fillerSymbol, randomGrid, stopPlan, tierOf, type StopPlan, type WinTier } from '../lib/plan';
+import { countMs, fillerSymbol, isBigTier, randomGrid, stopPlan, tierOf, type StopPlan, type WinTier } from '../lib/plan';
+import { buzz } from '../lib/haptics';
 import { Reel } from '../lib/reel';
 import * as sound from '../lib/sound';
 import { BigWin } from './BigWin';
@@ -40,7 +41,6 @@ type FreeState = { left: number; played: number; total: number; win: number; mul
 /** Окно сундуков или колеса и обещание, которое оно закрывает. */
 type Overlay = { bonus: Extract<SlotsBonus, { kind: 'pick' | 'wheel' }>; done: () => void };
 const SPECIAL: SlotSymbol[] = ['scatter', 'chest', 'wheel'];
-type BigTier = Exclude<WinTier, 'none' | 'small' | 'nice'>;
 
 /** Перезапустить CSS-анимацию по атрибуту: снять, дать браузеру заметить, поставить. */
 function kick(el: Element | null, attr: string) {
@@ -91,7 +91,13 @@ export function Machine({ config }: { config: SlotsConfig }) {
   const [bonusTone, setBonusTone] = useState<'free' | 'pick' | 'wheel' | null>(null);
   const [tier, setTier] = useState<WinTier>('none');
   const [cycling, setCycling] = useState(false);
-  const [big, setBig] = useState<{ tier: BigTier; win: number } | null>(null);
+  const [big, setBig] = useState<{ win: number } | null>(null);
+  /** «+N» над последним символом каждой выигравшей линии. */
+  const [pops, setPops] = useState<{ id: string; x: number; y: number; text: string; color: string; delay: number }[]>([]);
+  /** Молния через символы бонуса, в процентах окна барабанов. */
+  const [bolt, setBolt] = useState<{ x: number; y: number }[] | null>(null);
+  /** Выигрышных спинов подряд (в плюс). Только зрелище: на выплаты не влияет. */
+  const [streak, setStreak] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<number | null>(null);
   const [paytable, setPaytable] = useState(false);
@@ -121,6 +127,7 @@ export function Machine({ config }: { config: SlotsConfig }) {
   const credit = useRef<number | null>(null);
   /** Выигрыш спина, накопленный на табло: базовый и все бонусы. */
   const won = useRef(0);
+  const streakRef = useRef(0);
   const shownId = useRef(0);
   const audible = useRef(sfx.audible);
   const bigDone = useRef<() => void>(() => {});
@@ -207,8 +214,14 @@ export function Machine({ config }: { config: SlotsConfig }) {
   /** Снять подсветку прошлого выигрыша. */
   const clearWin = () => {
     reelsBox.current?.removeAttribute('data-dim');
-    for (const cells of cellEls.current) for (const c of cells) c?.classList.remove('is-win', 'is-scatter');
+    for (const cells of cellEls.current)
+      for (const c of cells) {
+        c?.classList.remove('is-win', 'is-scatter');
+        c?.style.removeProperty('--d');
+      }
     setShown(null);
+    setPops([]);
+    setBolt(null);
     setTier('none');
     setCycling(false);
   };
@@ -278,15 +291,49 @@ export function Machine({ config }: { config: SlotsConfig }) {
         cells.set(`${r}:${row}`, el);
       }),
     );
-    let i = 0;
-    for (const el of cells.values()) {
+    // Символы «оживают» по очереди слева направо, каждый со своим звоном выше
+    // прежнего; мелкий выигрыш (меньше ставки) — без звона и частиц.
+    const quiet = tr === 'tiny' || tr === 'none';
+    const ordered = [...cells.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, el]) => el);
+    ordered.forEach((el, k) => {
+      el.style.setProperty('--d', `${k * 90}ms`);
       el.classList.add('is-win');
+      if (quiet) return;
       const c = centerOf(el);
-      const delay = i++ * 60;
       later(() => {
         f?.ring(c.x, c.y, c.w * 0.6);
-        f?.burst(c.x, c.y, tr === 'small' ? 6 : 12, 260);
-      }, delay);
+        f?.burst(c.x, c.y, tr === 'small' ? 8 : 14, 280);
+        if (audible.current) sound.cellDing(k);
+      }, k * 90);
+    });
+    if (!quiet) {
+      setPops(
+        lines.map((w, k) => {
+          const rows = config.paylines[w.line];
+          return {
+            id: `${shownId.current}:${w.line}`,
+            x: ((w.count - 0.5) / REELS) * 100,
+            y: ((rows[w.count - 1] + 0.5) / 3) * 100,
+            text: `+${fmt(w.win)}`,
+            color: LINE_COLORS[w.line],
+            delay: 250 + k * 140,
+          };
+        }),
+      );
+      kick(cab.current, 'data-sweep');
+      buzz(tr === 'small' ? 30 : [40, 30, 60]);
+    }
+    if (triggers.length) {
+      // Молния через символы бонуса: по одному на барабан, слева направо.
+      const pts: { x: number; y: number }[] = [];
+      grid.forEach((col, r) => {
+        const row = col.findIndex((s) => triggers.includes(s));
+        if (row >= 0) pts.push({ x: ((r + 0.5) / REELS) * 100, y: ((row + 0.5) / 3) * 100 });
+      });
+      setBolt(pts);
+      if (audible.current) sound.thunder();
+      kick(cab.current, 'data-zoom');
+      buzz([80, 40, 80, 40, 160]);
     }
     const id = ++shownId.current;
     setShown({
@@ -303,18 +350,22 @@ export function Machine({ config }: { config: SlotsConfig }) {
     if (tr === 'none') {
       if (audible.current) sound.bonusStart();
       kick(page.current, 'data-flash');
-      await wait(1300);
+      await wait(1700);
+      return;
+    }
+    if (tr === 'tiny') {
+      await countUp(win, countMs(tr));
+      if (triggers.length) await wait(1200);
       return;
     }
     setPhase((p) => (p === 'bonus' ? p : 'present'));
-    if (audible.current) sound.winChime({ none: 0, small: 3, nice: 5, big: 6, mega: 7, epic: 8 }[tr]);
+    if (audible.current) sound.winChime({ none: 0, tiny: 0, small: 3, nice: 5, big: 6, mega: 7, epic: 8, legendary: 8 }[tr]);
     const meter = winMeter.current;
     if (meter && f) {
       const m = centerOf(meter);
-      f.fountain(m.x, m.y, { none: 0, small: 8, nice: 26, big: 50, mega: 70, epic: 90 }[tr], tr === 'small' ? 0.7 : 1);
+      f.fountain(m.x, m.y, { none: 0, tiny: 0, small: 10, nice: 30, big: 50, mega: 70, epic: 90, legendary: 110 }[tr], tr === 'small' ? 0.7 : 1);
     }
-    const isBig = tr === 'big' || tr === 'mega' || tr === 'epic';
-    if (isBig) {
+    if (isBigTier(tr)) {
       if (!reducedMotion()) kick(cab.current, 'data-shake');
       kick(page.current, 'data-flash');
       await wait(450);
@@ -323,13 +374,13 @@ export function Machine({ config }: { config: SlotsConfig }) {
           setBig(null);
           r();
         };
-        setBig({ tier: tr as BigTier, win });
+        setBig({ win });
       });
       await countUp(win, 0);
       return;
     }
     await countUp(win, countMs(tr) * (turboRef.current ? 0.5 : 1));
-    if (triggers.length) await wait(600);
+    if (triggers.length) await wait(1100);
   };
 
   /** Символы бонусов, что сработали на этом поле. */
@@ -340,7 +391,14 @@ export function Machine({ config }: { config: SlotsConfig }) {
 
   const onLand = (i: number, grid: SlotSymbol[][], plan: StopPlan, landed: () => void) => {
     if (audible.current) sound.reelStop(i);
-    kick(reelEls.current[i], 'data-land');
+    const reelEl = reelEls.current[i];
+    kick(reelEl, 'data-land');
+    buzz(12);
+    if (reelEl) {
+      // Искры из-под барабана — удар об упор.
+      const r = reelEl.getBoundingClientRect();
+      fx.current?.burst(r.left + r.width / 2, r.bottom - 4, 5, 180);
+    }
     for (const sym of SPECIAL) {
       const here = grid[i].filter((s) => s === sym).length;
       if (!here) continue;
@@ -363,7 +421,10 @@ export function Machine({ config }: { config: SlotsConfig }) {
     }
     if (i < REELS - 1 && plan.hot[i + 1]) {
       setHot(i + 1);
-      if (audible.current) sound.tease(plan.at[i + 1] - plan.at[i]);
+      if (audible.current) {
+        sound.tease(plan.at[i + 1] - plan.at[i]);
+        sound.heartbeat(plan.at[i + 1] - plan.at[i]);
+      }
     } else if (i < REELS - 1) setHot(-1);
     if (i === REELS - 1) {
       setHot(-1);
@@ -483,6 +544,13 @@ export function Machine({ config }: { config: SlotsConfig }) {
       else await playOverlay(b);
     }
     if (res.bonuses.length && winMeter.current) winMeter.current.textContent = fmt(res.win);
+    const next = res.win > res.bet ? streakRef.current + 1 : 0;
+    streakRef.current = next;
+    setStreak(next);
+    if (next >= 2) {
+      if (audible.current) sound.winChime(Math.min(8, 2 + next));
+      setSplash({ kind: 'toast', tone: 'wheel', title: t('streak', { n: next }), autoMs: 1800, onDone: () => setSplash(null) });
+    }
     finish();
   };
 
@@ -578,6 +646,8 @@ export function Machine({ config }: { config: SlotsConfig }) {
       data-mode={big ? 'big' : phase === 'present' ? 'win' : phase}
       data-tier={tier}
       data-bonus={bonusTone ?? undefined}
+      data-tease={hot >= 0 ? '' : undefined}
+      data-streak={streak >= 3 ? '' : undefined}
     >
       <div className="sl-room" aria-hidden>
         <div className="sl-bokeh" />
@@ -599,6 +669,11 @@ export function Machine({ config }: { config: SlotsConfig }) {
 
       <div className="sl-stage">
         <div className="sl-cab" ref={cab}>
+          {streak >= 2 && (
+            <div key={streak} className="sl-streak">
+              {t('streakBadge', { n: streak })}
+            </div>
+          )}
           {/* ── Вывеска ── */}
           <div className="sl-marquee">
             <div className="sl-bulbs" aria-hidden>
@@ -654,6 +729,29 @@ export function Machine({ config }: { config: SlotsConfig }) {
                 </div>
               ))}
               <div className="sl-cyl" aria-hidden />
+              {bolt && (
+                <>
+                  <svg className="sl-bolt" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+                    <polyline points={zigzag(bolt)} className="sl-bolt-glow" />
+                    <polyline points={zigzag(bolt)} className="sl-bolt-core" pathLength={1} />
+                  </svg>
+                  <div className="sl-stamp">{t('bonusStamp')}</div>
+                </>
+              )}
+              {pops.map((p) => (
+                <span
+                  key={p.id}
+                  className="sl-pop"
+                  style={{
+                    left: `${p.x}%`,
+                    top: `${p.y}%`,
+                    color: p.color,
+                    animationDelay: `${p.delay}ms`,
+                  }}
+                >
+                  {p.text}
+                </span>
+              ))}
               <WinLines key={shown?.id ?? 0} paylines={config.paylines} wins={winLines} cycling={cycling} preview={preview} />
               <div className="sl-glass" aria-hidden />
             </div>
@@ -765,8 +863,8 @@ export function Machine({ config }: { config: SlotsConfig }) {
       <canvas className="sl-fx" ref={canvas} aria-hidden />
       {big && (
         <BigWin
-          tier={big.tier}
           win={big.win}
+          bet={bet}
           fx={fxReady}
           audible={sfx.audible}
           onDone={() => bigDone.current()}
@@ -782,6 +880,23 @@ export function Machine({ config }: { config: SlotsConfig }) {
       {paytable && <Paytable config={config} bet={bet} onClose={() => setPaytable(false)} />}
     </div>
   );
+}
+
+/** Ломаная молнии между точками: между соседними — пара изломов в стороны. */
+function zigzag(pts: { x: number; y: number }[]) {
+  const out: string[] = [];
+  pts.forEach((p, i) => {
+    out.push(`${p.x},${p.y}`);
+    const q = pts[i + 1];
+    if (!q) return;
+    for (const [u, side] of [
+      [0.33, 1],
+      [0.66, -1],
+    ] as const) {
+      out.push(`${p.x + (q.x - p.x) * u + side * 2},${p.y + (q.y - p.y) * u - side * 9}`);
+    }
+  });
+  return out.join(' ');
 }
 
 function Meter({ label, hot, children }: { label: string; hot?: boolean; children: React.ReactNode }) {

@@ -26,10 +26,13 @@ it('сундуки на 1-м и 3-м — пятый горит', () => {
 describe('сила выигрыша', () => {
   it('по множителю ставки', () => {
     expect(tierOf(0, 10)).toBe('none');
-    expect(tierOf(5, 10)).toBe('small');
+    expect(tierOf(5, 10)).toBe('tiny');
+    expect(tierOf(10, 10)).toBe('tiny');
+    expect(tierOf(15, 10)).toBe('small');
     expect(tierOf(20, 10)).toBe('nice');
     expect(tierOf(100, 10)).toBe('big');
     expect(tierOf(300, 10)).toBe('mega');
     expect(tierOf(800, 10)).toBe('epic');
+    expect(tierOf(2000, 10)).toBe('legendary');
   });
 });

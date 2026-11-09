@@ -2405,7 +2405,8 @@
     "tier": {
       "big": "BIG WIN",
       "mega": "MEGA WIN",
-      "epic": "EPIC WIN"
+      "epic": "EPIC WIN",
+      "legendary": "LEGENDARY WIN"
     },
     "bonuses": "Bonus rounds",
     "free": {
@@ -2436,6 +2437,9 @@
       "take": "Take it",
       "spin": "Spin",
       "rule": "A wheel on reels 1, 3 and 5. {n} equal sectors from {min} to {max} — whatever stops under the arrow is yours."
-    }
+    },
+    "streak": "Streak ×{n}!",
+    "streakBadge": "Streak ×{n}",
+    "bonusStamp": "BONUS!"
   }
 }

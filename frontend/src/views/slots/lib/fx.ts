@@ -8,7 +8,7 @@
  * ничего.
  */
 
-type Kind = 'coin' | 'spark' | 'confetti' | 'ring';
+type Kind = 'coin' | 'spark' | 'confetti' | 'ring' | 'rocket' | 'flare';
 
 interface P {
   kind: Kind;
@@ -26,6 +26,7 @@ interface P {
   color: string;
 }
 
+const FIRE = ['#ffd34a', '#ff3b5c', '#2bd0ff', '#7cff6b', '#c46bff', '#ff8a1f', '#ff6bd5'];
 const CONFETTI = ['#ffd34a', '#ff2a55', '#2bd0ff', '#7cff6b', '#c46bff', '#ffffff', '#ff8a1f'];
 const MAX = 900;
 
@@ -228,6 +229,49 @@ export class Fx {
     }
   }
 
+  /**
+   * Фейерверк: ракеты взлетают снизу с хвостом и на вершине рассыпаются
+   * цветным шаром — каждая своего цвета.
+   */
+  fireworks(count: number) {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    for (let i = 0; i < this.n(count); i++) {
+      this.push({
+        kind: 'rocket',
+        x: w * (0.15 + Math.random() * 0.7),
+        y: h + 10,
+        vx: (Math.random() - 0.5) * 120,
+        vy: -(h * 0.85 + Math.random() * h * 0.3),
+        g: h * 0.75,
+        life: 3,
+        age: -i * 0.18,
+        size: 3,
+        color: FIRE[Math.floor(Math.random() * FIRE.length)],
+      });
+    }
+  }
+
+  private explode(p: P) {
+    const n = Math.round(60 * this.scale) + 10;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + Math.random() * 0.2;
+      const v = 160 + Math.random() * 260;
+      this.push({
+        kind: 'flare',
+        x: p.x,
+        y: p.y,
+        vx: Math.cos(a) * v,
+        vy: Math.sin(a) * v,
+        g: 140,
+        life: 1.1 + Math.random() * 0.8,
+        size: 2 + Math.random() * 2,
+        color: Math.random() < 0.2 ? '#ffffff' : p.color,
+      });
+    }
+    this.burst(p.x, p.y, 6, 120);
+  }
+
   clear() {
     this.parts.length = 0;
   }
@@ -254,13 +298,19 @@ export class Fx {
     for (let i = this.parts.length - 1; i >= 0; i--) {
       const p = this.parts[i];
       p.age += dt;
+      if (p.age < 0) continue;
+      if (p.kind === 'rocket' && p.vy > -40) {
+        this.parts.splice(i, 1);
+        this.explode(p);
+        continue;
+      }
       if (p.age >= p.life || p.y > h + 80) {
         this.parts.splice(i, 1);
         continue;
       }
       p.vy += p.g * dt;
       // Сопротивление воздуха: конфетти парит, монета падает.
-      const drag = p.kind === 'confetti' ? 1.6 : p.kind === 'spark' ? 2.2 : 0.4;
+      const drag = p.kind === 'confetti' ? 1.6 : p.kind === 'spark' || p.kind === 'flare' ? 2.2 : 0.4;
       p.vx -= p.vx * drag * dt;
       if (p.kind === 'confetti') p.vy -= p.vy * 1.2 * dt;
       p.x += p.vx * dt;
@@ -310,6 +360,23 @@ export class Fx {
         ctx.scale(1, Math.cos(p.spin));
         ctx.fillStyle = p.color;
         ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+        break;
+      }
+      case 'rocket':
+      case 'flare': {
+        // Хвост — отрезок назад по скорости: у ракеты длинный, у искры короткий.
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        const tail = p.kind === 'rocket' ? 0.06 : 0.035;
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = p.size;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x - p.vx * tail, p.y - p.vy * tail);
+        ctx.stroke();
+        const s = p.size * 5;
+        ctx.drawImage(this.spark, p.x - s / 2, p.y - s / 2, s, s);
         break;
       }
       case 'ring': {

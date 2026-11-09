@@ -264,3 +264,57 @@ export function wheelTick() {
   if (!t) return;
   tone('square', 2200, t, 0.05, 0.018);
 }
+
+/** Символ линии «ожил»: колокольчик, каждый следующий выше. */
+export function cellDing(k: number) {
+  const t = now();
+  if (!t) return;
+  const f = MAJOR[k % MAJOR.length] * (k >= MAJOR.length ? 2 : 1);
+  tone('sine', f, t, 0.16, 0.4);
+  tone('triangle', f * 2, t, 0.05, 0.2);
+}
+
+/** Сердцебиение под горящим барабаном: глухие двойные удары. */
+export function heartbeat(ms: number) {
+  const t = now();
+  if (!t) return;
+  for (let at = 0; at < ms / 1000; at += 0.62) {
+    tone('sine', 60, t + at, 0.5, 0.16, 40);
+    tone('sine', 55, t + at + 0.2, 0.35, 0.18, 38);
+  }
+}
+
+/** Гром — молния бонуса: шум с низким фильтром и раскатом. */
+export function thunder() {
+  const b = out();
+  if (!b) return;
+  const { c, o } = b;
+  const t = c.currentTime;
+  const n = noise(c);
+  const f = c.createBiquadFilter();
+  f.type = 'lowpass';
+  f.frequency.setValueAtTime(1800, t);
+  f.frequency.exponentialRampToValueAtTime(120, t + 1.2);
+  const g = env(c, t, 0.8, 0.01, 1.4);
+  n.connect(f).connect(g).connect(o);
+  n.start(t);
+  n.stop(t + 1.6);
+  tone('sine', 50, t, 0.7, 1.2, 30);
+}
+
+/** Повышение ступени крупного выигрыша: взлёт тона и удар. */
+export function levelUp(level: number) {
+  const t = now();
+  if (!t) return;
+  const base = 330 * 2 ** (level / 3);
+  for (let i = 0; i < 8; i++) tone('sawtooth', base * 2 ** (i / 8), t + i * 0.035, 0.07, 0.12);
+  tone('sine', 80, t + 0.3, 0.8, 0.7, 40);
+  fanfare(Math.min(2, level));
+}
+
+/** Хлопок ракеты фейерверка. */
+export function pop() {
+  const t = now();
+  if (!t) return;
+  tone('square', 160 + Math.random() * 80, t, 0.12, 0.08, 60);
+}
