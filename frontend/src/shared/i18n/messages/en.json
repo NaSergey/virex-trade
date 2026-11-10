@@ -1338,11 +1338,7 @@
       "gridStep": "order",
       "gridTake": "take",
       "pendingEntry": "limit"
-    },
-    "marker": {
-      "entry": "entry",
-      "exit": "exit"
-    },
+    },
     "drawings": {
       "toolbar": "Drawing tools",
       "tool": {
@@ -1694,6 +1690,10 @@
         "title": "Jetpack",
         "description": "Climb higher and cash out before the flight ends."
       },
+      "slots": {
+        "title": "Slots",
+        "description": "Five reels, ten lines and a diamond jackpot."
+      },
       "trading": {
         "title": "Trading",
         "description": "A real market and real skills. Trade against other players."
@@ -1701,10 +1701,6 @@
       "race": {
         "title": "Racing",
         "description": "Three on the track, mines and falling pylons. The first at the finish takes the pot."
-      },
-      "slots": {
-        "title": "Slots",
-        "description": "Five reels, ten lines and a diamond jackpot."
       }
     },
     "promo": {
