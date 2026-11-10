@@ -232,37 +232,80 @@ export function spinStart() {
 }
 
 /**
- * Гул ленты, пока барабаны крутятся: тихий шум с дребезгом роликов. Не
- * громче музыки — он идёт всё время спина. `set` — число крутящихся
- * барабанов, `stop` — тишина.
+ * Барабаны крутятся: мягкое тиканье символов, проходящих мимо окна, как у
+ * механического барабана, и тихий шорох ленты под ним. Тики — короткий
+ * деревянный щелчок с лёгкой высотой; чем больше барабанов крутится, тем
+ * чаще и плотнее. Ставятся планировщиком чуть вперёд по часам контекста,
+ * с небольшим разбросом — ровная сетка тиков звучала бы метрономом.
+ * `set` — число крутящихся барабанов (зовётся каждый кадр, поэтому дёшев),
+ * `stop` — тишина.
  */
 export function reelHum() {
   const b = out();
   if (!b) return { set: () => {}, stop: () => {} };
   const { c, o } = b;
+
+  // Шорох ленты: низкий мягкий шум, без дребезга.
   const n = noise(c);
   const f = c.createBiquadFilter();
-  f.type = 'bandpass';
-  f.frequency.value = 700;
-  f.Q.value = 0.8;
-  const rattle = c.createOscillator();
-  rattle.frequency.value = 24;
-  const depth = c.createGain();
-  depth.gain.value = 0.4;
+  f.type = 'lowpass';
+  f.frequency.value = 420;
   const g = c.createGain();
   g.gain.value = 0;
-  const am = c.createGain();
-  am.gain.value = 0.6;
-  rattle.connect(depth).connect(am.gain);
-  n.connect(f).connect(am).connect(g).connect(o);
+  n.connect(f).connect(g).connect(o);
   n.start();
-  rattle.start();
+
+  // Тики: общий фильтр «дерева», каждый тик — короткий импульс шума и
+  // треугольника.
+  const wood = c.createBiquadFilter();
+  wood.type = 'bandpass';
+  wood.frequency.value = 1500;
+  wood.Q.value = 2.5;
+  const ticks = c.createGain();
+  ticks.gain.value = 0.9;
+  wood.connect(ticks).connect(o);
+
+  let reels = 0;
+  let next = c.currentTime + 0.02;
+  let k = 0;
+  const tick = (at: number, peak: number) => {
+    const src = noise(c);
+    const e = env(c, at, peak, 0.001, 0.018);
+    src.connect(e).connect(wood);
+    src.start(at, Math.random());
+    src.stop(at + 0.03);
+    const osc = c.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.value = hz(k % 2 ? 76 : 79);
+    const eo = env(c, at, peak * 0.25, 0.001, 0.03);
+    osc.connect(eo).connect(o);
+    osc.start(at);
+    osc.stop(at + 0.05);
+  };
+  const timer = setInterval(() => {
+    if (c.state !== 'running' || reels === 0) {
+      next = Math.max(next, c.currentTime + 0.02);
+      return;
+    }
+    const gap = 1 / (7 + 2.2 * reels);
+    while (next < c.currentTime + 0.12) {
+      tick(next, 0.05 + 0.012 * reels);
+      k++;
+      next += gap * (0.85 + Math.random() * 0.3);
+    }
+  }, 30);
+
   return {
-    set: (reels: number) => g.gain.setTargetAtTime(0.018 * reels, c.currentTime, 0.05),
+    set: (r: number) => {
+      if (r === reels) return;
+      reels = r;
+      g.gain.setTargetAtTime(0.012 * r, c.currentTime, 0.08);
+    },
     stop: () => {
-      g.gain.setTargetAtTime(0, c.currentTime, 0.05);
+      clearInterval(timer);
+      reels = 0;
+      g.gain.setTargetAtTime(0, c.currentTime, 0.06);
       n.stop(c.currentTime + 0.4);
-      rattle.stop(c.currentTime + 0.4);
     },
   };
 }
