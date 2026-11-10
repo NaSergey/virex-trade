@@ -617,6 +617,7 @@
 }
 .sl-bonus-go:disabled { opacity: 0.4; cursor: default; animation: none; }
 .sl-bonus-go-big { min-height: 64px; min-width: 240px; font-size: 26px; }
+.sl-splash-go { margin-top: 28px; }
 .sl-bonus-foot { display: flex; flex-direction: column; align-items: center; gap: 14px; }
 
 /* Сокровищница: тёмный изумрудный зал, сундуки в золотом свете. */

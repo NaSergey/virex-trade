@@ -470,7 +470,7 @@ export function Machine({ config }: { config: SlotsConfig }) {
       tone: 'free',
       title: t('free.title'),
       sub: t('free.sub', { n: b.awarded, x: b.mult }),
-      autoMs: autoRef.current ? 2400 : 7000,
+      action: t('startBonus'),
     });
     setBonusTone('free');
     let left = b.awarded;
@@ -515,7 +515,7 @@ export function Machine({ config }: { config: SlotsConfig }) {
       tone: b.kind,
       title: t(`${b.kind}.title`),
       sub: t(`${b.kind}.sub`),
-      autoMs: autoRef.current ? 2200 : 7000,
+      action: t('startBonus'),
     });
     setBonusTone(b.kind);
     await new Promise<void>((r) =>
@@ -545,7 +545,13 @@ export function Machine({ config }: { config: SlotsConfig }) {
     await stopReels(res.grid, t0 + (turboRef.current ? 380 : 950));
     lastGrid.current = res.grid;
     await presentWin(res.grid, res.lines, res.baseWin, triggersOf(res.grid, res.scatters));
-    if (res.bonuses.length) setPhase('bonus');
+    if (res.bonuses.length) {
+      setPhase('bonus');
+      // Бонус запускает игрок, а не автоспин (владелец 2026-11-10): автоспин
+      // на бонусе встаёт, и после бонуса его включают снова сами.
+      autoRef.current = false;
+      setAuto(false);
+    }
     for (const b of res.bonuses) {
       if (b.kind === 'free') await playFree(b);
       else await playOverlay(b);
@@ -874,10 +880,10 @@ export function Machine({ config }: { config: SlotsConfig }) {
       )}
       {splash && <BonusSplash key={`${splash.kind}:${splash.title}`} splash={splash} />}
       {overlay?.bonus.kind === 'pick' && (
-        <PickBonus bonus={overlay.bonus} fx={fxReady} audible={sfx.audible} auto={auto} onDone={overlay.done} />
+        <PickBonus bonus={overlay.bonus} fx={fxReady} audible={sfx.audible} onDone={overlay.done} />
       )}
       {overlay?.bonus.kind === 'wheel' && (
-        <WheelBonus bonus={overlay.bonus} fx={fxReady} audible={sfx.audible} auto={auto} onDone={overlay.done} />
+        <WheelBonus bonus={overlay.bonus} fx={fxReady} audible={sfx.audible} onDone={overlay.done} />
       )}
       {paytable && <Paytable config={config} bet={bet} onClose={() => setPaytable(false)} />}
     </div>
