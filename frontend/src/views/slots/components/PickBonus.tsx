@@ -21,19 +21,17 @@ const fmt = (n: number) => Math.round(n).toLocaleString('ru-RU');
  * ответа и не может разойтись с начисленным. После «Забрать» открываются
  * остальные — что там было, видно, но не засчитано.
  *
- * С автоспином сундуки открываются сами.
+ * Сундуки открывает только игрок — автоспина здесь нет (владелец 2026-11-10).
  */
 export function PickBonus({
   bonus,
   fx,
   audible,
-  auto,
   onDone,
 }: {
   bonus: Pick;
   fx: Fx | null;
   audible: boolean;
-  auto: boolean;
   onDone: () => void;
 }) {
   const t = useTranslations('slots');
@@ -81,22 +79,12 @@ export function PickBonus({
     setOpened((v) => v + 1);
   };
 
-  // Автоспин открывает сундуки сам, по одному, пока не кончится.
-  useEffect(() => {
-    if (!auto || over) return;
-    const id = window.setTimeout(() => {
-      const free = boxes.map((b, i) => (b ? -1 : i)).filter((i) => i >= 0);
-      if (free.length) open(free[Math.floor(Math.random() * free.length)]);
-    }, 750);
-    return () => clearTimeout(id);
-  });
-
   useEffect(() => {
     if (!over) return;
     if (audible && bonus.win > 0) sound.winChime(6);
-    const id = window.setTimeout(() => finish.current(), auto ? 2600 : 4200);
+    const id = window.setTimeout(() => finish.current(), 4200);
     return () => clearTimeout(id);
-  }, [over, audible, auto, bonus.win]);
+  }, [over, audible, bonus.win]);
 
   return (
     <div className="sl-bonus sl-pick" role="dialog" aria-label={t('pick.title')}>

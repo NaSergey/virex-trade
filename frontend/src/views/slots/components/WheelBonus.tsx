@@ -27,13 +27,11 @@ export function WheelBonus({
   bonus,
   fx,
   audible,
-  auto,
   onDone,
 }: {
   bonus: Wheel;
   fx: Fx | null;
   audible: boolean;
-  auto: boolean;
   onDone: () => void;
 }) {
   const t = useTranslations('slots');
@@ -82,12 +80,8 @@ export function WheelBonus({
   };
 
   useEffect(() => {
-    if (state === 'ready' && auto) {
-      const id = window.setTimeout(spin, 900);
-      return () => clearTimeout(id);
-    }
     if (state === 'won') {
-      const id = window.setTimeout(() => finish.current(), auto ? 2800 : 5000);
+      const id = window.setTimeout(() => finish.current(), 5000);
       return () => clearTimeout(id);
     }
   });

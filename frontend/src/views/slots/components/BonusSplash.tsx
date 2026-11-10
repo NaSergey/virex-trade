@@ -14,6 +14,11 @@ export interface Splash {
   amount?: number;
   /** Закрыться само через столько мс. */
   autoMs?: number;
+  /**
+   * Кнопка запуска: заставка ждёт её (или пробел/Enter) и не закрывается ни
+   * сама, ни кликом мимо — бонус запускает игрок.
+   */
+  action?: string;
   onDone: () => void;
 }
 
@@ -21,7 +26,8 @@ const fmt = (n: number) => Math.round(n).toLocaleString('ru-RU');
 
 /**
  * Заставка бонуса во весь экран: лучи цвета бонуса, крупная надпись, под ней
- * условия или сумма. Закрывается кликом, пробелом или сама. `toast` — малая
+ * условия или сумма. Закрывается кликом, пробелом или сама; с `action` — только
+ * кнопкой (или пробелом/Enter). `toast` — малая
  * плашка поверх автомата («+4 спина»), без затемнения и без клика.
  */
 export function BonusSplash({ splash }: { splash: Splash }) {
@@ -68,7 +74,13 @@ export function BonusSplash({ splash }: { splash: Splash }) {
     );
   }
   return (
-    <div className="sl-splash" data-tone={splash.tone} data-kind={splash.kind} onClick={() => done.current()} role="dialog">
+    <div
+      className="sl-splash"
+      data-tone={splash.tone}
+      data-kind={splash.kind}
+      onClick={splash.action ? undefined : () => done.current()}
+      role="dialog"
+    >
       <div className="sl-big-rays" aria-hidden />
       <div className="sl-splash-body">
         <div className="sl-splash-title" data-text={splash.title}>
@@ -81,7 +93,13 @@ export function BonusSplash({ splash }: { splash: Splash }) {
             <span ref={amount}>0</span>
           </div>
         )}
-        <div className="sl-big-hint">{t('tapToContinue')}</div>
+        {splash.action ? (
+          <button type="button" className="sl-bonus-go sl-bonus-go-big sl-splash-go" autoFocus onClick={() => done.current()}>
+            {splash.action}
+          </button>
+        ) : (
+          <div className="sl-big-hint">{t('tapToContinue')}</div>
+        )}
       </div>
     </div>
   );
