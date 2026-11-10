@@ -190,7 +190,7 @@ function Puffs({
   seed: 'a' | 'b';
 }) {
   return (
-    <g filter={url(`cloud-${seed}`)}>
+    <g className="jsc-puffs" filter={url(`cloud-${seed}`)}>
       <g stroke={wisp} strokeWidth="9" strokeLinecap="round" opacity="0.7">
         {wisps.map((d) => (
           <path key={d} d={d} />
@@ -572,6 +572,21 @@ function SceneDefs() {
           </feMerge>
         </filter>
       ))}
+
+      {/* Лёгкий дым для телефона (`.jsc-puffs` в globals.css): без шума и сдвига, только
+          мягкий край и дымка. Шумовой фильтр выше на iPhone считается в тройной плотности
+          десятью промежуточными буферами на каждый клуб — вкладка падала по памяти. */}
+      <filter id={id('cloud-lite')} x="-20%" y="-20%" width="140%" height="140%">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="soft" />
+        <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="haze" />
+        <feComponentTransfer in="haze" result="veil">
+          <feFuncA type="linear" slope="0.5" />
+        </feComponentTransfer>
+        <feMerge>
+          <feMergeNode in="veil" />
+          <feMergeNode in="soft" />
+        </feMerge>
+      </filter>
 
       <linearGradient id={id('plate-peak')} x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" stopColor="#3a1f9e" stopOpacity="0.75" />
