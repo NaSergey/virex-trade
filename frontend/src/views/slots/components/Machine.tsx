@@ -23,6 +23,7 @@ import { countMs, fillerSymbol, isBigTier, randomGrid, stopPlan, tierOf, type St
 import { buzz } from '../lib/haptics';
 import { Reel } from '../lib/reel';
 import * as sound from '../lib/sound';
+import { useSlotsMusic } from '../model/useSlotsMusic';
 import { BigWin } from './BigWin';
 import { BonusSplash, type Splash } from './BonusSplash';
 import { Paytable } from './Paytable';
@@ -80,6 +81,7 @@ export function Machine({ config }: { config: SlotsConfig }) {
   const spinReq = useSlotsSpin();
   const { data: coins } = useCoinBalance();
   const sfx = useAudioChannel('virex.slots.sound', 0.8);
+  const mus = useAudioChannel('virex.slots.music', 0.6);
 
   const [betIdx, setBetIdx] = useState(0);
   const [turbo, setTurbo] = useState(false);
@@ -94,6 +96,8 @@ export function Machine({ config }: { config: SlotsConfig }) {
   const [tier, setTier] = useState<WinTier>('none');
   const [cycling, setCycling] = useState(false);
   const [big, setBig] = useState<{ win: number } | null>(null);
+  // Музыка бонуса вступает с его заставкой, а не после неё: заставка и есть вход.
+  useSlotsMusic(mus, bonusTone ?? (splash?.kind === 'intro' ? splash.tone : null) ?? 'base', big !== null);
   /** «+N» над последним символом каждой выигравшей линии. */
   const [pops, setPops] = useState<{ id: string; x: number; y: number; text: string; color: string; delay: number }[]>([]);
   /** Молния через символы бонуса, в процентах окна барабанов. */
@@ -711,6 +715,7 @@ export function Machine({ config }: { config: SlotsConfig }) {
             <button type="button" className="sl-tool" onClick={() => setPaytable(true)}>
               {t('paytable')}
             </button>
+            <AudioControl kind="music" channel={mus} />
             <AudioControl kind="sound" channel={sfx} />
           </div>
         </header>
