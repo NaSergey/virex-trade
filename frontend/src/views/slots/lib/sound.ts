@@ -212,86 +212,110 @@ const now = () => {
   return b ? b.c.currentTime : 0;
 };
 
-/** Пуск: щелчок механизма и мягкий разгон ленты. */
+/** Пуск: взлёт по высоте с воздушным свистом — как переход в гиперпространство. */
 export function spinStart() {
   const b = out();
   if (!b) return;
-  const { c, o } = b;
+  const { c, o, h } = b;
   const t = c.currentTime;
-  click(t, 2500, 0.25, 0.025);
+  // Свист: шум сверху, полоса едет вверх.
   const n = noise(c);
   const f = c.createBiquadFilter();
   f.type = 'bandpass';
-  f.Q.value = 1.4;
-  f.frequency.setValueAtTime(300, t);
-  f.frequency.exponentialRampToValueAtTime(1600, t + 0.35);
-  const g = env(c, t, 0.12, 0.1, 0.35);
+  f.Q.value = 3;
+  f.frequency.setValueAtTime(1200, t);
+  f.frequency.exponentialRampToValueAtTime(7000, t + 0.4);
+  const g = env(c, t, 0.06, 0.12, 0.35);
   n.connect(f).connect(g).connect(o);
-  n.start(t);
+  g.connect(h);
+  n.start(t, Math.random());
   n.stop(t + 0.55);
+  // Взлёт: синус по квинте вверх и его октава.
+  for (const [from, to, peak] of [
+    [hz(64), hz(76), 0.07],
+    [hz(76), hz(88), 0.03],
+  ] as const) {
+    const osc = c.createOscillator();
+    osc.frequency.setValueAtTime(from, t);
+    osc.frequency.exponentialRampToValueAtTime(to, t + 0.3);
+    const e = env(c, t, peak, 0.03, 0.4);
+    osc.connect(e).connect(o);
+    e.connect(h);
+    osc.start(t);
+    osc.stop(t + 0.5);
+  }
 }
 
 /**
- * Барабаны крутятся: мягкое тиканье символов, проходящих мимо окна, как у
- * механического барабана, и тихий шорох ленты под ним. Тики — короткий
- * деревянный щелчок с лёгкой высотой; чем больше барабанов крутится, тем
- * чаще и плотнее. Ставятся планировщиком чуть вперёд по часам контекста,
- * с небольшим разбросом — ровная сетка тиков звучала бы метрономом.
- * `set` — число крутящихся барабанов (зовётся каждый кадр, поэтому дёшев),
- * `stop` — тишина.
+ * Барабаны крутятся — космо-цифровой поток: светлый мерцающий пэд (Am9 в
+ * верхнем регистре) с медленно дышащим фильтром и россыпь тихих высоких
+ * «звёздочек» из пентатоники — как бегущие данные. Чем больше барабанов
+ * крутится, тем гуще звёзды и ярче пэд. Низов нет совсем: низкий шум и ровные
+ * тики читались мотором (владелец 2026-11-10). `set` зовётся каждый кадр, `stop`
+ * гасит.
  */
 export function reelHum() {
   const b = out();
   if (!b) return { set: () => {}, stop: () => {} };
-  const { c, o } = b;
+  const { c, o, h } = b;
+  const t0 = c.currentTime;
 
-  // Шорох ленты: низкий мягкий шум, без дребезга.
-  const n = noise(c);
-  const f = c.createBiquadFilter();
-  f.type = 'lowpass';
-  f.frequency.value = 420;
-  const g = c.createGain();
-  g.gain.value = 0;
-  n.connect(f).connect(g).connect(o);
-  n.start();
+  const padF = c.createBiquadFilter();
+  padF.type = 'lowpass';
+  padF.frequency.value = 2200;
+  padF.Q.value = 2;
+  const lfo = c.createOscillator();
+  lfo.frequency.value = 0.9;
+  const lfoDepth = c.createGain();
+  lfoDepth.gain.value = 900;
+  lfo.connect(lfoDepth).connect(padF.frequency);
+  const pad = c.createGain();
+  pad.gain.value = 0;
+  padF.connect(pad).connect(o);
+  const send = c.createGain();
+  send.gain.value = 0.8;
+  pad.connect(send).connect(h);
+  const voices = [69, 72, 76, 79, 83].flatMap((m) =>
+    [-9, 9].map((det) => {
+      const osc = c.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.value = hz(m);
+      osc.detune.value = det;
+      osc.connect(padF);
+      return osc;
+    }),
+  );
+  for (const v of [...voices, lfo]) v.start(t0);
 
-  // Тики: общий фильтр «дерева», каждый тик — короткий импульс шума и
-  // треугольника.
-  const wood = c.createBiquadFilter();
-  wood.type = 'bandpass';
-  wood.frequency.value = 1500;
-  wood.Q.value = 2.5;
-  const ticks = c.createGain();
-  ticks.gain.value = 0.9;
-  wood.connect(ticks).connect(o);
+  // Воздух: тихий шум сверху, без низов.
+  const air = noise(c);
+  const airF = c.createBiquadFilter();
+  airF.type = 'highpass';
+  airF.frequency.value = 6000;
+  const airG = c.createGain();
+  airG.gain.value = 0;
+  air.connect(airF).connect(airG).connect(o);
+  air.start(t0);
 
   let reels = 0;
-  let next = c.currentTime + 0.02;
-  let k = 0;
-  const tick = (at: number, peak: number) => {
-    const src = noise(c);
-    const e = env(c, at, peak, 0.001, 0.018);
-    src.connect(e).connect(wood);
-    src.start(at, Math.random());
-    src.stop(at + 0.03);
+  let next = t0 + 0.05;
+  const star = (at: number, peak: number) => {
     const osc = c.createOscillator();
-    osc.type = 'triangle';
-    osc.frequency.value = hz(k % 2 ? 76 : 79);
-    const eo = env(c, at, peak * 0.25, 0.001, 0.03);
-    osc.connect(eo).connect(o);
+    osc.frequency.value = hz(penta(10 + Math.floor(Math.random() * 7)));
+    const e = env(c, at, peak, 0.003, 0.12 + Math.random() * 0.1);
+    osc.connect(e).connect(o);
+    e.connect(h);
     osc.start(at);
-    osc.stop(at + 0.05);
+    osc.stop(at + 0.3);
   };
   const timer = setInterval(() => {
     if (c.state !== 'running' || reels === 0) {
-      next = Math.max(next, c.currentTime + 0.02);
+      next = Math.max(next, c.currentTime + 0.03);
       return;
     }
-    const gap = 1 / (7 + 2.2 * reels);
     while (next < c.currentTime + 0.12) {
-      tick(next, 0.05 + 0.012 * reels);
-      k++;
-      next += gap * (0.85 + Math.random() * 0.3);
+      star(next, 0.012 + 0.004 * reels);
+      next += (0.5 + Math.random()) / (5 + 3 * reels);
     }
   }, 30);
 
@@ -299,23 +323,30 @@ export function reelHum() {
     set: (r: number) => {
       if (r === reels) return;
       reels = r;
-      g.gain.setTargetAtTime(0.012 * r, c.currentTime, 0.08);
+      const now = c.currentTime;
+      pad.gain.setTargetAtTime(0.006 * r, now, 0.12);
+      airG.gain.setTargetAtTime(0.004 * r, now, 0.12);
     },
     stop: () => {
       clearInterval(timer);
       reels = 0;
-      g.gain.setTargetAtTime(0, c.currentTime, 0.06);
-      n.stop(c.currentTime + 0.4);
+      const now = c.currentTime;
+      pad.gain.setTargetAtTime(0, now, 0.15);
+      airG.gain.setTargetAtTime(0, now, 0.1);
+      for (const v of [...voices, lfo]) v.stop(now + 0.9);
+      air.stop(now + 0.9);
     },
   };
 }
 
-/** Барабан встал: глухой удар об упор и щелчок фиксатора. */
+/** Барабан встал: цифровой «блип» — короткий синус вниз и щелчок фиксации. */
 export function reelStop(i: number) {
   const t = now();
   if (!t) return;
-  tone('sine', 120 - i * 5, t, 0.4, 0.14, 55, 0);
-  click(t, 3200, 0.12, 0.02);
+  const f = hz(penta(9 - i));
+  tone('sine', f, t, 0.14, 0.12, f * 0.75, 0.25);
+  tone('sine', f * 2, t, 0.04, 0.05, undefined, 0.2);
+  tone('sine', 90, t, 0.12, 0.08, 60, 0);
 }
 
 /** Встал скаттер: колокольчик, каждый следующий — ступенью выше. */
