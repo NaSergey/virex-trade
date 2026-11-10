@@ -19,6 +19,7 @@ export type XpSource =
   | 'game.table'
   | 'game.jetpack'
   | 'game.race'
+  | 'game.slots'
   | 'trade.open'
   | 'journal.setup'
   | 'journal.tag';
@@ -63,6 +64,8 @@ export const XP_SOURCES: Record<XpSource, XpSourceDef> = {
   // Гонка — на старте, по id гонки: за вход в лобби опыта нет, вход и выход
   // до старта иначе набивали бы его.
   'game.race': { title: 'Гонка', enabled: true, base: 5, dailyCap: 100 },
+  // Спин — секунда, поэтому база мала, а потолок держит фарм.
+  'game.slots': { title: 'Спин в слотах', enabled: true, base: 2, dailyCap: 60 },
   // Новая позиция по рынку, открытая человеком, в любом терминале: биржа,
   // демо-счёт, бектест, турнир. Добор в открытую — не открытие; сработавший
   // лимит открыл позицию без человека.

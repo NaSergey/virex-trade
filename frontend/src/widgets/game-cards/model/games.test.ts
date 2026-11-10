@@ -39,12 +39,13 @@ describe('GAMES — каталог игр', () => {
     }
   });
 
-  it('написаны блэкджек, покер, джетпак, гонки и торговля', () => {
+  it('написаны блэкджек, покер, джетпак, гонки, слоты и торговля', () => {
     expect(GAMES.filter((g) => g.available).map((g) => g.id)).toEqual([
       'blackjack',
       'poker',
       'jetpack',
       'race',
+      'slots',
       'trading',
     ]);
   });

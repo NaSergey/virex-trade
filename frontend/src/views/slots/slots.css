@@ -1,0 +1,1454 @@
+/* ═══════════════════════════════════════════════════════════════
+   СЛОТЫ (/games/slots) — автомат «Lucky Sevens».
+
+   Тёмный зал в обеих темах, как остальные экраны игр. Автомат — предмет:
+   лаковый корпус, хромовые кромки, вывеска с лампами, барабаны-цилиндры за
+   стеклом с бликом. Поэтому здесь — четвёртое исключение из нулевого радиуса
+   и теней продукта (стол, витрина, джетпак); оно в `@layer base`, как у них:
+   глобальный сброс стоит там с !important, и из обычного слоя проиграл бы.
+
+   Двигаются только transform и opacity узлов (ленты барабанов, лампы,
+   лучи), плюс холст частиц. Внутри SVG символов ничего не анимируется.
+   ═══════════════════════════════════════════════════════════════ */
+
+.sl-root {
+  --sl-gold: #ffd34a;
+  --sl-gold-2: #c98a0c;
+  --sl-red: #a3061c;
+  --sl-ink: #f6eedd;
+  --top-h-safe: var(--top-h, 48px);
+  position: relative;
+  min-height: calc(100dvh - var(--top-h-safe) - var(--tab-h, 0px));
+  background: #07040a;
+  color: var(--sl-ink);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* clip, а не hidden: hidden заводит область прокрутки, и огни зала за
+     краем давали ей что прокручивать — фокус и клики уводили автомат вбок. */
+  overflow: clip;
+  isolation: isolate;
+}
+.sl-root button { font-family: inherit; }
+
+.sl-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.sl-wait {
+  padding: 48px 16px;
+  text-align: center;
+  color: #a99f8c;
+}
+
+.sl-page {
+  position: relative;
+  min-height: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 16px 20px;
+}
+
+/* ── Окно барабанов ── */
+.sl-window {
+  position: relative;
+  display: grid;
+  grid-template-columns: 26px 1fr 26px;
+  gap: 6px;
+  padding: 10px 8px;
+  background: linear-gradient(180deg, #1a0308, #08010a 30%, #1a0308);
+}
+
+.sl-reels {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 5px;
+  aspect-ratio: 5 / 3;
+  background: #0a0306;
+}
+.sl-reel {
+  position: relative;
+  overflow: hidden;
+  /* Лента — бумага на цилиндре: светлее посередине, темнеет к краям окна. */
+  background: linear-gradient(180deg, #2a1a0c 0%, #c9b994 12%, #f7efdc 32%, #fffaf0 50%, #f7efdc 68%, #c9b994 88%, #2a1a0c 100%);
+}
+.sl-cell {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: calc(100% / 3);
+  will-change: transform;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sl-cell > svg {
+  width: 84%;
+  height: 84%;
+  overflow: visible;
+  transition: opacity 0.35s, filter 0.35s;
+}
+/* Тень цилиндра поверх символов: верх и низ окна уходят за изгиб. */
+.sl-cyl {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgb(0 0 0 / 0.72) 0%, rgb(0 0 0 / 0.18) 16%, transparent 30%, transparent 70%, rgb(0 0 0 / 0.18) 84%, rgb(0 0 0 / 0.72) 100%),
+    repeating-linear-gradient(90deg, transparent 0 calc(20% - 5px), rgb(0 0 0 / 0.5) calc(20% - 5px) 20%);
+}
+/* Стекло: косой блик и отражение лампы сверху. */
+.sl-glass {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(125deg, rgb(255 255 255 / 0.16) 0%, rgb(255 255 255 / 0.04) 22%, transparent 23%, transparent 60%, rgb(255 255 255 / 0.05) 61%, transparent 72%),
+    radial-gradient(ellipse 60% 14% at 50% 0%, rgb(255 255 255 / 0.18), transparent);
+}
+
+/* Удар об упор: светлая полоса проходит по барабану сверху вниз. */
+.sl-reel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(180deg, transparent 0%, rgb(255 255 255 / 0.65) 50%, transparent 100%);
+  background-size: 100% 40%;
+  background-repeat: no-repeat;
+}
+.sl-reel[data-land]::after { animation: sl-land 0.42s ease-out; }
+@keyframes sl-land {
+  0% { opacity: 1; background-position: 0 -60%; }
+  100% { opacity: 0; background-position: 0 160%; }
+}
+
+/* Предвкушение: барабан в золотой рамке, рамка дышит, лента светится. */
+.sl-hotframe {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  border: 3px solid var(--sl-gold);
+  background: linear-gradient(180deg, rgb(255 200 60 / 0.35), transparent 30%, transparent 70%, rgb(255 200 60 / 0.35));
+  transition: opacity 0.2s;
+}
+.sl-reel[data-hot] .sl-hotframe {
+  opacity: 1;
+  animation: sl-hot 0.32s ease-in-out infinite alternate;
+}
+.sl-reel[data-hot] { filter: drop-shadow(0 0 14px rgb(255 190 40 / 0.9)); z-index: 1; }
+@keyframes sl-hot {
+  from { border-color: #fff2b0; opacity: 1; }
+  to { border-color: #ff8a1f; opacity: 0.55; }
+}
+
+/* Выигрыш: остальные символы гаснут, выигравшие бьются и светятся. */
+.sl-reels[data-dim] .sl-cell:not(.is-win) > svg {
+  opacity: 0.32;
+  filter: grayscale(0.7) brightness(0.7);
+}
+.sl-cell.is-win::before {
+  content: '';
+  position: absolute;
+  inset: 4%;
+  background: radial-gradient(circle, rgb(255 215 90 / 0.85), rgb(255 150 30 / 0.3) 45%, transparent 70%);
+  animation: sl-glow 0.9s ease-in-out infinite alternate;
+}
+.sl-cell.is-win::after {
+  content: '';
+  position: absolute;
+  inset: 3%;
+  border: 3px solid var(--sl-gold);
+  animation: sl-frame 0.9s ease-in-out infinite alternate;
+}
+.sl-cell.is-win > svg {
+  position: relative;
+  animation: sl-pop 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) infinite alternate;
+}
+.sl-cell.is-scatter::before { background: radial-gradient(circle, rgb(120 220 255 / 0.85), rgb(160 80 255 / 0.35) 45%, transparent 70%); }
+.sl-cell.is-scatter > svg { animation-name: sl-pop-spin; }
+@keyframes sl-glow {
+  from { opacity: 0.35; scale: 0.9; }
+  to { opacity: 1; scale: 1.05; }
+}
+@keyframes sl-frame {
+  from { opacity: 0.4; border-color: #ff8a1f; }
+  to { opacity: 1; border-color: #fff2b0; }
+}
+@keyframes sl-pop {
+  from { scale: 1; }
+  to { scale: 1.14; }
+}
+@keyframes sl-pop-spin {
+  from { scale: 1; rotate: -6deg; }
+  to { scale: 1.18; rotate: 6deg; }
+}
+/* Скаттер встал — короткий удар. */
+.sl-cell[data-pop] > svg { animation: sl-land-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); }
+@keyframes sl-land-pop {
+  0% { scale: 1.45; filter: brightness(2); }
+  100% { scale: 1; filter: none; }
+}
+
+/* Линии выигрыша. */
+.sl-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+.sl-line,
+.sl-line-glow {
+  fill: none;
+  stroke: var(--c);
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.sl-line {
+  stroke-width: 6;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: sl-draw 0.45s ease-out forwards;
+}
+.sl-line-glow {
+  stroke-width: 20;
+  opacity: 0;
+  animation: sl-line-glow 0.9s ease-in-out 0.3s infinite alternate;
+}
+.sl-line-preview {
+  stroke-width: 4;
+  stroke-dasharray: 10 8;
+  stroke-dashoffset: 0;
+  opacity: 0.85;
+  animation: none;
+}
+@keyframes sl-draw { to { stroke-dashoffset: 0; } }
+@keyframes sl-line-glow {
+  from { opacity: 0.1; }
+  to { opacity: 0.38; }
+}
+
+/* Значки линий по краям. */
+.sl-badges {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+.sl-badge {
+  display: grid;
+  place-items: center;
+  height: 18px;
+  font: 700 10px/1 system-ui, sans-serif;
+  color: #1a0a00;
+  background: color-mix(in srgb, var(--c) 55%, #222);
+  opacity: 0.75;
+  cursor: default;
+  transition: opacity 0.2s, scale 0.2s;
+}
+.sl-badge:hover { opacity: 1; scale: 1.15; }
+.sl-badge[data-on] {
+  opacity: 1;
+  background: var(--c);
+  animation: sl-badge 0.45s ease-in-out infinite alternate;
+}
+@keyframes sl-badge {
+  to { scale: 1.2; filter: brightness(1.4) drop-shadow(0 0 6px var(--c)); }
+}
+
+/* ── Частицы и вспышка ── */
+.sl-fx {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 60;
+}
+.sl-page::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 55;
+  opacity: 0;
+  background: radial-gradient(circle at 50% 45%, rgb(255 240 200 / 0.75), rgb(255 180 60 / 0.25) 40%, transparent 70%);
+}
+.sl-page[data-flash]::after { animation: sl-flash 0.6s ease-out; }
+@keyframes sl-flash {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ── Крупный выигрыш ── */
+.sl-big {
+  position: fixed;
+  inset: 0;
+  z-index: 58;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 50%, rgb(60 10 30 / 0.55), rgb(0 0 0 / 0.85) 70%);
+  cursor: pointer;
+  animation: sl-fade 0.35s ease-out;
+}
+@keyframes sl-fade { from { opacity: 0; } }
+.sl-big-rays {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 180vmax;
+  height: 180vmax;
+  translate: -50% -50%;
+  background: repeating-conic-gradient(from 0deg, rgb(255 210 90 / 0.22) 0deg 7deg, transparent 7deg 18deg);
+  -webkit-mask: radial-gradient(circle, #000 0%, transparent 55%);
+  mask: radial-gradient(circle, #000 0%, transparent 55%);
+  animation: sl-ring 14s linear infinite;
+}
+.sl-big-rays-2 {
+  background: repeating-conic-gradient(from 5deg, rgb(255 120 200 / 0.12) 0deg 4deg, transparent 4deg 24deg);
+  animation-duration: 22s;
+  animation-direction: reverse;
+}
+.sl-big[data-tier='mega'] .sl-big-rays { background: repeating-conic-gradient(rgb(120 220 255 / 0.25) 0deg 7deg, transparent 7deg 18deg); }
+.sl-big[data-tier='epic'] .sl-big-rays { background: repeating-conic-gradient(rgb(220 120 255 / 0.3) 0deg 7deg, transparent 7deg 16deg); animation-duration: 8s; }
+.sl-big-glow {
+  position: absolute;
+  width: 70vmin;
+  height: 70vmin;
+  background: radial-gradient(circle, rgb(255 210 90 / 0.55), transparent 65%);
+  animation: sl-glow 0.8s ease-in-out infinite alternate;
+}
+.sl-big-body {
+  position: relative;
+  text-align: center;
+  padding: 16px;
+  animation: sl-big-in 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes sl-big-in {
+  0% { scale: 0.2; opacity: 0; rotate: -8deg; }
+  100% { scale: 1; opacity: 1; rotate: 0deg; }
+}
+.sl-big-title {
+  --sl-face: linear-gradient(180deg, #fffbe0 0%, #ffe066 28%, #e09a00 50%, #fff2b0 58%, #a86200 100%);
+  position: relative;
+  font: 900 clamp(40px, 10vw, 112px) / 0.95 Impact, 'Arial Black', system-ui, sans-serif;
+  letter-spacing: 0.02em;
+  /* Сам узел — торец букв; лицо — слой поверх. Наоборот нельзя: анимация
+     масштаба делает узел контекстом наложения, и слой с z-index −1 лёг бы
+     поверх его фона, то есть поверх золотых букв. */
+  color: #2a0e00;
+  text-shadow:
+    2px 2px 0 #4a2000,
+    4px 4px 0 #3a1600,
+    6px 6px 0 #2a0e00,
+    8px 8px 16px rgb(0 0 0 / 0.9),
+    0 0 50px rgb(255 170 40 / 0.7);
+  animation: sl-big-pulse 0.6s ease-in-out infinite alternate;
+}
+.sl-big[data-tier='mega'] .sl-big-title { --sl-face: linear-gradient(180deg, #f0ffff 0%, #8ff0ff 30%, #1b9bd8 52%, #d0f8ff 60%, #0a4f8a 100%); }
+.sl-big[data-tier='legendary'] .sl-big-title { --sl-face: linear-gradient(180deg, #fff 0%, #ffd34a 100%); }
+.sl-big[data-tier='epic'] .sl-big-title { --sl-face: linear-gradient(180deg, #fff0ff 0%, #ff9cf0 30%, #a42ad8 52%, #ffd0ff 60%, #4a0a7a 100%); }
+.sl-big-title::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  color: transparent;
+  text-shadow: none;
+  background: var(--sl-face);
+  background-clip: text;
+  -webkit-background-clip: text;
+}
+@keyframes sl-big-pulse { to { scale: 1.06; } }
+.sl-big-amount {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+  font: 800 clamp(34px, 7vw, 76px) / 1 var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  text-shadow: 0 0 18px rgb(255 200 60 / 0.9), 0 4px 0 #7a4a00;
+}
+.sl-big-coin { width: 0.8em; height: 0.8em; color: #ffd34a; }
+.sl-big-hint {
+  margin-top: 22px;
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #e9d6aa;
+  animation: sl-breathe 1.4s ease-in-out infinite;
+  opacity: 0.8;
+}
+
+/* ── Таблица выплат ── */
+.sl-pt {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 0.72);
+  animation: sl-fade 0.2s ease-out;
+}
+.sl-pt-card {
+  width: min(680px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  padding: 18px 20px 20px;
+  background: linear-gradient(180deg, #2a0410, #12020a);
+  border: 2px solid #c98a0c;
+  color: var(--sl-ink);
+  animation: sl-big-in 0.35s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+.sl-pt-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.sl-pt-head h2,
+.sl-pt-card h3 {
+  margin: 0;
+  font: 900 22px/1.2 Impact, 'Arial Black', system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  color: var(--sl-gold);
+  text-transform: uppercase;
+  border: 0;
+}
+.sl-pt-card h3 { font-size: 16px; margin: 16px 0 8px; }
+.sl-pt-x {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: none;
+  color: #e9c97a;
+  font-size: 18px;
+  cursor: pointer;
+}
+.sl-pt-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+}
+.sl-pt-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  background: rgb(255 255 255 / 0.04);
+}
+.sl-pt-sym {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  background: linear-gradient(180deg, #d9cdb4, #fffaf0 50%, #d9cdb4);
+}
+.sl-pt-row dl { margin: 0; display: grid; gap: 2px; font-size: 13px; }
+.sl-pt-row dl > div { display: flex; gap: 10px; }
+.sl-pt-row dt { color: #c7955a; width: 22px; }
+.sl-pt-row dd { margin: 0; display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono, monospace); }
+.sl-pt-coin { width: 11px; height: 11px; }
+.sl-pt-row p { margin: 0; font-size: 13px; line-height: 1.45; color: #e2d6bd; }
+.sl-pt-special { display: grid; gap: 8px; margin-top: 8px; }
+.sl-pt-lines { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.sl-pt-line { width: 100%; }
+.sl-pt-cell { fill: rgb(255 255 255 / 0.08); }
+.sl-pt-note { margin: 14px 0 0; font-size: 12px; line-height: 1.5; color: #a99f8c; }
+
+/* ══ Бонусы ══════════════════════════════════════════════════════
+   Каждый бонус меняет свет зала и корпуса: бесплатные спины — синий неон,
+   сокровищница — изумруд с золотом, колесо — фиолетовый. Смена — переходом,
+   автомат «перекрашивается», а не мигает. */
+.sl-room, .sl-term { transition: filter 0.8s, background 0.8s; }
+.sl-page[data-bonus='free'] .sl-term {
+  background:
+    linear-gradient(90deg, rgb(255 255 255 / 0.08), transparent 12%, transparent 88%, rgb(0 0 0 / 0.35)),
+    linear-gradient(180deg, #0a2a7a 0%, #06144a 45%, #030824 100%);
+}
+.sl-page[data-bonus='free'] .sl-room { filter: hue-rotate(200deg) saturate(1.4); }
+.sl-page[data-bonus='free'] .sl-sub { color: #9fe8ff; font-size: 13px; opacity: 1; }
+.sl-page[data-bonus='free'] .sl-reels { outline: 3px solid #5ad0ff; outline-offset: 3px; animation: sl-free-glow 1.2s ease-in-out infinite alternate; }
+@keyframes sl-free-glow { to { outline-color: #c46bff; } }
+.sl-page[data-bonus='pick'] .sl-room { filter: hue-rotate(110deg); }
+.sl-page[data-bonus='wheel'] .sl-room { filter: hue-rotate(260deg) saturate(1.3); }
+
+/* Заставка бонуса. */
+.sl-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 58;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  cursor: pointer;
+  --tone: #5ad0ff;
+  --tone-2: #c46bff;
+  background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--tone) 22%, transparent), rgb(0 0 0 / 0.88) 70%);
+  animation: sl-fade 0.35s ease-out;
+}
+.sl-splash[data-tone='pick'] { --tone: #ffd34a; --tone-2: #2fdf7a; }
+.sl-splash[data-tone='wheel'] { --tone: #ff5adf; --tone-2: #ffd34a; }
+.sl-splash .sl-big-rays {
+  background: repeating-conic-gradient(color-mix(in srgb, var(--tone) 30%, transparent) 0deg 6deg, transparent 6deg 15deg);
+}
+.sl-splash-body {
+  position: relative;
+  text-align: center;
+  padding: 16px;
+  animation: sl-big-in 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.sl-splash-title,
+.sl-bonus-title {
+  position: relative;
+  font: 900 clamp(38px, 8.5vw, 96px) / 0.95 Impact, 'Arial Black', system-ui, sans-serif;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #120220;
+  text-shadow:
+    2px 2px 0 #2a0a40,
+    4px 4px 0 #1a0630,
+    6px 6px 14px rgb(0 0 0 / 0.9),
+    0 0 50px color-mix(in srgb, var(--tone, #ffd34a) 70%, transparent);
+  animation: sl-big-pulse 0.7s ease-in-out infinite alternate;
+}
+.sl-splash-title::after,
+.sl-bonus-title::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  color: transparent;
+  text-shadow: none;
+  background: linear-gradient(180deg, #ffffff 0%, var(--tone, #ffd34a) 40%, var(--tone-2, #c98a0c) 75%, #ffffff 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+}
+.sl-splash-sub {
+  margin-top: 16px;
+  font: 700 clamp(16px, 2.4vw, 24px) / 1.3 system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 0 14px var(--tone);
+}
+.sl-splash[data-kind='intro'] .sl-splash-title { animation: sl-big-pulse 0.7s ease-in-out infinite alternate, sl-intro-flicker 0.9s steps(6) 1; }
+@keyframes sl-intro-flicker {
+  0%, 30%, 60% { opacity: 0.2; }
+  15%, 45%, 100% { opacity: 1; }
+}
+
+/* «+4 спина» — плашка над автоматом. */
+.sl-toast {
+  position: fixed;
+  left: 50%;
+  top: 22%;
+  z-index: 57;
+  translate: -50% 0;
+  padding: 10px 26px;
+  font: 900 clamp(22px, 4vw, 40px) / 1 Impact, 'Arial Black', system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  color: #fff;
+  background: linear-gradient(180deg, #2a7aff, #6b1fd6);
+  text-shadow: 0 2px 0 #1a0a50;
+  pointer-events: none;
+  animation: sl-toast 1.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@keyframes sl-toast {
+  0% { scale: 0.3; opacity: 0; }
+  15% { scale: 1.1; opacity: 1; }
+  25%, 80% { scale: 1; opacity: 1; }
+  100% { scale: 1; opacity: 0; translate: -50% -30px; }
+}
+
+/* Окно бонуса (сундуки, колесо). */
+.sl-bonus {
+  position: fixed;
+  inset: 0;
+  z-index: 58;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: calc(var(--top-h, 48px) + 8px) 16px 16px;
+  overflow: hidden;
+  animation: sl-fade 0.4s ease-out;
+}
+.sl-bonus-head { position: relative; text-align: center; }
+.sl-bonus-head p {
+  margin: 8px 0 0;
+  font: 600 15px/1.4 system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #f4e6c0;
+}
+.sl-bonus-title { font-size: clamp(28px, min(6vw, 7dvh), 60px); }
+.sl-bonus-total {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font: 800 clamp(26px, 4vw, 44px) / 1 var(--font-mono, ui-monospace, monospace);
+  color: #fff;
+  text-shadow: 0 0 16px rgb(255 200 60 / 0.9), 0 3px 0 #7a4a00;
+}
+.sl-bonus-go {
+  position: relative;
+  min-height: 48px;
+  min-width: 180px;
+  padding: 0 28px;
+  border: 0;
+  cursor: pointer;
+  font: 900 18px/1 Impact, 'Arial Black', system-ui, sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #2a1400;
+  background: linear-gradient(180deg, #fff2b0, #ffc23a 50%, #d48a00);
+  animation: sl-breathe 1.2s ease-in-out infinite;
+}
+.sl-bonus-go:disabled { opacity: 0.4; cursor: default; animation: none; }
+.sl-bonus-go-big { min-height: 64px; min-width: 240px; font-size: 26px; }
+.sl-bonus-foot { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+
+/* Сокровищница: тёмный изумрудный зал, сундуки в золотом свете. */
+.sl-pick {
+  --tone: #ffd34a;
+  --tone-2: #2fdf7a;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 55%, rgb(255 190 60 / 0.25), transparent 70%),
+    radial-gradient(ellipse at 50% 120%, #0d4a2a, #02120a 70%);
+}
+.sl-chests {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(8px, 2vw, 18px);
+  width: min(680px, 100%, calc((100dvh - 330px) * 1.55));
+}
+.sl-chest {
+  position: relative;
+  aspect-ratio: 1.15;
+  padding: 0;
+  border: 0;
+  background: radial-gradient(ellipse at 50% 70%, rgb(255 210 90 / 0.18), transparent 65%);
+  cursor: pointer;
+  animation: sl-chest-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) backwards, sl-chest-idle 2.4s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 0.05s), calc(var(--i) * -0.37s);
+  transition: scale 0.15s, filter 0.15s;
+}
+.sl-chest:hover:not(:disabled) { scale: 1.08; filter: brightness(1.2) drop-shadow(0 0 14px #ffd34a); }
+.sl-chest:disabled { cursor: default; }
+.sl-chest-art { position: absolute; inset: 4%; width: 92%; height: 92%; overflow: visible; }
+@keyframes sl-chest-in { from { scale: 0.2; opacity: 0; } }
+@keyframes sl-chest-idle { 50% { translate: 0 -4px; } }
+.sl-chest.is-prize { animation: sl-chest-open 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.sl-chest.is-prize .sl-chest-art { filter: brightness(1.35) drop-shadow(0 0 16px #ffd34a); }
+.sl-chest.is-collect { animation: sl-chest-shake 0.5s; }
+.sl-chest.is-collect .sl-chest-art { filter: grayscale(0.8) brightness(0.6); }
+.sl-chest.is-missed { animation: none; }
+.sl-chest.is-missed .sl-chest-art { filter: grayscale(1) brightness(0.45); }
+@keyframes sl-chest-open {
+  0% { scale: 1; }
+  30% { scale: 1.25; rotate: -4deg; }
+  60% { rotate: 3deg; }
+  100% { scale: 1; rotate: 0deg; }
+}
+@keyframes sl-chest-shake {
+  20%, 60% { translate: -6px 0; }
+  40%, 80% { translate: 6px 0; }
+}
+.sl-chest-prize {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  translate: -50% -50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  white-space: nowrap;
+  font: 800 clamp(14px, 2.4vw, 22px) / 1 var(--font-mono, ui-monospace, monospace);
+  color: #fff;
+  background: rgb(0 0 0 / 0.7);
+  text-shadow: 0 0 10px #ffd34a;
+  animation: sl-prize-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.sl-chest.is-collect .sl-chest-prize { color: #ffb3b3; text-shadow: 0 0 10px #ff2a3c; background: rgb(60 0 10 / 0.85); text-transform: uppercase; }
+.sl-chest.is-missed .sl-chest-prize { color: #9a8f7d; text-shadow: none; animation-duration: 0.3s; }
+@keyframes sl-prize-pop {
+  from { scale: 0.2; translate: -50% 10%; opacity: 0; }
+}
+
+/* Колесо фортуны. */
+.sl-wheel {
+  --tone: #ff5adf;
+  --tone-2: #ffd34a;
+  background: radial-gradient(ellipse at 50% 55%, #3a0a52, #0a0212 70%);
+}
+.sl-wheel .sl-big-rays {
+  background: repeating-conic-gradient(rgb(255 90 223 / 0.14) 0deg 6deg, transparent 6deg 15deg);
+}
+.sl-wheel-box {
+  position: relative;
+  width: min(62vmin, 500px, calc(100dvh - 360px));
+  min-width: 240px;
+  aspect-ratio: 1;
+}
+.sl-wheel-rim {
+  position: absolute;
+  inset: -4%;
+  background: conic-gradient(#fff6c8, #c98a0c, #fff2b0, #8a5600, #ffe48a, #c98a0c, #fff6c8);
+}
+.sl-wheel-rim span {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4%;
+  height: 4%;
+  margin: -2% 0 0 -2%;
+  background: radial-gradient(circle at 35% 35%, #fff, #ffe48a 45%, #b06d00);
+  transform: rotate(calc(var(--i) * 15deg)) translateY(-1250%);
+  animation: sl-chase 0.9s linear infinite;
+  animation-delay: calc(var(--i) * -0.0375s);
+}
+.sl-wheel[data-state='spinning'] .sl-wheel-rim span { animation-duration: 0.3s; animation-delay: calc(var(--i) * -0.0125s); }
+.sl-wheel[data-state='won'] .sl-wheel-rim span { animation: sl-blink 0.2s steps(2, jump-none) infinite; animation-delay: calc(var(--i) % 2 * -0.1s); }
+.sl-wheel-disc { position: absolute; inset: 0; will-change: transform; }
+.sl-wheel-disc svg { width: 100%; height: 100%; display: block; }
+.sl-wheel-win { animation: sl-wheel-win 0.35s ease-in-out infinite alternate; }
+@keyframes sl-wheel-win { to { fill: #fff2b0; } }
+.sl-wheel-glass {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.22), transparent 40%, transparent 70%, rgb(0 0 0 / 0.25));
+}
+/* Язычок сверху: красная стрелка, бьётся о штыри. */
+.sl-wheel-flap {
+  position: absolute;
+  left: 50%;
+  top: -7%;
+  width: 9%;
+  height: 14%;
+  margin-left: -4.5%;
+  transform-origin: 50% 15%;
+  background: linear-gradient(90deg, #8a0014, #ff2a3c 45%, #8a0014);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  filter: drop-shadow(0 4px 6px rgb(0 0 0 / 0.6));
+}
+
+@media (max-width: 720px) {
+  .sl-chests { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .sl-wheel-box { width: 84vw; }
+}
+
+/* ══ Эйфория: эффекты выигрыша и ожидания ═════════════════════════ */
+
+/* Символ выигрыша «оживает»: оборот вокруг оси и прыжок — по очереди слева
+   направо (--d), потом бьётся в такт. */
+.sl-cell.is-win > svg {
+  animation:
+    sl-wake 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) var(--d, 0ms) backwards,
+    sl-pop 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) calc(var(--d, 0ms) + 0.7s) infinite alternate;
+}
+.sl-cell.is-scatter > svg {
+  animation:
+    sl-wake 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) var(--d, 0ms) backwards,
+    sl-pop-spin 0.7s ease-in-out calc(var(--d, 0ms) + 0.7s) infinite alternate;
+}
+@keyframes sl-wake {
+  0% { transform: perspective(300px) rotateY(0); scale: 1; filter: brightness(1); }
+  45% { transform: perspective(300px) rotateY(180deg); scale: 1.35; filter: brightness(2.2); }
+  100% { transform: perspective(300px) rotateY(360deg); scale: 1; filter: brightness(1); }
+}
+.sl-cell.is-win::before,
+.sl-cell.is-win::after { animation-delay: var(--d, 0ms); }
+
+/* «+N» взлетает над последним символом линии. */
+.sl-pop {
+  position: absolute;
+  z-index: 3;
+  translate: -50% -50%;
+  pointer-events: none;
+  font: 900 clamp(18px, 3.2vw, 34px) / 1 Impact, 'Arial Black', system-ui, sans-serif;
+  letter-spacing: 0.02em;
+  -webkit-text-stroke: 1.5px #1a0a00;
+  text-shadow: 0 3px 0 #1a0a00, 0 0 16px currentColor;
+  animation: sl-float-up 1.9s cubic-bezier(0.2, 0.8, 0.3, 1) backwards;
+  opacity: 0;
+}
+@keyframes sl-float-up {
+  0% { opacity: 0; scale: 0.2; translate: -50% -20%; }
+  15% { opacity: 1; scale: 1.35; }
+  30% { scale: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; translate: -50% -190%; }
+}
+
+/* Луч света проходит по корпусу. */
+.sl-term::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(105deg, transparent 35%, rgb(255 245 210 / 0.55) 50%, transparent 65%);
+  background-size: 300% 100%;
+}
+.sl-term[data-sweep]::after { animation: sl-sweep 0.9s ease-out; }
+@keyframes sl-sweep {
+  0% { opacity: 1; background-position: 120% 0; }
+  100% { opacity: 1; background-position: -60% 0; }
+}
+
+/* Бонус пойман: корпус «вдыхает», по символам бьёт молния, сверху — штамп. */
+.sl-term[data-zoom] { animation: sl-zoom 1.1s cubic-bezier(0.34, 1.56, 0.64, 1); }
+@keyframes sl-zoom {
+  0% { scale: 1; }
+  25% { scale: 1.045; }
+  100% { scale: 1; }
+}
+.sl-bolt {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 3;
+  pointer-events: none;
+  overflow: visible;
+}
+.sl-bolt-glow,
+.sl-bolt-core {
+  fill: none;
+  stroke-linejoin: miter;
+  vector-effect: non-scaling-stroke;
+}
+.sl-bolt-glow {
+  stroke: #9fe8ff;
+  stroke-width: 18;
+  opacity: 0.35;
+  animation: sl-bolt-flicker 0.12s steps(2, jump-none) 8, sl-fade-out 0.6s 1.6s forwards;
+}
+.sl-bolt-core {
+  stroke: #ffffff;
+  stroke-width: 4;
+  animation: sl-bolt-flicker 0.1s steps(2, jump-none) 10, sl-fade-out 0.6s 1.6s forwards;
+}
+@keyframes sl-bolt-flicker {
+  from { opacity: 1; }
+  to { opacity: 0.25; }
+}
+@keyframes sl-fade-out { to { opacity: 0; } }
+.sl-stamp {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 4;
+  translate: -50% -50%;
+  padding: 6px 22px;
+  pointer-events: none;
+  font: 900 clamp(34px, 7vw, 76px) / 1 Impact, 'Arial Black', system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  color: #fff;
+  -webkit-text-stroke: 2px #4a0a6a;
+  text-shadow: 0 5px 0 #2a0640, 0 0 30px #c46bff, 0 0 60px #5ad0ff;
+  rotate: -6deg;
+  animation: sl-stamp 1.9s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@keyframes sl-stamp {
+  0% { scale: 3; opacity: 0; }
+  18% { scale: 0.9; opacity: 1; }
+  28% { scale: 1.05; }
+  80% { scale: 1; opacity: 1; }
+  100% { scale: 1.3; opacity: 0; }
+}
+
+/* Ожидание: зал темнеет, горит только барабан, решающий бонус; края
+   экрана пульсируют в такт сердцу. */
+.sl-page[data-tease] .sl-reel:not([data-hot]) { filter: brightness(0.4) saturate(0.6); transition: filter 0.3s; }
+.sl-page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(ellipse 60% 55% at 50% 50%, transparent 40%, rgb(0 0 0 / 0.75) 100%);
+  transition: opacity 0.4s;
+}
+.sl-page[data-tease]::before { opacity: 1; animation: sl-heart 0.62s ease-in-out infinite; }
+@keyframes sl-heart {
+  0%, 100% { scale: 1; }
+  15% { scale: 0.97; }
+  32% { scale: 0.985; }
+}
+
+/* Серия: плашка на вывеске, с третьей — корпус в огне. */
+.sl-streak {
+  position: absolute;
+  right: 22px;
+  top: -14px;
+  z-index: 5;
+  padding: 5px 10px;
+  font: 900 13px/1 system-ui, sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #1a0800;
+  background: linear-gradient(180deg, #fff2b0, #ff9a1f 60%, #ff3b1f);
+  animation: sl-big-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), sl-streak 0.5s ease-in-out 0.6s infinite alternate;
+}
+@keyframes sl-streak { to { filter: brightness(1.3) drop-shadow(0 0 8px #ff7a1f); } }
+.sl-page[data-streak] .sl-term { animation: sl-fire 0.7s ease-in-out infinite alternate; }
+@keyframes sl-fire {
+  from { filter: drop-shadow(0 0 10px rgb(255 120 30 / 0.7)) drop-shadow(0 -6px 22px rgb(255 60 20 / 0.45)); }
+  to { filter: drop-shadow(0 0 22px rgb(255 190 40 / 0.9)) drop-shadow(0 -12px 34px rgb(255 80 20 / 0.6)); }
+}
+
+/* Крупный выигрыш: зал переливается, на каждой ступени экран вздрагивает. */
+.sl-page[data-mode='big'] .sl-room { animation: sl-disco 1.6s linear infinite; }
+@keyframes sl-disco { to { filter: hue-rotate(360deg) saturate(1.5); } }
+.sl-big[data-up] .sl-big-body { animation: sl-level 0.7s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.sl-big[data-up] { animation: sl-shake 0.6s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+@keyframes sl-level {
+  0% { scale: 1.6; filter: brightness(3); }
+  100% { scale: 1; filter: brightness(1); }
+}
+.sl-big-title { animation: sl-big-pulse 0.6s ease-in-out infinite alternate, sl-title-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
+@keyframes sl-title-in { from { scale: 2.4; opacity: 0; } }
+.sl-big[data-tier='mega'] .sl-big-rays { animation-duration: 9s; }
+.sl-big[data-tier='epic'] .sl-big-rays { animation-duration: 5s; }
+.sl-big[data-tier='legendary'] .sl-big-rays {
+  background: repeating-conic-gradient(#ffd34a55 0deg 5deg, #ff3b5c44 5deg 10deg, #2bd0ff44 10deg 15deg, transparent 15deg 20deg);
+  animation-duration: 3s;
+}
+.sl-big[data-tier='legendary'] .sl-big-title::after {
+  background: linear-gradient(90deg, #ff3b5c, #ffd34a, #7cff6b, #2bd0ff, #c46bff, #ff3b5c);
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: sl-rainbow 1.2s linear infinite;
+}
+@keyframes sl-rainbow { to { background-position: -200% 0; } }
+.sl-big-x {
+  margin-top: 8px;
+  font: 800 clamp(16px, 2.4vw, 24px) / 1 system-ui, sans-serif;
+  letter-spacing: 0.2em;
+  color: #ffe9a8;
+  opacity: 0.85;
+}
+
+/* ══ Терминал биржи (2026-11-09) ═══════════════════════════════════
+   Владелец: «чтобы пахло по-криптански, будто на криптобирже сижу». Не
+   автомат казино, а экран торгового терминала: лента котировок, пара со
+   статистикой сессии, график с барабанами, панель ордера справа, история
+   спинов как история сделок. Линии сетки — это зазоры сетки (`gap: 1px` на
+   фоне `--line`), как у панелей биржи. Цвета — рост/падение терминала;
+   ни логотипов, ни фирменных цветов конкретной биржи. */
+.sl-root {
+  --bg: #0b0e11;
+  --panel: #12161c;
+  --panel-2: #1a1f27;
+  --line: #262c36;
+  --txt: #eaecef;
+  --mut: #848e9c;
+  --up: #0ecb81;
+  --down: #f6465d;
+  --acc: #8b5cf6;
+  --neo: #0ecb81;
+  --sl-gold: #0ecb81;
+  background: var(--bg);
+  color: var(--txt);
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+.sl-root .up { color: var(--up); }
+.sl-root .down { color: var(--down); }
+.sl-room {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 60% 40% at 30% 0%, rgb(139 92 246 / 0.12), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 80% 100%, rgb(14 203 129 / 0.08), transparent 70%),
+    var(--bg);
+  transition: filter 0.8s;
+}
+.sl-page { padding: 8px 12px 16px; }
+
+.sl-term {
+  /* График и ордер — целиком в первом экране; история ниже, её листают. */
+  --w: min(100%, 1440px, calc((100dvh - var(--top-h-safe) - var(--tab-h, 0px) - 214px) * 1.6667 + 368px));
+  position: relative;
+  width: max(300px, var(--w));
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-areas:
+    'tick tick'
+    'pair pair'
+    'chart order'
+    'hist hist';
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+}
+.sl-term > * { background: var(--panel); min-width: 0; }
+
+/* Лента котировок. */
+.sl-ticker { grid-area: tick; overflow: hidden; height: 32px; background: var(--bg); }
+.sl-ticker-run {
+  display: flex;
+  width: max-content;
+  height: 100%;
+  animation: sl-tick 48s linear infinite;
+}
+@keyframes sl-tick { to { transform: translateX(-50%); } }
+.sl-tk {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 18px;
+  border-right: 1px solid var(--line);
+  font: 500 12px/1 var(--font-mono, ui-monospace, monospace);
+  white-space: nowrap;
+}
+.sl-tk svg { width: 18px; height: 18px; }
+.sl-tk b { font-weight: 700; color: var(--txt); }
+.sl-tk i { font-style: normal; }
+.sl-tk em { font-style: normal; color: var(--mut); }
+
+/* Пара и статистика. */
+.sl-pair {
+  grid-area: pair;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 8px 14px;
+  min-height: 56px;
+}
+.sl-back {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  color: var(--mut);
+  text-decoration: none;
+  font-size: 18px;
+}
+.sl-back:hover { color: var(--txt); background: var(--panel-2); }
+.sl-pair-name { display: flex; align-items: center; gap: 10px; }
+.sl-pair-ico { width: 30px; height: 30px; }
+.sl-pair-name b { display: block; font: 700 18px/1.1 system-ui, sans-serif; letter-spacing: 0.01em; }
+.sl-pair-name small { display: block; font-size: 11px; color: var(--mut); margin-top: 2px; }
+.sl-stats { display: flex; gap: 22px; margin: 0; }
+.sl-stats dt { font-size: 11px; color: var(--mut); }
+.sl-stats dd { margin: 2px 0 0; font: 600 14px/1.2 var(--font-mono, ui-monospace, monospace); font-variant-numeric: tabular-nums; }
+.sl-pair-tools { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.sl-tool {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--txt);
+  font-size: 12px;
+  cursor: pointer;
+}
+.sl-tool:hover { border-color: var(--mut); }
+.sl-streak {
+  padding: 5px 10px;
+  font: 800 11px/1 system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #062014;
+  background: linear-gradient(180deg, #6dffc4, var(--up));
+  animation: sl-big-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), sl-streak 0.5s ease-in-out 0.6s infinite alternate;
+}
+@keyframes sl-streak { to { filter: brightness(1.25) drop-shadow(0 0 8px var(--up)); } }
+
+/* График с барабанами. */
+.sl-chart { grid-area: chart; display: flex; flex-direction: column; padding: 10px 10px 0; }
+.sl-window {
+  position: relative;
+  display: grid;
+  grid-template-columns: 22px 1fr 22px;
+  gap: 6px;
+  padding: 0;
+  background: none;
+}
+.sl-reels {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1px;
+  aspect-ratio: 5 / 3;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 calc(100% / 6 - 1px), rgb(132 142 156 / 0.08) calc(100% / 6 - 1px) calc(100% / 6)),
+    repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), rgb(132 142 156 / 0.06) calc(10% - 1px) 10%),
+    #0b0e11;
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.sl-chartbg { position: absolute; inset: 8% 0; pointer-events: none; opacity: 0.22; }
+.sl-chartbg svg { width: 200%; height: 100%; display: block; animation: sl-chartrun 60s linear infinite; }
+.sl-chartbg .up line, .sl-chartbg .up rect { stroke: var(--up); fill: var(--up); }
+.sl-chartbg .down line, .sl-chartbg .down rect { stroke: var(--down); fill: var(--down); }
+.sl-chartbg line { stroke-width: 0.6; vector-effect: non-scaling-stroke; }
+@keyframes sl-chartrun { to { transform: translateX(-50%); } }
+.sl-reel {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgb(11 14 17 / 0.92), rgb(18 22 28 / 0.35) 50%, rgb(11 14 17 / 0.92));
+}
+.sl-cyl {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgb(11 14 17 / 0.85) 0%, transparent 18%, transparent 82%, rgb(11 14 17 / 0.85) 100%);
+}
+.sl-cell > svg { filter: drop-shadow(0 6px 10px rgb(0 0 0 / 0.55)); }
+.sl-reels[data-dim] .sl-cell:not(.is-win) > svg { opacity: 0.22; filter: grayscale(0.9); }
+.sl-cell.is-win::before { background: radial-gradient(circle, rgb(14 203 129 / 0.55), rgb(14 203 129 / 0.12) 50%, transparent 70%); }
+.sl-cell.is-win::after { border: 2px solid var(--up); inset: 4%; }
+@keyframes sl-frame {
+  from { opacity: 0.45; border-color: var(--acc); }
+  to { opacity: 1; border-color: var(--up); }
+}
+.sl-hotframe { border: 2px solid var(--up); background: linear-gradient(180deg, rgb(14 203 129 / 0.22), transparent 30%, transparent 70%, rgb(14 203 129 / 0.22)); }
+@keyframes sl-hot {
+  from { border-color: #b6ffe0; opacity: 1; }
+  to { border-color: var(--acc); opacity: 0.55; }
+}
+.sl-reel[data-hot] { filter: drop-shadow(0 0 12px rgb(14 203 129 / 0.8)); z-index: 1; }
+.sl-reel::after { background: linear-gradient(180deg, transparent 0%, rgb(14 203 129 / 0.35) 50%, transparent 100%); background-size: 100% 40%; background-repeat: no-repeat; }
+.sl-badge { height: 16px; font: 700 9px/1 var(--font-mono, monospace); color: #0b0e11; }
+
+.sl-msg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  margin: 0;
+  padding: 0 4px;
+  font: 600 12px/1 var(--font-mono, ui-monospace, monospace);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--txt);
+  text-shadow: none;
+}
+.sl-page[data-mode='win'] .sl-msg { color: var(--up); animation: none; }
+.sl-msg-err { color: var(--down); }
+.sl-live { width: 8px; height: 8px; background: var(--up); animation: sl-live 1.4s ease-in-out infinite; }
+.sl-page[data-mode='spinning'] .sl-live { animation-duration: 0.4s; }
+@keyframes sl-live { 50% { opacity: 0.25; } }
+
+/* Панель ордера. */
+.sl-order { grid-area: order; display: flex; flex-direction: column; gap: 12px; padding: 12px 14px 14px; }
+.sl-order-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 2px; background: var(--bg); }
+.sl-order-tabs button {
+  min-height: 34px;
+  border: 0;
+  background: none;
+  color: var(--mut);
+  font: 600 13px/1 system-ui, sans-serif;
+  cursor: pointer;
+}
+.sl-order-tabs button[data-on] { background: var(--panel-2); color: var(--txt); }
+.sl-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--mut); }
+.sl-row b {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: 600 14px/1.2 var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--txt);
+}
+.sl-row-win { padding: 10px 12px; background: var(--bg); border: 1px solid var(--line); }
+.sl-row-win b { font-size: 20px; color: var(--mut); }
+.sl-row-win[data-hot] { border-color: var(--up); }
+.sl-row-win[data-hot] b { color: var(--up); text-shadow: 0 0 14px rgb(14 203 129 / 0.6); animation: sl-meter 0.3s ease-in-out infinite alternate; }
+@keyframes sl-meter { to { scale: 1.05; } }
+.sl-coin-i { width: 13px; height: 13px; }
+.sl-size { display: grid; gap: 6px; font-size: 12px; color: var(--mut); }
+.sl-size-box {
+  display: grid;
+  grid-template-columns: 40px 1fr 40px;
+  align-items: center;
+  height: 44px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+}
+.sl-size-box:focus-within { border-color: var(--acc); }
+.sl-size-box button { height: 100%; border: 0; background: none; color: var(--txt); font-size: 18px; cursor: pointer; }
+.sl-size-box button:disabled { color: #4a525e; cursor: default; }
+.sl-size-box output {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  font: 700 17px/1 var(--font-mono, ui-monospace, monospace);
+  color: var(--txt);
+}
+.sl-chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.sl-chips button {
+  min-height: 30px;
+  border: 1px solid var(--line);
+  background: none;
+  color: var(--mut);
+  font: 600 12px/1 var(--font-mono, ui-monospace, monospace);
+  cursor: pointer;
+}
+.sl-chips button:hover:not(:disabled) { color: var(--txt); border-color: var(--mut); }
+.sl-chips button[data-on] { color: var(--txt); border-color: var(--acc); background: rgb(139 92 246 / 0.14); }
+.sl-chips button:disabled { cursor: default; opacity: 0.6; }
+.sl-check { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--mut); cursor: pointer; min-height: 24px; }
+.sl-check input { width: 16px; height: 16px; accent-color: var(--acc); }
+.sl-spin {
+  position: relative;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  min-height: 60px;
+  border: 0;
+  cursor: pointer;
+  font: 800 18px/1 system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: var(--up);
+  transition: filter 0.15s, translate 0.08s;
+  overflow: hidden;
+}
+.sl-spin small { font: 500 11px/1 system-ui, sans-serif; letter-spacing: 0; opacity: 0.85; }
+.sl-spin:hover { filter: brightness(1.1); }
+.sl-spin:active { translate: 0 1px; filter: brightness(0.92); }
+.sl-spin[data-state='stop'] { background: var(--down); }
+/* Блик по кнопке в покое — зовёт нажать. */
+.sl-spin::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgb(255 255 255 / 0.35) 50%, transparent 65%);
+  background-size: 300% 100%;
+  animation: sl-sweep-btn 3s ease-in-out infinite;
+}
+@keyframes sl-sweep-btn {
+  0%, 60% { background-position: 120% 0; }
+  100% { background-position: -60% 0; }
+}
+.sl-legal { margin: 0; font-size: 10px; line-height: 1.4; color: #5e6673; text-align: center; }
+
+/* История спинов. */
+.sl-hist { grid-area: hist; display: flex; flex-direction: column; min-height: 0; }
+.sl-hist > header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 14px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.sl-hist > header b { font-size: 13px; }
+.sl-hist > header span { font-size: 11px; color: var(--mut); }
+.sl-hist-scroll { max-height: 180px; overflow-y: auto; }
+.sl-hist table { width: 100%; border-collapse: collapse; font: 500 12px/1 var(--font-mono, ui-monospace, monospace); font-variant-numeric: tabular-nums; }
+.sl-hist th { position: sticky; top: 0; padding: 8px 14px; text-align: right; font: 500 11px/1 system-ui, sans-serif; color: var(--mut); background: var(--panel); }
+.sl-hist td { padding: 7px 14px; text-align: right; border-top: 1px solid rgb(38 44 54 / 0.6); }
+.sl-hist :is(th, td):first-child { text-align: left; color: var(--mut); }
+.sl-hist td em { margin-left: 6px; font-style: normal; font-size: 10px; color: var(--acc); }
+.sl-hist tbody tr { animation: sl-row-in 0.4s ease-out; }
+@keyframes sl-row-in { from { background: rgb(139 92 246 / 0.18); } }
+.sl-hist-empty { text-align: center !important; color: var(--mut); padding: 18px !important; }
+
+/* Ключевые кадры, общие с эффектами и бонусами. */
+@keyframes sl-shake {
+  10%, 90% { translate: -2px 1px; }
+  20%, 80% { translate: 4px -2px; }
+  30%, 50%, 70% { translate: -7px 2px; rotate: -0.3deg; }
+  40%, 60% { translate: 7px -2px; rotate: 0.3deg; }
+}
+.sl-term[data-shake] { animation: sl-shake 0.7s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+@keyframes sl-breathe { 50% { filter: brightness(1.18); } }
+@keyframes sl-ring { to { rotate: 360deg; } }
+@keyframes sl-chase {
+  0%, 30% { opacity: 1; filter: drop-shadow(0 0 4px #ffd34a); }
+  45%, 100% { opacity: 0.3; filter: none; }
+}
+@keyframes sl-blink {
+  from { opacity: 1; filter: drop-shadow(0 0 5px #ffd34a); }
+  to { opacity: 0.25; filter: none; }
+}
+.sl-page[data-bonus='free'] .sl-reels { outline: 2px solid #14f1c6; outline-offset: -2px; animation: sl-free-glow 1.2s ease-in-out infinite alternate; }
+@keyframes sl-free-glow { to { outline-color: var(--acc); } }
+.sl-page[data-streak] .sl-term { animation: sl-fire 0.8s ease-in-out infinite alternate; }
+@keyframes sl-fire {
+  from { filter: drop-shadow(0 0 6px rgb(14 203 129 / 0.45)); }
+  to { filter: drop-shadow(0 0 18px rgb(14 203 129 / 0.75)); }
+}
+
+/* ── Автомат: пять стеклянных колонок с переливающейся кромкой ──────
+   Каждый барабан — отдельная колонка с зазором, кромка — градиент
+   фиолетовый → бирюза (маской по краю, без рамки), средняя строка — светлее:
+   это линия 1. Монеты — объёмные (`SlotSymbols`). Во время спина кромки
+   разгораются. */
+.sl-reels {
+  gap: 8px;
+  padding: 8px;
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 50%, rgb(139 92 246 / 0.1), transparent 70%),
+    repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), rgb(132 142 156 / 0.05) calc(10% - 1px) 10%),
+    #07090d;
+}
+.sl-reel {
+  isolation: isolate;
+  background:
+    linear-gradient(180deg, transparent 33.2%, rgb(14 203 129 / 0.06) 33.4%, rgb(14 203 129 / 0.06) 66.6%, transparent 66.8%),
+    linear-gradient(180deg, rgb(28 33 44 / 0.95), rgb(14 17 23 / 0.55) 50%, rgb(28 33 44 / 0.95));
+}
+.sl-reel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  padding: 1.5px;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgb(139 92 246 / 0.85), rgb(20 241 198 / 0.4) 50%, rgb(139 92 246 / 0.85));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  opacity: 0.55;
+  transition: opacity 0.3s;
+}
+.sl-page[data-mode='spinning'] .sl-reel::before { opacity: 1; animation: sl-reelglow 0.5s ease-in-out infinite alternate; }
+@keyframes sl-reelglow { to { filter: brightness(1.6) drop-shadow(0 0 6px rgb(139 92 246 / 0.9)); } }
+.sl-cell > svg { width: 80%; height: 80%; }
+.sl-cyl { background: linear-gradient(180deg, rgb(7 9 13 / 0.9) 0%, transparent 16%, transparent 84%, rgb(7 9 13 / 0.9) 100%); }
+.sl-chartbg { inset: 6% 0; opacity: 0.16; }
+
+/* ══ Адаптивность ═══════════════════════════════════════════════════
+   Широкий экран — график слева, ордер справа, история под графиком. До
+   900 px — одна колонка: лента, пара, график, ордер, история. Телефон
+   боком — график и ордер рядом, ленты и истории в первом экране нет. */
+@media (max-width: 1100px) {
+  .sl-stats .sl-stat-hide { display: none; }
+}
+/* До 900 px — одна колонка, и ордер — полоса, прилипшая к низу экрана, как
+   кнопки «Купить/Продать» в мобильном приложении биржи: спин всегда под
+   пальцем, история — под ней, её листают. */
+@media (max-width: 900px) {
+  .sl-term {
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'tick' 'pair' 'chart' 'order' 'hist';
+    overflow: visible;
+  }
+  .sl-order {
+    position: sticky;
+    bottom: var(--tab-h, 0px);
+    z-index: 8;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas: 'credit win' 'size spin' 'tabs check';
+    gap: 8px 10px;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    background: rgb(18 22 28 / 0.96);
+    backdrop-filter: blur(8px);
+    border-top: 1px solid var(--line);
+  }
+  .sl-order > .sl-row:not(.sl-row-win) { grid-area: credit; align-self: center; }
+  .sl-row-win { grid-area: win; padding: 4px 10px; }
+  .sl-row-win b { font-size: 16px; }
+  .sl-size { grid-area: size; }
+  .sl-size > span { display: none; }
+  .sl-spin { grid-area: spin; min-height: 44px; font-size: 16px; }
+  .sl-spin small { display: none; }
+  .sl-order-tabs { grid-area: tabs; }
+  .sl-order-tabs button { min-height: 30px; font-size: 12px; }
+  .sl-check { grid-area: check; justify-content: flex-end; }
+  .sl-chips, .sl-legal { display: none; }
+  .sl-hist-scroll { max-height: none; }
+  .sl-hist { padding-bottom: 8px; }
+}
+@media (max-width: 640px) {
+  .sl-page { padding: 0 0 12px; }
+  .sl-term { border-left: 0; border-right: 0; }
+  .sl-pair { flex-wrap: wrap; gap: 8px 10px; padding: 6px 10px; min-height: 0; }
+  .sl-pair-name b { font-size: 15px; }
+  .sl-pair-name small { display: none; }
+  .sl-pair-ico { width: 24px; height: 24px; }
+  .sl-stats { order: 3; width: 100%; gap: 0; justify-content: space-between; }
+  .sl-stats dd { font-size: 13px; }
+  .sl-pair-tools { gap: 6px; }
+  .sl-chart { padding: 6px 6px 0; }
+  .sl-window { grid-template-columns: 1fr; }
+  .sl-badges { display: none; }
+  .sl-msg { min-height: 30px; font-size: 11px; }
+  .sl-tool { padding: 0 8px; }
+  .sl-ticker { height: 28px; }
+}
+@media (min-aspect-ratio: 13/10) and (max-height: 500px) {
+  .sl-page { padding: 0 6px; }
+  .sl-term {
+    --w: min(100%, calc((100dvh - var(--top-h-safe) - 92px) * 1.6667 + 250px));
+    width: max(300px, var(--w));
+    grid-template-columns: minmax(0, 1fr) 210px;
+    grid-template-areas: 'pair pair' 'chart order' 'hist hist';
+  }
+  .sl-order {
+    position: static;
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    backdrop-filter: none;
+    border-top: 0;
+  }
+  .sl-order > * { align-self: stretch !important;
+  }
+  .sl-ticker { display: none; }
+  .sl-pair { min-height: 40px; padding: 4px 10px; }
+  .sl-stats .sl-stat-hide, .sl-pair-name small, .sl-badges, .sl-legal, .sl-chips, .sl-order-tabs { display: none; }
+  .sl-window { grid-template-columns: 1fr; }
+  .sl-chart { padding: 4px 4px 0; }
+  .sl-msg { min-height: 26px; font-size: 10px; }
+  .sl-order { padding: 8px; gap: 6px; }
+  .sl-size-box { height: 36px; }
+  .sl-row-win { padding: 6px 8px; }
+  .sl-row-win b { font-size: 16px; }
+  .sl-spin { min-height: 48px; font-size: 15px; }
+  .sl-pair-name small { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sl-ticker-run, .sl-chartbg svg, .sl-spin::after { animation: none; }
+  .sl-term[data-shake] { animation: none; }
+}
+
+/* ── Исключение из нулевого радиуса и теней — в слое base, иначе проигрывает
+   глобальному сбросу. ── */
+@layer base {
+  .sl-root .sl-term { border-radius: 8px !important; overflow: clip; }
+  .sl-root :is(.sl-spin, .sl-size-box, .sl-row-win, .sl-tool, .sl-chips button, .sl-order-tabs, .sl-reels) { border-radius: 6px !important; }
+  .sl-root :is(.sl-order-tabs button, .sl-badge, .sl-streak, .sl-pt-sym, .sl-back) { border-radius: 4px !important; }
+  .sl-root :is(.sl-reel, .sl-reel::before, .sl-hotframe) { border-radius: 12px !important; }
+  .sl-root :is(.sl-cell::after) { border-radius: 10px !important; }
+  .sl-root .sl-reels { border-radius: 10px !important; }
+  .sl-root .sl-live { border-radius: 50% !important; }
+  .sl-root :is(.sl-pt-card, .sl-pt-row, .sl-big-glow) { border-radius: 8px !important; }
+  .sl-root .sl-big-glow,
+  .sl-root .sl-cell.is-win::before,
+  .sl-root .sl-wheel-rim,
+  .sl-root .sl-wheel-rim span,
+  .sl-root .sl-wheel-disc,
+  .sl-root .sl-wheel-glass { border-radius: 50% !important; }
+  .sl-root :is(.sl-bonus-go, .sl-toast, .sl-chest, .sl-chest-prize) { border-radius: 10px !important; }
+  .sl-root .sl-bonus-go { box-shadow: 0 6px 0 #7a4a00, 0 0 30px rgb(255 190 40 / 0.6) !important; }
+  .sl-root .sl-toast { box-shadow: 0 0 40px rgb(90 160 255 / 0.8) !important; }
+  .sl-root .sl-term { box-shadow: 0 24px 60px rgb(0 0 0 / 0.55) !important; }
+  .sl-root .sl-spin { box-shadow: 0 0 24px rgb(14 203 129 / 0.35) !important; }
+  .sl-root .sl-spin[data-state='stop'] { box-shadow: 0 0 24px rgb(246 70 93 / 0.35) !important; }
+}

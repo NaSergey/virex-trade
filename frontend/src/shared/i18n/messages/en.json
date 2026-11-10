@@ -1690,6 +1690,10 @@
         "title": "Jetpack",
         "description": "Climb higher and cash out before the flight ends."
       },
+      "slots": {
+        "title": "Slots",
+        "description": "Five reels, ten lines and a diamond jackpot."
+      },
       "trading": {
         "title": "Trading",
         "description": "A real market and real skills. Trade against other players."
@@ -1845,7 +1849,9 @@
       "JETPACK_REFUND": "Jetpack bet refund",
       "RACE_STAKE": "Race stake",
       "RACE_WIN": "Race win",
-      "RACE_REFUND": "Race stake refund"
+      "RACE_REFUND": "Race stake refund",
+      "SLOTS_BET": "Slots bet",
+      "SLOTS_WIN": "Slots win"
     },
     "games": "Games",
     "colGame": "Game",
@@ -2363,5 +2369,100 @@
     "colT": "t-stat",
     "fT": "Reliability t",
     "tHint": "Weekly-return t-statistic: how far the profit is from luck. 2 is about a 1-in-40 chance; steady strategies score higher, lumpy ones lower."
+  },
+  "slots": {
+    "back": "Games",
+    "loading": "Powering up…",
+    "loadFailed": "Couldn't load slots",
+    "subtitle": "Slots · 5×3 · 10 lines · played for coins",
+    "paytable": "Paytable",
+    "close": "Close",
+    "credit": "Credit",
+    "bet": "Bet",
+    "win": "Win",
+    "spin": "Spin",
+    "stop": "Stop",
+    "auto": "Auto",
+    "turbo": "Turbo",
+    "maxBet": "Max",
+    "betUp": "Raise bet",
+    "betDown": "Lower bet",
+    "noCoins": "Not enough coins for this bet",
+    "failed": "Spin failed",
+    "goodLuck": "WAGMI!",
+    "placeBet": "Press Space or “Spin”",
+    "lineWin": "Line {line}: {n} in a row!",
+    "linesWin": "Win on {n} lines!",
+    "tapToContinue": "Tap to continue",
+    "legal": "Played for in-app coins. Account money is never involved.",
+    "wildInfo": "WILD (the Moon) substitutes for any regular symbol. Appears on reels 2–4 only.",
+    "lines": "Lines",
+    "rules": "Lines pay left to right from the first reel. The best combination on each line pays, and line wins add up. Return to player — {rtp}%.",
+    "tier": {
+      "big": "BIG PUMP",
+      "mega": "MEGA PUMP",
+      "epic": "TO THE MOON",
+      "legendary": "LAMBO"
+    },
+    "bonuses": "Bonus rounds",
+    "free": {
+      "title": "Airdrop",
+      "sub": "{n} spins · wins ×{x}",
+      "more": "+{n} spins!",
+      "total": "Airdrop",
+      "played": "Spins played: {n}",
+      "counter": "Free spin {n} of {total} · ×{x}",
+      "left": "Spins left: {n} · bonus {win}",
+      "rule": "3, 4 or 5 airdrops anywhere — {a}, {b} or {c} free spins, every win ×{x}. Airdrops inside add more spins."
+    },
+    "pick": {
+      "title": "Crypto Vault",
+      "sub": "Open chests until you find “Collect”",
+      "hint": "Pick a chest",
+      "over": "Empty chest — the bonus is over",
+      "collect": "Collect",
+      "closed": "Closed chest",
+      "take": "Take {n}",
+      "rule": "A chest on reels 1, 3 and 5. {n} chests: open one at a time, each holds a prize up to {max}, until you find “Collect”. The first one always pays."
+    },
+    "wheel": {
+      "title": "Wheel of Fortune",
+      "sub": "Spin the wheel — the sector is your win",
+      "hint": "Press “Spin”",
+      "won": "The wheel has stopped!",
+      "take": "Take it",
+      "spin": "Spin",
+      "rule": "A wheel on reels 1, 3 and 5. {n} equal sectors from {min} to {max} — whatever stops under the arrow is yours."
+    },
+    "streak": "Streak ×{n}!",
+    "streakBadge": "Streak ×{n}",
+    "bonusStamp": "BONUS!",
+    "stat": {
+      "last": "Last",
+      "pnl": "Session PnL",
+      "spins": "Spins"
+    },
+    "order": {
+      "manual": "Manual",
+      "auto": "Auto",
+      "autoGo": "Start auto",
+      "stopHint": "stop the reels",
+      "hint": "bet {n}"
+    },
+    "hist": {
+      "title": "Spin history",
+      "note": "this session",
+      "time": "Time",
+      "bet": "Bet",
+      "payout": "Payout",
+      "result": "Result",
+      "x": "Mult.",
+      "empty": "No spins yet — make the first one",
+      "bonus": {
+        "free": "airdrop",
+        "pick": "vault",
+        "wheel": "wheel"
+      }
+    }
   }
 }

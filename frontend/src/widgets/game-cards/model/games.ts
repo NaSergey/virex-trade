@@ -14,7 +14,7 @@
  * хранить его отдельным полем значит завести второй источник того же знания,
  * способный разойтись с первым.
  */
-export type GameId = 'blackjack' | 'poker' | 'jetpack' | 'race' | 'trading';
+export type GameId = 'blackjack' | 'poker' | 'jetpack' | 'race' | 'slots' | 'trading';
 
 /**
  * Чипы под описанием — то, что игра обещает форматом: с кем играют и чем это
@@ -32,7 +32,7 @@ export type GameTag = '1v1' | 'pvp' | 'tournaments' | 'ratings' | 'fast' | 'mult
 export type GameAccent = 'green' | 'red' | 'purple' | 'amber';
 
 /** Сцены, нарисованные кодом, — `widgets/game-cards/components/<Name>Scene.tsx`. */
-export type GameScene = 'trading' | 'poker' | 'blackjack' | 'jetpack' | 'race';
+export type GameScene = 'trading' | 'poker' | 'blackjack' | 'jetpack' | 'race' | 'slots';
 
 export type Game = {
   id: GameId;
@@ -92,6 +92,14 @@ export const GAMES: readonly Game[] = [
     accent: 'amber',
     tags: ['fast', 'multiplayer'],
     scene: 'race',
+  },
+  {
+    id: 'slots',
+    href: '/games/slots',
+    available: true,
+    accent: 'amber',
+    tags: ['fast'],
+    scene: 'slots',
   },
   {
     id: 'trading',

@@ -1,5 +1,5 @@
 /**
- * Маршруты раздела игр, тёмные в обеих темах: витрина, джетпак, профиль
+ * Маршруты раздела игр, тёмные в обеих темах: витрина, джетпак, слоты, профиль
  * игрока (свой и чужой — он про игры и сезон) и сам стол покера/блэкджека (`.games-bg`/`.games-page`/`.ct-page`/`.jpg-page`). Лобби
  * столов (`/games/poker`, `/games/blackjack`) и турниры (`/games/trading*`) —
  * обычные страницы продукта, тему листают как все остальные, и сюда не
@@ -11,6 +11,7 @@ export function isGamesDarkRoute(pathname: string): boolean {
   return (
     pathname === '/games' ||
     pathname === '/games/jetpack' ||
+    pathname === '/games/slots' ||
     pathname === '/profile' ||
     pathname.startsWith('/profile/') ||
     /^\/games\/(poker|blackjack)\/[^/]+$/.test(pathname)
