@@ -1,4 +1,4 @@
-import { hits, hz, SCORE, STEPS, type MusicMode, type Section } from './score';
+import { hits, hz, rolls, SCORE, STEPS, type MusicMode, type Section } from './score';
 import { musicBus, noise } from './sound';
 
 const LOOKAHEAD = 0.2;
@@ -148,7 +148,10 @@ export class SlotsMusic {
       }
     }
     const b = s.bass[inBar];
-    if (b !== null && b !== undefined) this.bass(chord[0] - 12 + b, t, this.stepS() * 3);
+    if (b !== null && b !== undefined) {
+      if (s.bass808) this.bass808(chord[0] - 12 + b, t, this.stepS() * 6);
+      else this.bass(chord[0] - 12 + b, t, this.stepS() * 3);
+    }
 
     const n = s.lead[step];
     if (n !== null && n !== undefined) {
@@ -158,8 +161,17 @@ export class SlotsMusic {
     }
 
     if (hits(s.kick).includes(inBar)) this.kick(t, s === SCORE.base ? 0.35 : 0.55);
-    if (hits(s.snare).includes(inBar)) this.snare(t, s === SCORE.base ? 0.06 : 0.12);
-    if (hits(s.hat).includes(inBar)) this.hat(t, s === SCORE.pick ? 0.05 : 0.035);
+    if (hits(s.snare).includes(inBar)) {
+      if (s.bass808) this.clap(t, 0.11);
+      else this.snare(t, 0.12);
+    }
+    if (hits(s.hat).includes(inBar)) {
+      const peak = s === SCORE.pick ? 0.045 : 0.035;
+      if (rolls(s.hat).includes(inBar)) {
+        const st = this.stepS();
+        for (let k = 0; k < 3; k++) this.hat(t + (k * st) / 3, peak * (0.7 + 0.15 * k));
+      } else this.hat(t, peak);
+    }
   }
 
   private osc(type: OscillatorType, midi: number, t: number, detune = 0) {
@@ -237,6 +249,50 @@ export class SlotsMusic {
       x.start(t);
       x.stop(t + dur + 0.02);
     }
+  }
+
+  /**
+   * 808: синус с коротким подъездом тона сверху, долгий хвост и мягкий перегруз —
+   * чтобы бас был слышен и на телефоне, где саба нет (обертоны от перегруза).
+   */
+  private bass808(midi: number, t: number, dur: number) {
+    const o = this.c.createOscillator();
+    const f = hz(midi);
+    o.frequency.setValueAtTime(f * 1.5, t);
+    o.frequency.exponentialRampToValueAtTime(f, t + 0.05);
+    const sat = this.c.createWaveShaper();
+    sat.curve = this.drive();
+    const g = this.c.createGain();
+    g.gain.setValueAtTime(TINY, t);
+    g.gain.linearRampToValueAtTime(0.075, t + 0.008);
+    g.gain.setTargetAtTime(0.0001, t + dur * 0.6, dur * 0.25);
+    o.connect(sat).connect(g).connect(this.duck);
+    o.start(t);
+    o.stop(t + dur + 0.6);
+  }
+
+  private curve: Float32Array<ArrayBuffer> | null = null;
+  private drive() {
+    if (!this.curve) {
+      const n = 1024;
+      const c = new Float32Array(new ArrayBuffer(n * 4));
+      for (let i = 0; i < n; i++) {
+        const x = (i / (n - 1)) * 2 - 1;
+        c[i] = Math.tanh(2.2 * x) / Math.tanh(2.2);
+      }
+      this.curve = c;
+    }
+    return this.curve;
+  }
+
+  /** Клэп трэпа: три коротких шумовых хлопка подряд и хвост в зал. */
+  private clap(t: number, peak: number) {
+    for (const [d, k] of [
+      [0, 0.7],
+      [0.011, 0.8],
+      [0.023, 1],
+    ] as const)
+      this.noiseHit(t + d, 'bandpass', 1300, peak * k, d === 0.023 ? 0.14 : 0.012, d === 0.023 ? 0.6 : 0);
   }
 
   private pluck(midi: number, t: number, peak: number) {

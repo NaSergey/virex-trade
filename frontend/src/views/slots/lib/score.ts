@@ -32,8 +32,12 @@ export interface Section {
   /** Мелодия на цикл (4 такта × 16): MIDI или null. */
   lead: (number | null)[];
   kick: string;
+  /** Малый барабан; у трэпа — клэп. */
   snare: string;
+  /** Хэты: `x` — удар, `r` — ролл (дробь из трёх ударов в шаг), как в трэпе. */
   hat: string;
+  /** Бас — 808: длинный синус с подъездом тона, а не короткая нота. */
+  bass808?: boolean;
   /** Чем звучат аккорды: электропиано, пэд, стабы меди. */
   keys: 'epiano' | 'pad' | 'stab';
   /** Чем звучит мелодия. */
@@ -44,9 +48,12 @@ export interface Section {
 
 const R = null;
 
-/** Строка «x...» → набор шагов. */
+/** Строка «x...» → набор шагов (`r` — тоже удар, с дробью). */
 export const hits = (pattern: string) =>
-  pattern.split('').flatMap((ch, i) => (ch === 'x' ? [i] : []));
+  pattern.split('').flatMap((ch, i) => (ch === 'x' || ch === 'r' ? [i] : []));
+
+/** Шаги с роллом хэтов. */
+export const rolls = (pattern: string) => pattern.split('').flatMap((ch, i) => (ch === 'r' ? [i] : []));
 
 // Аккорды: Am9, Fmaj7, Cmaj7, G6 — мягкий лаунж без резких функций.
 const AM9 = [57, 60, 64, 67, 71];
@@ -61,41 +68,49 @@ const seq = (notes: [number, number][], len = STEPS * 4) => {
 };
 
 export const SCORE: Record<MusicMode, Section> = {
-  // Обычная игра — фон, который не надоедает: тихий лаунж, медленно.
+  // Обычная игра — крипто-трэп (владелец 2026-11-10: «больше в крипто уклон, а не в космос»):
+  // 808, хэты с роллами, клэп на третьей доле, тёмный плак. Лаунж и пэд-космос сняты.
   base: {
-    bpm: 96,
-    chords: [AM9, FMAJ7, CMAJ7, G6],
-    bass: [0, R, R, R, R, R, R, 0, R, R, 7, R, R, R, R, R],
+    bpm: 140,
+    chords: [
+      [57, 60, 64],
+      [53, 57, 60],
+      [48, 52, 55],
+      [55, 59, 62],
+    ],
+    bass: [0, R, R, R, R, R, R, R, R, R, 0, R, R, R, 7, R],
     lead: seq([
-      [6, 76], [10, 79], [14, 81],
-      [22, 79], [26, 76],
-      [38, 74], [42, 76], [46, 79],
-      [54, 76], [58, 74], [62, 72],
+      [0, 76], [3, 72], [6, 74], [10, 69],
+      [16, 77], [19, 72], [22, 74], [26, 69],
+      [32, 76], [35, 72], [38, 79], [42, 76],
+      [48, 74], [51, 71], [54, 74], [58, 79],
     ]),
     kick: 'x.........x.....',
-    snare: '....x.......x...',
-    hat: '..x...x...x...x.',
-    keys: 'epiano',
+    snare: '........x.......',
+    hat: 'x.x.x.x.x.x.xrxr',
+    keys: 'pad',
     voice: 'pluck',
-    comp: [0, 7, 10],
+    comp: [0],
+    bass808: true,
   },
-  // Бесплатные спины — разгон: прямая бочка, офбит, арпеджио шестнадцатыми.
+  // Бесплатные спины — тот же трэп злее и быстрее: арпеджио шестнадцатыми, хэты дробью, бас чаще.
   free: {
-    bpm: 122,
+    bpm: 150,
     chords: [AM9, FMAJ7, CMAJ7, G6],
-    bass: [R, R, 0, R, R, R, 0, R, R, R, 0, R, R, R, 12, R],
+    bass: [0, R, R, 0, R, R, R, R, R, R, 0, R, R, 12, R, R],
     lead: Array.from({ length: STEPS * 4 }, (_, i) => {
       const bar = [AM9, FMAJ7, CMAJ7, G6][Math.floor(i / STEPS)];
       if (i % 2) return R;
       const tones = bar.slice(1).map((n) => n + 12);
       return tones[(i / 2) % tones.length];
     }),
-    kick: 'x...x...x...x...',
+    kick: 'x.....x...x.....',
     snare: '....x.......x...',
-    hat: '..x...x...x...x.',
+    hat: 'xrxrxrxrxrxrxrrr',
     keys: 'pad',
     voice: 'pluck',
     comp: [0],
+    bass808: true,
   },
   // Сокровищница — тайна: маримба, низкий гул, редкие удары; гармонический минор (E7).
   pick: {
@@ -113,12 +128,13 @@ export const SCORE: Record<MusicMode, Section> = {
       [32, 77], [35, 76], [38, 72], [42, 69],
       [48, 76], [51, 74], [54, 71], [58, 68], [62, 71],
     ]),
-    kick: 'x.......x.......',
-    snare: '................',
-    hat: '....x.......x...',
+    kick: 'x.........x.....',
+    snare: '........x.......',
+    hat: '..x...x...x.x.r.',
     keys: 'pad',
     voice: 'mallet',
     comp: [0],
+    bass808: true,
   },
   // Колесо фортуны — телешоу: мажор, стабы меди, бодрый бит.
   wheel: {
@@ -138,7 +154,7 @@ export const SCORE: Record<MusicMode, Section> = {
     ]),
     kick: 'x...x...x...x...',
     snare: '....x.......x..x',
-    hat: '.xx..xx..xx..xx.',
+    hat: 'x.xrx.x.x.xrx.xr',
     keys: 'stab',
     voice: 'bell',
     comp: [0, 3, 6, 10],

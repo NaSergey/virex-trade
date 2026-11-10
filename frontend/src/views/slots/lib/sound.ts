@@ -212,141 +212,88 @@ const now = () => {
   return b ? b.c.currentTime : 0;
 };
 
-/** Пуск: взлёт по высоте с воздушным свистом — как переход в гиперпространство. */
+/**
+ * Пуск — как отправка ордера в терминале: щелчок и два быстрых цифровых блипа
+ * вверх (квинта), фильтрованный квадрат, без свиста.
+ */
 export function spinStart() {
+  const t = now();
+  if (!t) return;
+  click(t, 3000, 0.12, 0.015);
+  blip(76, t + 0.01, 0.07, 0.07);
+  blip(83, t + 0.08, 0.06, 0.09);
+}
+
+/** Цифровой блип: квадрат под закрывающимся фильтром — «звук терминала», а не колокольчик. */
+function blip(midi: number, at: number, peak: number, decay: number, wet = 0.15) {
   const b = out();
   if (!b) return;
   const { c, o, h } = b;
-  const t = c.currentTime;
-  // Свист: шум сверху, полоса едет вверх.
-  const n = noise(c);
+  const osc = c.createOscillator();
+  osc.type = 'square';
+  osc.frequency.value = hz(midi);
   const f = c.createBiquadFilter();
-  f.type = 'bandpass';
-  f.Q.value = 3;
-  f.frequency.setValueAtTime(1200, t);
-  f.frequency.exponentialRampToValueAtTime(7000, t + 0.4);
-  const g = env(c, t, 0.06, 0.12, 0.35);
-  n.connect(f).connect(g).connect(o);
-  g.connect(h);
-  n.start(t, Math.random());
-  n.stop(t + 0.55);
-  // Взлёт: синус по квинте вверх и его октава.
-  for (const [from, to, peak] of [
-    [hz(64), hz(76), 0.07],
-    [hz(76), hz(88), 0.03],
-  ] as const) {
-    const osc = c.createOscillator();
-    osc.frequency.setValueAtTime(from, t);
-    osc.frequency.exponentialRampToValueAtTime(to, t + 0.3);
-    const e = env(c, t, peak, 0.03, 0.4);
-    osc.connect(e).connect(o);
-    e.connect(h);
-    osc.start(t);
-    osc.stop(t + 0.5);
+  f.type = 'lowpass';
+  f.Q.value = 4;
+  f.frequency.setValueAtTime(5000, at);
+  f.frequency.exponentialRampToValueAtTime(900, at + decay);
+  const g = env(c, at, peak, 0.002, decay);
+  osc.connect(f).connect(g).connect(o);
+  if (wet) {
+    const s = c.createGain();
+    s.gain.value = wet;
+    g.connect(s).connect(h);
   }
+  osc.start(at);
+  osc.stop(at + decay + 0.03);
 }
 
 /**
- * Барабаны крутятся — космо-цифровой поток: светлый мерцающий пэд (Am9 в
- * верхнем регистре) с медленно дышащим фильтром и россыпь тихих высоких
- * «звёздочек» из пентатоники — как бегущие данные. Чем больше барабанов
- * крутится, тем гуще звёзды и ярче пэд. Низов нет совсем: низкий шум и ровные
- * тики читались мотором (владелец 2026-11-10). `set` зовётся каждый кадр, `stop`
- * гасит.
+ * Барабаны крутятся — лента котировок: быстрые короткие цифровые блипы, высота
+ * которых бродит по пентатонике с уклоном вверх, как тики цены на памп. Чем
+ * больше барабанов крутится, тем чаще тики. Низов, пэда и «звёздочек» нет:
+ * космос владелец снял 2026-11-10 («больше в крипто уклон»), тиканье с низким
+ * шорохом — «будто движок завожу». `set` зовётся каждый кадр, `stop` гасит.
  */
 export function reelHum() {
   const b = out();
   if (!b) return { set: () => {}, stop: () => {} };
-  const { c, o, h } = b;
-  const t0 = c.currentTime;
-
-  const padF = c.createBiquadFilter();
-  padF.type = 'lowpass';
-  padF.frequency.value = 2200;
-  padF.Q.value = 2;
-  const lfo = c.createOscillator();
-  lfo.frequency.value = 0.9;
-  const lfoDepth = c.createGain();
-  lfoDepth.gain.value = 900;
-  lfo.connect(lfoDepth).connect(padF.frequency);
-  const pad = c.createGain();
-  pad.gain.value = 0;
-  padF.connect(pad).connect(o);
-  const send = c.createGain();
-  send.gain.value = 0.8;
-  pad.connect(send).connect(h);
-  const voices = [69, 72, 76, 79, 83].flatMap((m) =>
-    [-9, 9].map((det) => {
-      const osc = c.createOscillator();
-      osc.type = 'triangle';
-      osc.frequency.value = hz(m);
-      osc.detune.value = det;
-      osc.connect(padF);
-      return osc;
-    }),
-  );
-  for (const v of [...voices, lfo]) v.start(t0);
-
-  // Воздух: тихий шум сверху, без низов.
-  const air = noise(c);
-  const airF = c.createBiquadFilter();
-  airF.type = 'highpass';
-  airF.frequency.value = 6000;
-  const airG = c.createGain();
-  airG.gain.value = 0;
-  air.connect(airF).connect(airG).connect(o);
-  air.start(t0);
-
+  const { c } = b;
   let reels = 0;
-  let next = t0 + 0.05;
-  const star = (at: number, peak: number) => {
-    const osc = c.createOscillator();
-    osc.frequency.value = hz(penta(10 + Math.floor(Math.random() * 7)));
-    const e = env(c, at, peak, 0.003, 0.12 + Math.random() * 0.1);
-    osc.connect(e).connect(o);
-    e.connect(h);
-    osc.start(at);
-    osc.stop(at + 0.3);
-  };
+  let next = c.currentTime + 0.04;
+  let step = 3;
   const timer = setInterval(() => {
     if (c.state !== 'running' || reels === 0) {
       next = Math.max(next, c.currentTime + 0.03);
       return;
     }
-    while (next < c.currentTime + 0.12) {
-      star(next, 0.012 + 0.004 * reels);
-      next += (0.5 + Math.random()) / (5 + 3 * reels);
+    while (next < c.currentTime + 0.1) {
+      // Случайное блуждание с уклоном вверх; упёрлось в потолок — откат, как коррекция.
+      step += Math.random() < 0.62 ? 1 : -1;
+      if (step > 11) step = 5;
+      if (step < 0) step = 2;
+      blip(penta(step, 60), next, 0.022 + 0.004 * reels, 0.045, 0.1);
+      next += 1 / (8 + 2.5 * reels);
     }
-  }, 30);
-
+  }, 25);
   return {
     set: (r: number) => {
-      if (r === reels) return;
       reels = r;
-      const now = c.currentTime;
-      pad.gain.setTargetAtTime(0.006 * r, now, 0.12);
-      airG.gain.setTargetAtTime(0.004 * r, now, 0.12);
     },
     stop: () => {
       clearInterval(timer);
       reels = 0;
-      const now = c.currentTime;
-      pad.gain.setTargetAtTime(0, now, 0.15);
-      airG.gain.setTargetAtTime(0, now, 0.1);
-      for (const v of [...voices, lfo]) v.stop(now + 0.9);
-      air.stop(now + 0.9);
     },
   };
 }
 
-/** Барабан встал: цифровой «блип» — короткий синус вниз и щелчок фиксации. */
+/** Барабан встал: «ордер исполнен» — блип вниз и короткий щелчок фиксации. */
 export function reelStop(i: number) {
   const t = now();
   if (!t) return;
-  const f = hz(penta(9 - i));
-  tone('sine', f, t, 0.14, 0.12, f * 0.75, 0.25);
-  tone('sine', f * 2, t, 0.04, 0.05, undefined, 0.2);
+  blip(penta(8 - i, 60), t, 0.09, 0.09);
   tone('sine', 90, t, 0.12, 0.08, 60, 0);
+  click(t, 3200, 0.08, 0.015);
 }
 
 /** Встал скаттер: колокольчик, каждый следующий — ступенью выше. */
