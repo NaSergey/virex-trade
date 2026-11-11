@@ -927,10 +927,7 @@ export function OrderPanel({
           <FieldGroup data-tour="term-stop"
             label={
               <span className="fld-head">
-                <span className="fld-left">
-                  <span>{t('stop')}</span>
-                  <TrailToggle on={trail} onChange={onTrail} />
-                </span>
+                <span>{t('stop')}</span>
                 {sStopPct != null && <span className="fld-val">{fmtPctSigned(sStopPct)}</span>}
               </span>
             }
