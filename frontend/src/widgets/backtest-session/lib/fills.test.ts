@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MINUTE, type Candle } from './candles';
-import { checkMinute, findExit, isPartialExit, type Position } from './fills';
+import { checkMinute, findExit, isPartialExit, trailStop, type Position } from './fills';
 
 const T = Date.UTC(2024, 2, 5, 12, 0);
 const m = (o: number, h: number, l: number, c: number, t = T): Candle => ({ t, o, h, l, c });
@@ -173,5 +173,24 @@ describe('isPartialExit', () => {
     expect(isPartialExit(trade, { ...at, reason: 'limit', qty: 2 - 1e-12, closeOrderId: 'o1' })).toBe(false);
     expect(isPartialExit(trade, { ...at, reason: 'stop' })).toBe(false);
     expect(isPartialExit(trade, { ...at, reason: 'take' })).toBe(false);
+  });
+});
+
+describe('trailStop', () => {
+  it('лонг: стоп идёт за максимумом на расстоянии', () => expect(trailStop('long', 98, 2, 105, 101)).toBe(99));
+  it('лонг: цена не выше прежнего — стоп стоит', () => expect(trailStop('long', 98, 2, 105, 99.5)).toBe(98));
+  it('лонг: не дальше безубытка', () => expect(trailStop('long', 98, 2, 100, 110)).toBe(100));
+  it('лонг: стоп в безубытке и дальше — не двигается', () => {
+    expect(trailStop('long', 100, 2, 100, 110)).toBe(100);
+    expect(trailStop('long', 101, 2, 100, 110)).toBe(101);
+  });
+  it('шорт — зеркально', () => {
+    expect(trailStop('short', 102, 2, 95, 99)).toBe(101);
+    expect(trailStop('short', 102, 2, 100, 90)).toBe(100);
+    expect(trailStop('short', 99, 2, 100, 90)).toBe(99);
+  });
+  it('без расстояния — стоп как есть', () => {
+    expect(trailStop('long', 98, null, 105, 120)).toBe(98);
+    expect(trailStop('long', 98, 0, 105, 120)).toBe(98);
   });
 });

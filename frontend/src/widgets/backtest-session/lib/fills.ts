@@ -133,3 +133,29 @@ export function findEntryFill(orders: EntryOrder[], minutes: Candle[], from: num
   }
   return null;
 }
+
+/**
+ * Подводящий стоп (спека 2026-11-11-trailing-stop-design.md): стоп идёт за ценой на
+ * расстоянии `dist`, только подтягиваясь и не дальше безубытка (`entry` — средний
+ * вход позиции). Стоп в безубытке или дальше не двигается — дошёл сам, переставлен
+ * руками или перенесён другим правилом. `extreme` — максимум шага у лонга, минимум у
+ * шорта. Вызывающий зовёт её после проверки выхода: новый стоп действует со
+ * следующего шага, порядок цен внутри минутки не восстановить.
+ */
+export function trailStop(
+  direction: Direction,
+  stop: number,
+  dist: number | null | undefined,
+  entry: number,
+  extreme: number,
+): number {
+  if (dist == null || !(dist > 0) || !(stop > 0)) return stop;
+  if (direction === 'long') {
+    if (stop >= entry) return stop;
+    const target = Math.min(extreme - dist, entry);
+    return target > stop ? target : stop;
+  }
+  if (stop <= entry) return stop;
+  const target = Math.max(extreme + dist, entry);
+  return target < stop ? target : stop;
+}

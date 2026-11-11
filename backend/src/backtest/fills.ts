@@ -47,13 +47,22 @@ export interface Exit {
 }
 
 /** Ближайший к открытию отрезка среди кандидатов — его цена достигла бы первым. */
-function closestToOpen(candidates: CloseOrder[], open: number): CloseOrder | null {
+function closestToOpen(
+  candidates: CloseOrder[],
+  open: number,
+): CloseOrder | null {
   if (candidates.length === 0) return null;
-  return candidates.reduce((best, o) => (Math.abs(o.price - open) < Math.abs(best.price - open) ? o : best));
+  return candidates.reduce((best, o) =>
+    Math.abs(o.price - open) < Math.abs(best.price - open) ? o : best,
+  );
 }
 
 /** Правила в порядке спеки бектеста; первое совпавшее решает. */
-export function checkMinute(p: Position, m: Bar, closeOrders: CloseOrder[] = []): Exit | null {
+export function checkMinute(
+  p: Position,
+  m: Bar,
+  closeOrders: CloseOrder[] = [],
+): Exit | null {
   const long = p.direction === 'long';
   const s = p.stopLoss;
   const tp = p.takeProfit;
@@ -61,24 +70,34 @@ export function checkMinute(p: Position, m: Bar, closeOrders: CloseOrder[] = [])
 
   // 0. Гэп за ликвидацией — по её цене, а не по открытию, даже если стоп ближе:
   // маржа изолированная, и больше неё позиция потерять не может.
-  if (liq != null && (long ? m.o <= liq : m.o >= liq)) return { reason: 'liquidation', price: liq };
+  if (liq != null && (long ? m.o <= liq : m.o >= liq))
+    return { reason: 'liquidation', price: liq };
   // 1. Гэп за стопом — по открытию, то есть хуже стопа, как на бирже.
   if (long ? m.o <= s : m.o >= s) return { reason: 'stop', price: m.o };
   // 2. Гэп за тейком — по тейку: лучше заявленного тейк не исполняется.
-  if (tp != null && (long ? m.o >= tp : m.o <= tp)) return { reason: 'take', price: tp };
+  if (tp != null && (long ? m.o >= tp : m.o <= tp))
+    return { reason: 'take', price: tp };
   // 2a. Касание ликвидации, стоящей ближе стопа: цена дошла до неё раньше. С тейком
   // в той же минутке — ликвидация, как стоп: худшее.
-  if (liq != null && (long ? liq > s && m.l <= liq : liq < s && m.h >= liq)) return { reason: 'liquidation', price: liq };
+  if (liq != null && (long ? liq > s && m.l <= liq : liq < s && m.h >= liq))
+    return { reason: 'liquidation', price: liq };
   // 3 и 5. Касание стопа — стоп, даже если задет и тейк: порядок внутри отрезка
   // не восстановить, честнее предполагать худшее.
   if (long ? m.l <= s : m.h >= s) return { reason: 'stop', price: s };
   // 4. Касание тейка.
-  if (tp != null && (long ? m.h >= tp : m.l <= tp)) return { reason: 'take', price: tp };
+  if (tp != null && (long ? m.h >= tp : m.l <= tp))
+    return { reason: 'take', price: tp };
   // 6. Касание лимит-ордера на закрытие. Гэпа у него нет: стороны от входа у
   // лимитки нет, и диапазон, не задевший уровень, её просто не исполнил.
   const touched = closeOrders.filter((o) => o.price <= m.h && o.price >= m.l);
   const fired = closestToOpen(touched, m.o);
-  if (fired) return { reason: 'limit', price: fired.price, qty: fired.qty, closeOrderId: fired.id };
+  if (fired)
+    return {
+      reason: 'limit',
+      price: fired.price,
+      qty: fired.qty,
+      closeOrderId: fired.id,
+    };
   return null;
 }
 
@@ -99,4 +118,30 @@ export function touchedEntries<T extends EntryLevel>(orders: T[], m: Bar): T[] {
   return orders
     .filter((o) => o.price <= m.h && o.price >= m.l)
     .sort((a, b) => Math.abs(a.price - m.o) - Math.abs(b.price - m.o));
+}
+
+/**
+ * Подводящий стоп (спека 2026-11-11-trailing-stop-design.md): стоп идёт за ценой на
+ * расстоянии `dist`, только подтягиваясь и не дальше безубытка (`entry` — средний
+ * вход позиции). Стоп в безубытке или дальше не двигается — дошёл сам, переставлен
+ * руками или перенесён другим правилом. `extreme` — максимум шага у лонга, минимум у
+ * шорта. Вызывающий зовёт её после проверки выхода: новый стоп действует со
+ * следующего шага, порядок цен внутри минутки не восстановить.
+ */
+export function trailStop(
+  direction: Direction,
+  stop: number,
+  dist: number | null | undefined,
+  entry: number,
+  extreme: number,
+): number {
+  if (dist == null || !(dist > 0) || !(stop > 0)) return stop;
+  if (direction === 'long') {
+    if (stop >= entry) return stop;
+    const target = Math.min(extreme - dist, entry);
+    return target > stop ? target : stop;
+  }
+  if (stop <= entry) return stop;
+  const target = Math.max(extreme + dist, entry);
+  return target < stop ? target : stop;
 }
