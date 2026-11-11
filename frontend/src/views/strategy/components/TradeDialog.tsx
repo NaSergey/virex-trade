@@ -111,7 +111,7 @@ export function TradeDialog({ trade, onClose }: { trade: TradeRow; onClose: () =
     };
     note('sweep', trade.sweepMs, 'свип', false);
     note('fvg', trade.fvgMs, 'FVG 1H', false);
-    note('bos', trade.bosMs, 'слом 15m', true);
+    note('bos', trade.bosMs, 'слом 1H', true);
     return out;
   }, [trade, candles, direction]);
 
@@ -250,7 +250,7 @@ export function TradeDialog({ trade, onClose }: { trade: TradeRow; onClose: () =
             <KeyValue label="ATR 4H">{`${fmtPrice(trade.atr4)} · ${fmtPct(trade.atr4 / Math.abs(trade.entries[0]), 2)}`}</KeyValue>
             <KeyValue label="План, стоп к цели">{fmtR(trade.plannedR)}</KeyValue>
             <KeyValue label="Ордерблок 1H">{`${fmtPrice(Math.min(trade.blockTop, trade.stop))} – ${fmtPrice(Math.max(trade.blockTop, trade.stop))}`}</KeyValue>
-            {trade.bosMs != null && <KeyValue label="Слом на 15m">{fmtDateTime(trade.bosMs)}</KeyValue>}
+            {trade.bosMs != null && <KeyValue label="Слом на 1H">{fmtDateTime(trade.bosMs)}</KeyValue>}
             <KeyValue label="Вход">{fmtDateTime(trade.fillMs)}</KeyValue>
             <KeyValue label="Выход">{fmtDateTime(trade.exitMs)}</KeyValue>
           </aside>

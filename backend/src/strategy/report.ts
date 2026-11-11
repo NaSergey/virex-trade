@@ -41,7 +41,7 @@ import { theoryOf } from './theory';
 import { maxDrawdown, summarize } from './stats';
 
 /** Поднимать при любой правке правил, обучения или формы отчёта. */
-export const STRATEGY_VERSION = 10;
+export const STRATEGY_VERSION = 11;
 export const REPORT_ID = 'smc-intraday';
 /** Сделки и статистика отчёта — за столько последних лет (решение владельца). */
 export const STATS_YEARS = 2;

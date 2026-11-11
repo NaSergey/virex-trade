@@ -68,7 +68,7 @@ describe('report', () => {
       expect(t.maxUp).toBeGreaterThanOrEqual(0);
       expect(t.maxDown).toBeGreaterThanOrEqual(0);
       expect(t.tf).toBe(15);
-      expect(t.takes.length).toBe(1);
+      expect(t.takes.length).toBe(2);
       expect(t.entries.length).toBe(1);
       expect(t.id.startsWith(`${t.symbol}:`)).toBe(true);
     }

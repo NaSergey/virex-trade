@@ -1,5 +1,5 @@
 import type { Dir, FeatureKey, Features } from './report.types';
-import { closeMs, lowerBound, Series, Swing, swings } from './series';
+import { closeMs, lowerBound, Series } from './series';
 import { confirmAfter, Scan } from './events';
 
 export const FEATURE_KEYS: FeatureKey[] = [
@@ -11,13 +11,12 @@ export const FEATURE_KEYS: FeatureKey[] = [
   'pierce',
 ];
 
-/** Выход всем объёмом — столько процентов от входа. */
-export const TARGET_PCT = 1.5;
+/** Тейки в R от входа, равными долями; после первого стоп идёт в безубыток, дальше — за тейками. */
+export const TAKES_R = [1, 3];
+/** Ближайший нетронутый свинг 1H по ходу сделки должен быть не ближе стольких R от входа. */
+export const CLEAR_R = 2;
 /** Диапазон для положения входа — столько последних закрытых 4H-свечей. */
 export const RANGE_BARS = 30;
-
-/** Сколько свечей 15m сетап ждёт возврата в блок и слома: 48 часов. */
-export const CONFIRM_LIFE = 192;
 
 export interface Setup {
   /** `${свеча свипа 1H}:${сторона}`. */
@@ -27,7 +26,7 @@ export interface Setup {
   sweepI: number;
   fvgI: number;
   bosI: number;
-  /** Свеча 15m со сломом: первый вход — по открытию следующей. */
+  /** Последняя свеча 15m часа, на закрытии которого сетап готов: лимит стоит со следующей. */
   e: number;
   obI: number;
   level: number;
@@ -38,13 +37,13 @@ export interface Setup {
   rangeHi: number;
   /** ATR(14) закрытой 4H-свечи на момент решения. */
   atr4: number;
-  /** Уровни входа: один, по рынку. */
+  /** Уровни входа: один лимит на границе блока. */
   entries: number[];
   stop: number;
   target: number;
-  /** Тейки: один, на цели. */
+  /** Тейки по возрастанию дистанции; последний — цель. */
   takes: number[];
-  /** Стоп за тейками и снятие входа после первого тейка; при одном тейке сделка им и кончается. */
+  /** Стоп за тейками: после первого — в безубыток, после следующего — на цену предыдущего. */
   trail: boolean;
   /** Первый уровень исполняется по рынку на открытии следующей свечи. */
   market?: boolean;
@@ -131,51 +130,17 @@ function rangeAt(h4: Series, i4: number): { lo: number; hi: number } | null {
 }
 
 /**
- * Подтверждение входа: цена вернулась в часовой блок, затем свеча 15m закрылась за
- * последним свингом 15m, известным на момент касания. Пробой стопа раньше слома или
- * истечение срока — сделки нет; −1. Часовой сетап этим не меняется: стоп и цель от него.
- */
-function confirmOn15m(
-  m15: Series,
-  list: Swing[],
-  from: number,
-  d: Dir,
-  top: number,
-  stop: number,
-): number {
-  let ref = NaN;
-  const end = Math.min(m15.n - 1, from + CONFIRM_LIFE);
-  for (let j = from + 1; j <= end; j++) {
-    if (d === 1 ? m15.l[j] <= stop : m15.h[j] >= stop) return -1;
-    if (Number.isNaN(ref)) {
-      if (d === 1 ? m15.l[j] > top : m15.h[j] < top) continue;
-      let lo = 0;
-      let hi = list.length;
-      while (lo < hi) {
-        const mid = (lo + hi) >> 1;
-        if (list[mid].known <= j) lo = mid + 1;
-        else hi = mid;
-      }
-      if (!lo) return -1;
-      ref = list[lo - 1].price;
-      continue;
-    }
-    if (d === 1 ? m15.c[j] > ref : m15.c[j] < ref) return j;
-  }
-  return -1;
-}
-
-/**
- * Сетапы стратегии: контекст 4H → на 1H свип, FVG и слом в окне, ордерблок и стоп →
- * на 15m возврат в блок и слом, от него один вход и выход на +TARGET_PCT %; на 4H положение
- * входа. Решение — на закрытии свечи слома 15m; будущих свечей оно не видит.
+ * Сетапы стратегии, основной таймфрейм — 1H: контекст 4H → свип, FVG и слом в окне,
+ * ордерблок и стоп → лимит на границе блока, тейки на TAKES_R со стопом за ними.
+ * Отбор: положение входа в диапазоне 4H и свободный ход CLEAR_R до ближайшего свинга.
+ * Решение — на закрытии часовой свечи, где сетап сложился; будущих свечей оно не видит.
+ * Ряд 15m нужен только исполнению.
  */
 export function findSetups(m15: Series, s: Series, ctx: SetupContext): Setup[] {
   const out: Setup[] = [];
   const volRank = volatilityRanker(s, ctx.atr);
   const firstOf = (i: number) => lowerBound(m15.t, s.t[i]);
   const lastOf = (i: number) => lowerBound(m15.t, closeMs(s, i)) - 1;
-  const sw15 = swings(m15);
   for (const sw of ctx.scan.sweeps) {
     const d = sw.dir;
     const conf = confirmAfter(s, sw);
@@ -204,33 +169,31 @@ export function findSetups(m15: Series, s: Series, ctx: SetupContext): Setup[] {
     }
 
     const stop = bottom;
-    if (!(d * (top - stop) > 0)) continue;
-    if (d * (s.c[e] - top) <= 0) continue; // цена уже в блоке
-
-    const list = d === 1 ? sw15.highs : sw15.lows;
-    const e15 = confirmOn15m(m15, list, lastOf(e), d, top, stop);
-    if (e15 < 0) continue;
-    const entry = m15.c[e15];
+    const entry = top;
     const h = d * (entry - stop);
     if (!(h > 0)) continue;
+    if (d * (s.c[e] - top) <= 0) continue; // цена уже в блоке
+
+    // Препятствие — ближайший нетронутый свинг 1H по ходу сделки, известный на решении.
+    const near = d === 1 ? ctx.scan.nearHigh[e] : ctx.scan.nearLow[e];
+    if (Number.isFinite(near) && d * (near - entry) < CLEAR_R * h) continue;
 
     // 4H — только закрытые свечи на момент решения.
-    const i4 = lowerBound(ctx.h4.t, closeMs(m15, e15) - H4_MS + 1) - 1;
+    const i4 = lowerBound(ctx.h4.t, closeMs(s, e) - H4_MS + 1) - 1;
     const atr4 = i4 >= 0 && Number.isFinite(ctx.atr4[i4]) ? ctx.atr4[i4] : null;
     const range = rangeAt(ctx.h4, i4);
     if (!range || atr4 == null) continue;
     const pos = (entry - range.lo) / (range.hi - range.lo);
     if (pos > 1 / 3 && pos < 2 / 3) continue;
-    const move = (TARGET_PCT / 100) * Math.abs(entry);
-    const target = entry + d * move;
-    const plannedR = move / h;
+    const takes = TAKES_R.map((r) => entry + d * r * h);
+    const e15 = lastOf(e);
 
     out.push({
       id: `${sw.i}:${d}`,
       dir: d,
       sweepI: firstOf(sw.i),
       fvgI: lastOf(conf.fvg),
-      bosI: e15,
+      bosI: lastOf(conf.bos),
       e: e15,
       obI: firstOf(obI),
       level: sw.level,
@@ -240,11 +203,10 @@ export function findSetups(m15: Series, s: Series, ctx: SetupContext): Setup[] {
       atr4,
       entries: [entry],
       stop,
-      target,
-      takes: [target],
+      target: takes[takes.length - 1],
+      takes,
       trail: true,
-      market: true,
-      plannedR,
+      plannedR: TAKES_R[TAKES_R.length - 1],
       features: featuresOf({
         at: closeMs(s, e),
         dir: d,

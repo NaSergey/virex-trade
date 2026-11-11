@@ -2,11 +2,11 @@
 
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { CHECK } from '../model/check';
-import { fmtPct, fmtR } from '../model/format';
+import { fmtR } from '../model/format';
 
 /** Чего отчёт сервера не считает: случайный вход, сверка с Binance, цена перебора. */
 export function CheckSection() {
-  const { random, binance } = CHECK;
+  const { binance, gross, previous } = CHECK;
   return (
     <section id="check" className="st-section">
       <SectionHead title="Насколько этому верить" />
@@ -14,14 +14,15 @@ export function CheckSection() {
         Это бектест, а не доказанная прибыль: стратегия не отправляет ордера, вперёд и живым счётом не проверялась.
       </p>
       <p className="muted">
-        Снимок от {CHECK.date}. Случайный вход с теми же монетами, сторонами, стопами и целью был не хуже стратегии в{' '}
-        {fmtPct(random.after, 0)} из {random.runs} прогонов за 2 года и в {fmtPct(random.before, 0)} за период до них. На
-        свечах Binance те же правила дают {fmtR(binance.after)} и {fmtR(binance.before)}.
+        Снимок от {CHECK.date}. На свечах Binance с 2022 года эти правила дают {fmtR(binance.after)} на сделку за 2 года и{' '}
+        {fmtR(binance.before)} за период до них; до комиссии — {fmtR(gross.after)} и {fmtR(gross.before)}. Стоп за часовым блоком
+        узкий, около 1 %, и комиссия съедает перевес. Прежние правила — один вход по рынку и выход на +1,5 % — на тех же свечах
+        давали {fmtR(previous.after)} и {fmtR(previous.before)}.
       </p>
       <p className="muted">
-        Проскальзывание не учтено: 0,1 % на входе по рынку и на стопе срежет около {CHECK.slippageR.toLocaleString('ru-RU')}R на
-        сделку. Вариант выбран примерно из {CHECK.tried}, поэтому часть результата может быть удачей. Заранее записанный критерий
-        он не прошёл: нужно было +0,15R и плюс на 3 монетах из 5.
+        Проскальзывание не учтено: 0,1 % на стопе срежет около {CHECK.slippageR.toLocaleString('ru-RU')}R с каждой сделки, закрытой
+        стопом. Случайным входом эти правила не проверялись. Заранее записанный критерий — +0,15R и плюс на 3 монетах из 5 — не
+        пройден.
       </p>
     </section>
   );
