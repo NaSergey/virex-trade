@@ -5,8 +5,14 @@ import type { Candle } from '../market-data/market-data.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { liquidationPrice, type Direction } from './backtest-math';
 import { BacktestService } from './backtest.service';
-import { checkMinute, touchedEntries } from './fills';
-import { barForTrade, buildSegments, type Bar, type Segment, type Snapshot } from './live-segments';
+import { checkMinute, touchedEntries, trailStop } from './fills';
+import {
+  barForTrade,
+  buildSegments,
+  type Bar,
+  type Segment,
+  type Snapshot,
+} from './live-segments';
 
 const MINUTE_MS = 60_000;
 
@@ -18,7 +24,13 @@ const MINUTE_MS = 60_000;
 /** Ключ снимка: поток и монета. `|` не встречается ни в id, ни в символах Binance. */
 const snapshotKey = (stream: string, symbol: string) => `${stream}|${symbol}`;
 
-const toBar = (c: Candle): Bar => ({ t: c.time.getTime(), o: c.open, h: c.high, l: c.low, c: c.close });
+const toBar = (c: Candle): Bar => ({
+  t: c.time.getTime(),
+  o: c.open,
+  h: c.high,
+  l: c.low,
+  c: c.close,
+});
 
 /**
  * Движок эфира: исполняет стопы, тейки, лимитки на закрытие и уровни на вход
@@ -72,14 +84,17 @@ export class LiveEngineService {
     // от курсора.
     for (const key of this.snapshots.keys()) {
       const [owner, symbol] = key.split('|');
-      if (owner === stream && !symbols.includes(symbol)) this.snapshots.delete(key);
+      if (owner === stream && !symbols.includes(symbol))
+        this.snapshots.delete(key);
     }
     // Разбирать нечего — время всё равно идёт, и курсор потока обязан за ним.
-    if (symbols.length === 0) return until > (cursor?.getTime() ?? Number.NEGATIVE_INFINITY);
+    if (symbols.length === 0)
+      return until > (cursor?.getTime() ?? Number.NEGATIVE_INFINITY);
 
     let moved = false;
     for (const symbol of symbols) {
-      if (await this.runSymbol(stream, symbol, cursor, until, scope)) moved = true;
+      if (await this.runSymbol(stream, symbol, cursor, until, scope))
+        moved = true;
     }
     return moved;
   }
@@ -121,7 +136,9 @@ export class LiveEngineService {
   }
 
   /** Монеты потока, где есть что исполнять: открытая сделка или уровень на вход. */
-  private async activeSymbols(scope: Prisma.BacktestSessionWhereInput): Promise<string[]> {
+  private async activeSymbols(
+    scope: Prisma.BacktestSessionWhereInput,
+  ): Promise<string[]> {
     const [trades, orders] = await Promise.all([
       this.prisma.backtestTrade.findMany({
         where: { session: scope, exitTime: null },
@@ -160,10 +177,15 @@ export class LiveEngineService {
       leverage: number;
       stopLoss: number;
       takeProfit: number | null;
+      /** Подводящий стоп: расстояние в цене; null — стоп стоит. */
+      trailDist?: number | null;
       closeOrders: { id: string; price: number; qty: number }[];
     },
   ): Promise<void> {
-    const bar = barForTrade(seg, { entryTime: trade.entryTime.getTime(), entryPrice: trade.entryPrice });
+    const bar = barForTrade(seg, {
+      entryTime: trade.entryTime.getTime(),
+      entryPrice: trade.entryPrice,
+    });
     if (!bar) return;
 
     let orders = trade.closeOrders;
@@ -176,12 +198,29 @@ export class LiveEngineService {
           direction,
           stopLoss: trade.stopLoss,
           takeProfit: trade.takeProfit,
-          liqPrice: liquidationPrice(direction, trade.entryPrice, trade.leverage),
+          liqPrice: liquidationPrice(
+            direction,
+            trade.entryPrice,
+            trade.leverage,
+          ),
         },
         bar,
         orders,
       );
-      if (!exit) return;
+      if (!exit) {
+        // Выхода нет — подводящий стоп подтягивается по экстремуму отрезка и
+        // действует со следующего: порядок цен внутри отрезка не восстановить.
+        const next = trailStop(
+          direction,
+          trade.stopLoss,
+          trade.trailDist,
+          trade.entryPrice,
+          direction === 'long' ? bar.h : bar.l,
+        );
+        if (next !== trade.stopLoss)
+          await this.backtest.systemTrail(trade.id, next);
+        return;
+      }
 
       const closed = await this.backtest.systemClose(trade.id, {
         // Время выхода — конец отрезка: закрытие минутки или время тика.
@@ -210,7 +249,11 @@ export class LiveEngineService {
    * засчитать их уровню, которого тогда ещё не было, значило бы исполнить его
    * по цене, которой при нём не было.
    */
-  private async fillEntries(seg: Segment, scope: Prisma.BacktestSessionWhereInput, symbol: string): Promise<void> {
+  private async fillEntries(
+    seg: Segment,
+    scope: Prisma.BacktestSessionWhereInput,
+    symbol: string,
+  ): Promise<void> {
     const orders = await this.prisma.backtestEntryOrder.findMany({
       where: { session: scope, symbol, createdAt: { lte: new Date(seg.from) } },
       select: { id: true, price: true },
