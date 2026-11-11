@@ -13,6 +13,7 @@ import { cn } from '@/shared/lib/utils/css';
 import { fmtPctSigned, formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
 import { entryGridTable, gridAvgEntry, gridOrderCount, type EntryGridRow } from '../lib/level-table';
 import { EditCell, SplitHeader, withPin } from './EditCell';
+import { TrailToggle } from './TrailToggle';
 import type { Direction } from '../api/types';
 import {
   applyEntryChange,
@@ -43,21 +44,6 @@ import {
  */
 export function SliderSlot() {
   return <input type="range" className="slider slider-slot" disabled tabIndex={-1} aria-hidden />;
-}
-
-/**
- * Галочка «Подводящий» в заголовке поля стопа: отдельной строки она не занимает.
- * Подпись поля — `span` (`FieldGroup`): `label` с галочкой внутри `label` поля
- * был бы невалидной разметкой, а ползунок назван своим `aria-label`.
- */
-function TrailToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
-  const t = useTranslations('backtest');
-  return (
-    <label className="cg-follow trail-chk" title={t('trailHint')}>
-      <input type="checkbox" checked={on} onChange={(e) => onChange(e.target.checked)} />
-      <span>{t('trail')}</span>
-    </label>
-  );
 }
 
 function TakeTitle({ profit }: { profit: number | null }) {

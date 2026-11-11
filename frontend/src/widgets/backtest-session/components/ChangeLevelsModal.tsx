@@ -10,6 +10,7 @@ import { fmtPctSigned, formatPriceGrouped } from '@/shared/lib/utils/format';
 import type { BacktestTrade, PositionLike } from '../api/types';
 import { checkLevels, levelSliderRange, toScreen } from '../lib/money';
 import { PriceInput } from './PriceInput';
+import { TrailToggle } from './TrailToggle';
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
@@ -87,10 +88,9 @@ export function ChangeLevelsModal({
               </>
             )}
           </Field>
-          <label className="cg-follow trail-row" title={t('trailHint')}>
-            <input type="checkbox" checked={trail} onChange={(e) => setTrail(e.target.checked)} />
-            <span>{t('trailStop')}</span>
-          </label>
+          <div className="trail-row">
+            <TrailToggle on={trail} onChange={setTrail} />
+          </div>
           <Field
             label={
               <span className="fld-head">

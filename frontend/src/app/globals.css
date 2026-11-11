@@ -1284,10 +1284,27 @@
      та же, что у соседей, с квадратом слева. */
   .cg-follow { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; text-transform: inherit; letter-spacing: inherit; }
   .cg-follow input { accent-color: var(--ink); margin: 0; flex: none; }
-  /* Галочка «Подводящий» в заголовке поля стопа: тише подписи поля и не спорит
-     с процентом стопа справа. В окне «Изменить уровни» — своей строкой под стопом. */
-  .trail-chk { font-size: var(--t-xs); color: var(--ink-2); }
-  .trail-row { margin-top: var(--s1); font-size: var(--t-s); }
+  /* «Подводящий» у стопа — кнопка-переключатель в стиле вкладок панели: включённая
+     заливается, как выбранная вкладка. В заголовке поля стоит после подписи. */
+  .trail-chip {
+    appearance: none;
+    cursor: pointer;
+    background: none;
+    border: 1px solid var(--rule);
+    color: var(--ink-2);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    line-height: 1;
+    padding: 3px 7px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    transition: color 150ms ease, border-color 150ms ease, background-color 150ms ease;
+  }
+  .trail-chip:hover { color: var(--ink); border-color: var(--ink-3); }
+  .trail-chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--ground); }
+  .trail-row { margin-top: var(--s2); }
+  .fld-left .trail-chip { margin-left: var(--s1); align-self: center; }
   /* Таблица уровней в колонке 360px: общая мерка .ledger (760px) уводила её в
      горизонтальную прокрутку с пустыми промежутками между колонками. Строки
      плотнее, чем в журнале, — уровней до десяти, и все должны быть видны. */
