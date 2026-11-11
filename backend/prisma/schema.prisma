@@ -531,6 +531,9 @@ model BacktestTrade {
   /// (первый), дальше — на цену предыдущего исполненного лимита. Ставится сеткой
   /// фиксации (BacktestService.createCloseGrid), исполняется в applyClose.
   stopFollow Boolean         @default(false)
+  /// Подводящий стоп: расстояние от цены до стопа, в цене; null — выключен. Стоп идёт
+  /// за ценой до безубытка (спека 2026-11-11-trailing-stop-design.md).
+  trailDist  Float?
   /// Позиция грид-бота (BacktestBot): её закрытие не продажей бота останавливает бота.
   botId      String?
   exitTime   DateTime?
@@ -626,6 +629,8 @@ model BacktestEntryOrder {
   botId      String?
   /// Цель стопа позиции, когда этот ордер исполнится («Стоп после» у «Сетки»); null — стоп не двигается.
   stopAfter  Float?
+  /// Подводящий стоп: открыв позицию, ордер включит его от своей цены до стопа.
+  trail      Boolean         @default(false)
   createdAt  DateTime        @default(now())
 
   @@index([sessionId])

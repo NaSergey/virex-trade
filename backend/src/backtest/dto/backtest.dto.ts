@@ -86,6 +86,11 @@ export class OpenTradeDto {
   @IsOptional()
   @IsString()
   entryOrderId?: string;
+
+  /** Подводящий стоп: позиция, открытая этим входом, получит расстояние |вход − стоп|. */
+  @IsOptional()
+  @IsBoolean()
+  trail?: boolean;
 }
 
 export class ModifyTradeDto {
@@ -97,6 +102,17 @@ export class ModifyTradeDto {
   @IsOptional()
   @IsPositive()
   takeProfit?: number | null;
+
+  /** Подводящий стоп: расстояние в цене; null — выключить; нет поля — не трогать. */
+  @IsOptional()
+  @IsPositive()
+  trailDist?: number | null;
+}
+
+/** Стоп, подтянутый подводящим в прокрутке браузера. */
+export class TrailTradeDto {
+  @IsPositive()
+  stopLoss: number;
 }
 
 export class AddToTradeDto {
@@ -240,6 +256,11 @@ export class CreateEntryOrdersDto {
   @IsNumber({}, { each: true })
   @Min(0, { each: true })
   stopsAfter?: number[];
+
+  /** Подводящий стоп у позиции, которую уровень откроет. */
+  @IsOptional()
+  @IsBoolean()
+  trail?: boolean;
 }
 
 export class SetBacktestTagsDto {
