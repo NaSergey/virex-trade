@@ -6,7 +6,7 @@ import type {
   SessionDetail,
   TerminalActions,
 } from '@/widgets/backtest-session';
-import { belowMinOrder, floorToLot } from '@/widgets/backtest-session';
+import { belowMinOrder, floorToLot, trailStop } from '@/widgets/backtest-session';
 import { demoQtyStepOf } from './demoMarket';
 
 /**
@@ -147,7 +147,8 @@ export function openTrade(s0: DemoState, v: OpenVars): DemoState {
     leverage: v.leverage,
     closedQty: 0,
     stopFollow: false,
-    trailDist: null,
+    // Подводящий — у позиции, которую вход открыл: галочка сработавшего лимита или рынка.
+    trailDist: (order ? order.trail : v.trail) ? dist : null,
     exitTime: null,
     exitPrice: null,
     exitReason: null,
@@ -217,6 +218,7 @@ export function modifyTrade(s: DemoState, v: ModifyVars): DemoState {
     ...trade,
     stopLoss: v.stopLoss ?? trade.stopLoss,
     takeProfit: v.takeProfit === undefined ? trade.takeProfit : v.takeProfit,
+    trailDist: v.trailDist === undefined ? trade.trailDist : v.trailDist,
   });
 }
 
@@ -319,6 +321,7 @@ export function createEntryOrders(s0: DemoState, v: EntryOrdersVars, now: number
       createdAt: iso(now),
       // 0 — уровень таблицы со «стопом после», но без своей цели: стоп не двигается, объём — от стопа ордера.
       stopAfter: v.stopsAfter ? v.stopsAfter[i] || 0 : null,
+      trail: v.trail ?? false,
     });
   }
   return { ...s, entryOrders: [...s.entryOrders, ...orders] };
@@ -395,6 +398,12 @@ export function tick(s0: DemoState, symbol: string, price: number, now: number):
     const cur = s.trades.find((x) => x.id === t0.id)!;
     if (cur.exitTime == null && cur.takeProfit != null && reached(cur.takeProfit)) {
       s = closeTrade(s, { tradeId: cur.id, exitTime: time, exitPrice: cur.takeProfit, reason: 'take' });
+    }
+    // Подводящий стоп — после проверки выхода, по этой же цене: действует со следующего опроса.
+    const left = s.trades.find((x) => x.id === t0.id)!;
+    if (left.exitTime == null && left.trailDist != null) {
+      const stop = trailStop(left.direction, left.stopLoss, left.trailDist, left.entryPrice, price);
+      if (stop !== left.stopLoss) s = replaceTrade(s, { ...left, stopLoss: stop });
     }
   }
 
