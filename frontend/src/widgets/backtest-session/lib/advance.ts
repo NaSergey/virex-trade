@@ -1,5 +1,5 @@
 import type { Candle } from './candles';
-import { findEntryFill, findExit, type CloseOrder, type Direction, type EntryFill, type EntryOrder, type Exit } from './fills';
+import { findEntryFill, findExit, trailedStop, type CloseOrder, type Direction, type EntryFill, type EntryOrder, type Exit } from './fills';
 
 /** Открытая позиция в виде, достаточном для проверки срабатывания. entryTime — в мс. */
 export interface OpenPosition {
@@ -9,6 +9,9 @@ export interface OpenPosition {
   takeProfit: number | null;
   /** Цена ликвидации (`liquidationPrice`); стоящая ближе стопа закрывает позицию раньше него. */
   liqPrice?: number | null;
+  /** Подводящий стоп — расстояние в цене и безубыток (`trailStop`). */
+  trailDist?: number | null;
+  entryPrice?: number;
   entryTime: number;
 }
 
@@ -29,6 +32,8 @@ export interface AdvanceResult {
   /** Первое сработавшее по времени касание сетки на вход, если оно раньше или
    * одновременно с любым exits — иначе null, оно ждёт следующего вызова. */
   entryFill: EntryFill | null;
+  /** Позиции без выхода, чей подводящий стоп сдвинулся к моменту `reach`. */
+  trails: { tradeId: string; stopLoss: number }[];
 }
 
 /**
@@ -61,6 +66,7 @@ export function advanceTo(p: {
   let exits: PositionExit[] = [];
   let entryFill: EntryFill | null = null;
   let reach = historyReach;
+  const trails: { tradeId: string; stopLoss: number }[] = [];
   if (historyReach > p.from) {
     for (const position of p.positions) {
       const orders = (p.closeOrders ?? []).filter((o) => o.tradeId === position.tradeId);
@@ -77,6 +83,12 @@ export function advanceTo(p: {
       reach = earliestExit;
       exits = exits.filter((e) => e.time <= reach);
     }
+    // Стоп — к моменту, где шаг встал: минутки после `reach` проверит следующий.
+    for (const position of p.positions) {
+      if (position.trailDist == null || exits.some((e) => e.tradeId === position.tradeId)) continue;
+      const stop = trailedStop(position, p.minutes, Math.max(position.entryTime, p.from), reach);
+      if (stop !== position.stopLoss) trails.push({ tradeId: position.tradeId, stopLoss: stop });
+    }
   }
-  return { reach, complete, exits, entryFill };
+  return { reach, complete, exits, entryFill, trails };
 }

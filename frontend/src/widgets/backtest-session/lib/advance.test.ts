@@ -10,12 +10,12 @@ const mins = (from: number, n: number, price = 100) =>
 describe('advanceTo', () => {
   it('доходит до target, когда минутки загружены дальше', () => {
     const r = advanceTo({ from: at(0), target: at(5), minutes: mins(at(0), 10), loadedUntil: at(10), positions: [] });
-    expect(r).toEqual({ reach: at(5), complete: true, exits: [], entryFill: null });
+    expect(r).toEqual({ reach: at(5), complete: true, exits: [], entryFill: null, trails: [] });
   });
 
   it('останавливается на загруженном крае, если он раньше target', () => {
     const r = advanceTo({ from: at(0), target: at(5), minutes: mins(at(0), 3), loadedUntil: at(3), positions: [] });
-    expect(r).toEqual({ reach: at(3), complete: false, exits: [], entryFill: null });
+    expect(r).toEqual({ reach: at(3), complete: false, exits: [], entryFill: null, trails: [] });
   });
 
   it('без прогресса (from === target) — срабатывание не проверяется', () => {
@@ -129,6 +129,7 @@ describe('advanceTo', () => {
       complete: true,
       exits: [],
       entryFill: { orderId: 'e1', direction: 'long', price: 96, time: at(3) },
+      trails: [],
     });
   });
 
@@ -164,5 +165,46 @@ describe('advanceTo', () => {
     expect(r.reach).toEqual(at(2));
     expect(r.exits).toEqual([]);
     expect(r.entryFill).toEqual({ orderId: 'e1', direction: 'short', price: 105, time: at(2) });
+  });
+});
+
+describe('advanceTo — подводящий стоп', () => {
+  // Минутки фикстуры — от 99 до 101: расстояние 3 держит стоп ниже их минимумов.
+  const trailing = { tradeId: 'a', direction: 'long' as const, stopLoss: 97, takeProfit: null, trailDist: 3, entryPrice: 100, entryTime: at(0) };
+
+  it('позиция без выхода — подтянутый стоп на момент reach', () => {
+    const minutes = mins(at(0), 5, 100);
+    minutes[1] = { ...minutes[1], h: 101.5 };
+    const r = advanceTo({ from: at(0), target: at(5), minutes, loadedUntil: at(5), positions: [trailing] });
+    expect(r.exits).toEqual([]);
+    expect(r.trails).toEqual([{ tradeId: 'a', stopLoss: 98.5 }]);
+  });
+
+  it('стоп не сдвинулся — trails пуст; закрытая позиция в trails не попадает', () => {
+    const still = advanceTo({ from: at(0), target: at(3), minutes: mins(at(0), 3, 99), loadedUntil: at(3), positions: [trailing] });
+    expect(still.trails).toEqual([]);
+    const minutes = mins(at(0), 5, 100);
+    minutes[1] = { ...minutes[1], h: 101.5 };
+    minutes[3] = { ...minutes[3], l: 98 };
+    const r = advanceTo({ from: at(0), target: at(5), minutes, loadedUntil: at(5), positions: [trailing] });
+    expect(r.exits).toEqual([{ reason: 'stop', price: 98.5, time: at(4), tradeId: 'a' }]);
+    expect(r.trails).toEqual([]);
+  });
+
+  it('ордер на вход оборвал шаг — стоп другой позиции считается только до reach', () => {
+    const minutes = mins(at(0), 5, 100);
+    minutes[1] = { ...minutes[1], l: 95 };
+    minutes[3] = { ...minutes[3], h: 101.5 };
+    const r = advanceTo({
+      from: at(0),
+      target: at(5),
+      minutes,
+      loadedUntil: at(5),
+      positions: [{ ...trailing, stopLoss: 90, trailDist: 10 }],
+      entryOrders: [{ id: 'o', direction: 'long', price: 95.5 }],
+    });
+    expect(r.reach).toBe(at(2));
+    // До reach максимум 101 — стоп 91, а не 91.5 из минутки после.
+    expect(r.trails).toEqual([{ tradeId: 'a', stopLoss: 91 }]);
   });
 });
