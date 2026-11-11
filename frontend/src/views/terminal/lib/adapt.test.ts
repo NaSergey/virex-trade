@@ -98,6 +98,11 @@ describe('toDetail', () => {
     expect(trade.tags).toHaveLength(1);
   });
 
+  it('подводящий стоп позиции — расстояние плана; без плана — выключен', () => {
+    const d = toDetail(state({ positions: [position({ trail: 700 }), position({ direction: 'short', trail: null })] }), new Map(), []);
+    expect(d.trades.map((x) => x.trailDist)).toEqual([700, null]);
+  });
+
   it('позиция без стопа и без известного времени открытия так и помечена', () => {
     const [trade] = toDetail(state({ positions: [position({ stopLoss: null, liqPrice: null })] }), NO_META, []).trades;
     // Ноль — «стопа нет»: терминал линию не рисует. null у ликвидации — биржа её не назвала.

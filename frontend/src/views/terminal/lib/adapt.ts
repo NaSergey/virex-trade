@@ -62,7 +62,8 @@ export function positionTrade(p: TerminalPosition, balance: number, meta: Positi
     closedQty: 0,
     // Стоп за тейками на бирже ведёт worker по событиям потока — флажок приходит с сервера.
     stopFollow: p.follow ?? false,
-    trailDist: null,
+    // Подводящий стоп на бирже тоже ведёт worker — расстояние плана приходит с сервера.
+    trailDist: p.trail ?? null,
     exitTime: null,
     exitPrice: null,
     exitReason: null,

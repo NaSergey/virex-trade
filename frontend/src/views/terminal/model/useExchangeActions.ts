@@ -88,6 +88,7 @@ export function useExchangeActions(): TerminalActions {
           stopLoss: v.stopLoss,
           takeProfit: v.takeProfit,
           leverage: v.leverage,
+          trail: v.trail,
         }),
       ),
     ),
@@ -103,6 +104,8 @@ export function useExchangeActions(): TerminalActions {
           // Ноль — «стопа нет»: на биржу он не уходит, стоп позиции остаётся как был.
           stopLoss: v.stopLoss != null && v.stopLoss > 0 ? v.stopLoss : undefined,
           takeProfit: v.takeProfit ?? null,
+          // Подводящий: расстояние от цены до стопа, null — выключить, нет поля — не трогать.
+          trailDist: v.trailDist,
         }),
       ),
     ),
@@ -130,6 +133,7 @@ export function useExchangeActions(): TerminalActions {
           stopLoss: v.stopLoss,
           takeProfit: v.takeProfit,
           leverage: v.leverage,
+          trail: v.trail,
         }),
       ),
     ),

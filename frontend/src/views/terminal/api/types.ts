@@ -16,6 +16,8 @@ export interface TerminalPosition {
   takeProfit: number | null;
   /** Есть план стопа за тейками: его ведёт worker, и окно сетки открывается с флажком. */
   follow?: boolean;
+  /** Подводящий стоп: расстояние в цене (план ведёт worker); null — выключен. */
+  trail?: number | null;
 }
 
 /** Висящий лимит. Стопы и тейки позиций сюда не входят — они её уровни. */
