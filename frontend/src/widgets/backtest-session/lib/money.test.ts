@@ -21,6 +21,7 @@ import {
   liquidationPrice,
   openPnl,
   parsePriceInput,
+  pendingEntryQty,
   previewSize,
   roundLevel,
   riskAmount,
@@ -555,5 +556,43 @@ describe('closePart', () => {
   it('часть позиции — вниз до шага лота, весь остаток — как есть', () => {
     expect(closePart(0.0347, 50, 0.001)).toBe(0.017);
     expect(closePart(0.0347, 100, 0.001)).toBe(0.0347);
+  });
+});
+
+describe('pendingEntryQty', () => {
+  const order = {
+    direction: 'long' as const,
+    price: 100,
+    riskPct: 1,
+    stopLoss: 90,
+    leverage: 10,
+    botId: null,
+    stopAfter: null,
+  };
+
+  it('без позиции — от стопа самого ордера', () => {
+    // 1 % от 1000 = 10 USDT риска на 10 пунктов до стопа — 1 монета.
+    expect(pendingEntryQty(order, null, 1000, 0)).toBeCloseTo(1);
+  });
+
+  it('лимит до стопа открытой позиции — от её стопа: исполнившись, он её дольёт', () => {
+    expect(pendingEntryQty(order, 95, 1000, 0)).toBeCloseTo(2);
+  });
+
+  it('лимит за стопом позиции — от своего: позицию раньше закроет стоп', () => {
+    expect(pendingEntryQty({ ...order, price: 94 }, 95, 1000, 0)).toBeCloseTo(10 / 4);
+  });
+
+  it('уровень таблицы «Сетки» и покупка бота — всегда от своего стопа', () => {
+    expect(pendingEntryQty({ ...order, stopAfter: 0 }, 95, 1000, 0)).toBeCloseTo(1);
+    expect(pendingEntryQty({ ...order, botId: 'b' }, 95, 1000, 0)).toBeCloseTo(1);
+  });
+
+  it('объём, зафиксированный биржей, — как есть', () => {
+    expect(pendingEntryQty({ ...order, qty: 0.37 }, 95, 1000, 0)).toBe(0.37);
+  });
+
+  it('шагом лота — вниз', () => {
+    expect(pendingEntryQty({ ...order, stopLoss: 97 }, null, 1000, 0.1)).toBeCloseTo(3.3);
   });
 });

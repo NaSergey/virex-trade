@@ -54,7 +54,7 @@ import {
   levelMove,
   liquidationPrice,
   openPnl,
-  previewSize,
+  pendingEntryQty,
   toInput,
   roundLevel,
   toInputPrice,
@@ -780,20 +780,12 @@ export function Terminal({
     }
     // Ещё не сработавшие лимиты на вход — независимо от того, есть ли уже
     // сделка этого направления: до срабатывания это не её уровень. Объём — тот,
-    // что сервер посчитает на срабатывании (`openChecked`, `sizeStopOf`): риск
-    // лимита от стопа позиции, если она этой стороны открыта и лимит до её стопа,
-    // иначе от стопа самого лимита. Лимит за стопом позиции исполнится, когда
-    // её уже закроет стоп, — от стопа позиции объём выходил в десятки раз больше
-    // (QA 2026-10-23). У ордера бота и со «стопом после» — всегда свой стоп.
-    // Депозит к срабатыванию может смениться, поэтому число — на сейчас.
+    // что сервер посчитает на срабатывании (`pendingEntryQty`), тот же, что в
+    // таблице ордеров. Депозит к срабатыванию может смениться, поэтому число — на сейчас.
     for (const o of detail.entryOrders) {
       if (o.symbol !== symbol) continue;
       const posStop = chartTrades.find((x) => x.direction === o.direction)?.stopLoss;
-      const beforeStop = posStop != null && posStop > 0 && (o.direction === 'long' ? o.price > posStop : o.price < posStop);
-      const ownStop = o.botId != null || o.stopAfter != null;
-      const stop = beforeStop && !ownStop ? posStop : o.stopLoss;
-      // У лимита биржи объём уже зафиксирован — пересчитывать его от риска нечего.
-      const qty = o.qty ?? previewSize(balance, o.riskPct, o.price, stop, o.leverage, o.direction, qtyStepOf(o.symbol))?.qty;
+      const qty = pendingEntryQty(o, posStop, balance, qtyStepOf(o.symbol)) ?? undefined;
       const price = pendingOrder?.id === o.id ? pendingOrder.price : toScreen(o.price, scale);
       list.push({ id: o.id, kind: 'pendingEntry', price, draggable: true, qty });
     }
@@ -1733,6 +1725,8 @@ export function Terminal({
               showSymbol={isLive}
               decimalsOf={decimalsOf}
               onSymbol={pickSymbol}
+              balance={balance}
+              qtyStepOf={qtyStepOf}
             />
             </div>
           )}

@@ -72,6 +72,29 @@ export function previewSize(
   };
 }
 
+/**
+ * Объём висящего лимита на вход — тот, что сервер посчитает на срабатывании
+ * (`openChecked`, `sizeStopOf`), на нынешний депозит: риск лимита от стопа открытой
+ * позиции той же монеты и стороны, если лимит до её стопа (исполнившись, он её
+ * дольёт), иначе от стопа самого лимита. Лимит за стопом позиции исполнится, когда
+ * её уже закроет стоп, — от стопа позиции объём выходил в десятки раз больше
+ * (QA 2026-10-23). У покупки бота и уровня таблицы «Сетки» — всегда свой стоп.
+ * Объём, уже зафиксированный биржей, — как есть.
+ */
+export function pendingEntryQty(
+  o: { direction: Direction; price: number; riskPct: number; stopLoss: number; leverage: number; qty?: number; botId?: string | null; stopAfter?: number | null },
+  positionStop: number | null | undefined,
+  balance: number,
+  step: number,
+): number | null {
+  if (o.qty != null) return o.qty;
+  const beforeStop =
+    positionStop != null && positionStop > 0 && (o.direction === 'long' ? o.price > positionStop : o.price < positionStop);
+  const ownStop = o.botId != null || o.stopAfter != null;
+  const stop = beforeStop && !ownStop ? positionStop : o.stopLoss;
+  return previewSize(balance, o.riskPct, o.price, stop, o.leverage, o.direction, step)?.qty ?? null;
+}
+
 /** N цен уровней сетки, равномерно на отрезке [lower, upper] включительно. N=1 — середина отрезка. */
 export function gridPrices(lower: number, upper: number, count: number): number[] {
   const n = Math.max(1, Math.round(count));
