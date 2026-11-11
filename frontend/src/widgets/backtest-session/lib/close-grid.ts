@@ -1,6 +1,6 @@
 import type { Direction } from '../api/types';
 import type { Level } from '../components/ReplayChart';
-import { fromScreen, gridPrices, levelMove, toScreen, unrealizedPnl } from './money';
+import { floorToLot, fromScreen, gridPrices, levelMove, toScreen, unrealizedPnl } from './money';
 
 /**
  * Сетка фиксации позиции — лимиты закрытия на ценах от первого тейка до
@@ -53,6 +53,23 @@ export function closeGridQtys(
   const lastFree = pinned.lastIndexOf(false);
   if (lastFree >= 0 && rest > 0) qtys[lastFree] = remaining - qtys.reduce((sum, q, i) => (i === lastFree ? sum : sum + q), 0);
   return { qtys, pinned, over: rest < -QTY_EPS * Math.max(1, remaining) };
+}
+
+/**
+ * Объёмы уровней — вниз до шага лота монеты, как режет сервер (`gridQtys`):
+ * сетка на всю позицию — последний уровень забирает остаток округления, и
+ * позиция закрывается целиком. `tooSmall` — уровень меньше шага, сервер откажет.
+ */
+export function closeGridLots(split: CloseGridQtys, remaining: number, step: number): CloseGridQtys & { tooSmall: boolean } {
+  if (!(step > 0) || split.qtys.length === 0) return { ...split, tooSmall: false };
+  const sum = split.qtys.reduce((a, q) => a + q, 0);
+  const qtys = split.qtys.map((q) => floorToLot(q, step));
+  const n = qtys.length;
+  if (Math.abs(sum - remaining) <= QTY_EPS * Math.max(1, remaining)) {
+    qtys[n - 1] = remaining - qtys.slice(0, -1).reduce((a, q) => a + q, 0);
+  }
+  // Уровень без объёма из-за закреплений — не «мало», а «пусто»: о нём говорит панель своей строкой.
+  return { ...split, qtys, tooSmall: qtys.some((q, i) => split.qtys[i] > 0 && q < step - 1e-12) };
 }
 
 /**
@@ -194,11 +211,12 @@ type GridTrade = { direction: Direction; entryPrice: number; stopLoss: number; q
  * Всё, что следует из черновика: цены уровней (экранные и настоящие), объёмы
  * с закреплениями и план с целями стопа — одно на панель и график.
  */
-export function closeGridFromDraft(trade: GridTrade, draft: CloseGridDraft, scale: number) {
+export function closeGridFromDraft(trade: GridTrade, draft: CloseGridDraft, scale: number, qtyStep = 0) {
   const screenPrices = closeGridPrices(draft.first, draft.last, closeGridCount(draft.count));
   const prices = screenPrices.map((p) => fromScreen(p, scale));
   const weights = draft.tilt ? distributionWeights(prices, draft.tilt) : undefined;
-  const split = closeGridQtys(trade.qty - trade.closedQty, prices.length, draft.qtyPins, weights);
+  const remaining = trade.qty - trade.closedQty;
+  const split = closeGridLots(closeGridQtys(remaining, prices.length, draft.qtyPins, weights), remaining, qtyStep);
   const targets = prices.map((_, i) => (draft.stopPins[i] != null ? fromScreen(draft.stopPins[i], scale) : null));
   const plan = closeGridPlan(trade, prices, split.qtys, draft.stopFollow, targets);
   return { screenPrices, prices, split, plan };
@@ -214,10 +232,10 @@ export const CLOSE_GRID_LAST_ID = 'close-grid-last';
  * промежуточные стоят с равным шагом между ними и пересчитываются сами.
  * Недописанное число в поле — линий нет, а не линия в нуле.
  */
-export function closeGridLevels(trade: GridTrade, draft: CloseGridDraft, scale: number): Level[] {
+export function closeGridLevels(trade: GridTrade, draft: CloseGridDraft, scale: number, qtyStep = 0): Level[] {
   const valid = (p: number) => Number.isFinite(p) && p > 0;
   if (!valid(draft.first) || !valid(draft.last)) return [];
-  const { screenPrices: prices, plan } = closeGridFromDraft(trade, draft, scale);
+  const { screenPrices: prices, plan } = closeGridFromDraft(trade, draft, scale, qtyStep);
   const lastIndex = prices.length - 1;
   return prices.map((price, i) => {
     const qty = plan.rows[i].qty;

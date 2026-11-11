@@ -5,7 +5,7 @@ import type { Candle } from '../market-data/market-data.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { liquidationPrice, type Direction } from './backtest-math';
 import { BacktestService } from './backtest.service';
-import { checkMinute, touchedEntries } from './fills';
+import { checkMinute, touchedEntries, trailStop } from './fills';
 import { barForTrade, buildSegments, type Bar, type Segment, type Snapshot } from './live-segments';
 
 const MINUTE_MS = 60_000;
@@ -160,6 +160,8 @@ export class LiveEngineService {
       leverage: number;
       stopLoss: number;
       takeProfit: number | null;
+      /** Подводящий стоп: расстояние в цене; null — стоп стоит. */
+      trailDist?: number | null;
       closeOrders: { id: string; price: number; qty: number }[];
     },
   ): Promise<void> {
@@ -181,7 +183,13 @@ export class LiveEngineService {
         bar,
         orders,
       );
-      if (!exit) return;
+      if (!exit) {
+        // Выхода нет — подводящий стоп подтягивается по экстремуму отрезка и
+        // действует со следующего: порядок цен внутри отрезка не восстановить.
+        const next = trailStop(direction, trade.stopLoss, trade.trailDist, trade.entryPrice, direction === 'long' ? bar.h : bar.l);
+        if (next !== trade.stopLoss) await this.backtest.systemTrail(trade.id, next, trade.trailDist ?? undefined);
+        return;
+      }
 
       const closed = await this.backtest.systemClose(trade.id, {
         // Время выхода — конец отрезка: закрытие минутки или время тика.

@@ -48,6 +48,8 @@ export {
 export type { TerminalAction, TerminalActions } from './model/actions';
 export type { LiveSource } from './model/useLiveFeed';
 export { fromApi, type ApiCandle } from './lib/candles';
+export { belowMinOrder, floorToLot } from './lib/money';
+export { trailStop } from './lib/fills';
 export { terminalIntl, timeLabelFormats } from './lib/time-labels';
 export { EXCHANGE_DRAWINGS, pruneDrawings } from './lib/drawings/store';
 export type { TerminalSound } from './lib/sounds';

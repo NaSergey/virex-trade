@@ -9,18 +9,113 @@ import type { Direction } from './fills';
 /** Та же ставка, что на сервере (`FEE_RATE` в backtest-math.ts). */
 export const FEE_RATE = 0.00055;
 
+/** Самый маленький ордер на вход, USDT, — `minNotionalValue` Bybit; копия `MIN_ORDER_USDT` сервера (`backtest-math.ts`). */
+export const MIN_ORDER_USDT = 5;
+
+/** Знаков после запятой у шага лота: 0.001 → 3, 1 → 0. */
+export const lotDecimals = (step: number) => {
+  const s = String(step);
+  const dot = s.indexOf('.');
+  return dot < 0 ? 0 : s.length - dot - 1;
+};
+
+/**
+ * Объём вниз до шага лота монеты, как у биржи и сервера (`floorToLot` в
+ * `backtest-math.ts`): 0.00347 BTC ордером не встанет, встанет 0.003. Допуск —
+ * на двоичную дробь. Шаг 0 — без округления.
+ */
+export function floorToLot(qty: number, step: number): number {
+  if (!(step > 0)) return qty;
+  if (!(qty > 0)) return 0;
+  return Number((Math.floor(qty / step + 1e-6) * step).toFixed(lotDecimals(step)));
+}
+
+/**
+ * Часть позиции к закрытию по проценту: весь остаток — как есть (позицию закрыть
+ * целиком можно всегда), часть — вниз до шага лота, как сервер (`closeQtyOf`).
+ */
+export const closePart = (remaining: number, pct: number, step: number) =>
+  pct >= 100 ? remaining : floorToLot((remaining * pct) / 100, step);
+
+/** Ордер, которого биржа не примет: меньше шага лота (он же минимальный ордер) или дешевле `MIN_ORDER_USDT`. */
+export const belowMinOrder = (qty: number, price: number, step: number) =>
+  (step > 0 && qty < step - 1e-12) || !(qty > 0) || qty * price < MIN_ORDER_USDT;
+
 /**
  * Предпросмотр размера и маржи — те же формулы, что на сервере при открытии
  * (`positionSize`/margin-проверка в `backtest.service.ts`), чтобы число до
- * отправки не расходилось с тем, что вернётся.
+ * отправки не расходилось с тем, что вернётся. С шагом лота (`step`) объём —
+ * вниз до него, риск — встающего объёма; `tooSmall` — сервер откажет.
  */
-export function previewSize(balance: number, riskPct: number, entry: number, stop: number, leverage: number, direction: Direction) {
+export function previewSize(
+  balance: number,
+  riskPct: number,
+  entry: number,
+  stop: number,
+  leverage: number,
+  direction: Direction,
+  step = 0,
+) {
   const dist = Math.abs(entry - stop);
   if (!(dist > 0) || !(balance > 0) || !(riskPct > 0)) return null;
-  const riskUsdt = (balance * riskPct) / 100;
-  const qty = riskUsdt / dist;
+  const planned = (balance * riskPct) / 100;
+  const qty = step > 0 ? floorToLot(planned / dist, step) : planned / dist;
+  const riskUsdt = step > 0 ? qty * dist : planned;
   const notional = qty * entry;
-  return { riskUsdt, qty, notional, margin: notional / leverage, liqPrice: liquidationPrice(direction, entry, leverage) };
+  return {
+    riskUsdt,
+    qty,
+    notional,
+    margin: notional / leverage,
+    liqPrice: liquidationPrice(direction, entry, leverage),
+    tooSmall: belowMinOrder(qty, entry, step),
+  };
+}
+
+/**
+ * Объём висящего лимита на вход — тот, что сервер посчитает на срабатывании
+ * (`openChecked`, `sizeStopOf`), на нынешний депозит: риск лимита от стопа открытой
+ * позиции той же монеты и стороны, если лимит до её стопа (исполнившись, он её
+ * дольёт), иначе от стопа самого лимита. Лимит за стопом позиции исполнится, когда
+ * её уже закроет стоп, — от стопа позиции объём выходил в десятки раз больше
+ * (QA 2026-10-23). У покупки бота и уровня таблицы «Сетки» — всегда свой стоп.
+ * Объём, уже зафиксированный биржей, — как есть.
+ */
+export function pendingEntryQty(
+  o: { direction: Direction; price: number; riskPct: number; stopLoss: number; leverage: number; qty?: number; botId?: string | null; stopAfter?: number | null },
+  positionStop: number | null | undefined,
+  balance: number,
+  step: number,
+): number | null {
+  if (o.qty != null) return o.qty;
+  const beforeStop =
+    positionStop != null && positionStop > 0 && (o.direction === 'long' ? o.price > positionStop : o.price < positionStop);
+  const ownStop = o.botId != null || o.stopAfter != null;
+  const stop = beforeStop && !ownStop ? positionStop : o.stopLoss;
+  return previewSize(balance, o.riskPct, o.price, stop, o.leverage, o.direction, step)?.qty ?? null;
+}
+
+/**
+ * Подводящий стоп при правке уровней позиции (окно «Изменить уровни», жест на графике):
+ * включают — расстояние от цены сейчас до стопа; выключают — null; включён, а стоп
+ * перенесли руками — пересчёт от цены до нового стопа (иначе отпущенный ниже стоп
+ * подводящий тут же вернул бы назад); иначе — undefined, поле не трогается.
+ * `trail` не задан (жест) — галочка как была. Все цены — настоящие.
+ */
+export function trailDistOf(
+  trade: { stopLoss: number; trailDist: number | null },
+  priceNow: number,
+  stopLoss: number,
+  trail?: boolean,
+): number | null | undefined {
+  const was = trade.trailDist != null;
+  const on = trail ?? was;
+  if (!on) return was ? null : undefined;
+  // Стоп из окна приходит через экранный масштаб — сравнение с допуском, а не на равенство.
+  const moved = Math.abs(stopLoss - trade.stopLoss) > Math.abs(trade.stopLoss) * 1e-9;
+  if (was && !moved) return undefined;
+  const dist = Math.abs(priceNow - stopLoss);
+  return dist > 0 ? dist : undefined;
 }
 
 /** N цен уровней сетки, равномерно на отрезке [lower, upper] включительно. N=1 — середина отрезка. */

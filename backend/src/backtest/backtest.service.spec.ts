@@ -383,6 +383,30 @@ describe('BacktestService — сделки', () => {
     );
   });
 
+  it('объём — вниз до шага лота BTC (0.001), риск — встающего объёма', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+
+    // 100 / 2880 = 0.0347… BTC — на бирже встанет 0.034.
+    await service.openTrade('u1', 's1', { ...OPEN, entryPrice: 60_000, stopLoss: 57_120 });
+
+    const data = prisma.backtestTrade.create.mock.calls[0][0].data;
+    expect(data.qty).toBe(0.034);
+    expect(data.riskUsdt).toBeCloseTo(97.92, 9);
+    expect(data.riskPct).toBeCloseTo(0.9792, 9);
+  });
+
+  it('объём меньше минимального ордера — отказ, а не округление вверх', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+
+    // 1 % от 10 000 при стопе за 200 000 — 0.0005 BTC.
+    const err = await rejection(service.openTrade('u1', 's1', { ...OPEN, entryPrice: 300_000, stopLoss: 100_000, leverage: 100 }));
+
+    expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_QTY_TOO_SMALL' });
+    expect(prisma.backtestTrade.create).not.toHaveBeenCalled();
+  });
+
   it('открывает сделку: сохраняет плечо', async () => {
     const { service, prisma } = makeService();
     prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
@@ -1088,6 +1112,27 @@ describe('BacktestService — сделки', () => {
       expect(rows.map((r: any) => r.qty).slice(0, 2)).toEqual([0.5, 0.2]);
       expect(rows.map((r: any) => r.qty).reduce((a: number, b: number) => a + b, 0)).toBe(0.9);
       expect(rows.map((r: any) => r.stopAfter)).toEqual([100, 104, null]);
+    });
+
+    it('объёмы уровней — вниз до шага лота монеты, последний забирает остаток округления', async () => {
+      const { service, prisma } = makeService();
+      prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, symbol: 'BTCUSDT', qty: 0.01, closedQty: 0 });
+
+      await service.createCloseGrid('u1', 't1', { prices: [105, 110, 115], stopFollow: false });
+
+      const qtys = prisma.backtestCloseOrder.create.mock.calls.map((c: any[]) => c[0].data.qty);
+      expect(qtys.slice(0, 2)).toEqual([0.003, 0.003]);
+      expect(qtys[2]).toBeCloseTo(0.004, 12);
+    });
+
+    it('уровень меньше шага лота — отказ', async () => {
+      const { service, prisma } = makeService();
+      prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, symbol: 'BTCUSDT', qty: 0.002, closedQty: 0 });
+
+      const err = await rejection(service.createCloseGrid('u1', 't1', { prices: [105, 110, 115], stopFollow: false }));
+
+      expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_QTY_TOO_SMALL' });
+      expect(prisma.backtestCloseOrder.create).not.toHaveBeenCalled();
     });
 
     it('объёмы меньше остатка — так и ставятся: остаток остаётся под стопом', async () => {
@@ -2791,11 +2836,11 @@ describe('BacktestService — таблица уровней: доли и «ст�
     // Доли 10/20/30/40 %, депозит 10 000, риск 2 % = 200; Σ доля·(уровень − 90) = 1+4+9+16 = 30 → Q = 200/30.
     await service.startBot('u1', 's1', { ...START, shares: [0.1, 0.2, 0.3, 0.4] });
 
-    const Q = 200 / 30;
+    // Объём продажи — вниз до шага лота BTC (0.001): 0.3·Q = 2, 0.4·Q = 2.666(6).
     const sells = prisma.backtestCloseOrder.create.mock.calls.map((c: any[]) => c[0].data);
     expect(sells.map((x: any) => x.botBuyPrice)).toEqual([120, 130]);
-    expect(sells[0].qty).toBeCloseTo(0.3 * Q, 9);
-    expect(sells[1].qty).toBeCloseTo(0.4 * Q, 9);
+    expect(sells[0].qty).toBe(2);
+    expect(sells[1].qty).toBe(2.666);
     const buys = prisma.backtestEntryOrder.create.mock.calls.map((c: any[]) => c[0].data);
     // Риск уровня 100: 2 % · 0.1·10 / 30.
     expect(buys[0].riskPct).toBeCloseTo((2 * 0.1 * 10) / 30, 9);
@@ -2871,3 +2916,211 @@ describe('BacktestService — таблица уровней: доли и «ст�
   });
 });
 
+describe('BacktestService — подводящий стоп', () => {
+  const OPEN = {
+    direction: 'long' as const,
+    entryTime: new Date(T0 + DAY),
+    entryPrice: 100,
+    stopLoss: 98,
+    riskPct: 1,
+    leverage: 10,
+  };
+  const TRADE = {
+    id: 't1',
+    sessionId: 's1',
+    symbol: 'BTCUSDT',
+    direction: 'long',
+    entryTime: new Date(T0),
+    entryPrice: 100,
+    stopLoss: 98,
+    takeProfit: null,
+    qty: 50,
+    riskUsdt: 100,
+    leverage: 10,
+    closedQty: 0,
+    exitTime: null,
+    trailDist: 2,
+    session: SESSION,
+  };
+
+  it('рынок с галочкой — расстояние от входа до стопа', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+
+    await service.openTrade('u1', 's1', { ...OPEN, trail: true });
+
+    expect(prisma.backtestTrade.create.mock.calls[0][0].data.trailDist).toBe(2);
+  });
+
+  it('без галочки — подводящего нет', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+
+    await service.openTrade('u1', 's1', OPEN);
+
+    expect(prisma.backtestTrade.create.mock.calls[0][0].data.trailDist).toBeNull();
+  });
+
+  it('ордер с галочкой открыл позицию — расстояние от его цены', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+    prisma.backtestEntryOrder.findFirst.mockResolvedValue({ id: 'eo1', price: 99, trail: true, botId: null, stopAfter: null });
+    prisma.backtestEntryOrder.deleteMany.mockResolvedValue({ count: 1 });
+
+    await service.openTrade('u1', 's1', { ...OPEN, entryPrice: 99, stopLoss: 96, entryOrderId: 'eo1' });
+
+    expect(prisma.backtestTrade.create.mock.calls[0][0].data.trailDist).toBe(3);
+  });
+
+  it('ордер с галочкой долил позицию — её подводящий не меняется', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+    prisma.backtestEntryOrder.findFirst.mockResolvedValue({ id: 'eo1', price: 99, trail: true, botId: null, stopAfter: null });
+    prisma.backtestEntryOrder.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.backtestTrade.findFirst.mockResolvedValue({ ...TRADE, trailDist: null, stopLoss: 95 });
+    prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, tags: [], entries: [] });
+
+    await service.openTrade('u1', 's1', { ...OPEN, entryPrice: 99, stopLoss: 96, entryOrderId: 'eo1' });
+
+    expect(prisma.backtestTrade.create).not.toHaveBeenCalled();
+    for (const [arg] of prisma.backtestTrade.updateMany.mock.calls) expect(arg.data).not.toHaveProperty('trailDist');
+  });
+
+  it('лимиты несут галочку, перенос её сохраняет', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+
+    await service.createEntryOrders('u1', 's1', {
+      direction: 'long',
+      stopLoss: 90,
+      riskPct: 1,
+      leverage: 10,
+      prices: [99, 98],
+      trail: true,
+    });
+    expect(prisma.backtestEntryOrder.create.mock.calls.map(([a]: any) => a.data.trail)).toEqual([true, true]);
+
+    prisma.backtestEntryOrder.findUnique = jest.fn().mockResolvedValue({
+      id: 'eo1',
+      sessionId: 's1',
+      symbol: 'BTCUSDT',
+      direction: 'long',
+      price: 99,
+      riskPct: 1,
+      stopLoss: 90,
+      takeProfit: null,
+      leverage: 10,
+      botId: null,
+      stopAfter: null,
+      trail: true,
+      session: SESSION,
+    });
+    prisma.backtestEntryOrder.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.backtestEntryOrder.create.mockClear();
+    await service.moveEntryOrder('u1', 'eo1', 97);
+    expect(prisma.backtestEntryOrder.create.mock.calls[0][0].data.trail).toBe(true);
+  });
+
+  it('правка уровней ставит и снимает подводящий; без поля — не трогает', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, tags: [], entries: [] });
+
+    await service.modifyTrade('u1', 't1', { stopLoss: 97, trailDist: 3.5 });
+    await service.modifyTrade('u1', 't1', { trailDist: null });
+    await service.modifyTrade('u1', 't1', { stopLoss: 97 });
+
+    const datas = prisma.backtestTrade.updateMany.mock.calls.map(([a]: any) => a.data);
+    expect(datas[0]).toEqual({ stopLoss: 97, trailDist: 3.5 });
+    expect(datas[1]).toEqual({ trailDist: null });
+    expect(datas[2]).toEqual({ stopLoss: 97 });
+  });
+
+  it('trail от прокрутки — под замком сессии, только теснее, не дальше безубытка', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+    prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, tags: [], entries: [] });
+
+    await service.trailTrade('u1', 't1', 99);
+    expect(prisma.$executeRaw).toHaveBeenCalled();
+    expect(prisma.backtestTrade.update).toHaveBeenLastCalledWith({ where: { id: 't1' }, data: { stopLoss: 99 } });
+
+    await service.trailTrade('u1', 't1', 103);
+    expect(prisma.backtestTrade.update).toHaveBeenLastCalledWith({ where: { id: 't1' }, data: { stopLoss: 100 } });
+
+    prisma.backtestTrade.update.mockClear();
+    await service.trailTrade('u1', 't1', 97.5);
+    expect(prisma.backtestTrade.update).not.toHaveBeenCalled();
+  });
+
+  it('trail у шорта — зеркально', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+    prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, direction: 'short', stopLoss: 102, tags: [], entries: [] });
+
+    await service.trailTrade('u1', 't1', 98);
+
+    expect(prisma.backtestTrade.update).toHaveBeenLastCalledWith({ where: { id: 't1' }, data: { stopLoss: 100 } });
+  });
+
+  it('стоп посчитан с другим расстоянием — его перенесли руками, подтяжка не пишется', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+    prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, stopLoss: 96, trailDist: 5, tags: [], entries: [] });
+
+    await service.trailTrade('u1', 't1', 99, 2);
+    expect(prisma.backtestTrade.update).not.toHaveBeenCalled();
+
+    await service.trailTrade('u1', 't1', 97, 5);
+    expect(prisma.backtestTrade.update).toHaveBeenLastCalledWith({ where: { id: 't1' }, data: { stopLoss: 97 } });
+  });
+
+  it('безубыток — по свежей строке под замком: добор успел опустить средний вход', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+    // Первое чтение (владелец) — до добора, второе — под замком, после него.
+    prisma.backtestTrade.findUnique
+      .mockResolvedValueOnce({ ...TRADE, tags: [], entries: [] })
+      .mockResolvedValueOnce({ ...TRADE, entryPrice: 99.2 })
+      .mockResolvedValue({ ...TRADE, tags: [], entries: [] });
+
+    await service.trailTrade('u1', 't1', 99.5);
+
+    expect(prisma.backtestTrade.update).toHaveBeenLastCalledWith({ where: { id: 't1' }, data: { stopLoss: 99.2 } });
+  });
+
+  it('trail без подводящего, у закрытой сделки и у завершённой сессии — стоп не трогается, без отказа', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+    prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, trailDist: null, tags: [], entries: [] });
+    await service.trailTrade('u1', 't1', 99);
+    prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, exitTime: new Date(T0 + DAY), tags: [], entries: [] });
+    await service.trailTrade('u1', 't1', 99);
+    prisma.backtestTrade.findUnique.mockResolvedValue({ ...TRADE, tags: [], entries: [] });
+    prisma.$executeRaw.mockResolvedValue(0);
+    await service.trailTrade('u1', 't1', 99);
+
+    expect(prisma.backtestTrade.update).not.toHaveBeenCalled();
+  });
+
+  it('trail в эфире — отказ: стоп там ведёт движок', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestTrade.findUnique.mockResolvedValue({
+      ...TRADE,
+      session: { ...SESSION, dataSource: 'live', tournament: null },
+    });
+
+    const err = await rejection(service.trailTrade('u1', 't1', 99));
+
+    expect(err).toBeInstanceOf(ConflictException);
+    expect(err.getResponse()).toMatchObject({ code: 'BACKTEST_TRAIL_LIVE' });
+  });
+
+  it('systemTrail — тем же правилом', async () => {
+    const { service, prisma } = makeService();
+    prisma.backtestSession.findUnique.mockResolvedValue(SESSION);
+    prisma.backtestTrade.findUnique.mockResolvedValue(TRADE);
+
+    expect(await service.systemTrail('t1', 99.5, 2)).toBe(true);
+    expect(prisma.backtestTrade.update).toHaveBeenLastCalledWith({ where: { id: 't1' }, data: { stopLoss: 99.5 } });
+  });
+});

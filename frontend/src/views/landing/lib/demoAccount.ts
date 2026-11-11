@@ -6,6 +6,8 @@ import type {
   SessionDetail,
   TerminalActions,
 } from '@/widgets/backtest-session';
+import { belowMinOrder, floorToLot, trailStop } from '@/widgets/backtest-session';
+import { demoQtyStepOf } from './demoMarket';
 
 /**
  * Демо-счёт терминала на главной: позиции и ордера живут в браузере гостя, на
@@ -43,7 +45,7 @@ const DEFAULT_SYMBOL = 'BTCUSDT';
 const SESSION_ID = 'landing-demo';
 
 /** Отказ демо-счёта — код, а текст подставляет вызывающий на языке страницы. */
-export type DemoErrorCode = 'noBalance' | 'stopSide' | 'takeSide' | 'margin' | 'qty' | 'gone';
+export type DemoErrorCode = 'noBalance' | 'stopSide' | 'takeSide' | 'margin' | 'qty' | 'minOrder' | 'gone';
 export class DemoError extends Error {
   constructor(readonly code: DemoErrorCode) {
     super(code);
@@ -122,9 +124,13 @@ export function openTrade(s0: DemoState, v: OpenVars): DemoState {
   // Лимит со «стопом после»: объём — от стопа самого ордера (`sizeStopOf` сервера), а не от подтянутого стопа позиции.
   if (open) return tightenStop(addInto(s, open, v, order?.stopAfter != null ? order.stopLoss : undefined), open.id, order?.stopAfter, v.entryPrice);
   if (s.balance <= 0) throw new DemoError('noBalance');
-  const riskUsdt = (s.balance * v.riskPct) / 100;
-  const qty = riskUsdt / Math.abs(v.entryPrice - v.stopLoss);
+  // Объём — вниз до шага лота монеты, риск — встающего объёма, как у сервера (`positionSize`).
+  const step = demoQtyStepOf(symbol);
+  const dist = Math.abs(v.entryPrice - v.stopLoss);
+  const qty = floorToLot((s.balance * v.riskPct) / 100 / dist, step);
+  const riskUsdt = qty * dist;
   if ((qty * v.entryPrice) / v.leverage > s.balance) throw new DemoError('margin');
+  if (belowMinOrder(qty, v.entryPrice, step)) throw new DemoError('minOrder');
   const [id, s1] = nextId(s);
   const trade: BacktestTrade = {
     id,
@@ -135,12 +141,14 @@ export function openTrade(s0: DemoState, v: OpenVars): DemoState {
     entryPrice: v.entryPrice,
     stopLoss: v.stopLoss,
     takeProfit: v.takeProfit ?? null,
-    riskPct: v.riskPct,
+    riskPct: (riskUsdt / s.balance) * 100,
     riskUsdt,
     qty,
     leverage: v.leverage,
     closedQty: 0,
     stopFollow: false,
+    // Подводящий — у позиции, которую вход открыл: галочка сработавшего лимита или рынка.
+    trailDist: (order ? order.trail : v.trail) ? dist : null,
     exitTime: null,
     exitPrice: null,
     exitReason: null,
@@ -182,13 +190,16 @@ function addInto(
   sizeStop?: number,
 ): DemoState {
   if (s.balance <= 0) throw new DemoError('noBalance');
-  const addRisk = (s.balance * v.riskPct) / 100;
-  const addQty = addRisk / Math.abs(v.entryPrice - (sizeStop ?? trade.stopLoss));
+  const step = demoQtyStepOf(trade.symbol);
+  const dist = Math.abs(v.entryPrice - (sizeStop ?? trade.stopLoss));
+  const addQty = floorToLot((s.balance * v.riskPct) / 100 / dist, step);
+  const addRisk = addQty * dist;
   const remaining = trade.qty - trade.closedQty;
   const qty = trade.qty + addQty;
   const entryPrice = (remaining * trade.entryPrice + addQty * v.entryPrice) / (remaining + addQty);
   checkSides(trade.direction, entryPrice, trade.stopLoss, trade.takeProfit);
   if (((remaining + addQty) * entryPrice) / trade.leverage > s.balance) throw new DemoError('margin');
+  if (belowMinOrder(addQty, v.entryPrice, step)) throw new DemoError('minOrder');
   const riskUsdt = trade.riskUsdt + addRisk;
   return replaceTrade(s, {
     ...trade,
@@ -207,6 +218,7 @@ export function modifyTrade(s: DemoState, v: ModifyVars): DemoState {
     ...trade,
     stopLoss: v.stopLoss ?? trade.stopLoss,
     takeProfit: v.takeProfit === undefined ? trade.takeProfit : v.takeProfit,
+    trailDist: v.trailDist === undefined ? trade.trailDist : v.trailDist,
   });
 }
 
@@ -309,6 +321,7 @@ export function createEntryOrders(s0: DemoState, v: EntryOrdersVars, now: number
       createdAt: iso(now),
       // 0 — уровень таблицы со «стопом после», но без своей цели: стоп не двигается, объём — от стопа ордера.
       stopAfter: v.stopsAfter ? v.stopsAfter[i] || 0 : null,
+      trail: v.trail ?? false,
     });
   }
   return { ...s, entryOrders: [...s.entryOrders, ...orders] };
@@ -385,6 +398,12 @@ export function tick(s0: DemoState, symbol: string, price: number, now: number):
     const cur = s.trades.find((x) => x.id === t0.id)!;
     if (cur.exitTime == null && cur.takeProfit != null && reached(cur.takeProfit)) {
       s = closeTrade(s, { tradeId: cur.id, exitTime: time, exitPrice: cur.takeProfit, reason: 'take' });
+    }
+    // Подводящий стоп — после проверки выхода, по этой же цене: действует со следующего опроса.
+    const left = s.trades.find((x) => x.id === t0.id)!;
+    if (left.exitTime == null && left.trailDist != null) {
+      const stop = trailStop(left.direction, left.stopLoss, left.trailDist, left.entryPrice, price);
+      if (stop !== left.stopLoss) s = replaceTrade(s, { ...left, stopLoss: stop });
     }
   }
 

@@ -119,6 +119,15 @@ export function useDecimalsOf(enabled: boolean): (symbol: string) => number | un
   );
 }
 
+/**
+ * Шаг лота монеты сессии (у монет продукта он же минимальный ордер). Список
+ * ещё не пришёл — 0: объём не округляется, решит сервер.
+ */
+export function useQtyStepOf(enabled: boolean): (symbol: string) => number {
+  const { data } = useLiveSymbols(enabled);
+  return useCallback((symbol: string) => (enabled ? (data?.symbols.find((s) => s.symbol === symbol)?.qtyStep ?? 0) : 0), [data, enabled]);
+}
+
 /** Как часто обновлять цены монет, которых нет на графике: столько же, сколько хвост графика. */
 const PRICES_MS = 2000;
 
@@ -201,6 +210,8 @@ export const useOpenTrade = (id: string) => {
       riskPct: number;
       leverage: number;
       entryOrderId?: string;
+      /** Подводящий стоп у позиции, которую вход откроет. */
+      trail?: boolean;
     }) => apiJson<{ trade: BacktestTrade | null }>(`/api/backtest/sessions/${id}/trades`, json('POST', input)),
     // Перечитку дожидаемся, как у закрытия: исполнение ордера грид-бота ставит на
     // сервере его следующий ордер, и прокрутка, пока тот не приехал, могла бы
@@ -215,8 +226,16 @@ export const useOpenTrade = (id: string) => {
 export const useModifyTrade = (id: string) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ tradeId, ...body }: { tradeId: string; stopLoss?: number; takeProfit?: number | null }) =>
-      apiJson<{ trade: BacktestTrade }>(`/api/backtest/trades/${tradeId}`, json('PATCH', body)),
+    mutationFn: ({
+      tradeId,
+      ...body
+    }: {
+      tradeId: string;
+      stopLoss?: number;
+      takeProfit?: number | null;
+      /** Подводящий стоп: расстояние в цене, null — выключить, нет поля — не трогать. */
+      trailDist?: number | null;
+    }) => apiJson<{ trade: BacktestTrade }>(`/api/backtest/trades/${tradeId}`, json('PATCH', body)),
     // Перечитку сессии — дожидаемся: колбэки конкретного mutate() срабатывают только
     // после неё, и экран держит отпущенную по графику линию на месте ровно до прихода
     // новых уровней, без кадра со старыми (см. pendingLevel в SessionScreen).
@@ -226,6 +245,17 @@ export const useModifyTrade = (id: string) => {
     },
   });
 };
+
+/**
+ * Стоп, подтянутый подводящим в прокрутке браузера, — на сервер (только теснее и
+ * до безубытка решает он). Не мутация экрана: шлёт прокрутка сама, по одному
+ * запросу на сделку в полёте, и ошибку не показывает — следующий тик повторит.
+ */
+export async function trailTrade(qc: QueryClient, sessionId: string, tradeId: string, stopLoss: number, dist: number) {
+  // `dist` — расстояние, от которого стоп посчитан: перенесённый руками стоп сервер не вернёт назад.
+  await apiJson<{ trade: BacktestTrade | null }>(`/api/backtest/trades/${tradeId}/trail`, json('POST', { stopLoss, dist }));
+  await qc.invalidateQueries({ queryKey: sessionKey(sessionId) });
+}
 
 export const useAddToTrade = (id: string) => {
   const qc = useQueryClient();
@@ -378,6 +408,7 @@ export const useCreateEntryOrders = (id: string) => {
       prices: number[];
       riskPcts?: number[];
       stopsAfter?: number[];
+      trail?: boolean;
     }) => apiJson<{ entryOrders: BacktestEntryOrder[] }>(`/api/backtest/sessions/${id}/entry-orders`, json('POST', input)),
     onSettled: () => refresh(qc, id),
   });

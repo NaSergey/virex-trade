@@ -58,6 +58,10 @@ interface Setup {
   follow?: string[];
   /** Запись целей «стопа после исполнения» падает — база мигнула. */
   entryFollowFails?: boolean;
+  /** Расстояния активных планов подводящего — ключи `символ:сторона`. */
+  trail?: Record<string, number>;
+  /** Запись плана подводящего падает. */
+  trailFails?: boolean;
 }
 
 function setup(s: Setup = {}) {
@@ -105,6 +109,14 @@ function setup(s: Setup = {}) {
       if (s.entryFollowFails) throw new Error('db down');
     }),
   };
+  const trails = {
+    put: jest.fn(async () => {
+      if (s.trailFails) throw new Error('db down');
+    }),
+    dropUnseen: jest.fn(async () => undefined),
+    remove: jest.fn(async () => undefined),
+    activeDistances: jest.fn(async () => new Map(Object.entries(s.trail ?? {}))),
+  };
   const battlePass = { awardSafe: jest.fn(async () => undefined) };
   const service = new TerminalService(
     credentials as any,
@@ -114,10 +126,11 @@ function setup(s: Setup = {}) {
     streams as any,
     follows as any,
     entryFollows as any,
+    trails as any,
     battlePass as any,
   );
   const orders = () => posts.filter((p) => p.path === '/order/create').map((p) => p.body);
-  return { service, posts, orders, bybit, streams, follows, entryFollows, battlePass, credentials };
+  return { service, posts, orders, bybit, streams, follows, entryFollows, trails, battlePass, credentials };
 }
 
 const market = (extra: Record<string, unknown> = {}) => ({
@@ -868,5 +881,109 @@ describe('TerminalService', () => {
       expect(await setup({ active: 'okx' }).service.access('u1')).toMatchObject({ available: false, reason: 'NOT_BYBIT' });
       expect(await setup({ active: null }).service.access('u1')).toMatchObject({ available: false, reason: 'NO_EXCHANGE' });
     });
+  });
+});
+
+describe('TerminalService — подводящий стоп', () => {
+  const limits = (extra: Record<string, unknown> = {}) => ({
+    symbol: 'BTCUSDT',
+    direction: 'long' as const,
+    kind: 'limit' as const,
+    prices: [59_700, 59_900],
+    riskPct: 0.5,
+    stopLoss: 59_500,
+    ...extra,
+  });
+
+  it('рынок с галочкой без позиции — план от последней цены до стопа, ждёт позицию', async () => {
+    const { service, trails } = setup({ last: 60_000 });
+
+    await service.placeOrders('u1', market({ trail: true }));
+
+    expect(trails.put).toHaveBeenCalledWith('u1', {
+      symbol: 'BTCUSDT',
+      direction: 'long',
+      distance: 500,
+      orderIds: ['o-1'],
+      seen: false,
+    });
+  });
+
+  it('сетка лонга — расстояние от верхнего уровня: он откроет позицию', async () => {
+    const { service, trails } = setup();
+
+    await service.placeOrders('u1', limits({ trail: true }));
+
+    expect(trails.put).toHaveBeenCalledWith('u1', expect.objectContaining({ distance: 400, orderIds: ['o-1', 'o-2'] }));
+  });
+
+  it('шорт — от нижнего уровня', async () => {
+    const { service, trails } = setup();
+
+    await service.placeOrders('u1', limits({ direction: 'short', prices: [60_300, 60_100], stopLoss: 60_500, trail: true }));
+
+    expect(trails.put).toHaveBeenCalledWith('u1', expect.objectContaining({ direction: 'short', distance: 400 }));
+  });
+
+  it('ордер без галочки на свободную сторону снимает неувиденный план', async () => {
+    const { service, trails } = setup();
+
+    await service.placeOrders('u1', market());
+
+    expect(trails.dropUnseen).toHaveBeenCalledWith('u1', 'BTCUSDT', 'long');
+    expect(trails.put).not.toHaveBeenCalled();
+  });
+
+  it('позиция этой стороны есть — ордер её доливает, план не трогается', async () => {
+    const { service, trails } = setup({ rows: [openRow('Buy', 0, { stopLoss: '59000' })] });
+
+    await service.placeOrders('u1', market({ trail: true }));
+
+    expect(trails.put).not.toHaveBeenCalled();
+    expect(trails.dropUnseen).not.toHaveBeenCalled();
+  });
+
+  it('план не записался — отказ: ордер уже на бирже, а стоп сам не поедет', async () => {
+    const { service } = setup({ trailFails: true });
+
+    await expect(service.placeOrders('u1', market({ trail: true }))).rejects.toMatchObject({
+      response: { code: 'TERMINAL_TRAIL_NOT_SAVED' },
+    });
+  });
+
+  it('уровни: расстояние — план на открытую позицию, null — снять, нет поля — не трогать', async () => {
+    const { service, trails } = setup({ rows: [openRow('Buy', 0)] });
+
+    await service.setLevels('u1', { symbol: 'BTCUSDT', direction: 'long', stopLoss: 59_000, takeProfit: null, trailDist: 1_200 });
+    expect(trails.put).toHaveBeenCalledWith('u1', {
+      symbol: 'BTCUSDT',
+      direction: 'long',
+      distance: 1_200,
+      orderIds: [],
+      seen: true,
+    });
+
+    await service.setLevels('u1', { symbol: 'BTCUSDT', direction: 'long', takeProfit: null, trailDist: null });
+    expect(trails.remove).toHaveBeenCalledWith('u1', 'BTCUSDT', 'long');
+
+    trails.put.mockClear();
+    trails.remove.mockClear();
+    await service.setLevels('u1', { symbol: 'BTCUSDT', direction: 'long', takeProfit: null });
+    expect(trails.put).not.toHaveBeenCalled();
+    expect(trails.remove).not.toHaveBeenCalled();
+  });
+
+  it('состояние: у позиции с планом — его расстояние, у остальных — null', async () => {
+    const { service } = setup({
+      rows: [openRow('Buy', 1), openRow('Sell', 2)],
+      trail: { 'BTCUSDT:long': 700 },
+    });
+
+    const state = await service.state('u1');
+
+    expect(state.positions.map((p) => [p.direction, p.trail])).toEqual([
+      ['long', 700],
+      ['short', null],
+    ]);
   });
 });

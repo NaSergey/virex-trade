@@ -13,7 +13,18 @@ import { SectionHead } from '@/shared/ui/SectionHead';
 import { Seg, type SegOption } from '@/shared/ui/Seg';
 import { Wrap } from '@/shared/ui/Wrap';
 import { formatPriceGrouped } from '@/shared/lib/utils/format';
-import { fetchCandles, useBacktestSession, isLiveSession, useDecimalsOf, useFinishSession, useLivePrices, useLiveSymbols } from '../api/hooks';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  fetchCandles,
+  trailTrade,
+  useBacktestSession,
+  isLiveSession,
+  useDecimalsOf,
+  useFinishSession,
+  useLivePrices,
+  useLiveSymbols,
+  useQtyStepOf,
+} from '../api/hooks';
 import {
   DEFAULT_SYMBOL,
   coinBase,
@@ -45,7 +56,8 @@ import {
   levelMove,
   liquidationPrice,
   openPnl,
-  previewSize,
+  pendingEntryQty,
+  trailDistOf,
   toInput,
   roundLevel,
   toInputPrice,
@@ -60,6 +72,7 @@ import { useRangeCandles, type Load4h } from '../model/useRangeCandles';
 import { useMaxRisk } from '../model/useRiskSettings';
 import { useLiveSymbol } from '../model/useLiveSymbol';
 import { useDefaultLeverage } from '../model/useDefaultLeverage';
+import { useTrailSetting } from '../model/useTrailSetting';
 import { useDrawingTools } from '../model/useDrawingTools';
 import { SESSION_SOURCE, useLiveFeed, type LiveSource } from '../model/useLiveFeed';
 import { SPEEDS, useReplay } from '../model/useReplay';
@@ -198,6 +211,8 @@ export interface TerminalProps {
   symbols?: LiveSymbol[];
   /** Знаков цены монеты; не задано — по списку монет эфира. */
   decimalsOf?: (symbol: string) => number | undefined;
+  /** Шаг лота монеты (0 — не округлять); не задано — по списку монет эфира. */
+  qtyStepOf?: (symbol: string) => number;
   /** Цена монеты, которой нет на графике; не задано — цены эфира с сервера. */
   priceOf?: (symbol: string) => number | null;
   /** Подпись у переключателя таблиц вместо «Эфир»; `false` — без подписи (терминал на главной). */
@@ -258,6 +273,7 @@ export function Terminal({
   source,
   symbols,
   decimalsOf: decimalsOfProp,
+  qtyStepOf: qtyStepOfProp,
   priceOf: priceOfProp,
   badge,
   soundsOf,
@@ -360,6 +376,7 @@ export function Terminal({
   // любого действия над сделками и ордерами.
   const tAudio = useTranslations('audio');
   const [soundOn, setSoundOn] = useTerminalSoundOn();
+  const qc = useQueryClient();
 
   // Настройки графика — правая панель на месте панели ордера (шестерёнка над
   // графиком): индикаторы и верхняя граница ползунка риска.
@@ -465,6 +482,8 @@ export function Terminal({
       (actions.bot?.start.isPending ?? false) ||
       (actions.bot?.stop.isPending ?? false),
     !isLive,
+    // Подводящий стоп, подтянутый по минуткам истории, — на сервер.
+    (trade, stop, dist) => trailTrade(qc, detail.session.id, trade.id, stop, dist),
   );
   // Хуки нельзя вызывать по условию, поэтому вызываются оба, а спит тот, чья
   // очередь не настала: в эфире свечи идут живым хвостом, а не прокруткой.
@@ -514,6 +533,16 @@ export function Terminal({
   const liveDecimalsOf = useDecimalsOf(coinDecimals && !decimalsOfProp);
   const decimalsOf = decimalsOfProp ?? liveDecimalsOf;
   const chartDecimals = decimalsOf(symbol);
+  // Шаг лота — у любой сессии (история и тренажёр тоже торгуют BTC): объёмы панели,
+  // таблиц и линий — те, что поставит биржа, а не 0.00347 BTC.
+  const liveQtyStepOf = useQtyStepOf(!qtyStepOfProp);
+  const qtyStepOf = qtyStepOfProp ?? liveQtyStepOf;
+  const chartQtyStep = qtyStepOf(symbol);
+  /** Подсказка «меньше минимального ордера биржи» — с шагом лота монеты; скрытую монету не называет. */
+  const minOrderHint = (sym: string) =>
+    symbolShown && qtyStepOf(sym) > 0
+      ? t('qtyBelowMin', { min: String(qtyStepOf(sym)), coin: coinBase(sym) })
+      : t('qtyBelowMinHidden');
   // Цены монет, по которым есть позиции, но которых нет на графике: отметка
   // позиции и окна её закрытия берут цену своей монеты, а не графика.
   const otherSymbols = useMemo(
@@ -535,6 +564,8 @@ export function Terminal({
   // уже загружен, то есть уже после гидрации, и здесь безопасно взять текущее
   // значение хранилища без риска разойтись с серверной разметкой.
   const [defaultLeverage, setDefaultLeverage] = useDefaultLeverage();
+  // Галочка «Подводящий» панели: ордер, открывший позицию, включит у неё подводящий стоп.
+  const [trailOn, setTrailOn] = useTrailSetting();
   const [draft, setDraft] = useState<Draft>({ risk: '1', stop: '', take: '', leverage: toInput(defaultLeverage) });
   const [orderTab, setOrderTab] = useState<OrderTab>('market');
   const [limitDraft, setLimitDraft] = useState<LimitDraft>({ risk: '1', stop: '', take: '', entry: '' });
@@ -691,6 +722,7 @@ export function Terminal({
           leverage: draftLeverage,
           scale,
           oddsOn: takeOddsOn,
+          qtyStep: chartQtyStep,
         });
 
     // Уровни уже открытых сделок монеты графика — от их собственных
@@ -725,6 +757,7 @@ export function Terminal({
           draggable: true,
           qty: remaining,
           impactAt: impactAt(remaining),
+          name: trade.trailDist != null ? t('level.trailStop') : undefined,
         });
       }
       const take = pending?.kind === 'take' ? pending.price : trade.takeProfit != null ? toScreen(trade.takeProfit, scale) : null;
@@ -757,20 +790,12 @@ export function Terminal({
     }
     // Ещё не сработавшие лимиты на вход — независимо от того, есть ли уже
     // сделка этого направления: до срабатывания это не её уровень. Объём — тот,
-    // что сервер посчитает на срабатывании (`openChecked`, `sizeStopOf`): риск
-    // лимита от стопа позиции, если она этой стороны открыта и лимит до её стопа,
-    // иначе от стопа самого лимита. Лимит за стопом позиции исполнится, когда
-    // её уже закроет стоп, — от стопа позиции объём выходил в десятки раз больше
-    // (QA 2026-10-23). У ордера бота и со «стопом после» — всегда свой стоп.
-    // Депозит к срабатыванию может смениться, поэтому число — на сейчас.
+    // что сервер посчитает на срабатывании (`pendingEntryQty`), тот же, что в
+    // таблице ордеров. Депозит к срабатыванию может смениться, поэтому число — на сейчас.
     for (const o of detail.entryOrders) {
       if (o.symbol !== symbol) continue;
       const posStop = chartTrades.find((x) => x.direction === o.direction)?.stopLoss;
-      const beforeStop = posStop != null && posStop > 0 && (o.direction === 'long' ? o.price > posStop : o.price < posStop);
-      const ownStop = o.botId != null || o.stopAfter != null;
-      const stop = beforeStop && !ownStop ? posStop : o.stopLoss;
-      // У лимита биржи объём уже зафиксирован — пересчитывать его от риска нечего.
-      const qty = o.qty ?? previewSize(balance, o.riskPct, o.price, stop, o.leverage, o.direction)?.qty;
+      const qty = pendingEntryQty(o, posStop, balance, qtyStepOf(o.symbol)) ?? undefined;
       const price = pendingOrder?.id === o.id ? pendingOrder.price : toScreen(o.price, scale);
       list.push({ id: o.id, kind: 'pendingEntry', price, draggable: true, qty });
     }
@@ -784,12 +809,13 @@ export function Terminal({
       const standing = list.filter((l) => l.kind === 'limitClose' && l.tradeId === gridTrade.id);
       return [
         ...list.filter((l) => !standing.includes(l)),
-        ...closeGridLevels(gridTrade, closeGrid, scale),
+        ...closeGridLevels(gridTrade, closeGrid, scale, qtyStepOf(gridTrade.symbol)),
         ...standing.map((l) => ({ ...l, draggable: false })),
       ];
     }
     return list;
   }, [
+    t,
     gridTrade,
     closeGrid,
     pendingOrder,
@@ -825,6 +851,8 @@ export function Terminal({
     detail.entryOrders,
     pendingLevel,
     takeOddsOn,
+    chartQtyStep,
+    qtyStepOf,
   ]);
 
   // Отметки сделок на графике: где вошли и где вышли. Своим useMemo — по той
@@ -1046,6 +1074,7 @@ export function Terminal({
         takeProfit: takeN != null ? fromScreen(takeN, scale) : undefined,
         riskPct: risk,
         leverage: draftLeverage,
+        trail: trailOn,
       }),
       // Ордер ушёл — его стоп и тейк теперь живут у сделки. Оставленный черновик лёг бы
       // линиями ровно поверх уровней новой позиции, и жест по ним тянул бы черновик.
@@ -1092,6 +1121,7 @@ export function Terminal({
         riskPct: risk,
         leverage: draftLeverage,
         prices: [fromScreen(lEntryN, scale)],
+        trail: trailOn,
       }),
       () => setLimitDraft((prev) => ({ ...prev, stop: '', take: '', entry: '' })),
     );
@@ -1126,9 +1156,14 @@ export function Terminal({
       stopTargets: Object.fromEntries(Object.entries(scaledDraft.stopPins).map(([k, v]) => [k, fromScreen(v, scale)])),
       stopFollow: actions.gridStopAfter === true && scaledDraft.stopFollow,
       tilt: scaledDraft.tilt,
+      qtyStep: chartQtyStep,
     });
     if (table.over) {
       setScaledHint(t('closeGridPinnedOver'));
+      return;
+    }
+    if (table.tooSmall) {
+      setScaledHint(minOrderHint(symbol));
       return;
     }
     if (table.blocked) {
@@ -1147,6 +1182,7 @@ export function Terminal({
         prices: table.prices,
         riskPcts: table.riskPcts,
         stopsAfter: table.stopsAfter,
+        trail: trailOn,
       }),
       () => setScaledDraft((prev) => ({ ...prev, stop: '', take: '', upper: '', lower: '', qtyPins: {}, stopPins: {} })),
     );
@@ -1154,15 +1190,29 @@ export function Terminal({
 
   // Принимает screenPrice параметром, а не читает внешний: onDragLevel ниже зовёт её
   // из рефа, модалка «Изменить уровни» — из своего рендера, и цена у каждого своя.
-  const applyLevels = (trade: BacktestTrade, screenPriceNow: number, stop: number, take: number | null, onSettled?: () => void) => {
+  // `trail` — галочка подводящего из окна «Изменить уровни»; не задана (жест на графике) — как была.
+  const applyLevels = (
+    trade: BacktestTrade,
+    screenPriceNow: number,
+    stop: number,
+    take: number | null,
+    onSettled?: () => void,
+    trail?: boolean,
+  ) => {
     const err = checkLevels(trade.direction, screenPriceNow, stop, take);
     setPositionHint(err ? t(err) : null);
     if (err) {
       onSettled?.();
       return;
     }
+    const stopLoss = fromScreen(stop, scale);
     modifyM.mutate(
-      { tradeId: trade.id, stopLoss: fromScreen(stop, scale), takeProfit: take != null ? fromScreen(take, scale) : null },
+      {
+        tradeId: trade.id,
+        stopLoss,
+        takeProfit: take != null ? fromScreen(take, scale) : null,
+        trailDist: trailDistOf(trade, fromScreen(screenPriceNow, scale), stopLoss, trail),
+      },
       { onSuccess: () => setLevelsModalFor(null), onSettled },
     );
   };
@@ -1581,6 +1631,8 @@ export function Terminal({
                 screenPrice={screenPriceOf(gridTrade.symbol)}
                 closeOrdersCount={detail.closeOrders.filter((o) => o.tradeId === gridTrade.id).length}
                 decimals={decimalsOf(gridTrade.symbol)}
+                qtyStep={qtyStepOf(gridTrade.symbol)}
+                minOrderHint={minOrderHint(gridTrade.symbol)}
                 onSubmit={(grid) => closeGridM.mutate({ tradeId: gridTrade.id, ...grid }, { onSuccess: () => setCloseGrid(null) })}
                 onCancel={() => setCloseGrid(null)}
                 isPending={closeGridM.isPending}
@@ -1592,6 +1644,10 @@ export function Terminal({
                   tab={orderTab}
                   onTab={switchOrderTab}
                   maxRisk={maxRisk}
+                  qtyStep={chartQtyStep}
+                  minOrderHint={minOrderHint(symbol)}
+                  trail={trailOn}
+                  onTrail={setTrailOn}
                   draft={marketDraft}
                   onDraft={setDraft}
                   limitDraft={limitDraft}
@@ -1699,6 +1755,8 @@ export function Terminal({
               showSymbol={isLive}
               decimalsOf={decimalsOf}
               onSymbol={pickSymbol}
+              balance={balance}
+              qtyStepOf={qtyStepOf}
             />
             </div>
           )}
@@ -1733,7 +1791,7 @@ export function Terminal({
             screenPrice={tradePrice}
             decimals={decimalsOf(trade.symbol)}
             showSymbol={symbolShown}
-            onApply={(stop, take) => applyLevels(trade, tradePrice, stop, take)}
+            onApply={(stop, take, trail) => applyLevels(trade, tradePrice, stop, take, undefined, trail)}
             onClose={() => setLevelsModalFor(null)}
             isPending={modifyM.isPending}
             error={modifyM.error}
@@ -1750,6 +1808,8 @@ export function Terminal({
             scale={scale}
             screenPrice={tradePrice}
             decimals={decimalsOf(trade.symbol)}
+            qtyStep={qtyStepOf(trade.symbol)}
+            minOrderHint={minOrderHint(trade.symbol)}
             showSymbol={symbolShown}
             onSubmit={(price, qty) => submitLimit(trade, price, qty)}
             onClose={() => setLimitModalFor(null)}
@@ -1768,6 +1828,8 @@ export function Terminal({
             scale={scale}
             screenPrice={tradePrice}
             decimals={decimalsOf(trade.symbol)}
+            qtyStep={qtyStepOf(trade.symbol)}
+            minOrderHint={minOrderHint(trade.symbol)}
             showSymbol={symbolShown}
             canClose={canClose(trade)}
             onSubmit={(qty) => submitMarket(trade, qty)}

@@ -1,4 +1,4 @@
-import { checkMinute, touchedEntries, type Bar, type Position } from './fills';
+import { checkMinute, touchedEntries, trailStop, type Bar, type Position } from './fills';
 
 // Случаи из frontend/src/widgets/backtest-session/lib/fills.test.ts: правила одни, копий две
 // (историю исполняет браузер, эфир турнира — сервер), и расходиться им нельзя.
@@ -141,5 +141,27 @@ describe('touchedEntries — уровни на вход', () => {
 
   it('гэпа нет: диапазон не задел уровень — ждёт', () => {
     expect(touchedEntries(orders, m(99, 101, 98.5, 100))).toEqual([]);
+  });
+});
+
+describe('trailStop', () => {
+  it('лонг: стоп идёт за максимумом на расстоянии', () =>
+    expect(trailStop('long', 98, 2, 105, 101)).toBe(99));
+  it('лонг: цена не выше прежнего — стоп стоит', () =>
+    expect(trailStop('long', 98, 2, 105, 99.5)).toBe(98));
+  it('лонг: не дальше безубытка', () =>
+    expect(trailStop('long', 98, 2, 100, 110)).toBe(100));
+  it('лонг: стоп в безубытке и дальше — не двигается', () => {
+    expect(trailStop('long', 100, 2, 100, 110)).toBe(100);
+    expect(trailStop('long', 101, 2, 100, 110)).toBe(101);
+  });
+  it('шорт — зеркально', () => {
+    expect(trailStop('short', 102, 2, 95, 99)).toBe(101);
+    expect(trailStop('short', 102, 2, 100, 90)).toBe(100);
+    expect(trailStop('short', 99, 2, 100, 90)).toBe(99);
+  });
+  it('без расстояния — стоп как есть', () => {
+    expect(trailStop('long', 98, null, 105, 120)).toBe(98);
+    expect(trailStop('long', 98, 0, 105, 120)).toBe(98);
   });
 });

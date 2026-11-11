@@ -2,7 +2,7 @@ import type { StreamContext, StreamListener } from './stop-follow.service';
 
 /**
  * Несколько слушателей потока счёта за одним токеном `STREAM_LISTENER`: стоп за
- * тейками и стоп после исполнения сетки входа. Сбой одного слушателя другому не
+ * тейками, стоп после исполнения сетки входа и подводящий стоп. Сбой одного слушателя другому не
  * мешает: события идут каждому отдельно.
  */
 export class StreamListeners implements StreamListener {

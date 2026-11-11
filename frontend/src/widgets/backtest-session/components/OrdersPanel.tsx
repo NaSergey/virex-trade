@@ -2,6 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { CoinSymbol } from '@/shared/ui/CoinSymbol';
+import { CopyText, plainNumber } from '@/shared/ui/CopyText';
 import { Button } from '@/shared/ui/Button';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
@@ -9,7 +10,7 @@ import { SectionHead } from '@/shared/ui/SectionHead';
 import { cn } from '@/shared/lib/utils/css';
 import { formatPriceGrouped, formatQty, formatTradeDate } from '@/shared/lib/utils/format';
 import type { BacktestCloseOrder, BacktestEntryOrder, BacktestTrade, Direction } from '../api/types';
-import { toScreen } from '../lib/money';
+import { pendingEntryQty, toScreen } from '../lib/money';
 
 /**
  * Ещё не сработавшие ордера сессии — своя вкладка, а не часть «Открытых
@@ -36,6 +37,8 @@ export function OrdersPanel({
   showSymbol = false,
   decimalsOf,
   onSymbol,
+  balance,
+  qtyStepOf,
 }: {
   trades: BacktestTrade[];
   scale: number;
@@ -51,11 +54,26 @@ export function OrdersPanel({
   decimalsOf?: (symbol: string) => number | undefined;
   /** Нажатие на символ монеты — открыть её на графике (терминал); не задано — символ просто текст. */
   onSymbol?: (symbol: string) => void;
+  /** Депозит сейчас — от него объём лимита сессии, как на линии графика. */
+  balance: number;
+  /** Шаг лота монеты: объём лимита — вниз до него, как поставит сервер. */
+  qtyStepOf: (symbol: string) => number;
 }) {
   const t = useTranslations('backtest');
   const tradeById = new Map(trades.map((x) => [x.id, x]));
   const price = (p: number, symbol: string | undefined) =>
     formatPriceGrouped(toScreen(p, scale), symbol ? decimalsOf?.(symbol) : undefined);
+  /** Число, которое копируется нажатием: как показано, без разделителей разрядов. */
+  const copyable = (shown: string) => <CopyText value={plainNumber(shown)}>{shown}</CopyText>;
+  // Объём лимита — тот же, что на его линии графика (`pendingEntryQty`): от стопа
+  // открытой позиции той же стороны, если лимит её дольёт, иначе от своего.
+  const entryQty = (o: BacktestEntryOrder) =>
+    pendingEntryQty(
+      o,
+      trades.find((x) => x.symbol === o.symbol && x.direction === o.direction)?.stopLoss,
+      balance,
+      qtyStepOf(o.symbol),
+    );
 
   // Сервер отдаёт ордера по цене; монета — первой, чтобы в эфире строки одной
   // монеты стояли рядом.
@@ -100,9 +118,9 @@ export function OrdersPanel({
       header: t('colOrderPrice'),
       align: 'right',
       cellClassName: 'n',
-      render: (o) => price(o.price, tradeById.get(o.tradeId)?.symbol),
+      render: (o) => copyable(price(o.price, tradeById.get(o.tradeId)?.symbol)),
     },
-    { key: 'qty', header: t('colOrderQty'), align: 'right', cellClassName: 'n', render: (o) => formatQty(o.qty) },
+    { key: 'qty', header: t('colOrderQty'), align: 'right', cellClassName: 'n', render: (o) => copyable(formatQty(o.qty)) },
     {
       key: 'time',
       header: t('colOrderTime'),
@@ -145,7 +163,17 @@ export function OrdersPanel({
       header: t('colOrderPrice'),
       align: 'right',
       cellClassName: 'n',
-      render: (o) => price(o.price, o.symbol),
+      render: (o) => copyable(price(o.price, o.symbol)),
+    },
+    {
+      key: 'qty',
+      header: t('colOrderQty'),
+      align: 'right',
+      cellClassName: 'n',
+      render: (o) => {
+        const qty = entryQty(o);
+        return qty != null ? copyable(formatQty(Number(qty.toFixed(8)))) : '—';
+      },
     },
     // Стоп и тейк ордера — те, с которыми он откроет позицию. Если позиция этой
     // стороны уже открыта, ордер её доливает, и уровни остаются её собственные.

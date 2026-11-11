@@ -47,6 +47,8 @@ export interface OpenTradeVars {
   riskPct: number;
   leverage: number;
   entryOrderId?: string;
+  /** Подводящий стоп у позиции, которую вход откроет; долив его не меняет. */
+  trail?: boolean;
 }
 
 export interface AddToTradeVars {
@@ -79,6 +81,8 @@ export interface EntryOrdersVars {
   riskPcts?: number[];
   /** Цель стопа после исполнения уровня; 0 — стоп не двигается. По одному на цену. */
   stopsAfter?: number[];
+  /** Подводящий стоп у позиции, которую уровень откроет. */
+  trail?: boolean;
 }
 
 /**
@@ -106,7 +110,8 @@ export interface CloseGridVars {
 export interface TerminalActions {
   open: TerminalAction<OpenTradeVars>;
   addToTrade: TerminalAction<AddToTradeVars>;
-  modify: TerminalAction<{ tradeId: string; stopLoss?: number; takeProfit?: number | null }>;
+  /** `trailDist` — подводящий стоп: расстояние в цене, null — выключить, нет поля — не трогать. */
+  modify: TerminalAction<{ tradeId: string; stopLoss?: number; takeProfit?: number | null; trailDist?: number | null }>;
   close: TerminalAction<CloseTradeVars>;
   createCloseOrder: TerminalAction<{ tradeId: string; price: number; qty: number }>;
   cancelCloseOrder: TerminalAction<string>;

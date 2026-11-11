@@ -62,6 +62,8 @@ export function positionTrade(p: TerminalPosition, balance: number, meta: Positi
     closedQty: 0,
     // Стоп за тейками на бирже ведёт worker по событиям потока — флажок приходит с сервера.
     stopFollow: p.follow ?? false,
+    // Подводящий стоп на бирже тоже ведёт worker — расстояние плана приходит с сервера.
+    trailDist: p.trail ?? null,
     exitTime: null,
     exitPrice: null,
     exitReason: null,
@@ -98,6 +100,7 @@ export function journalTrade(x: Trade): BacktestTrade {
     leverage: x.leverage ?? 1,
     closedQty: x.qty,
     stopFollow: false,
+    trailDist: null,
     exitTime: x.closedAt,
     exitPrice: x.avgExitPrice,
     exitReason: null,

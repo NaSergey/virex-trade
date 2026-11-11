@@ -8,7 +8,7 @@ import { Field, Input } from '@/shared/ui/Field';
 import { Slider } from '@/shared/ui/Slider';
 import { formatMoney, formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
 import type { PositionLike } from '../api/types';
-import { closeImpact, fromScreen, toScreen } from '../lib/money';
+import { closeImpact, closePart, fromScreen, toScreen } from '../lib/money';
 import { PriceInput } from './PriceInput';
 
 const clampPct = (v: number) => Math.max(0, Math.min(100, v));
@@ -29,6 +29,8 @@ export function LimitCloseModal({
   error,
   decimals,
   showSymbol = true,
+  qtyStep = 0,
+  minOrderHint,
 }: {
   trade: PositionLike;
   /** Остаток открытой позиции в монете (qty - closedQty). */
@@ -43,12 +45,18 @@ export function LimitCloseModal({
   decimals?: number;
   /** Монета в подзаголовке; снимается у истории со случайной монетой — она скрыта до итога. */
   showSymbol?: boolean;
+  /** Шаг лота монеты: часть позиции — вниз до него, как поставит биржа. */
+  qtyStep?: number;
+  /** Текст «меньше минимального ордера биржи». */
+  minOrderHint?: string;
 }) {
   const t = useTranslations('backtest');
   const { closing, close } = useDialogFade(onClose);
   const [price, setPrice] = useState(screenPrice);
   const [pct, setPct] = useState(100);
-  const qty = (remaining * pct) / 100;
+  const qty = closePart(remaining, pct, qtyStep);
+  // Часть меньше шага лота биржа не примет — окно говорит это, а не молчит выключенной кнопкой.
+  const tooSmall = pct > 0 && pct < 100 && qtyStep > 0 && qty < qtyStep - 1e-12;
   const impact = closeImpact(trade, scale, price, qty);
 
   return (
@@ -82,11 +90,12 @@ export function LimitCloseModal({
           <p className="muted">
             {t('limitCloseHint', { qty: formatQty(qty), price: formatPriceGrouped(price, decimals), pnl: formatMoney(impact.usdt) })}
           </p>
+          {tooSmall && minOrderHint && <p className="neg">{minOrderHint}</p>}
           <ErrorNote error={error} fallback={t('actionFailed')} />
         </DialogBody>
         <DialogActions
           confirmLabel={t('limitCloseConfirm')}
-          confirmDisabled={isPending || !(qty > 0) || !(price > 0)}
+          confirmDisabled={isPending || !(qty > 0) || tooSmall || !(price > 0)}
           onConfirm={() => onSubmit(fromScreen(price, scale), qty)}
           onCancel={close}
         />

@@ -1,5 +1,6 @@
 import type { Direction } from '../api/types';
 import { closeGridQtys, distributionWeights } from './close-grid';
+import { belowMinOrder, floorToLot } from './money';
 
 export { distributionWeights };
 
@@ -144,11 +145,19 @@ export function entryGridTable(a: {
   stopFollow: boolean;
   /** Распределение объёма по цене (−100…100, 0 — равномерно). */
   tilt?: number;
+  /** Шаг лота монеты: объём уровня — вниз до него, как поставит биржа; 0 — без округления. */
+  qtyStep?: number;
 }) {
   const order = executionOrder(a.prices, a.direction);
   const { shares, pinned, over } = orderedShares(order, a.qtyPins, a.tilt);
-  const qtys = gridLevelQtys(order, a.stop, (a.balance * a.riskPct) / 100, shares);
-  const riskPcts = gridRiskPcts(order, a.stop, a.riskPct, shares);
+  const step = a.qtyStep ?? 0;
+  const raw = gridLevelQtys(order, a.stop, (a.balance * a.riskPct) / 100, shares);
+  const qtys = step > 0 ? raw.map((q) => floorToLot(q, step)) : raw;
+  // С шагом лота риск уровня — от встающего объёма: сервер обратит его ровно в этот объём.
+  const riskPcts =
+    step > 0 && a.balance > 0
+      ? order.map((p, i) => (qtys[i] * Math.abs(p - a.stop) * 100) / a.balance)
+      : gridRiskPcts(order, a.stop, a.riskPct, shares);
   const auto = autoStopAfter(order, a.stop);
   const targets = order.map((_, i) => (a.stopFollow ? (a.stopTargets[i] ?? auto) : 0));
   const blocks = stopAfterBlocks(a.direction, order, targets);
@@ -162,5 +171,14 @@ export function entryGridTable(a: {
     stopPinned: a.stopFollow && a.stopTargets[i] != null,
     blocked: blocks[i],
   }));
-  return { rows, prices: order, over, blocked: blocks.some(Boolean), riskPcts, stopsAfter: a.stopFollow ? targets : undefined };
+  return {
+    rows,
+    prices: order,
+    over,
+    blocked: blocks.some(Boolean),
+    // Уровень, которого биржа не примет (меньше лота или 5 USDT), — сетка не уходит.
+    tooSmall: qtys.some((q, i) => belowMinOrder(q, order[i], step)),
+    riskPcts,
+    stopsAfter: a.stopFollow ? targets : undefined,
+  };
 }

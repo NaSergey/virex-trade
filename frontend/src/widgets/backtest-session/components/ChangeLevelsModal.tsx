@@ -7,7 +7,7 @@ import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { Field } from '@/shared/ui/Field';
 import { Slider } from '@/shared/ui/Slider';
 import { fmtPctSigned, formatPriceGrouped } from '@/shared/lib/utils/format';
-import type { PositionLike } from '../api/types';
+import type { BacktestTrade, PositionLike } from '../api/types';
 import { checkLevels, levelSliderRange, toScreen } from '../lib/money';
 import { PriceInput } from './PriceInput';
 
@@ -29,11 +29,12 @@ export function ChangeLevelsModal({
   decimals,
   showSymbol = true,
 }: {
-  trade: PositionLike;
+  trade: PositionLike & Pick<BacktestTrade, 'trailDist'>;
   scale: number;
   /** Текущая экранная цена — источник для диапазонов и процентов. */
   screenPrice: number;
-  onApply: (stop: number, take: number | null) => void;
+  /** `trail` — галочка подводящего стопа: включён ли он после применения. */
+  onApply: (stop: number, take: number | null, trail: boolean) => void;
   onClose: () => void;
   isPending: boolean;
   error: unknown;
@@ -48,6 +49,8 @@ export function ChangeLevelsModal({
   // стоп, и окно не даст применить его, пока человек не поставит свой.
   const [stop, setStop] = useState(() => (trade.stopLoss > 0 ? toScreen(trade.stopLoss, scale) : screenPrice));
   const [take, setTake] = useState<number | null>(() => (trade.takeProfit != null ? toScreen(trade.takeProfit, scale) : null));
+  // Подводящий стоп: включают — от цены сейчас до стопа в окне (`trailDistOf`).
+  const [trail, setTrail] = useState(trade.trailDist != null);
   const takeRange = levelSliderRange('take', screenPrice, trade.direction);
   const stopRange = levelSliderRange('stop', screenPrice, trade.direction);
   const stopPct = ((stop - screenPrice) / screenPrice) * 100;
@@ -84,6 +87,10 @@ export function ChangeLevelsModal({
               </>
             )}
           </Field>
+          <label className="cg-follow trail-row" title={t('trailHint')}>
+            <input type="checkbox" checked={trail} onChange={(e) => setTrail(e.target.checked)} />
+            <span>{t('trailStop')}</span>
+          </label>
           <Field
             label={
               <span className="fld-head">
@@ -112,7 +119,7 @@ export function ChangeLevelsModal({
         <DialogActions
           confirmLabel={t('apply')}
           confirmDisabled={isPending || err != null}
-          onConfirm={() => onApply(stop, take)}
+          onConfirm={() => onApply(stop, take, trail)}
           onCancel={close}
         />
       </DialogContent>

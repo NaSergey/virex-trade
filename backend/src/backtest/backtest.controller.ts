@@ -17,6 +17,7 @@ import {
   SetBacktestTagsDto,
   SetLeverageDto,
   StartBotDto,
+  TrailTradeDto,
 } from './dto/backtest.dto';
 
 @UseGuards(JwtAuthGuard)
@@ -76,6 +77,11 @@ export class BacktestController {
   @Patch('trades/:id')
   modify(@CurrentUser('userId') userId: string, @Param('id') id: string, @Body() dto: ModifyTradeDto) {
     return this.backtest.modifyTrade(userId, id, dto);
+  }
+
+  @Post('trades/:id/trail')
+  trail(@CurrentUser('userId') userId: string, @Param('id') id: string, @Body() dto: TrailTradeDto) {
+    return this.backtest.trailTrade(userId, id, dto.stopLoss, dto.dist);
   }
 
   @Post('trades/:id/add')

@@ -77,6 +77,11 @@ export interface BacktestTrade {
   closedQty: number;
   /** Стоп за тейками — ставит сетка фиксации; двигает стоп сервер. */
   stopFollow: boolean;
+  /**
+   * Подводящий стоп: расстояние от цены до стопа, в цене; null — выключен. Стоп идёт
+   * за ценой до безубытка (`trailStop`, спека 2026-11-11-trailing-stop-design.md).
+   */
+  trailDist: number | null;
   exitTime: string | null;
   exitPrice: number | null;
   exitReason: ExitReason | null;
@@ -146,6 +151,8 @@ export interface BacktestEntryOrder {
    * двигается, но объём считается от стопа ордера; null — у ордера цели нет.
    */
   stopAfter?: number | null;
+  /** Подводящий стоп у позиции, которую ордер откроет. */
+  trail?: boolean;
 }
 
 /**
@@ -158,6 +165,8 @@ export interface LiveSymbol {
   decimals: number;
   /** Есть — монета есть и в истории бектеста, минутки с этого момента (мс). */
   historySince?: number;
+  /** Шаг лота перпа Bybit — он же минимальный ордер; нет — объём не округляется. */
+  qtyStep?: number;
 }
 
 /** Монета тренажёра, история без выбранной монеты и начало графика эфира. */

@@ -16,17 +16,22 @@ import { START_MS } from './timeframes';
  * момента: у BTC — начало хранилища, у остальных — первая минутка Binance spot
  * (`klines?startTime=0`, сверено 2026-10-23). Свечи не-BTC история берёт у
  * Binance тем же прокси, что и эфир, — не хранит.
+ *
+ * `qtyStep` — шаг лота перпа Bybit (`instruments-info`, lotSizeFilter.qtyStep,
+ * сверено 2026-11-10); у всех монет списка он же и минимальный ордер. Объём
+ * сессии бектеста округляется вниз до него — ордер, которого биржа не примет
+ * (0.00347 BTC), сессия не ставит.
  */
 export const LIVE_SYMBOLS = [
-  { symbol: 'BTCUSDT', base: 'BTC', decimals: 2, historySince: START_MS },
-  { symbol: 'ETHUSDT', base: 'ETH', decimals: 2, historySince: Date.UTC(2017, 7, 17, 4) },
-  { symbol: 'SOLUSDT', base: 'SOL', decimals: 2, historySince: Date.UTC(2020, 7, 11, 6) },
-  { symbol: 'BNBUSDT', base: 'BNB', decimals: 2, historySince: Date.UTC(2017, 10, 6, 3, 54) },
-  { symbol: 'XRPUSDT', base: 'XRP', decimals: 4, historySince: Date.UTC(2018, 4, 4, 8, 11) },
-  { symbol: 'DOGEUSDT', base: 'DOGE', decimals: 5 },
-  { symbol: 'ADAUSDT', base: 'ADA', decimals: 4 },
-  { symbol: 'AVAXUSDT', base: 'AVAX', decimals: 3 },
-  { symbol: 'LINKUSDT', base: 'LINK', decimals: 3 },
+  { symbol: 'BTCUSDT', base: 'BTC', decimals: 2, qtyStep: 0.001, historySince: START_MS },
+  { symbol: 'ETHUSDT', base: 'ETH', decimals: 2, qtyStep: 0.01, historySince: Date.UTC(2017, 7, 17, 4) },
+  { symbol: 'SOLUSDT', base: 'SOL', decimals: 2, qtyStep: 0.1, historySince: Date.UTC(2020, 7, 11, 6) },
+  { symbol: 'BNBUSDT', base: 'BNB', decimals: 2, qtyStep: 0.01, historySince: Date.UTC(2017, 10, 6, 3, 54) },
+  { symbol: 'XRPUSDT', base: 'XRP', decimals: 4, qtyStep: 0.1, historySince: Date.UTC(2018, 4, 4, 8, 11) },
+  { symbol: 'DOGEUSDT', base: 'DOGE', decimals: 5, qtyStep: 1 },
+  { symbol: 'ADAUSDT', base: 'ADA', decimals: 4, qtyStep: 1 },
+  { symbol: 'AVAXUSDT', base: 'AVAX', decimals: 3, qtyStep: 0.1 },
+  { symbol: 'LINKUSDT', base: 'LINK', decimals: 3, qtyStep: 0.1 },
 ] as const;
 
 export type LiveSymbol = (typeof LIVE_SYMBOLS)[number];
@@ -50,3 +55,6 @@ export const historySince = (symbol: string): number | null => {
 
 /** Монеты истории бектеста — в порядке списка. */
 export const HISTORY_SYMBOL_IDS: string[] = LIVE_SYMBOL_IDS.filter((s) => historySince(s) != null);
+
+/** Шаг лота монеты; 0 — монеты нет в списке, объём не округляется. */
+export const qtyStepOf = (symbol: string): number => LIVE_SYMBOLS.find((x) => x.symbol === symbol)?.qtyStep ?? 0;

@@ -12,15 +12,18 @@ import { XP_SOURCES } from '../battlepass/xp-registry';
 import { PrismaService } from '../prisma/prisma.service';
 import { LiveMarketService } from '../market-data/live-market.service';
 import { MarketDataService } from '../market-data/market-data.service';
-import { DEFAULT_SYMBOL, HISTORY_SYMBOL_IDS, historySince } from '../market-data/symbols';
+import { DEFAULT_SYMBOL, HISTORY_SYMBOL_IDS, historySince, qtyStepOf } from '../market-data/symbols';
 import { TIMEFRAMES, isValidTimeframe } from '../market-data/timeframes';
 import { botGridError, botLevelOf, botPrices, botQty, botStep, levelRiskPct, splitAtPrice } from './bot-grid';
 import { SYNTH_VERSION } from './synthetic/params';
 import { SyntheticMarketService } from './synthetic/synthetic-market.service';
 import {
   MINUTE_MS,
+  MIN_ORDER_USDT,
   averageIn,
+  belowMinOrder,
   closedNumbers,
+  floorToLot,
   maxDrawdownPct,
   pickPriceScale,
   pickStart,
@@ -67,12 +70,16 @@ export interface OpenTradeInput {
   riskPct: number;
   leverage: number;
   entryOrderId?: string;
+  /** Подводящий стоп: открыв позицию, вход включит его на расстоянии |вход − стоп|. */
+  trail?: boolean;
 }
 
 export interface ModifyTradeInput {
   stopLoss?: number;
   /** null — убрать тейк. */
   takeProfit?: number | null;
+  /** Подводящий стоп: расстояние в цене, null — выключить, нет поля — не трогать. */
+  trailDist?: number | null;
 }
 
 export interface AddToTradeInput {
@@ -95,6 +102,8 @@ export interface CreateEntryOrdersInput {
   riskPcts?: number[];
   /** Цель стопа позиции после исполнения уровня; 0 или нет элемента — стоп не двигается. */
   stopsAfter?: number[];
+  /** Подводящий стоп у позиции, которую уровень откроет. */
+  trail?: boolean;
 }
 
 /** Запуск грид-бота: сетка, риск и момент запуска (как у входа по рынку). */
@@ -139,6 +148,17 @@ const qtyExceedsRemaining = () =>
   new BadRequestException({ message: 'Объём больше остатка', code: 'BACKTEST_QTY_EXCEEDS_REMAINING' });
 
 /**
+ * Ордер, которого биржа не примет (`belowMinOrder`): объём меньше шага лота
+ * монеты или сумма меньше `MIN_ORDER_USDT`. Отказ, а не округление вверх —
+ * вверх ставит на кон больше выбранного риска (правило биржевого терминала).
+ */
+const qtyTooSmall = (step: number) =>
+  new BadRequestException({
+    message: `Объём меньше минимального ордера биржи: ${step} монеты и ${MIN_ORDER_USDT} USDT`,
+    code: 'BACKTEST_QTY_TOO_SMALL',
+  });
+
+/**
  * Стоп, от которого считается объём исполнившегося ордера на вход, если не от
  * стопа позиции: у покупки бота и у уровня таблицы «Сетки» со «стопом после»
  * (`stopAfter` не null) — свой стоп ордера, от него посчитан объём в таблице.
@@ -153,22 +173,33 @@ const gridInvalid = () =>
 const QTY_EPS = 1e-8;
 
 /**
- * Объёмы уровней сетки фиксации: присланные — как есть, если вместе не больше
- * остатка (совпали с ним — последний забирает остаток деления), иначе отказ;
- * не присланы — равные части, последний забирает остаток деления.
+ * Объёмы уровней сетки фиксации: присланные (вместе не больше остатка, иначе
+ * отказ) или равные части. Каждый — вниз до шага лота, как режет биржа; сетка
+ * на всю позицию — последний забирает остаток округления, и позиция
+ * закрывается целиком, без хвоста. Уровень меньше шага — отказ.
  */
-function gridQtys(remaining: number, n: number, sent?: number[]): number[] {
-  if (!sent) {
-    const part = remaining / n;
-    return Array.from({ length: n }, (_, i) => (i === n - 1 ? remaining - part * (n - 1) : part));
-  }
-  const sum = sent.reduce((a, b) => a + b, 0);
-  if (sum > remaining + QTY_EPS) throw qtyExceedsRemaining();
-  const qtys = [...sent];
-  if (Math.abs(sum - remaining) <= QTY_EPS) qtys[n - 1] = remaining - qtys.slice(0, -1).reduce((a, b) => a + b, 0);
+function gridQtys(remaining: number, n: number, step: number, sent?: number[]): number[] {
+  const raw = sent ?? Array.from({ length: n }, () => remaining / n);
+  const sum = raw.reduce((a, b) => a + b, 0);
+  if (sent && sum > remaining + QTY_EPS) throw qtyExceedsRemaining();
+  const qtys = raw.map((q) => floorToLot(q, step));
+  if (!sent || Math.abs(sum - remaining) <= QTY_EPS) qtys[n - 1] = remaining - qtys.slice(0, -1).reduce((a, b) => a + b, 0);
   // Остаток деления съел последний уровень — лимита на ноль не бывает.
   if (!(qtys[n - 1] > 0)) throw gridInvalid();
+  if (qtys.some((q) => q < step - 1e-12)) throw qtyTooSmall(step);
   return qtys;
+}
+
+/**
+ * Объём закрытия, выбранный человеком (часть позиции), — вниз до шага лота.
+ * Весь остаток — как есть: позицию, открытую до шага лота, закрыть целиком
+ * можно всегда.
+ */
+function closeQtyOf(qty: number, remaining: number, step: number): number {
+  if (Math.abs(qty - remaining) <= QTY_EPS) return qty;
+  const lot = floorToLot(qty, step);
+  if (!(lot > 0) || lot < step - 1e-12) throw qtyTooSmall(step);
+  return lot;
 }
 
 /** Что подтягивать к сделке, чтобы отдать её с тегами и историей входов —
@@ -255,6 +286,7 @@ const HOPELESS_ENTRY = new Set([
   'BACKTEST_MARGIN_EXCEEDS_BALANCE',
   'BACKTEST_STOP_SIDE',
   'BACKTEST_TAKE_SIDE',
+  'BACKTEST_QTY_TOO_SMALL',
 ]);
 
 const isHopelessEntry = (e: unknown) =>
@@ -644,7 +676,8 @@ export class BacktestService {
         tx,
         sessionId,
         symbol,
-        { ...input, botId: order?.botId ?? undefined },
+        // Галочка подводящего — у сработавшего ордера (браузер шлёт только его id).
+        { ...input, botId: order?.botId ?? undefined, trail: order ? order.trail : input.trail },
         sizeStopOf(order),
       );
       if (xpFor && opened) await this.battlePass.award(tx, xpFor, 'trade.open', trade.id, XP_SOURCES['trade.open'].base);
@@ -671,12 +704,14 @@ export class BacktestService {
     const open = await tx.backtestTrade.findFirst({ where: { sessionId, symbol, exitTime: null, direction: input.direction } });
     if (open) return { ...(await this.addCore(tx, open, input, sizeStop)), opened: false };
     const balance = await this.balanceForEntry(tx, sessionId);
-    const { riskUsdt, qty } = positionSize(balance, input.riskPct, input.entryPrice, input.stopLoss);
+    const step = qtyStepOf(symbol);
+    const { riskUsdt, qty } = positionSize(balance, input.riskPct, input.entryPrice, input.stopLoss, step);
     const notional = qty * input.entryPrice;
     const margin = notional / input.leverage;
     if (margin > balance) {
       throw new BadRequestException({ message: 'Маржа больше депозита', code: 'BACKTEST_MARGIN_EXCEEDS_BALANCE' });
     }
+    if (belowMinOrder(qty, input.entryPrice, step)) throw qtyTooSmall(step);
     const trade = await tx.backtestTrade.create({
       data: {
         sessionId,
@@ -686,11 +721,15 @@ export class BacktestService {
         entryPrice: input.entryPrice,
         stopLoss: input.stopLoss,
         takeProfit: input.takeProfit ?? null,
-        riskPct: input.riskPct,
+        // Риск того объёма, что встал после округления до лота, — как у добора.
+        riskPct: (riskUsdt / balance) * 100,
         riskUsdt,
         qty,
         leverage: input.leverage,
         botId: input.botId ?? null,
+        // Подводящий стоп держит расстояние, с которым позиция открылась. Добор его не
+        // меняет (выше: `addCore`), как не меняет стоп и тейк позиции.
+        trailDist: input.trail ? Math.abs(input.entryPrice - input.stopLoss) : null,
         // Первое исполнение — сразу вложенным create: у сделки ещё нет id
         // ни для одного отдельного запроса, а второй запрос тем же id
         // потребовал бы отдельного круга к базе только ради истории входов.
@@ -728,9 +767,12 @@ export class BacktestService {
     const trade = await this.ownedTrade(userId, tradeId);
     if (trade.exitTime) throw tradeClosed();
     if (trade.session.status !== 'active') throw sessionFinished();
-    const data: { stopLoss?: number; takeProfit?: number | null } = {};
+    const data: { stopLoss?: number; takeProfit?: number | null; trailDist?: number | null } = {};
     if (input.stopLoss !== undefined) data.stopLoss = input.stopLoss;
     if (input.takeProfit !== undefined) data.takeProfit = input.takeProfit;
+    // Расстояние считает экран — от цены сейчас до стопа: при включении и при ручном
+    // переносе стопа. Иначе стоп, отпущенный ниже, подводящий тут же вернул бы назад.
+    if (input.trailDist !== undefined) data.trailDist = input.trailDist;
 
     return this.prisma.$transaction(async (tx) => {
       // Тот же замок + защита статуса сессии, что у входа и выхода сделки —
@@ -814,7 +856,14 @@ export class BacktestService {
     if (input.entryTime.getTime() < trade.entryTime.getTime()) throw timeInvalid();
     const balance = await this.balanceForEntry(tx, trade.sessionId);
 
-    const { riskUsdt: addRiskUsdt, qty: addQty } = positionSize(balance, input.riskPct, input.entryPrice, sizeStop ?? trade.stopLoss);
+    const step = qtyStepOf(trade.symbol);
+    const { riskUsdt: addRiskUsdt, qty: addQty } = positionSize(
+      balance,
+      input.riskPct,
+      input.entryPrice,
+      sizeStop ?? trade.stopLoss,
+      step,
+    );
     // `qty` сделки — всё, что в неё когда-либо вошло: закрытия растят `closedQty`,
     // а не уменьшают `qty`. Средняя и маржа — от остатка, как у биржи: после
     // частичного закрытия средняя остатка прежняя, добор усредняет с ним. Иначе
@@ -837,6 +886,7 @@ export class BacktestService {
     if (margin > balance) {
       throw new BadRequestException({ message: 'Маржа добора больше депозита', code: 'BACKTEST_MARGIN_EXCEEDS_BALANCE' });
     }
+    if (belowMinOrder(addQty, input.entryPrice, step)) throw qtyTooSmall(step);
 
     const result = await tx.backtestTrade.updateMany({
       where: { id: tradeId, exitTime: null },
@@ -887,6 +937,14 @@ export class BacktestService {
         throw new BadRequestException({ message: 'Тейк стоит не по ту сторону от входа', code: 'BACKTEST_TAKE_SIDE' });
       }
     }
+    // Объём уровня на нынешний депозит — тот, что покажет таблица панели: ордер,
+    // которого биржа не примет, отклоняется сразу, а не снимается на исполнении.
+    const balance = await this.balanceForEntry(this.prisma, sessionId);
+    const step = qtyStepOf(symbol);
+    for (const [i, price] of input.prices.entries()) {
+      const { qty } = positionSize(balance, input.riskPcts?.[i] ?? input.riskPct, price, input.stopLoss, step);
+      if (belowMinOrder(qty, price, step)) throw qtyTooSmall(step);
+    }
     const entryOrders = await this.prisma.$transaction(
       input.prices.map((price, i) =>
         this.prisma.backtestEntryOrder.create({
@@ -902,6 +960,7 @@ export class BacktestService {
             // 0 — уровень таблицы со «стопом после», но без своей цели: стоп он не
             // двигает, а объём считается от стопа ордера (`sizeStopOf`).
             stopAfter: input.stopsAfter ? input.stopsAfter[i] || 0 : null,
+            trail: input.trail ?? false,
           },
         }),
       ),
@@ -953,6 +1012,7 @@ export class BacktestService {
           leverage: order.leverage,
           botId: order.botId,
           stopAfter: order.stopAfter,
+          trail: order.trail,
         },
       });
       return { entryOrder };
@@ -1019,7 +1079,10 @@ export class BacktestService {
       const prices = botPrices(grid);
       const { market, limit } = splitAtPrice(prices, input.entryPrice);
       const balance = await this.balanceForEntry(tx, sessionId);
-      const qOf = (price: number) => botQty(grid, balance, input.riskPct, botLevelOf(grid, price));
+      // Объём уровня — вниз до шага лота, как его купит лимит бота (`positionSize`).
+      const lot = qtyStepOf(symbol);
+      const qOf = (price: number) => floorToLot(botQty(grid, balance, input.riskPct, botLevelOf(grid, price)), lot);
+      if (prices.some((p) => belowMinOrder(qOf(p), p, lot))) throw qtyTooSmall(lot);
       // Маржа всей сетки, если исполнятся все покупки: иначе бот запустится и
       // упрётся в депозит на первой же глубокой покупке.
       if (prices.reduce((a, p) => a + qOf(p) * p, 0) / input.leverage > balance) {
@@ -1223,8 +1286,9 @@ export class BacktestService {
     if (trade.session.status !== 'active') throw sessionFinished();
     const remaining = trade.qty - trade.closedQty;
     if (input.qty > remaining + QTY_EPS) throw qtyExceedsRemaining();
+    const qty = closeQtyOf(input.qty, remaining, qtyStepOf(trade.symbol));
     const order = await this.prisma.backtestCloseOrder.create({
-      data: { tradeId, price: input.price, qty: input.qty },
+      data: { tradeId, price: input.price, qty },
     });
     return { closeOrder: order };
   }
@@ -1260,7 +1324,7 @@ export class BacktestService {
       const fresh = await tx.backtestTrade.findUnique({ where: { id: tradeId } });
       if (!fresh || fresh.exitTime) throw tradeClosed();
       const remaining = fresh.qty - fresh.closedQty;
-      const qtys = gridQtys(remaining, n, input.qtys);
+      const qtys = gridQtys(remaining, n, qtyStepOf(fresh.symbol), input.qtys);
 
       await tx.backtestCloseOrder.deleteMany({ where: { tradeId } });
       // Сетка фиксации заменяет все лимиты закрытия, продажи бота тоже: позицию
@@ -1320,15 +1384,20 @@ export class BacktestService {
     if (input.exitTime.getTime() <= trade.entryTime.getTime()) throw timeInvalid();
 
     const remaining = trade.qty - trade.closedQty;
-    const qty = input.qty ?? remaining;
-    if (qty > remaining + QTY_EPS) {
+    if ((input.qty ?? remaining) > remaining + QTY_EPS) {
       throw new BadRequestException({ message: 'Объём закрытия больше остатка', code: 'BACKTEST_QTY_EXCEEDS_REMAINING' });
     }
+    // Часть позиции, выбранная человеком, — до шага лота; лимит закрытия несёт свой, уже округлённый.
+    const exit =
+      input.qty != null && !input.closeOrderId
+        ? { ...input, qty: closeQtyOf(input.qty, remaining, qtyStepOf(trade.symbol)) }
+        : input;
+    const qty = exit.qty ?? remaining;
 
     return this.prisma.$transaction(async (tx) => {
       // Объём «закрыть всё» считает applyClose под замком: позицию могли долить
       // между чтением выше и замком (покупка грид-бота в той же минутке).
-      const applied = await this.applyClose(tx, trade, input);
+      const applied = await this.applyClose(tx, trade, exit);
       if (!applied) {
         // Гонка или потерянный-и-повторённый ответ — разбираемся по последнему exit.
         const raced = await tx.backtestTrade.findUnique({ where: { id: tradeId }, include: TRADE_INCLUDE });
@@ -1338,9 +1407,9 @@ export class BacktestService {
         const same =
           last != null &&
           last.qty === qty &&
-          last.price === input.exitPrice &&
-          last.time.getTime() === input.exitTime.getTime() &&
-          last.reason === input.reason;
+          last.price === exit.exitPrice &&
+          last.time.getTime() === exit.exitTime.getTime() &&
+          last.reason === exit.reason;
         if (!same) throw tradeClosed();
         const fresh = await tx.backtestSession.findUnique({ where: { id: trade.sessionId }, select: { balance: true } });
         return { trade: tradeView(raced), balance: fresh!.balance };
@@ -1507,6 +1576,58 @@ export class BacktestService {
   }
 
   /**
+   * Подводящий стоп от прокрутки браузера: стоп, подтянутый по минуткам истории
+   * (`trailStop` во `fills.ts` фронта), сохраняется — для графика, таблиц и
+   * перезагрузки. Цену выхода по нему браузер присылает сам, как и у обычного стопа.
+   * `dist` — расстояние, с которым браузер его посчитал (см. `applyTrail`).
+   *
+   * Закрытая сделка и сделка без подводящего — тихий ответ: запрос мог разминуться с
+   * закрытием или правкой. В эфире стоп ведёт движок (`systemTrail`).
+   */
+  async trailTrade(userId: string, tradeId: string, stopLoss: number, dist?: number) {
+    const trade = await this.ownedTrade(userId, tradeId);
+    if (isLive(trade.session)) {
+      throw new ConflictException({ message: 'В эфире стоп ведёт сервер', code: 'BACKTEST_TRAIL_LIVE' });
+    }
+    if (!trade.exitTime) await this.applyTrail(trade.id, trade.sessionId, stopLoss, dist);
+    const fresh = await this.prisma.backtestTrade.findUnique({ where: { id: tradeId }, include: TRADE_INCLUDE });
+    return { trade: fresh ? tradeView(fresh) : null };
+  }
+
+  /** Подводящий стоп движком эфира — по экстремуму отрезка. `false` — стоп не сдвинулся. */
+  async systemTrail(tradeId: string, stopLoss: number, dist?: number): Promise<boolean> {
+    const trade = await this.prisma.backtestTrade.findUnique({ where: { id: tradeId }, select: { sessionId: true, exitTime: true } });
+    if (!trade || trade.exitTime) return false;
+    return this.applyTrail(tradeId, trade.sessionId, stopLoss, dist);
+  }
+
+  /**
+   * Стоп с подводящим (`trailDist`) — на новый уровень: только теснее и не дальше
+   * безубытка (средний вход). Под замком сессии и по свежей строке: стоп двигают и
+   * другие правила (`followStop`, `tightenStop`, правка) — тоже под этим замком, — а
+   * добор меняет средний вход. Без замка стоп, подтянутый ими между чтением и
+   * записью, ослаб бы, а предел остался бы от прежнего входа.
+   *
+   * `dist` — расстояние, с которым стоп посчитан: у сделки оно другое — стоп за это
+   * время перенесли руками (`trailDistOf`), и подтяжка от старого расстояния вернула
+   * бы его назад. `false` — стоп не сдвинулся.
+   */
+  protected async applyTrail(tradeId: string, sessionId: string, stopLoss: number, dist?: number): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const session = await tx.backtestSession.findUnique({ where: { id: sessionId }, select: { cursorTime: true } });
+      if (!session || (await this.bumpCursor(tx, sessionId, session.cursorTime)) === 0) return false;
+      const cur = await tx.backtestTrade.findUnique({ where: { id: tradeId } });
+      if (!cur || cur.exitTime || cur.trailDist == null) return false;
+      if (dist !== undefined && Math.abs(cur.trailDist - dist) > 1e-9 * Math.max(1, Math.abs(dist))) return false;
+      const long = cur.direction === 'long';
+      const target = long ? Math.min(stopLoss, cur.entryPrice) : Math.max(stopLoss, cur.entryPrice);
+      if (long ? !(target > cur.stopLoss) : !(target < cur.stopLoss)) return false;
+      await tx.backtestTrade.update({ where: { id: tradeId }, data: { stopLoss: target } });
+      return true;
+    });
+  }
+
+  /**
    * Закрытие движком турнира: стоп, тейк или лимитка, сработавшие по живым
    * минуткам. Владельца в запросе нет — исполняет сервер, не человек.
    *
@@ -1553,6 +1674,7 @@ export class BacktestService {
           riskPct: order.riskPct,
           leverage: order.leverage,
           entryOrderId: order.id,
+          trail: order.trail,
         },
         true,
       );

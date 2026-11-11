@@ -42,6 +42,7 @@ function makeEngine(opts: { trades?: any[]; orders?: any[]; minutes?: any[] | ((
   const backtest = {
     systemClose: jest.fn(async () => true),
     systemEnter: jest.fn(async () => true),
+    systemTrail: jest.fn(async () => true),
   };
   const engine = new LiveEngineService(prisma as never, live as never, backtest as never);
   return { engine, prisma, live, backtest, state };
@@ -216,5 +217,49 @@ describe('LiveEngineService — монеты', () => {
       ['BTCUSDT', T + 40_000, T + 50_000],
       ['ETHUSDT', T + 40_000, T + 50_000],
     ]);
+  });
+});
+
+describe('LiveEngineService — подводящий стоп', () => {
+  // Лонг от 100 со стопом 98 и расстоянием 2; вошли минутой раньше отрезка.
+  const TRAIL = {
+    id: 't1',
+    direction: 'long',
+    entryTime: new Date(T - MIN),
+    entryPrice: 100,
+    leverage: 1,
+    stopLoss: 98,
+    takeProfit: null,
+    trailDist: 2,
+    closeOrders: [],
+  };
+
+  it('выхода нет — стоп подтягивается по максимуму отрезка', async () => {
+    const h = makeEngine({ trades: [TRAIL], minutes: [bar(T, 100, 101, 99, 100.5)] });
+
+    await h.engine.run('s:s1', new Date(T), T + 2 * MIN, SCOPE);
+
+    expect(h.backtest.systemClose).not.toHaveBeenCalled();
+    expect(h.backtest.systemTrail).toHaveBeenCalledWith('t1', 99, 2);
+  });
+
+  it('отрезок закрыл позицию — подтягивать нечего', async () => {
+    const h = makeEngine({ trades: [TRAIL], minutes: [bar(T, 100, 103, 97, 99)] });
+
+    await h.engine.run('s:s1', new Date(T), T + 2 * MIN, SCOPE);
+
+    // Стоп пришёл на отрезок 98 и задет — выход по нему, а не по стопу, подтянутому максимумом 103.
+    expect(h.backtest.systemClose).toHaveBeenCalledWith('t1', expect.objectContaining({ reason: 'stop', exitPrice: 98 }));
+    expect(h.backtest.systemTrail).not.toHaveBeenCalled();
+  });
+
+  it('без подводящего и без сдвига — не зовётся', async () => {
+    const off = makeEngine({ trades: [{ ...TRAIL, trailDist: null }], minutes: [bar(T, 100, 101, 99, 100.5)] });
+    await off.engine.run('s:s1', new Date(T), T + 2 * MIN, SCOPE);
+    expect(off.backtest.systemTrail).not.toHaveBeenCalled();
+
+    const still = makeEngine({ trades: [TRAIL], minutes: [bar(T, 99.5, 99.8, 99, 99.5)] });
+    await still.engine.run('s:s1', new Date(T), T + 2 * MIN, SCOPE);
+    expect(still.backtest.systemTrail).not.toHaveBeenCalled();
   });
 });

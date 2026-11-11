@@ -1284,6 +1284,10 @@
      та же, что у соседей, с квадратом слева. */
   .cg-follow { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; text-transform: inherit; letter-spacing: inherit; }
   .cg-follow input { accent-color: var(--ink); margin: 0; flex: none; }
+  /* Галочка «Подводящий» в заголовке поля стопа: тише подписи поля и не спорит
+     с процентом стопа справа. В окне «Изменить уровни» — своей строкой под стопом. */
+  .trail-chk { font-size: var(--t-xs); color: var(--ink-2); }
+  .trail-row { margin-top: var(--s1); font-size: var(--t-s); }
   /* Таблица уровней в колонке 360px: общая мерка .ledger (760px) уводила её в
      горизонтальную прокрутку с пустыми промежутками между колонками. Строки
      плотнее, чем в журнале, — уровней до десяти, и все должны быть видны. */
@@ -1952,6 +1956,37 @@
     border-bottom-color: var(--ink);
     border-bottom-style: solid;
     color: var(--ink);
+  }
+  /* Число, которое копируется нажатием (`CopyText`): курсор копирования и черта
+     под курсором — не пунктир, он занят ценой с графиком и монетой. Отклик —
+     знак слева от числа, вне потока: правый край колонки не сдвигается. */
+  .copy-val {
+    position: relative;
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    padding: 0 0 1px;
+    border-bottom: 1px solid transparent;
+    cursor: copy;
+    transition: border-color 150ms ease;
+  }
+  .copy-val:hover,
+  .copy-val:focus-visible {
+    border-bottom-color: var(--ink-3);
+  }
+  .copy-done::before,
+  .copy-failed::before {
+    position: absolute;
+    right: 100%;
+    margin-right: 6px;
+  }
+  .copy-done::before {
+    content: '✓';
+    color: var(--ink);
+  }
+  .copy-failed::before {
+    content: '✕';
+    color: var(--ink-3);
   }
   /* Цена, за которой стоит график: вход и выход в журнале открывают окно со
      свечами вокруг сделки. Пунктир, а не цвет: цветом в этом продукте

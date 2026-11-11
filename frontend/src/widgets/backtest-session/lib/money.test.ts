@@ -3,6 +3,8 @@ import {
   applyEntryChange,
   applyStopChange,
   averageIn,
+  closePart,
+  floorToLot,
   checkEntrySide,
   checkLevels,
   closeImpact,
@@ -19,6 +21,8 @@ import {
   liquidationPrice,
   openPnl,
   parsePriceInput,
+  pendingEntryQty,
+  trailDistOf,
   previewSize,
   roundLevel,
   riskAmount,
@@ -40,7 +44,20 @@ describe('previewSize', () => {
       notional: 5000,
       margin: 500,
       liqPrice: 90,
+      tooSmall: false,
     });
+  });
+
+  it('с шагом лота — объём вниз до шага, риск — встающего объёма (как сервер)', () => {
+    // 100 / 2880 = 0.0347… BTC → 0.034, риск 0.034 · 2880 = 97.92.
+    const p = previewSize(10_000, 1, 60_000, 57_120, 10, 'long', 0.001)!;
+    expect(p.qty).toBe(0.034);
+    expect(p.riskUsdt).toBeCloseTo(97.92, 9);
+    expect(p.tooSmall).toBe(false);
+  });
+
+  it('меньше шага лота — tooSmall: сервер такой ордер отклонит', () => {
+    expect(previewSize(10_000, 1, 300_000, 100_000, 10, 'long', 0.001)!.tooSmall).toBe(true);
   });
 
   it('стоп на цене входа — размера нет', () => {
@@ -525,4 +542,72 @@ describe('roundLevel — цена отпущенного уровня', () => {
   it('без знаков — шесть значащих, как у ползунков', () => {
     expect(roundLevel(43289.95283968977)).toBe(43290);
   });
+});
+
+describe('floorToLot', () => {
+  it('вниз до шага лота, без хвоста двоичной дроби', () => {
+    expect(floorToLot(0.00347, 0.001)).toBe(0.003);
+    expect(floorToLot(12.98, 0.1)).toBe(12.9);
+    expect(floorToLot(0.0029999999, 0.001)).toBe(0.003);
+    expect(floorToLot(0.00347, 0)).toBe(0.00347);
+  });
+});
+
+describe('closePart', () => {
+  it('часть позиции — вниз до шага лота, весь остаток — как есть', () => {
+    expect(closePart(0.0347, 50, 0.001)).toBe(0.017);
+    expect(closePart(0.0347, 100, 0.001)).toBe(0.0347);
+  });
+});
+
+describe('pendingEntryQty', () => {
+  const order = {
+    direction: 'long' as const,
+    price: 100,
+    riskPct: 1,
+    stopLoss: 90,
+    leverage: 10,
+    botId: null,
+    stopAfter: null,
+  };
+
+  it('без позиции — от стопа самого ордера', () => {
+    // 1 % от 1000 = 10 USDT риска на 10 пунктов до стопа — 1 монета.
+    expect(pendingEntryQty(order, null, 1000, 0)).toBeCloseTo(1);
+  });
+
+  it('лимит до стопа открытой позиции — от её стопа: исполнившись, он её дольёт', () => {
+    expect(pendingEntryQty(order, 95, 1000, 0)).toBeCloseTo(2);
+  });
+
+  it('лимит за стопом позиции — от своего: позицию раньше закроет стоп', () => {
+    expect(pendingEntryQty({ ...order, price: 94 }, 95, 1000, 0)).toBeCloseTo(10 / 4);
+  });
+
+  it('уровень таблицы «Сетки» и покупка бота — всегда от своего стопа', () => {
+    expect(pendingEntryQty({ ...order, stopAfter: 0 }, 95, 1000, 0)).toBeCloseTo(1);
+    expect(pendingEntryQty({ ...order, botId: 'b' }, 95, 1000, 0)).toBeCloseTo(1);
+  });
+
+  it('объём, зафиксированный биржей, — как есть', () => {
+    expect(pendingEntryQty({ ...order, qty: 0.37 }, 95, 1000, 0)).toBe(0.37);
+  });
+
+  it('шагом лота — вниз', () => {
+    expect(pendingEntryQty({ ...order, stopLoss: 97 }, null, 1000, 0.1)).toBeCloseTo(3.3);
+  });
+});
+
+describe('trailDistOf', () => {
+  const trade = { stopLoss: 98, trailDist: null as number | null };
+
+  it('включают — от цены сейчас до стопа', () => expect(trailDistOf(trade, 101, 98, true)).toBe(3));
+  it('выключают — null; выключенный и не включают — не трогать', () => {
+    expect(trailDistOf({ ...trade, trailDist: 2 }, 101, 98, false)).toBeNull();
+    expect(trailDistOf(trade, 101, 97)).toBeUndefined();
+  });
+  it('включён, стоп перенесли руками — пересчёт от цены до нового стопа', () =>
+    expect(trailDistOf({ ...trade, trailDist: 2 }, 101, 96)).toBe(5));
+  it('включён, стоп на месте (правили тейк) — не трогать', () =>
+    expect(trailDistOf({ ...trade, trailDist: 2 }, 101, 98.00000000001)).toBeUndefined());
 });

@@ -41,6 +41,8 @@ export interface TerminalPosition {
   takeProfit: number | null;
   /** Есть активный план стопа за тейками — ставит `TerminalService.state`, у строки биржи его нет. */
   follow?: boolean;
+  /** Расстояние подводящего стопа (план `terminal_trail_stops`), null — выключен; ставит `TerminalService.state`. */
+  trail?: number | null;
 }
 
 export interface TerminalOrder {

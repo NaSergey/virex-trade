@@ -22,6 +22,7 @@ import {
   stopRequired,
   stopSide,
   takeSide,
+  trailNotSaved,
 } from './terminal-errors';
 import {
   closeSide,
@@ -45,6 +46,7 @@ import { StateCache } from './state-cache';
 import { balanceOf, keyHash, project, usable, walletOf, type StreamState } from './stream/stream-state';
 import { EntryFollowStore } from './stream/entry-follow.store';
 import { StopFollowStore } from './stream/stop-follow.store';
+import { TrailStopStore } from './stream/trail-stop.store';
 import { TerminalStreamStore } from './stream/terminal-stream.store';
 
 /** Почему терминала нет — фронт переводит причину по ключу. */
@@ -135,6 +137,7 @@ export class TerminalService {
     private readonly streams: TerminalStreamStore,
     private readonly follows: StopFollowStore,
     private readonly entryFollows: EntryFollowStore,
+    private readonly trails: TrailStopStore,
     private readonly battlePass: BattlePassService,
   ) {}
 
@@ -188,14 +191,27 @@ export class TerminalService {
     return this.withFollow(userId, base);
   }
 
-  /** Флажок «стоп за тейками» у позиций с активным планом — по нему окно сетки открывается с ним. */
+  /**
+   * Флажок «стоп за тейками» у позиций с активным планом — по нему окно сетки
+   * открывается с ним; расстояние подводящего стопа (`trail`) — по нему галочка окна
+   * уровней и подпись линии стопа.
+   */
   private async withFollow(userId: string, state: TerminalState): Promise<TerminalState> {
     if (state.positions.length === 0) return state;
-    const keys = await this.follows.activeKeys(userId).catch(() => null);
-    if (!keys) return state;
+    const [keys, trails] = await Promise.all([
+      this.follows.activeKeys(userId).catch(() => null),
+      this.trails.activeDistances(userId).catch(() => null),
+    ]);
     return {
       ...state,
-      positions: state.positions.map((p) => ({ ...p, follow: keys.has(`${p.symbol}:${p.direction}`) })),
+      positions: state.positions.map((p) => {
+        const key = `${p.symbol}:${p.direction}`;
+        return {
+          ...p,
+          ...(keys ? { follow: keys.has(key) } : {}),
+          ...(trails ? { trail: trails.get(key) ?? null } : {}),
+        };
+      }),
     };
   }
 
@@ -304,13 +320,15 @@ export class TerminalService {
       } catch (e) {
         if (placed.length === 0) throw e;
         this.logger.warn(`user ${userId}: grid ${dto.symbol} stopped at ${placed.length}/${plan.length}`);
-        // Что встало, то и ведётся: цели записываются и у неполной сетки.
+        // Что встало, то и ведётся: цели и подводящий записываются и у неполной сетки.
         await this.recordEntryFollow(userId, dto, placed).catch(() => undefined);
+        await this.recordTrail(userId, dto, open.some((x) => x.direction === dto.direction), stop, plan, placed).catch(() => undefined);
         throw gridPartial(placed.length, plan.length, reasonOf(e));
       }
     }
 
     await this.recordEntryFollow(userId, dto, placed);
+    await this.recordTrail(userId, dto, open.some((x) => x.direction === dto.direction), stop, plan, placed);
     this.logger.log(`user ${userId}: ${dto.kind} ${dto.direction} ${dto.symbol} × ${placed.length}`);
     // Опыт — за открытие позиции: рыночный ордер, когда в эту сторону позиции
     // не было. Добор в открытую — не открытие; лимит откроет её без человека.
@@ -338,6 +356,44 @@ export class TerminalService {
     } catch (e) {
       this.logger.error(`user ${userId}: цели стопа после исполнения не записаны — ${(e as Error).message}`);
       throw entryFollowNotSaved();
+    }
+  }
+
+  /**
+   * Подводящий стоп позиции, которую откроет этот ордер (спека
+   * 2026-11-11-trailing-stop-design.md). Позиции этой стороны нет: галочка заводит
+   * план с расстоянием от цены входа до стопа — у сетки от ближнего к цене уровня
+   * (у лонга верхнего, у шорта нижнего), он позицию и откроет; без галочки снимается
+   * план, ждавший позицию, — открывающий ордер решает. Позиция есть — ордер её
+   * доливает, и её подводящий не меняется (как стоп и тейк). Не записался — отказ:
+   * ордер уже на бирже, а стоп сам не поедет.
+   */
+  private async recordTrail(
+    userId: string,
+    dto: PlaceOrderDto,
+    hasPosition: boolean,
+    stop: number,
+    plan: { entry: number }[],
+    placed: { orderId: string }[],
+  ) {
+    if (hasPosition || placed.length === 0) return;
+    try {
+      if (!dto.trail) {
+        await this.trails.dropUnseen(userId, dto.symbol, dto.direction);
+        return;
+      }
+      const entries = plan.slice(0, placed.length).map((p) => p.entry);
+      const first = dto.direction === 'long' ? Math.max(...entries) : Math.min(...entries);
+      await this.trails.put(userId, {
+        symbol: dto.symbol,
+        direction: dto.direction,
+        distance: Math.abs(first - stop),
+        orderIds: placed.map((o) => o.orderId),
+        seen: false,
+      });
+    } catch (e) {
+      this.logger.error(`user ${userId}: подводящий стоп не записан — ${(e as Error).message}`);
+      if (dto.trail) throw trailNotSaved();
     }
   }
 
@@ -387,6 +443,25 @@ export class TerminalService {
     if (dto.stopLoss != null) body.stopLoss = roundToTick(dto.stopLoss, inst.tickSize);
     await this.bybit.privatePost(creds, '/position/trading-stop', body, [LEVELS_NOT_MODIFIED]);
     this.logger.log(`user ${userId}: levels ${dto.direction} ${dto.symbol}`);
+    // Подводящий: включили или перенесли стоп руками — расстояние от цены до стопа
+    // считает экран (`trailDistOf`); null — выключили; нет поля — не трогать.
+    if (dto.trailDist !== undefined) {
+      try {
+        if (dto.trailDist == null) await this.trails.remove(userId, dto.symbol, dto.direction);
+        else {
+          await this.trails.put(userId, {
+            symbol: dto.symbol,
+            direction: dto.direction,
+            distance: dto.trailDist,
+            orderIds: [],
+            seen: true,
+          });
+        }
+      } catch (e) {
+        this.logger.error(`user ${userId}: подводящий стоп не записан — ${(e as Error).message}`);
+        throw trailNotSaved();
+      }
+    }
     return { success: true };
   }
 

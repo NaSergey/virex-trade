@@ -7,6 +7,7 @@ import {
   createEntryOrders,
   emptyDemo,
   loadDemo,
+  modifyTrade,
   moveEntryOrder,
   openTrade,
   tick,
@@ -209,5 +210,45 @@ describe('demoAccount: снимок и хранилище', () => {
     expect(loadDemo({ getItem: () => JSON.stringify({ v: 2 }) })).toBeNull();
     const s = emptyDemo(T0);
     expect(loadDemo({ getItem: () => JSON.stringify(s) })).toEqual(s);
+  });
+});
+
+describe('demoAccount: подводящий стоп', () => {
+  it('рынок с галочкой — расстояние от входа до стопа; без неё — выключен', () => {
+    expect(long(emptyDemo(T0), { trail: true }).trades[0].trailDist).toBe(5);
+    expect(long(emptyDemo(T0)).trades[0].trailDist).toBeNull();
+  });
+
+  it('лимит с галочкой открыл позицию — от его цены; долил открытую — её подводящий прежний', () => {
+    const order = { symbol: 'BTCUSDT', direction: 'long' as const, stopLoss: 90, riskPct: 1, leverage: 10, prices: [95], trail: true };
+    const opened = tick(createEntryOrders(emptyDemo(T0), order, T0), 'BTCUSDT', 94.5, T0 + 60_000);
+    expect(opened.trades[0].trailDist).toBe(5);
+
+    const added = tick(createEntryOrders(long(emptyDemo(T0), { stopLoss: 92 }), order, T0), 'BTCUSDT', 94.5, T0 + 60_000);
+    expect(added.trades).toHaveLength(1);
+    expect(added.trades[0].trailDist).toBeNull();
+  });
+
+  it('цена опроса подтягивает стоп после проверки выхода — только вверх и до безубытка', () => {
+    let s = long(emptyDemo(T0), { trail: true });
+    s = tick(s, 'BTCUSDT', 102, T0 + 60_000);
+    expect(s.trades[0].stopLoss).toBe(97);
+    s = tick(s, 'BTCUSDT', 101, T0 + 120_000);
+    expect(s.trades[0].stopLoss).toBe(97);
+    s = tick(s, 'BTCUSDT', 110, T0 + 180_000);
+    expect(s.trades[0].stopLoss).toBe(100);
+    s = tick(s, 'BTCUSDT', 99.5, T0 + 240_000);
+    expect(s.trades[0].exitReason).toBe('stop');
+  });
+
+  it('правка уровней ставит и снимает подводящий; без поля — не трогает', () => {
+    let s = long(emptyDemo(T0));
+    const id = s.trades[0].id;
+    s = modifyTrade(s, { tradeId: id, stopLoss: 96, trailDist: 4 });
+    expect(s.trades[0].trailDist).toBe(4);
+    s = modifyTrade(s, { tradeId: id, takeProfit: 120 });
+    expect(s.trades[0].trailDist).toBe(4);
+    s = modifyTrade(s, { tradeId: id, trailDist: null });
+    expect(s.trades[0].trailDist).toBeNull();
   });
 });

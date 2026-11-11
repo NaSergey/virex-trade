@@ -55,6 +55,8 @@ export function CloseGridPanel({
   isPending,
   error,
   decimals,
+  qtyStep = 0,
+  minOrderHint,
 }: {
   trade: BacktestTrade;
   draft: CloseGridDraft;
@@ -69,6 +71,10 @@ export function CloseGridPanel({
   isPending: boolean;
   error: unknown;
   decimals?: number;
+  /** Шаг лота монеты сделки: объёмы уровней — вниз до него, как поставит биржа. */
+  qtyStep?: number;
+  /** Текст «меньше минимального ордера биржи». */
+  minOrderHint?: string;
 }) {
   const t = useTranslations('backtest');
   const tc = useTranslations('common');
@@ -79,10 +85,11 @@ export function CloseGridPanel({
   const anchor = screenPrice != null ? closeGridAnchor(trade.direction, entry, screenPrice) : entry;
 
   const range = levelSliderRange('take', anchor, trade.direction);
-  const { screenPrices, prices, split, plan } = closeGridFromDraft(trade, draft, scale);
+  const { screenPrices, prices, split, plan } = closeGridFromDraft(trade, draft, scale, qtyStep);
   const remaining = trade.qty - trade.closedQty;
   const err = checkCloseGridSide(trade.direction, screenPrices, anchor);
-  const emptyLevel = !split.over && split.qtys.some((q) => !(q > 0));
+  const tooSmall = !split.over && split.tooSmall;
+  const emptyLevel = !split.over && !tooSmall && split.qtys.some((q) => !(q > 0));
   const price = (p: number) => formatPriceGrouped(toScreen(p, scale), decimals);
   /** Отступ экранной цены от входа, в процентах: тейк меряют от входа, а не от графика. */
   const pct = (screen: number) => fmtPctSigned(((screen - entry) / entry) * 100);
@@ -224,11 +231,12 @@ export function CloseGridPanel({
         {err && <p className="neg">{t(`closeGridSide.${trade.direction}`)}</p>}
         {split.over && <p className="neg">{t('closeGridPinnedOver')}</p>}
         {emptyLevel && <p className="neg">{t('closeGridEmptyLevel')}</p>}
+        {tooSmall && minOrderHint && <p className="neg">{minOrderHint}</p>}
         <ErrorNote error={error} fallback={t('actionFailed')} />
         <div className="order-actions">
           <Button
             variant="solid"
-            disabled={isPending || err != null || split.over || emptyLevel || !(remaining > 0)}
+            disabled={isPending || err != null || split.over || emptyLevel || tooSmall || !(remaining > 0)}
             onClick={() =>
               onSubmit({
                 prices,

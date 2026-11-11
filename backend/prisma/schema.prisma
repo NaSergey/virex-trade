@@ -118,6 +118,7 @@ model User {
   /// Планы стопа за тейками на бирже (`terminal_stop_follows`).
   terminalStopFollows  TerminalStopFollow[]
   terminalEntryFollows TerminalEntryFollow[]
+  terminalTrailStops   TerminalTrailStop[]
 
   @@map("users")
 }
@@ -531,6 +532,9 @@ model BacktestTrade {
   /// (первый), дальше — на цену предыдущего исполненного лимита. Ставится сеткой
   /// фиксации (BacktestService.createCloseGrid), исполняется в applyClose.
   stopFollow Boolean         @default(false)
+  /// Подводящий стоп: расстояние от цены до стопа, в цене; null — выключен. Стоп идёт
+  /// за ценой до безубытка (спека 2026-11-11-trailing-stop-design.md).
+  trailDist  Float?
   /// Позиция грид-бота (BacktestBot): её закрытие не продажей бота останавливает бота.
   botId      String?
   exitTime   DateTime?
@@ -626,6 +630,8 @@ model BacktestEntryOrder {
   botId      String?
   /// Цель стопа позиции, когда этот ордер исполнится («Стоп после» у «Сетки»); null — стоп не двигается.
   stopAfter  Float?
+  /// Подводящий стоп: открыв позицию, ордер включит его от своей цены до стопа.
+  trail      Boolean         @default(false)
   createdAt  DateTime        @default(now())
 
   @@index([sessionId])
@@ -1432,6 +1438,31 @@ model TerminalEntryFollow {
 
   @@index([active, userId])
   @@map("terminal_entry_follows")
+}
+
+/// Подводящий стоп позиции на бирже (спека docs/superpowers/specs/2026-11-11-trailing-stop-design.md).
+/// Заводит api (ордер с галочкой, окно «Изменить уровни»), ведёт worker: стоп идёт за
+/// маркировкой на `distance` до безубытка. Один план на позицию — монету и сторону.
+model TerminalTrailStop {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol    String
+  /// long | short
+  direction String
+  /// Расстояние от цены до стопа, в цене.
+  distance  Float
+  /// Ордера, которые откроют позицию: неувиденный план ждёт, пока хоть один висит.
+  orderIds  String[]
+  /// Позицию уже видели: её не стало — план кончился.
+  seen      Boolean  @default(false)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, symbol, direction])
+  @@index([active, userId])
+  @@map("terminal_trail_stops")
 }
 
 /// Кошелёк Hyperliquid в отборе бота (backend/src/hl-scout; спека

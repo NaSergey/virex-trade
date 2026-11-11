@@ -21,6 +21,13 @@ export interface Position {
    * позицию раньше него. Нет — ликвидация не проверяется.
    */
   liqPrice?: number | null;
+  /**
+   * Подводящий стоп: расстояние в цене (`trailStop`); нет — стоп стоит. Нужен и
+   * `entryPrice` — предел, безубыток позиции.
+   */
+  trailDist?: number | null;
+  /** Средний вход позиции — безубыток, дальше которого подводящий стоп не идёт. */
+  entryPrice?: number;
 }
 
 export interface CloseOrder {
@@ -105,15 +112,40 @@ export function checkMinute(p: Position, m: Candle, closeOrders: CloseOrder[] = 
   return null;
 }
 
-/** Первая сработавшая минутка среди открытых не раньше from и закрытых не позже to. */
+/**
+ * Первая сработавшая минутка среди открытых не раньше from и закрытых не позже to.
+ * Подводящий стоп (`trailDist`) идёт за минутками: каждая проверяется стопом, каким
+ * он на неё пришёл, и подтягивает его для следующей (`trailStop`).
+ */
 export function findExit(p: Position, minutes: Candle[], from: number, to: number, closeOrders: CloseOrder[] = []): Exit | null {
+  let stop = p.stopLoss;
   for (let i = firstFrom(minutes, from); i < minutes.length; i++) {
     const m = minutes[i];
     if (m.t + MINUTE > to) break;
-    const exit = checkMinute(p, m, closeOrders);
+    const exit = checkMinute(stop === p.stopLoss ? p : { ...p, stopLoss: stop }, m, closeOrders);
     if (exit) return exit;
+    stop = trailOf(p, stop, m);
   }
   return null;
+}
+
+/** Стоп после минутки `m` — подтянутый подводящим или прежний. */
+const trailOf = (p: Position, stop: number, m: Candle) =>
+  p.entryPrice == null ? stop : trailStop(p.direction, stop, p.trailDist, p.entryPrice, p.direction === 'long' ? m.h : m.l);
+
+/**
+ * Стоп позиции на конец отрезка [from, to) — подтянутый подводящим по минуткам, если
+ * выхода на отрезке не было (его ищет `findExit`). Без подводящего — прежний.
+ */
+export function trailedStop(p: Position, minutes: Candle[], from: number, to: number): number {
+  let stop = p.stopLoss;
+  if (p.trailDist == null || p.entryPrice == null) return stop;
+  for (let i = firstFrom(minutes, from); i < minutes.length; i++) {
+    const m = minutes[i];
+    if (m.t + MINUTE > to) break;
+    stop = trailOf(p, stop, m);
+  }
+  return stop;
 }
 
 /**
@@ -132,4 +164,30 @@ export function findEntryFill(orders: EntryOrder[], minutes: Candle[], from: num
     if (fired) return { orderId: fired.id, direction: fired.direction, price: fired.price, time: m.t + MINUTE };
   }
   return null;
+}
+
+/**
+ * Подводящий стоп (спека 2026-11-11-trailing-stop-design.md): стоп идёт за ценой на
+ * расстоянии `dist`, только подтягиваясь и не дальше безубытка (`entry` — средний
+ * вход позиции). Стоп в безубытке или дальше не двигается — дошёл сам, переставлен
+ * руками или перенесён другим правилом. `extreme` — максимум шага у лонга, минимум у
+ * шорта. Вызывающий зовёт её после проверки выхода: новый стоп действует со
+ * следующего шага, порядок цен внутри минутки не восстановить.
+ */
+export function trailStop(
+  direction: Direction,
+  stop: number,
+  dist: number | null | undefined,
+  entry: number,
+  extreme: number,
+): number {
+  if (dist == null || !(dist > 0) || !(stop > 0)) return stop;
+  if (direction === 'long') {
+    if (stop >= entry) return stop;
+    const target = Math.min(extreme - dist, entry);
+    return target > stop ? target : stop;
+  }
+  if (stop <= entry) return stop;
+  const target = Math.max(extreme + dist, entry);
+  return target < stop ? target : stop;
 }
