@@ -1284,6 +1284,10 @@
      та же, что у соседей, с квадратом слева. */
   .cg-follow { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; text-transform: inherit; letter-spacing: inherit; }
   .cg-follow input { accent-color: var(--ink); margin: 0; flex: none; }
+  /* Галочка «Подводящий» в заголовке поля стопа: тише подписи поля и не спорит
+     с процентом стопа справа. В окне «Изменить уровни» — своей строкой под стопом. */
+  .trail-chk { font-size: var(--t-xs); color: var(--ink-2); }
+  .trail-row { margin-top: var(--s1); font-size: var(--t-s); }
   /* Таблица уровней в колонке 360px: общая мерка .ledger (760px) уводила её в
      горизонтальную прокрутку с пустыми промежутками между колонками. Строки
      плотнее, чем в журнале, — уровней до десяти, и все должны быть видны. */

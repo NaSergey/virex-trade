@@ -180,6 +180,8 @@ export interface Level {
   direction?: 'long' | 'short';
   /** Готовый текст плашки вместо подписи по виду уровня — у разбора закрытой сделки. */
   label?: string;
+  /** Название уровня вместо названия его вида (`levelLabel`) — «подв. стоп» у стопа с подводящим; сумма остаётся. */
+  name?: string;
 }
 
 /** Лимит на вход — висящий или черновик панели: плашка «Лимит цена | объём», как у позиции. */
@@ -1858,7 +1860,7 @@ export const ReplayChart = memo(function ReplayChart({
                     ? `P&L ${l.pnl != null ? formatMoney(l.pnl) : '—'}`
                     : isLimit(l.kind)
                       ? `${levelLabel(l.kind)} ${formatPriceGrouped(price, priceDecimals)}`
-                      : `${levelLabel(l.kind)}${impact != null ? ` ${formatMoney(impact)}` : ''}${odds != null ? ` · ${Math.round(odds)} %` : ''}`;
+                      : `${l.name ?? levelLabel(l.kind)}${impact != null ? ` ${formatMoney(impact)}` : ''}${odds != null ? ` · ${Math.round(odds)} %` : ''}`;
                   const qtyText = l.qty != null ? formatQty(Number(l.qty.toFixed(4))) : '';
                   const onX: (() => void) | null =
                     (l.kind === 'pendingEntry' || l.kind === 'limitClose') && onCancelOrder
@@ -1975,7 +1977,7 @@ export const ReplayChart = memo(function ReplayChart({
                   pointerEvents="none"
                 >
                   {l.kind === 'stop' || l.kind === 'take' || l.kind === 'limitClose'
-                    ? `${levelLabel(l.kind)}${impact != null ? ` ${formatMoney(impact)} USDT` : ''}`
+                    ? `${l.name ?? levelLabel(l.kind)}${impact != null ? ` ${formatMoney(impact)} USDT` : ''}`
                     : levelLabel(l.kind)}
                 </text>
               )}

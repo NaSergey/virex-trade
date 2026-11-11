@@ -483,7 +483,7 @@ export function Terminal({
       (actions.bot?.stop.isPending ?? false),
     !isLive,
     // Подводящий стоп, подтянутый по минуткам истории, — на сервер.
-    (trade, stop) => trailTrade(qc, detail.session.id, trade.id, stop),
+    (trade, stop, dist) => trailTrade(qc, detail.session.id, trade.id, stop, dist),
   );
   // Хуки нельзя вызывать по условию, поэтому вызываются оба, а спит тот, чья
   // очередь не настала: в эфире свечи идут живым хвостом, а не прокруткой.
@@ -757,6 +757,7 @@ export function Terminal({
           draggable: true,
           qty: remaining,
           impactAt: impactAt(remaining),
+          name: trade.trailDist != null ? t('level.trailStop') : undefined,
         });
       }
       const take = pending?.kind === 'take' ? pending.price : trade.takeProfit != null ? toScreen(trade.takeProfit, scale) : null;
@@ -814,6 +815,7 @@ export function Terminal({
     }
     return list;
   }, [
+    t,
     gridTrade,
     closeGrid,
     pendingOrder,
@@ -1644,6 +1646,8 @@ export function Terminal({
                   maxRisk={maxRisk}
                   qtyStep={chartQtyStep}
                   minOrderHint={minOrderHint(symbol)}
+                  trail={trailOn}
+                  onTrail={setTrailOn}
                   draft={marketDraft}
                   onDraft={setDraft}
                   limitDraft={limitDraft}
@@ -1787,7 +1791,7 @@ export function Terminal({
             screenPrice={tradePrice}
             decimals={decimalsOf(trade.symbol)}
             showSymbol={symbolShown}
-            onApply={(stop, take) => applyLevels(trade, tradePrice, stop, take)}
+            onApply={(stop, take, trail) => applyLevels(trade, tradePrice, stop, take, undefined, trail)}
             onClose={() => setLevelsModalFor(null)}
             isPending={modifyM.isPending}
             error={modifyM.error}

@@ -1332,6 +1332,7 @@
     "historyEnded": "History has run out — finishing the session.",
     "dayN": "day {n}",
     "level": {
+      "trailStop": "trail stop",
       "entry": "entry",
       "stop": "stop",
       "take": "take",
@@ -1546,6 +1547,9 @@
     "botStopAfter": "Stop after take",
     "botStopHint": "Where the position stop goes when this level's sell fills. Empty — the stop stays. Bot buys at the stop and below are cancelled.",
     "gridStopFollow": "Move the stop after a fill",
+    "trail": "Trailing",
+    "trailHint": "The stop follows the price at the same distance, only tightening, and stops at breakeven",
+    "trailStop": "Trailing stop",
     "gridStopAfter": "Stop after",
     "gridStopHint": "Where the position stop goes when this level fills. An empty field restores the rule: halfway from the stop to the last level to fill.",
     "gridStopBlocks": "A stop after a level sits at or beyond a level that fills later — that one would never fill. Move the target past those levels.",

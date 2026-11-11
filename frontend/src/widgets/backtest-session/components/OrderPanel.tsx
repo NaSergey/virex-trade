@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'r
 import { useTranslations } from 'next-intl';
 import { ChevronDown } from 'lucide-react';
 import { Button } from '@/shared/ui/Button';
-import { Field, Input } from '@/shared/ui/Field';
+import { Field, FieldGroup, Input } from '@/shared/ui/Field';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import { KeyValue } from '@/shared/ui/Lookup';
 import { Seg } from '@/shared/ui/Seg';
@@ -43,6 +43,21 @@ import {
  */
 export function SliderSlot() {
   return <input type="range" className="slider slider-slot" disabled tabIndex={-1} aria-hidden />;
+}
+
+/**
+ * Галочка «Подводящий» в заголовке поля стопа: отдельной строки она не занимает.
+ * Подпись поля — `span` (`FieldGroup`): `label` с галочкой внутри `label` поля
+ * был бы невалидной разметкой, а ползунок назван своим `aria-label`.
+ */
+function TrailToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+  const t = useTranslations('backtest');
+  return (
+    <label className="cg-follow trail-chk" title={t('trailHint')}>
+      <input type="checkbox" checked={on} onChange={(e) => onChange(e.target.checked)} />
+      <span>{t('trail')}</span>
+    </label>
+  );
 }
 
 function TakeTitle({ profit }: { profit: number | null }) {
@@ -151,6 +166,8 @@ export function OrderPanel({
   gridStopAfter = false,
   qtyStep = 0,
   minOrderHint,
+  trail,
+  onTrail,
 }: {
   tab: OrderTab;
   onTab: (tab: OrderTab) => void;
@@ -199,6 +216,12 @@ export function OrderPanel({
   qtyStep?: number;
   /** Текст «меньше минимального ордера биржи» — с шагом и монетой. */
   minOrderHint?: string;
+  /**
+   * Галочка «Подводящий» у стопа «Маркета», «Лимита» и «Сетки» — одна на панель:
+   * ордер, открывший позицию, включит у неё подводящий стоп (`trailStop`).
+   */
+  trail: boolean;
+  onTrail: (on: boolean) => void;
 }) {
   const t = useTranslations('backtest');
 
@@ -641,15 +664,18 @@ export function OrderPanel({
           )
         }
       </Field>
-      <Field data-tour="term-stop"
+      <FieldGroup data-tour="term-stop"
         label={
           <span className="fld-head">
-            <span>{t('stop')}</span>
+            <span className="fld-left">
+                  <span>{t('stop')}</span>
+                  <TrailToggle on={trail} onChange={onTrail} />
+                </span>
             {stopPct != null && <span className="fld-val">{fmtPctSigned(stopPct)}</span>}
           </span>
         }
       >
-        {() =>
+        {
           screenPrice != null && stopPos != null ? (
             <Slider
               value={stopPos}
@@ -664,7 +690,7 @@ export function OrderPanel({
             <SliderSlot />
           )
         }
-      </Field>
+      </FieldGroup>
 
       <div className="order-foot">
         <div className="size-preview" data-tour="term-size">
@@ -768,15 +794,18 @@ export function OrderPanel({
               )
             }
           </Field>
-          <Field data-tour="term-stop"
+          <FieldGroup data-tour="term-stop"
             label={
               <span className="fld-head">
-                <span>{t('stop')}</span>
+                <span className="fld-left">
+                  <span>{t('stop')}</span>
+                  <TrailToggle on={trail} onChange={onTrail} />
+                </span>
                 {lStopPct != null && <span className="fld-val">{fmtPctSigned(lStopPct)}</span>}
               </span>
             }
           >
-            {() =>
+            {
               lStopRange &&
               lStopPos != null &&
               lAnchor != null && (
@@ -792,7 +821,7 @@ export function OrderPanel({
                 />
               )
             }
-          </Field>
+          </FieldGroup>
 
           <div className="order-foot">
             <div className="size-preview" data-tour="term-size">
@@ -909,15 +938,18 @@ export function OrderPanel({
               )
             }
           </Field>
-          <Field data-tour="term-stop"
+          <FieldGroup data-tour="term-stop"
             label={
               <span className="fld-head">
-                <span>{t('stop')}</span>
+                <span className="fld-left">
+                  <span>{t('stop')}</span>
+                  <TrailToggle on={trail} onChange={onTrail} />
+                </span>
                 {sStopPct != null && <span className="fld-val">{fmtPctSigned(sStopPct)}</span>}
               </span>
             }
           >
-            {() =>
+            {
               sStopRange &&
               sStopPos != null &&
               sStopAnchor != null && (
@@ -933,7 +965,7 @@ export function OrderPanel({
                 />
               )
             }
-          </Field>
+          </FieldGroup>
 
           <div className="size-preview" data-tour="term-scaled-count">
             <KeyValue label={t('ordersCount')} control valueClassName="">

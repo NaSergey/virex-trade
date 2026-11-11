@@ -165,14 +165,17 @@ export function FieldGroup({
   children,
   className,
   style,
+  'data-tour': dataTour,
 }: {
   label: ReactNode;
   children: ReactNode;
   className?: string;
   style?: CSSProperties;
+  /** Метка для обучения и подсказок терминала — см. тот же проп у `Field`. */
+  'data-tour'?: string;
 }) {
   return (
-    <div className={cn('field', className)} style={style}>
+    <div className={cn('field', className)} style={style} data-tour={dataTour}>
       <span className="lbl">{label}</span>
       {children}
     </div>
