@@ -8,6 +8,7 @@ import { EntryFollowStore } from './stream/entry-follow.store';
 import { STREAM_LISTENER, StopFollowService, type StreamListener } from './stream/stop-follow.service';
 import { StopFollowStore } from './stream/stop-follow.store';
 import { StreamListeners } from './stream/stream-listeners';
+import { TrailStopService } from './stream/trail-stop.service';
 import { TrailStopStore } from './stream/trail-stop.store';
 import { STREAM_STORE, TerminalStreamService } from './stream/terminal-stream.service';
 import { TerminalStreamStore } from './stream/terminal-stream.store';
@@ -35,10 +36,12 @@ import { TerminalService } from './terminal.service';
     EntryFollowService,
     // Подводящий стоп: план пишет api (ордер с галочкой, окно уровней), ведёт worker.
     TrailStopStore,
+    TrailStopService,
     {
       provide: STREAM_LISTENER,
-      useFactory: (takes: StopFollowService, entries: EntryFollowService): StreamListener => new StreamListeners([takes, entries]),
-      inject: [StopFollowService, EntryFollowService],
+      useFactory: (takes: StopFollowService, entries: EntryFollowService, trails: TrailStopService): StreamListener =>
+        new StreamListeners([takes, entries, trails]),
+      inject: [StopFollowService, EntryFollowService, TrailStopService],
     },
   ],
 })
