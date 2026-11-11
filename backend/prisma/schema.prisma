@@ -118,6 +118,7 @@ model User {
   /// Планы стопа за тейками на бирже (`terminal_stop_follows`).
   terminalStopFollows  TerminalStopFollow[]
   terminalEntryFollows TerminalEntryFollow[]
+  terminalTrailStops   TerminalTrailStop[]
 
   @@map("users")
 }
@@ -1437,6 +1438,31 @@ model TerminalEntryFollow {
 
   @@index([active, userId])
   @@map("terminal_entry_follows")
+}
+
+/// Подводящий стоп позиции на бирже (спека docs/superpowers/specs/2026-11-11-trailing-stop-design.md).
+/// Заводит api (ордер с галочкой, окно «Изменить уровни»), ведёт worker: стоп идёт за
+/// маркировкой на `distance` до безубытка. Один план на позицию — монету и сторону.
+model TerminalTrailStop {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol    String
+  /// long | short
+  direction String
+  /// Расстояние от цены до стопа, в цене.
+  distance  Float
+  /// Ордера, которые откроют позицию: неувиденный план ждёт, пока хоть один висит.
+  orderIds  String[]
+  /// Позицию уже видели: её не стало — план кончился.
+  seen      Boolean  @default(false)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, symbol, direction])
+  @@index([active, userId])
+  @@map("terminal_trail_stops")
 }
 
 /// Кошелёк Hyperliquid в отборе бота (backend/src/hl-scout; спека

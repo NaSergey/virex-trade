@@ -79,6 +79,11 @@ export class PlaceOrderDto {
   @Min(1)
   @Max(200)
   leverage?: number;
+
+  // Подводящий стоп у позиции, которую ордер откроет; долив позиции его не меняет.
+  @IsOptional()
+  @IsBoolean()
+  trail?: boolean;
 }
 
 export class MoveOrderDto {
@@ -109,6 +114,12 @@ export class SetLevelsDto {
   @IsNumber()
   @IsPositive()
   takeProfit?: number | null;
+
+  // Подводящий стоп: расстояние в цене; null — выключить; нет поля — не трогать.
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  trailDist?: number | null;
 }
 
 export class CloseGridDto {
