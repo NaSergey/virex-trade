@@ -6,33 +6,15 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import type {
-  BacktestTrade,
-  BacktestTradeEntry,
-  Prisma,
-  Tag,
-} from '@prisma/client';
+import type { BacktestTrade, BacktestTradeEntry, Prisma, Tag } from '@prisma/client';
 import { BattlePassService } from '../battlepass/battlepass.service';
 import { XP_SOURCES } from '../battlepass/xp-registry';
 import { PrismaService } from '../prisma/prisma.service';
 import { LiveMarketService } from '../market-data/live-market.service';
 import { MarketDataService } from '../market-data/market-data.service';
-import {
-  DEFAULT_SYMBOL,
-  HISTORY_SYMBOL_IDS,
-  historySince,
-  qtyStepOf,
-} from '../market-data/symbols';
+import { DEFAULT_SYMBOL, HISTORY_SYMBOL_IDS, historySince, qtyStepOf } from '../market-data/symbols';
 import { TIMEFRAMES, isValidTimeframe } from '../market-data/timeframes';
-import {
-  botGridError,
-  botLevelOf,
-  botPrices,
-  botQty,
-  botStep,
-  levelRiskPct,
-  splitAtPrice,
-} from './bot-grid';
+import { botGridError, botLevelOf, botPrices, botQty, botStep, levelRiskPct, splitAtPrice } from './bot-grid';
 import { SYNTH_VERSION } from './synthetic/params';
 import { SyntheticMarketService } from './synthetic/synthetic-market.service';
 import {
@@ -152,34 +134,18 @@ export interface CloseTradeInput {
 }
 
 const timeInvalid = () =>
-  new BadRequestException({
-    message: 'Время сделки вне сессии или раньше входа',
-    code: 'BACKTEST_TIME_INVALID',
-  });
+  new BadRequestException({ message: 'Время сделки вне сессии или раньше входа', code: 'BACKTEST_TIME_INVALID' });
 
-const tradeClosed = () =>
-  new ConflictException({
-    message: 'Сделка уже закрыта',
-    code: 'BACKTEST_TRADE_CLOSED',
-  });
+const tradeClosed = () => new ConflictException({ message: 'Сделка уже закрыта', code: 'BACKTEST_TRADE_CLOSED' });
 
 const entryOrderNotFound = () =>
-  new NotFoundException({
-    message: 'Ордер не найден',
-    code: 'BACKTEST_ENTRY_ORDER_NOT_FOUND',
-  });
+  new NotFoundException({ message: 'Ордер не найден', code: 'BACKTEST_ENTRY_ORDER_NOT_FOUND' });
 
 const closeOrderNotFound = () =>
-  new NotFoundException({
-    message: 'Ордер не найден',
-    code: 'BACKTEST_CLOSE_ORDER_NOT_FOUND',
-  });
+  new NotFoundException({ message: 'Ордер не найден', code: 'BACKTEST_CLOSE_ORDER_NOT_FOUND' });
 
 const qtyExceedsRemaining = () =>
-  new BadRequestException({
-    message: 'Объём больше остатка',
-    code: 'BACKTEST_QTY_EXCEEDS_REMAINING',
-  });
+  new BadRequestException({ message: 'Объём больше остатка', code: 'BACKTEST_QTY_EXCEEDS_REMAINING' });
 
 /**
  * Ордер, которого биржа не примет (`belowMinOrder`): объём меньше шага лота
@@ -197,22 +163,11 @@ const qtyTooSmall = (step: number) =>
  * стопа позиции: у покупки бота и у уровня таблицы «Сетки» со «стопом после»
  * (`stopAfter` не null) — свой стоп ордера, от него посчитан объём в таблице.
  */
-const sizeStopOf = (
-  order: {
-    botId: string | null;
-    stopAfter: number | null;
-    stopLoss: number;
-  } | null,
-) =>
-  order && (order.botId || order.stopAfter != null)
-    ? order.stopLoss
-    : undefined;
+const sizeStopOf = (order: { botId: string | null; stopAfter: number | null; stopLoss: number } | null) =>
+  order && (order.botId || order.stopAfter != null) ? order.stopLoss : undefined;
 
 const gridInvalid = () =>
-  new BadRequestException({
-    message: 'Объёмов или целей стопа не столько, сколько уровней',
-    code: 'BACKTEST_GRID_INVALID',
-  });
+  new BadRequestException({ message: 'Объёмов или целей стопа не столько, сколько уровней', code: 'BACKTEST_GRID_INVALID' });
 
 /** Допуск на накопленную погрешность float-сложений closedQty. */
 const QTY_EPS = 1e-8;
@@ -223,18 +178,12 @@ const QTY_EPS = 1e-8;
  * на всю позицию — последний забирает остаток округления, и позиция
  * закрывается целиком, без хвоста. Уровень меньше шага — отказ.
  */
-function gridQtys(
-  remaining: number,
-  n: number,
-  step: number,
-  sent?: number[],
-): number[] {
+function gridQtys(remaining: number, n: number, step: number, sent?: number[]): number[] {
   const raw = sent ?? Array.from({ length: n }, () => remaining / n);
   const sum = raw.reduce((a, b) => a + b, 0);
   if (sent && sum > remaining + QTY_EPS) throw qtyExceedsRemaining();
   const qtys = raw.map((q) => floorToLot(q, step));
-  if (!sent || Math.abs(sum - remaining) <= QTY_EPS)
-    qtys[n - 1] = remaining - qtys.slice(0, -1).reduce((a, b) => a + b, 0);
+  if (!sent || Math.abs(sum - remaining) <= QTY_EPS) qtys[n - 1] = remaining - qtys.slice(0, -1).reduce((a, b) => a + b, 0);
   // Остаток деления съел последний уровень — лимита на ноль не бывает.
   if (!(qtys[n - 1] > 0)) throw gridInvalid();
   if (qtys.some((q) => q < step - 1e-12)) throw qtyTooSmall(step);
@@ -257,66 +206,37 @@ function closeQtyOf(qty: number, remaining: number, step: number): number {
  * каждое отдельное исполнение (открытие и каждый добор сеткой), а не только
  * усреднённый итог в entryPrice/entryTime. По времени: разметка на графике
  * (одна стрелка на исполнение) обязана идти в порядке заполнения. */
-export const TRADE_INCLUDE = {
-  tags: { include: { tag: true } },
-  entries: { orderBy: { time: 'asc' } },
-} as const;
+export const TRADE_INCLUDE = { tags: { include: { tag: true } }, entries: { orderBy: { time: 'asc' } } } as const;
 
-type TradeWithRelations = BacktestTrade & {
-  tags: { tag: Tag }[];
-  entries: BacktestTradeEntry[];
-};
+type TradeWithRelations = BacktestTrade & { tags: { tag: Tag }[]; entries: BacktestTradeEntry[] };
 
 /** Сделка наружу: теги плоским списком — так их рисует фронт. */
 export function tradeView(t: TradeWithRelations) {
   const { tags, ...rest } = t;
-  return {
-    ...rest,
-    tags: tags.map(({ tag }) => ({
-      id: tag.id,
-      name: tag.name,
-      color: tag.color,
-      type: tag.type,
-    })),
-  };
+  return { ...rest, tags: tags.map(({ tag }) => ({ id: tag.id, name: tag.name, color: tag.color, type: tag.type })) };
 }
 
 const noHistory = () =>
-  new ConflictException({
-    message: 'История минуток ещё не загружена — сессию не на чем начать',
-    code: 'BACKTEST_NO_HISTORY',
-  });
+  new ConflictException({ message: 'История минуток ещё не загружена — сессию не на чем начать', code: 'BACKTEST_NO_HISTORY' });
 
 const marketUnavailable = () =>
-  new ServiceUnavailableException({
-    message: 'Биржа не ответила — сессию не с чего начать',
-    code: 'BACKTEST_MARKET_UNAVAILABLE',
-  });
+  new ServiceUnavailableException({ message: 'Биржа не ответила — сессию не с чего начать', code: 'BACKTEST_MARKET_UNAVAILABLE' });
 
 export const sessionFinished = () =>
-  new ConflictException({
-    message: 'Сессия уже завершена',
-    code: 'BACKTEST_SESSION_FINISHED',
-  });
+  new ConflictException({ message: 'Сессия уже завершена', code: 'BACKTEST_SESSION_FINISHED' });
 
 /** Сессия построена прежней версией генератора: её график больше не построить. */
-export const isSynthOutdated = (s: {
-  dataSource: string;
-  synthVersion: number | null;
-}) => s.dataSource === 'synthetic' && s.synthVersion !== SYNTH_VERSION;
+export const isSynthOutdated = (s: { dataSource: string; synthVersion: number | null }) =>
+  s.dataSource === 'synthetic' && s.synthVersion !== SYNTH_VERSION;
 
 const synthOutdated = () =>
   new ConflictException({
-    message:
-      'Генератор рынка обновился — график этой сессии больше не построить',
+    message: 'Генератор рынка обновился — график этой сессии больше не построить',
     code: 'BACKTEST_SYNTH_OUTDATED',
   });
 
 const tournamentEnded = () =>
-  new ConflictException({
-    message: 'Турнир завершён',
-    code: 'TOURNAMENT_ENDED',
-  });
+  new ConflictException({ message: 'Турнир завершён', code: 'TOURNAMENT_ENDED' });
 
 /**
  * Сессия в прямом эфире — своя (`dataSource = 'live'`) или турнирная. Отличается
@@ -324,14 +244,8 @@ const tournamentEnded = () =>
  * стоп обязан сработать, — поэтому цену и время сделки ставит сервер, а стопы,
  * тейки и лимитки исполняет движок эфира (`LiveEngineService`), а не браузер.
  */
-type MaybeLive = {
-  dataSource?: string;
-  tournament?: { mode: string } | null;
-  endTime?: Date | null;
-  symbol?: string;
-};
-const isLive = (s: MaybeLive) =>
-  s.dataSource === 'live' || s.tournament?.mode === 'live';
+type MaybeLive = { dataSource?: string; tournament?: { mode: string } | null; endTime?: Date | null; symbol?: string };
+const isLive = (s: MaybeLive) => s.dataSource === 'live' || s.tournament?.mode === 'live';
 /** Эфирный турнир: на кону призы, и завершить сессию раньше турнира нельзя. */
 const isLiveTournament = (s: MaybeLive) => s.tournament?.mode === 'live';
 
@@ -376,8 +290,7 @@ const HOPELESS_ENTRY = new Set([
 ]);
 
 const isHopelessEntry = (e: unknown) =>
-  e instanceof HttpException &&
-  HOPELESS_ENTRY.has((e.getResponse() as { code?: string }).code ?? '');
+  e instanceof HttpException && HOPELESS_ENTRY.has((e.getResponse() as { code?: string }).code ?? '');
 
 type SessionForEntry = { id: string; startTime: Date };
 type EntryInput = { entryTime: Date; entryPrice: number; riskPct: number };
@@ -410,10 +323,8 @@ export class BacktestService {
   protected rnd: () => number = Math.random;
 
   async createSession(userId: string, input: CreateSessionInput) {
-    if (input.dataSource === 'synthetic')
-      return this.createSyntheticSession(userId, input);
-    if (input.dataSource === 'live')
-      return this.createLiveSession(userId, input);
+    if (input.dataSource === 'synthetic') return this.createSyntheticSession(userId, input);
+    if (input.dataSource === 'live') return this.createLiveSession(userId, input);
 
     // Случайную монету, точку старта и масштаб выбирает сервер: иначе создание
     // сессии можно было бы перезапускать из браузера, пока не выпадет узнаваемый
@@ -459,10 +370,7 @@ export class BacktestService {
       );
     }
     const since = new Date(historySince(symbol)!);
-    return startWindow(
-      { from: since, to: null },
-      { from: since, to: new Date() },
-    );
+    return startWindow({ from: since, to: null }, { from: since, to: new Date() });
   }
 
   /**
@@ -471,23 +379,15 @@ export class BacktestService {
    */
   protected async priceBefore(symbol: string, start: number) {
     const to = new Date(start - MINUTE_MS);
-    if (symbol === DEFAULT_SYMBOL)
-      return (
-        await this.marketData.getCandles({ timeframe: 1, to, limit: 1 })
-      )[0];
+    if (symbol === DEFAULT_SYMBOL) return (await this.marketData.getCandles({ timeframe: 1, to, limit: 1 }))[0];
     try {
-      return (
-        await this.live.history(symbol, { timeframe: 1, to, limit: 1 })
-      )[0];
+      return (await this.live.history(symbol, { timeframe: 1, to, limit: 1 }))[0];
     } catch {
       throw marketUnavailable();
     }
   }
 
-  protected async createSyntheticSession(
-    userId: string,
-    input: CreateSessionInput,
-  ) {
+  protected async createSyntheticSession(userId: string, input: CreateSessionInput) {
     // Зерно выбирает сервер тем же случаем, что и старт реальной сессии.
     const seed = Math.floor(this.rnd() * 2 ** 31);
     const { start, price } = this.synthetic.start(seed);
@@ -549,9 +449,7 @@ export class BacktestService {
     }
     if (isSynthOutdated(s)) throw synthOutdated();
     if (!isValidTimeframe(q.timeframe)) {
-      throw new BadRequestException(
-        `Неизвестный таймфрейм: ${q.timeframe}. Допустимы: ${TIMEFRAMES.join(', ')}`,
-      );
+      throw new BadRequestException(`Неизвестный таймфрейм: ${q.timeframe}. Допустимы: ${TIMEFRAMES.join(', ')}`);
     }
     return this.synthetic.getCandles(s.seed, {
       timeframe: q.timeframe,
@@ -570,18 +468,10 @@ export class BacktestService {
     const rows = await this.prisma.backtestSession.findMany({
       where: { userId, tournamentId: null },
       orderBy: { createdAt: 'desc' },
-      include: {
-        trades: {
-          where: { exitTime: { not: null } },
-          select: { pnl: true, r: true },
-        },
-      },
+      include: { trades: { where: { exitTime: { not: null } }, select: { pnl: true, r: true } } },
     });
     return {
-      sessions: rows.map(({ trades, ...s }) => ({
-        ...s,
-        summary: summarize(trades.map(closedNumbers)),
-      })),
+      sessions: rows.map(({ trades, ...s }) => ({ ...s, summary: summarize(trades.map(closedNumbers)) })),
     };
   }
 
@@ -599,10 +489,7 @@ export class BacktestService {
       where: { sessionId: id },
       orderBy: { price: 'asc' },
     });
-    const botRows = await this.prisma.backtestBot.findMany({
-      where: { sessionId: id },
-      orderBy: { createdAt: 'asc' },
-    });
+    const botRows = await this.prisma.backtestBot.findMany({ where: { sessionId: id }, orderBy: { createdAt: 'asc' } });
     // Результат бота — по выходам его позиций, частичные тоже: тейки бота закрывают позицию частями.
     const botExits = botRows.length
       ? await this.prisma.backtestTradeExit.findMany({
@@ -612,9 +499,7 @@ export class BacktestService {
       : [];
     const bots = botRows.map((b) => ({
       ...b,
-      closedPnl: botExits
-        .filter((e) => e.trade.botId === b.id)
-        .reduce((a, e) => a + e.pnl, 0),
+      closedPnl: botExits.filter((e) => e.trade.botId === b.id).reduce((a, e) => a + e.pnl, 0),
     }));
     const closed = trades
       .filter((t) => t.exitTime != null)
@@ -639,10 +524,7 @@ export class BacktestService {
       bots,
       summary: {
         ...summarize(closed.map(closedNumbers)),
-        maxDrawdownPct: maxDrawdownPct(
-          session.startBalance,
-          closed.map((t) => t.pnl ?? 0),
-        ),
+        maxDrawdownPct: maxDrawdownPct(session.startBalance, closed.map((t) => t.pnl ?? 0)),
       },
     };
   }
@@ -653,10 +535,7 @@ export class BacktestService {
     // значением значило бы разрешить перемотку вперёд.
     if (isLive(s)) return { cursorTime: s.cursorTime };
     await this.bumpCursor(this.prisma, id, cursorTime);
-    const moved = await this.prisma.backtestSession.findUnique({
-      where: { id },
-      select: { cursorTime: true },
-    });
+    const moved = await this.prisma.backtestSession.findUnique({ where: { id }, select: { cursorTime: true } });
     return { cursorTime: moved!.cursorTime };
   }
 
@@ -685,14 +564,8 @@ export class BacktestService {
         await tx.backtestEntryOrder.deleteMany({ where: { sessionId: id } });
       } else {
         // Позицию закрывает браузер (он знает цену момента), сервер только проверяет.
-        const open = await tx.backtestTrade.count({
-          where: { sessionId: id, exitTime: null },
-        });
-        if (open > 0)
-          throw new ConflictException({
-            message: 'Сначала закройте открытую сделку',
-            code: 'BACKTEST_OPEN_TRADE',
-          });
+        const open = await tx.backtestTrade.count({ where: { sessionId: id, exitTime: null } });
+        if (open > 0) throw new ConflictException({ message: 'Сначала закройте открытую сделку', code: 'BACKTEST_OPEN_TRADE' });
         // Висящие ордера на вход после завершения не исполнит никто — снимаются
         // сами. Требовать их отмены значило бы запереть сессию: история кончилась,
         // браузер завершает её сам, и кнопки повторить у человека нет.
@@ -701,11 +574,7 @@ export class BacktestService {
       // Боты кончаются вместе с сессией: их ордера сняты выше, исполнять больше нечего.
       await tx.backtestBot.updateMany({
         where: { sessionId: id, status: 'active' },
-        data: {
-          status: 'stopped',
-          stopReason: 'finish',
-          stoppedAt: s.cursorTime,
-        },
+        data: { status: 'stopped', stopReason: 'finish', stoppedAt: s.cursorTime },
       });
       const session = await tx.backtestSession.update({
         where: { id },
@@ -717,13 +586,7 @@ export class BacktestService {
       // назван в одном месте, а не выводиться из порядка проверок. Сейчас
       // источник выключен (владелец 2026-10-17): опыт бектеста — за открытые
       // в нём позиции (`trade.open`); включается одной строкой реестра.
-      await this.battlePass.award(
-        tx,
-        userId,
-        'game.backtest',
-        id,
-        XP_SOURCES['game.backtest'].base,
-      );
+      await this.battlePass.award(tx, userId, 'game.backtest', id, XP_SOURCES['game.backtest'].base);
       return { session };
     });
   }
@@ -745,11 +608,7 @@ export class BacktestService {
     const symbol = symbolFor(s, rawInput.symbol);
     // В эфире вход исполняется по живой цене в момент запроса, как на бирже:
     // присланные браузером время и цена — только его представление о рынке.
-    const input = await this.withServerEntry(
-      s,
-      { ...rawInput, symbol },
-      symbol,
-    );
+    const input = await this.withServerEntry(s, { ...rawInput, symbol }, symbol);
     try {
       // Ордер, который исполняет прокрутка, обязан ещё стоять: его могли снять
       // (остановка бота, его же стоп в той же минутке, перенос, другая вкладка).
@@ -757,29 +616,17 @@ export class BacktestService {
       // Раньше браузерный путь открывал позицию и без ордера — и после стопа
       // бота в той же минутке открывал ручную позицию без продажи, уже за стопом.
       // Опыт — за вход человека по рынку, а не за ордер, который исполнила прокрутка.
-      return await this.openChecked(
-        s,
-        input,
-        input.entryOrderId != null,
-        input.entryOrderId == null ? userId : undefined,
-      );
+      return await this.openChecked(s, input, input.entryOrderId != null, input.entryOrderId == null ? userId : undefined);
     } catch (e) {
       if (e instanceof EntryOrderGone) return { trade: null };
       // Ордер на вход, исполненный прокруткой браузера, но неисполнимый в
       // принципе, снимается — тем же правилом, что у движка эфира (`systemEnter`).
       // Иначе он висел бы на графике, и цена проходила бы сквозь него.
       if (input.entryOrderId && isHopelessEntry(e)) {
-        const order = await this.prisma.backtestEntryOrder.findFirst({
-          where: { id: input.entryOrderId, sessionId },
-        });
-        await this.prisma.backtestEntryOrder.deleteMany({
-          where: { id: input.entryOrderId, sessionId },
-        });
+        const order = await this.prisma.backtestEntryOrder.findFirst({ where: { id: input.entryOrderId, sessionId } });
+        await this.prisma.backtestEntryOrder.deleteMany({ where: { id: input.entryOrderId, sessionId } });
         // Покупка бота без шансов — и бот без уровня: держал бы лонг монеты, ничего не торгуя.
-        if (order?.botId)
-          await this.prisma.$transaction((tx) =>
-            this.haltBot(tx, order.botId!, 'hopeless', input.entryTime),
-          );
+        if (order?.botId) await this.prisma.$transaction((tx) => this.haltBot(tx, order.botId!, 'hopeless', input.entryTime));
       }
       throw e;
     }
@@ -803,31 +650,17 @@ export class BacktestService {
    * `xpFor` — кто открыл позицию сам: ему опыт за открытие (`trade.open`), той
    * же транзакцией и только если позиция новая, а не долитая.
    */
-  protected async openChecked(
-    s: SessionForEntry,
-    input: OpenTradeInput,
-    requireOrder = false,
-    xpFor?: string,
-  ) {
+  protected async openChecked(s: SessionForEntry, input: OpenTradeInput, requireOrder = false, xpFor?: string) {
     const sessionId = s.id;
     const symbol = input.symbol ?? DEFAULT_SYMBOL;
     if (input.entryTime.getTime() < s.startTime.getTime()) throw timeInvalid();
     // Сторона — только при входе: дальше стоп можно тянуть в безубыток и в
     // прибыль, а текущей цены сервер не знает (её проверяет браузер).
     if (!stopOnRightSide(input.direction, input.entryPrice, input.stopLoss)) {
-      throw new BadRequestException({
-        message: 'Стоп стоит не по ту сторону от входа',
-        code: 'BACKTEST_STOP_SIDE',
-      });
+      throw new BadRequestException({ message: 'Стоп стоит не по ту сторону от входа', code: 'BACKTEST_STOP_SIDE' });
     }
-    if (
-      input.takeProfit != null &&
-      !takeOnRightSide(input.direction, input.entryPrice, input.takeProfit)
-    ) {
-      throw new BadRequestException({
-        message: 'Тейк стоит не по ту сторону от входа',
-        code: 'BACKTEST_TAKE_SIDE',
-      });
+    if (input.takeProfit != null && !takeOnRightSide(input.direction, input.entryPrice, input.takeProfit)) {
+      throw new BadRequestException({ message: 'Тейк стоит не по ту сторону от входа', code: 'BACKTEST_TAKE_SIDE' });
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -837,53 +670,20 @@ export class BacktestService {
       // строки, и создавать сделку в уже завершённой сессии нельзя.
       const bumped = await this.bumpCursor(tx, sessionId, input.entryTime);
       if (bumped === 0) throw sessionFinished();
-      const order = await this.takeEntryOrder(
-        tx,
-        sessionId,
-        input.entryOrderId,
-        requireOrder,
-      );
+      const order = await this.takeEntryOrder(tx, sessionId, input.entryOrderId, requireOrder);
       await this.assertLongFree(tx, sessionId, symbol, input.direction, order);
       const { trade, filledQty, opened } = await this.openInTx(
         tx,
         sessionId,
         symbol,
         // Галочка подводящего — у сработавшего ордера (браузер шлёт только его id).
-        {
-          ...input,
-          botId: order?.botId ?? undefined,
-          trail: input.trail || order?.trail === true,
-        },
+        { ...input, botId: order?.botId ?? undefined, trail: input.trail || order?.trail === true },
         sizeStopOf(order),
       );
-      if (xpFor && opened)
-        await this.battlePass.award(
-          tx,
-          xpFor,
-          'trade.open',
-          trade.id,
-          XP_SOURCES['trade.open'].base,
-        );
-      if (order?.botId)
-        await this.sellAfterBotBuy(
-          tx,
-          order.botId,
-          trade.id,
-          order.price,
-          filledQty,
-        );
-      if (order?.stopAfter)
-        await this.tightenStop(tx, trade.id, order.stopAfter, input.entryPrice);
-      return {
-        trade: tradeView(
-          order?.stopAfter
-            ? (await tx.backtestTrade.findUnique({
-                where: { id: trade.id },
-                include: TRADE_INCLUDE,
-              }))!
-            : trade,
-        ),
-      };
+      if (xpFor && opened) await this.battlePass.award(tx, xpFor, 'trade.open', trade.id, XP_SOURCES['trade.open'].base);
+      if (order?.botId) await this.sellAfterBotBuy(tx, order.botId, trade.id, order.price, filledQty);
+      if (order?.stopAfter) await this.tightenStop(tx, trade.id, order.stopAfter, input.entryPrice);
+      return { trade: tradeView(order?.stopAfter ? (await tx.backtestTrade.findUnique({ where: { id: trade.id }, include: TRADE_INCLUDE }))! : trade) };
     });
   }
 
@@ -900,35 +700,16 @@ export class BacktestService {
     symbol: string,
     input: OpenTradeInput & { botId?: string },
     sizeStop?: number,
-  ): Promise<{
-    trade: TradeWithRelations;
-    filledQty: number;
-    opened: boolean;
-  }> {
-    const open = await tx.backtestTrade.findFirst({
-      where: { sessionId, symbol, exitTime: null, direction: input.direction },
-    });
-    if (open)
-      return {
-        ...(await this.addCore(tx, open, input, sizeStop)),
-        opened: false,
-      };
+  ): Promise<{ trade: TradeWithRelations; filledQty: number; opened: boolean }> {
+    const open = await tx.backtestTrade.findFirst({ where: { sessionId, symbol, exitTime: null, direction: input.direction } });
+    if (open) return { ...(await this.addCore(tx, open, input, sizeStop)), opened: false };
     const balance = await this.balanceForEntry(tx, sessionId);
     const step = qtyStepOf(symbol);
-    const { riskUsdt, qty } = positionSize(
-      balance,
-      input.riskPct,
-      input.entryPrice,
-      input.stopLoss,
-      step,
-    );
+    const { riskUsdt, qty } = positionSize(balance, input.riskPct, input.entryPrice, input.stopLoss, step);
     const notional = qty * input.entryPrice;
     const margin = notional / input.leverage;
     if (margin > balance) {
-      throw new BadRequestException({
-        message: 'Маржа больше депозита',
-        code: 'BACKTEST_MARGIN_EXCEEDS_BALANCE',
-      });
+      throw new BadRequestException({ message: 'Маржа больше депозита', code: 'BACKTEST_MARGIN_EXCEEDS_BALANCE' });
     }
     if (belowMinOrder(qty, input.entryPrice, step)) throw qtyTooSmall(step);
     const trade = await tx.backtestTrade.create({
@@ -948,15 +729,11 @@ export class BacktestService {
         botId: input.botId ?? null,
         // Подводящий стоп держит расстояние, с которым позиция открылась. Добор его не
         // меняет (выше: `addCore`), как не меняет стоп и тейк позиции.
-        trailDist: input.trail
-          ? Math.abs(input.entryPrice - input.stopLoss)
-          : null,
+        trailDist: input.trail ? Math.abs(input.entryPrice - input.stopLoss) : null,
         // Первое исполнение — сразу вложенным create: у сделки ещё нет id
         // ни для одного отдельного запроса, а второй запрос тем же id
         // потребовал бы отдельного круга к базе только ради истории входов.
-        entries: {
-          create: { qty, price: input.entryPrice, time: input.entryTime },
-        },
+        entries: { create: { qty, price: input.entryPrice, time: input.entryTime } },
       },
       include: TRADE_INCLUDE,
     });
@@ -980,12 +757,8 @@ export class BacktestService {
     // Строка читается до снятия: ордер бота несёт `botId`, и продажа после
     // покупки ставится по нему. Замок сессии уже взят — между чтением и снятием
     // строку никто не тронет.
-    const order = await tx.backtestEntryOrder.findFirst({
-      where: { id: entryOrderId, sessionId },
-    });
-    const { count } = await tx.backtestEntryOrder.deleteMany({
-      where: { id: entryOrderId, sessionId },
-    });
+    const order = await tx.backtestEntryOrder.findFirst({ where: { id: entryOrderId, sessionId } });
+    const { count } = await tx.backtestEntryOrder.deleteMany({ where: { id: entryOrderId, sessionId } });
     if (requireOrder && count === 0) throw new EntryOrderGone();
     return count > 0 ? order : null;
   }
@@ -994,11 +767,7 @@ export class BacktestService {
     const trade = await this.ownedTrade(userId, tradeId);
     if (trade.exitTime) throw tradeClosed();
     if (trade.session.status !== 'active') throw sessionFinished();
-    const data: {
-      stopLoss?: number;
-      takeProfit?: number | null;
-      trailDist?: number | null;
-    } = {};
+    const data: { stopLoss?: number; takeProfit?: number | null; trailDist?: number | null } = {};
     if (input.stopLoss !== undefined) data.stopLoss = input.stopLoss;
     if (input.takeProfit !== undefined) data.takeProfit = input.takeProfit;
     // Расстояние считает экран — от цены сейчас до стопа: при включении и при ручном
@@ -1008,21 +777,11 @@ export class BacktestService {
     return this.prisma.$transaction(async (tx) => {
       // Тот же замок + защита статуса сессии, что у входа и выхода сделки —
       // сессию или саму сделку могли завершить между чтением выше и сюда.
-      const bumped = await this.bumpCursor(
-        tx,
-        trade.sessionId,
-        trade.session.cursorTime,
-      );
+      const bumped = await this.bumpCursor(tx, trade.sessionId, trade.session.cursorTime);
       if (bumped === 0) throw sessionFinished();
-      const result = await tx.backtestTrade.updateMany({
-        where: { id: tradeId, exitTime: null },
-        data,
-      });
+      const result = await tx.backtestTrade.updateMany({ where: { id: tradeId, exitTime: null }, data });
       if (result.count === 0) throw tradeClosed();
-      const updated = await tx.backtestTrade.findUnique({
-        where: { id: tradeId },
-        include: TRADE_INCLUDE,
-      });
+      const updated = await tx.backtestTrade.findUnique({ where: { id: tradeId }, include: TRADE_INCLUDE });
       return { trade: tradeView(updated!) };
     });
   }
@@ -1032,11 +791,7 @@ export class BacktestService {
     if (trade.exitTime) throw tradeClosed();
     if (trade.session.status !== 'active') throw sessionFinished();
     // См. openTrade: в эфире цену и время добора тоже ставит сервер — по монете сделки.
-    const input = await this.withServerEntry(
-      trade.session,
-      rawInput,
-      trade.symbol,
-    );
+    const input = await this.withServerEntry(trade.session, rawInput, trade.symbol);
     return this.addChecked(trade, input);
   }
 
@@ -1046,59 +801,20 @@ export class BacktestService {
       // Добор — содержательный момент сессии (как открытие и закрытие), а не
       // просто повторная проверка замка (как у modifyTrade): курсор двигаем
       // на его время, а не на уже известное trade.session.cursorTime.
-      const bumped = await this.bumpCursor(
-        tx,
-        trade.sessionId,
-        input.entryTime,
-      );
+      const bumped = await this.bumpCursor(tx, trade.sessionId, input.entryTime);
       if (bumped === 0) throw sessionFinished();
       // См. openTrade.entryOrderId — тот же атомарный приём для ордера на вход,
       // который долил уже открытую сделку, а не создал новую.
-      const order = await this.takeEntryOrder(
-        tx,
-        trade.sessionId,
-        input.entryOrderId,
-        false,
-      );
-      await this.assertLongFree(
-        tx,
-        trade.sessionId,
-        trade.symbol,
-        trade.direction,
-        order,
-      );
+      const order = await this.takeEntryOrder(tx, trade.sessionId, input.entryOrderId, false);
+      await this.assertLongFree(tx, trade.sessionId, trade.symbol, trade.direction, order);
       // Сделка — свежим чтением под замком: средняя и маржа добора считаются от
       // остатка, а частичное закрытие между чтением снаружи и замком его меняет.
-      const fresh = await tx.backtestTrade.findUnique({
-        where: { id: trade.id },
-      });
+      const fresh = await tx.backtestTrade.findUnique({ where: { id: trade.id } });
       if (!fresh || fresh.exitTime) throw tradeClosed();
-      const { trade: updated, filledQty } = await this.addCore(
-        tx,
-        fresh,
-        input,
-        sizeStopOf(order),
-      );
-      if (order?.botId)
-        await this.sellAfterBotBuy(
-          tx,
-          order.botId,
-          trade.id,
-          order.price,
-          filledQty,
-        );
-      if (order?.stopAfter)
-        await this.tightenStop(tx, trade.id, order.stopAfter, input.entryPrice);
-      return {
-        trade: tradeView(
-          order?.stopAfter
-            ? (await tx.backtestTrade.findUnique({
-                where: { id: trade.id },
-                include: TRADE_INCLUDE,
-              }))!
-            : updated,
-        ),
-      };
+      const { trade: updated, filledQty } = await this.addCore(tx, fresh, input, sizeStopOf(order));
+      if (order?.botId) await this.sellAfterBotBuy(tx, order.botId, trade.id, order.price, filledQty);
+      if (order?.stopAfter) await this.tightenStop(tx, trade.id, order.stopAfter, input.entryPrice);
+      return { trade: tradeView(order?.stopAfter ? (await tx.backtestTrade.findUnique({ where: { id: trade.id }, include: TRADE_INCLUDE }))! : updated) };
     });
   }
 
@@ -1109,14 +825,8 @@ export class BacktestService {
    * некорректными (r и pnl расходятся в знаке, при balance === 0 — NaN), и
    * сессию отсюда можно только завершить. Общее у открытия и добора.
    */
-  protected async balanceForEntry(
-    tx: Prisma.TransactionClient,
-    sessionId: string,
-  ): Promise<number> {
-    const fresh = await tx.backtestSession.findUnique({
-      where: { id: sessionId },
-      select: { balance: true },
-    });
+  protected async balanceForEntry(tx: Prisma.TransactionClient, sessionId: string): Promise<number> {
+    const fresh = await tx.backtestSession.findUnique({ where: { id: sessionId }, select: { balance: true } });
     if (fresh!.balance <= 0) {
       throw new ConflictException({
         message: 'Депозит сессии исчерпан — сессию можно только завершить',
@@ -1143,8 +853,7 @@ export class BacktestService {
     const tradeId = trade.id;
     // Добор не может быть раньше открытия — тот же порядок времени, что
     // closeTrade требует от exitTime относительно entryTime.
-    if (input.entryTime.getTime() < trade.entryTime.getTime())
-      throw timeInvalid();
+    if (input.entryTime.getTime() < trade.entryTime.getTime()) throw timeInvalid();
     const balance = await this.balanceForEntry(tx, trade.sessionId);
 
     const step = qtyStepOf(trade.symbol);
@@ -1162,66 +871,34 @@ export class BacktestService {
     // продаёт и докупает по кругу, через несколько циклов маржа «превышала» бы депозит.
     const remaining = trade.qty - trade.closedQty;
     const newQty = trade.qty + addQty;
-    const newEntry = averageIn(
-      remaining,
-      trade.entryPrice,
-      addQty,
-      input.entryPrice,
-    );
+    const newEntry = averageIn(remaining, trade.entryPrice, addQty, input.entryPrice);
     const newRiskUsdt = trade.riskUsdt + addRiskUsdt;
     const newRiskPct = (newRiskUsdt / balance) * 100;
     const direction = trade.direction as Direction;
 
     if (!stopOnRightSide(direction, newEntry, trade.stopLoss)) {
-      throw new BadRequestException({
-        message: 'Добор загоняет средний вход за стоп',
-        code: 'BACKTEST_STOP_SIDE',
-      });
+      throw new BadRequestException({ message: 'Добор загоняет средний вход за стоп', code: 'BACKTEST_STOP_SIDE' });
     }
-    if (
-      trade.takeProfit != null &&
-      !takeOnRightSide(direction, newEntry, trade.takeProfit)
-    ) {
-      throw new BadRequestException({
-        message: 'Добор загоняет средний вход за тейк',
-        code: 'BACKTEST_TAKE_SIDE',
-      });
+    if (trade.takeProfit != null && !takeOnRightSide(direction, newEntry, trade.takeProfit)) {
+      throw new BadRequestException({ message: 'Добор загоняет средний вход за тейк', code: 'BACKTEST_TAKE_SIDE' });
     }
     const margin = ((remaining + addQty) * newEntry) / trade.leverage;
     if (margin > balance) {
-      throw new BadRequestException({
-        message: 'Маржа добора больше депозита',
-        code: 'BACKTEST_MARGIN_EXCEEDS_BALANCE',
-      });
+      throw new BadRequestException({ message: 'Маржа добора больше депозита', code: 'BACKTEST_MARGIN_EXCEEDS_BALANCE' });
     }
     if (belowMinOrder(addQty, input.entryPrice, step)) throw qtyTooSmall(step);
 
     const result = await tx.backtestTrade.updateMany({
       where: { id: tradeId, exitTime: null },
-      data: {
-        qty: newQty,
-        entryPrice: newEntry,
-        riskUsdt: newRiskUsdt,
-        riskPct: newRiskPct,
-      },
+      data: { qty: newQty, entryPrice: newEntry, riskUsdt: newRiskUsdt, riskPct: newRiskPct },
     });
     if (result.count === 0) throw tradeClosed();
     // Своя строка истории на каждый добор — тем же приёмом, что и
     // BacktestTradeExit у частичных закрытий: без неё entryPrice/entryTime
     // сделки после доборов — только усреднённый итог, и разметить на
     // графике каждый отдельный вход было бы нечем.
-    await tx.backtestTradeEntry.create({
-      data: {
-        tradeId,
-        qty: addQty,
-        price: input.entryPrice,
-        time: input.entryTime,
-      },
-    });
-    const updated = await tx.backtestTrade.findUnique({
-      where: { id: tradeId },
-      include: TRADE_INCLUDE,
-    });
+    await tx.backtestTradeEntry.create({ data: { tradeId, qty: addQty, price: input.entryPrice, time: input.entryTime } });
+    const updated = await tx.backtestTrade.findUnique({ where: { id: tradeId }, include: TRADE_INCLUDE });
     return { trade: updated!, filledQty: addQty };
   }
 
@@ -1236,21 +913,11 @@ export class BacktestService {
    * позицию со своими стопом/тейком/плечом, а если позиция этой стороны уже
    * открыта — доливает её по её стопу (`openChecked`).
    */
-  async createEntryOrders(
-    userId: string,
-    sessionId: string,
-    input: CreateEntryOrdersInput,
-  ) {
+  async createEntryOrders(userId: string, sessionId: string, input: CreateEntryOrdersInput) {
     const s = await this.ownedSession(userId, sessionId);
     if (s.status !== 'active') throw sessionFinished();
     const symbol = symbolFor(s, input.symbol);
-    await this.assertLongFree(
-      this.prisma,
-      sessionId,
-      symbol,
-      input.direction,
-      null,
-    );
+    await this.assertLongFree(this.prisma, sessionId, symbol, input.direction, null);
     if (
       (input.riskPcts && input.riskPcts.length !== input.prices.length) ||
       (input.stopsAfter && input.stopsAfter.length !== input.prices.length)
@@ -1259,27 +926,15 @@ export class BacktestService {
     }
     for (const [i, price] of input.prices.entries()) {
       if (!stopOnRightSide(input.direction, price, input.stopLoss)) {
-        throw new BadRequestException({
-          message: 'Стоп стоит не по ту сторону от входа',
-          code: 'BACKTEST_STOP_SIDE',
-        });
+        throw new BadRequestException({ message: 'Стоп стоит не по ту сторону от входа', code: 'BACKTEST_STOP_SIDE' });
       }
       // Цель стопа после исполнения уровня — по свою сторону от его цены, как сам стоп.
       const after = input.stopsAfter?.[i];
       if (after && !stopOnRightSide(input.direction, price, after)) {
-        throw new BadRequestException({
-          message: 'Стоп после исполнения стоит не по ту сторону от входа',
-          code: 'BACKTEST_STOP_SIDE',
-        });
+        throw new BadRequestException({ message: 'Стоп после исполнения стоит не по ту сторону от входа', code: 'BACKTEST_STOP_SIDE' });
       }
-      if (
-        input.takeProfit != null &&
-        !takeOnRightSide(input.direction, price, input.takeProfit)
-      ) {
-        throw new BadRequestException({
-          message: 'Тейк стоит не по ту сторону от входа',
-          code: 'BACKTEST_TAKE_SIDE',
-        });
+      if (input.takeProfit != null && !takeOnRightSide(input.direction, price, input.takeProfit)) {
+        throw new BadRequestException({ message: 'Тейк стоит не по ту сторону от входа', code: 'BACKTEST_TAKE_SIDE' });
       }
     }
     // Объём уровня на нынешний депозит — тот, что покажет таблица панели: ордер,
@@ -1287,13 +942,7 @@ export class BacktestService {
     const balance = await this.balanceForEntry(this.prisma, sessionId);
     const step = qtyStepOf(symbol);
     for (const [i, price] of input.prices.entries()) {
-      const { qty } = positionSize(
-        balance,
-        input.riskPcts?.[i] ?? input.riskPct,
-        price,
-        input.stopLoss,
-        step,
-      );
+      const { qty } = positionSize(balance, input.riskPcts?.[i] ?? input.riskPct, price, input.stopLoss, step);
       if (belowMinOrder(qty, price, step)) throw qtyTooSmall(step);
     }
     const entryOrders = await this.prisma.$transaction(
@@ -1330,50 +979,26 @@ export class BacktestService {
    * Новый id делает обе гонки невозможными: старого ордера больше нет.
    */
   async moveEntryOrder(userId: string, orderId: string, price: number) {
-    const order = await this.prisma.backtestEntryOrder.findUnique({
-      where: { id: orderId },
-      include: { session: true },
-    });
+    const order = await this.prisma.backtestEntryOrder.findUnique({ where: { id: orderId }, include: { session: true } });
     if (!order || order.session.userId !== userId) throw entryOrderNotFound();
     if (order.session.status !== 'active') throw sessionFinished();
     const direction = order.direction as Direction;
     if (!stopOnRightSide(direction, price, order.stopLoss)) {
-      throw new BadRequestException({
-        message: 'Стоп стоит не по ту сторону от входа',
-        code: 'BACKTEST_STOP_SIDE',
-      });
+      throw new BadRequestException({ message: 'Стоп стоит не по ту сторону от входа', code: 'BACKTEST_STOP_SIDE' });
     }
-    if (
-      order.takeProfit != null &&
-      !takeOnRightSide(direction, price, order.takeProfit)
-    ) {
-      throw new BadRequestException({
-        message: 'Тейк стоит не по ту сторону от входа',
-        code: 'BACKTEST_TAKE_SIDE',
-      });
+    if (order.takeProfit != null && !takeOnRightSide(direction, price, order.takeProfit)) {
+      throw new BadRequestException({ message: 'Тейк стоит не по ту сторону от входа', code: 'BACKTEST_TAKE_SIDE' });
     }
-    if (
-      order.stopAfter &&
-      !stopOnRightSide(direction, price, order.stopAfter)
-    ) {
-      throw new BadRequestException({
-        message: 'Стоп после исполнения стоит не по ту сторону от входа',
-        code: 'BACKTEST_STOP_SIDE',
-      });
+    if (order.stopAfter && !stopOnRightSide(direction, price, order.stopAfter)) {
+      throw new BadRequestException({ message: 'Стоп после исполнения стоит не по ту сторону от входа', code: 'BACKTEST_STOP_SIDE' });
     }
 
     return this.prisma.$transaction(async (tx) => {
       // Замок сессии и проверка статуса — тем же приёмом, что у modifyTrade.
-      const bumped = await this.bumpCursor(
-        tx,
-        order.sessionId,
-        order.session.cursorTime,
-      );
+      const bumped = await this.bumpCursor(tx, order.sessionId, order.session.cursorTime);
       if (bumped === 0) throw sessionFinished();
       // Ордер успели исполнить или снять — переставлять нечего.
-      const { count } = await tx.backtestEntryOrder.deleteMany({
-        where: { id: orderId, sessionId: order.sessionId },
-      });
+      const { count } = await tx.backtestEntryOrder.deleteMany({ where: { id: orderId, sessionId: order.sessionId } });
       if (count === 0) throw entryOrderNotFound();
       const entryOrder = await tx.backtestEntryOrder.create({
         data: {
@@ -1395,10 +1020,7 @@ export class BacktestService {
   }
 
   async cancelEntryOrder(userId: string, orderId: string) {
-    const order = await this.prisma.backtestEntryOrder.findUnique({
-      where: { id: orderId },
-      include: { session: true },
-    });
+    const order = await this.prisma.backtestEntryOrder.findUnique({ where: { id: orderId }, include: { session: true } });
     if (!order || order.session.userId !== userId) throw entryOrderNotFound();
     // deleteMany, а не delete: в эфире уровень мог исполнить движок между
     // чтением выше и этой строкой, и delete ответил бы на это 500.
@@ -1418,50 +1040,24 @@ export class BacktestService {
     const symbol = symbolFor(s, raw.symbol);
     // В эфире момент и цену запуска ставит сервер — как у входа по рынку.
     const input = await this.withServerEntry(s, raw, symbol);
-    const grid = {
-      lower: input.lower,
-      upper: input.upper,
-      levels: input.levels,
-      stopLoss: input.stopLoss,
-      shares: input.shares ?? [],
-    };
+    const grid = { lower: input.lower, upper: input.upper, levels: input.levels, stopLoss: input.stopLoss, shares: input.shares ?? [] };
     const err =
       botGridError(grid, input.entryPrice) ??
-      (input.stopsAfter && input.stopsAfter.length !== input.levels
-        ? 'BACKTEST_BOT_LEVELS'
-        : null);
-    if (err)
-      throw new BadRequestException({
-        message: 'Сетка бота задана неверно',
-        code: err,
-      });
+      (input.stopsAfter && input.stopsAfter.length !== input.levels ? 'BACKTEST_BOT_LEVELS' : null);
+    if (err) throw new BadRequestException({ message: 'Сетка бота задана неверно', code: err });
     if (input.entryTime.getTime() < s.startTime.getTime()) throw timeInvalid();
 
     return this.prisma.$transaction(async (tx) => {
       const bumped = await this.bumpCursor(tx, sessionId, input.entryTime);
       if (bumped === 0) throw sessionFinished();
-      if (
-        await tx.backtestBot.findFirst({
-          where: { sessionId, symbol, status: 'active' },
-        })
-      ) {
-        throw new ConflictException({
-          message: 'На этой монете бот уже работает',
-          code: 'BACKTEST_BOT_EXISTS',
-        });
+      if (await tx.backtestBot.findFirst({ where: { sessionId, symbol, status: 'active' } })) {
+        throw new ConflictException({ message: 'На этой монете бот уже работает', code: 'BACKTEST_BOT_EXISTS' });
       }
       const busy =
-        (await tx.backtestTrade.findFirst({
-          where: { sessionId, symbol, direction: 'long', exitTime: null },
-        })) != null ||
-        (await tx.backtestEntryOrder.count({
-          where: { sessionId, symbol, direction: 'long' },
-        })) > 0;
+        (await tx.backtestTrade.findFirst({ where: { sessionId, symbol, direction: 'long', exitTime: null } })) != null ||
+        (await tx.backtestEntryOrder.count({ where: { sessionId, symbol, direction: 'long' } })) > 0;
       if (busy) {
-        throw new ConflictException({
-          message: 'Лонг этой монеты занят',
-          code: 'BACKTEST_BOT_SIDE_BUSY',
-        });
+        throw new ConflictException({ message: 'Лонг этой монеты занят', code: 'BACKTEST_BOT_SIDE_BUSY' });
       }
       const bot = await tx.backtestBot.create({
         data: {
@@ -1485,29 +1081,17 @@ export class BacktestService {
       const balance = await this.balanceForEntry(tx, sessionId);
       // Объём уровня — вниз до шага лота, как его купит лимит бота (`positionSize`).
       const lot = qtyStepOf(symbol);
-      const qOf = (price: number) =>
-        floorToLot(
-          botQty(grid, balance, input.riskPct, botLevelOf(grid, price)),
-          lot,
-        );
-      if (prices.some((p) => belowMinOrder(qOf(p), p, lot)))
-        throw qtyTooSmall(lot);
+      const qOf = (price: number) => floorToLot(botQty(grid, balance, input.riskPct, botLevelOf(grid, price)), lot);
+      if (prices.some((p) => belowMinOrder(qOf(p), p, lot))) throw qtyTooSmall(lot);
       // Маржа всей сетки, если исполнятся все покупки: иначе бот запустится и
       // упрётся в депозит на первой же глубокой покупке.
-      if (
-        prices.reduce((a, p) => a + qOf(p) * p, 0) / input.leverage >
-        balance
-      ) {
-        throw new BadRequestException({
-          message: 'Маржа сетки бота больше депозита',
-          code: 'BACKTEST_MARGIN_EXCEEDS_BALANCE',
-        });
+      if (prices.reduce((a, p) => a + qOf(p) * p, 0) / input.leverage > balance) {
+        throw new BadRequestException({ message: 'Маржа сетки бота больше депозита', code: 'BACKTEST_MARGIN_EXCEEDS_BALANCE' });
       }
       if (market.length > 0) {
         // Один вход объёмом всех верхних уровней: риск входа — тот, что даёт этот объём от его цены.
         const marketQty = market.reduce((a, p) => a + qOf(p), 0);
-        const riskPct =
-          (marketQty * (input.entryPrice - grid.stopLoss) * 100) / balance;
+        const riskPct = (marketQty * (input.entryPrice - grid.stopLoss) * 100) / balance;
         const { trade } = await this.openInTx(tx, sessionId, symbol, {
           symbol,
           direction: 'long',
@@ -1520,13 +1104,7 @@ export class BacktestService {
         });
         for (const price of market) {
           await tx.backtestCloseOrder.create({
-            data: {
-              tradeId: trade.id,
-              price: price + step,
-              qty: qOf(price),
-              botId: bot.id,
-              botBuyPrice: price,
-            },
+            data: { tradeId: trade.id, price: price + step, qty: qOf(price), botId: bot.id, botBuyPrice: price },
           });
         }
       }
@@ -1551,37 +1129,21 @@ export class BacktestService {
 
   /** «Остановить»: снимаются покупки бота; позиция и её продажи остаются человеку. */
   async stopBot(userId: string, botId: string) {
-    const bot = await this.prisma.backtestBot.findUnique({
-      where: { id: botId },
-      include: { session: true },
-    });
+    const bot = await this.prisma.backtestBot.findUnique({ where: { id: botId }, include: { session: true } });
     if (!bot || bot.session.userId !== userId) {
-      throw new NotFoundException({
-        message: 'Бот не найден',
-        code: 'BACKTEST_BOT_NOT_FOUND',
-      });
+      throw new NotFoundException({ message: 'Бот не найден', code: 'BACKTEST_BOT_NOT_FOUND' });
     }
     const s = bot.session;
     return this.prisma.$transaction(async (tx) => {
       const bumped = await this.bumpCursor(tx, s.id, s.cursorTime);
       if (bumped === 0) throw sessionFinished();
-      await this.haltBot(
-        tx,
-        botId,
-        'user',
-        isLive(s) ? new Date() : s.cursorTime,
-      );
+      await this.haltBot(tx, botId, 'user', isLive(s) ? new Date() : s.cursorTime);
       return { bot: await tx.backtestBot.findUnique({ where: { id: botId } }) };
     });
   }
 
   /** Бот перестаёт работать: статус, причина и его покупки, которые больше никто не поведёт. */
-  protected async haltBot(
-    tx: Prisma.TransactionClient,
-    botId: string,
-    reason: string,
-    time: Date,
-  ): Promise<boolean> {
+  protected async haltBot(tx: Prisma.TransactionClient, botId: string, reason: string, time: Date): Promise<boolean> {
     const { count } = await tx.backtestBot.updateMany({
       where: { id: botId, status: 'active' },
       data: { status: 'stopped', stopReason: reason, stoppedAt: time },
@@ -1591,23 +1153,11 @@ export class BacktestService {
   }
 
   /** Покупка бота исполнилась — продажа на шаг выше на исполненный объём, если бот ещё работает. */
-  protected async sellAfterBotBuy(
-    tx: Prisma.TransactionClient,
-    botId: string,
-    tradeId: string,
-    buyPrice: number,
-    qty: number,
-  ) {
+  protected async sellAfterBotBuy(tx: Prisma.TransactionClient, botId: string, tradeId: string, buyPrice: number, qty: number) {
     const bot = await tx.backtestBot.findUnique({ where: { id: botId } });
     if (!bot || bot.status !== 'active') return;
     await tx.backtestCloseOrder.create({
-      data: {
-        tradeId,
-        price: buyPrice + botStep(bot),
-        qty,
-        botId,
-        botBuyPrice: buyPrice,
-      },
+      data: { tradeId, price: buyPrice + botStep(bot), qty, botId, botBuyPrice: buyPrice },
     });
   }
 
@@ -1630,37 +1180,22 @@ export class BacktestService {
     // бота на стопе и ниже снимаются — их исполнение сервер всё равно отклонил бы.
     let stop = trade.stopLoss;
     if (positionOpen && bot.stopFollow && bot.stopsAfter[j] > 0) {
-      const moved = await this.tightenStop(
-        tx,
-        trade.id,
-        bot.stopsAfter[j],
-        exitPrice,
-      );
+      const moved = await this.tightenStop(tx, trade.id, bot.stopsAfter[j], exitPrice);
       if (moved != null) {
         stop = moved;
-        await tx.backtestEntryOrder.deleteMany({
-          where: { sessionId: bot.sessionId, botId, price: { lte: moved } },
-        });
+        await tx.backtestEntryOrder.deleteMany({ where: { sessionId: bot.sessionId, botId, price: { lte: moved } } });
       }
     }
     // Покупка на стопе и ниже не встаёт: открытая позиция её не примет.
     if (positionOpen && price <= stop) return;
     // Позиция закрыта целиком — подтянутого стопа больше нет, и покупки, снятые
     // им, встают снова: все уровни ниже цены продажи, у которых покупки нет.
-    const prices = positionOpen
-      ? [price]
-      : botPrices(bot).filter((p) => p < exitPrice);
+    const prices = positionOpen ? [price] : botPrices(bot).filter((p) => p < exitPrice);
     const standing = positionOpen
       ? []
-      : (
-          await tx.backtestEntryOrder.findMany({
-            where: { sessionId: bot.sessionId, botId },
-            select: { price: true },
-          })
-        ).map((o) => o.price);
+      : (await tx.backtestEntryOrder.findMany({ where: { sessionId: bot.sessionId, botId }, select: { price: true } })).map((o) => o.price);
     for (const p of prices) {
-      if (standing.some((s) => botLevelOf(bot, s) === botLevelOf(bot, p)))
-        continue;
+      if (standing.some((s) => botLevelOf(bot, s) === botLevelOf(bot, p))) continue;
       await tx.backtestEntryOrder.create({
         data: {
           sessionId: bot.sessionId,
@@ -1684,23 +1219,14 @@ export class BacktestService {
    * стоп или null, если он не сдвинулся. Общий у «Стопа после» «Сетки» и
    * «Стопа после тейка» бота.
    */
-  protected async tightenStop(
-    tx: Prisma.TransactionClient,
-    tradeId: string,
-    target: number,
-    fillPrice: number,
-  ): Promise<number | null> {
+  protected async tightenStop(tx: Prisma.TransactionClient, tradeId: string, target: number, fillPrice: number): Promise<number | null> {
     const cur = await tx.backtestTrade.findUnique({ where: { id: tradeId } });
     if (!cur || cur.exitTime) return null;
     const direction = cur.direction as Direction;
     if (!stopOnRightSide(direction, fillPrice, target)) return null;
-    const tighter =
-      direction === 'long' ? target > cur.stopLoss : target < cur.stopLoss;
+    const tighter = direction === 'long' ? target > cur.stopLoss : target < cur.stopLoss;
     if (!tighter) return null;
-    await tx.backtestTrade.update({
-      where: { id: tradeId },
-      data: { stopLoss: target },
-    });
+    await tx.backtestTrade.update({ where: { id: tradeId }, data: { stopLoss: target } });
     return target;
   }
 
@@ -1718,24 +1244,14 @@ export class BacktestService {
     order: { botId: string | null } | null,
   ) {
     if (direction !== 'long') return;
-    const bot = await tx.backtestBot.findFirst({
-      where: { sessionId, symbol, status: 'active' },
-    });
+    const bot = await tx.backtestBot.findFirst({ where: { sessionId, symbol, status: 'active' } });
     if (bot && order?.botId !== bot.id) {
-      throw new ConflictException({
-        message: 'Лонг этой монеты ведёт бот',
-        code: 'BACKTEST_BOT_SIDE',
-      });
+      throw new ConflictException({ message: 'Лонг этой монеты ведёт бот', code: 'BACKTEST_BOT_SIDE' });
     }
   }
 
   /** Плечо открытых сделок одной монеты: на бирже плечо задаётся на символ. */
-  async setLeverage(
-    userId: string,
-    sessionId: string,
-    leverage: number,
-    rawSymbol?: string,
-  ) {
+  async setLeverage(userId: string, sessionId: string, leverage: number, rawSymbol?: string) {
     const s = await this.ownedSession(userId, sessionId);
     if (s.status !== 'active') throw sessionFinished();
     const symbol = symbolFor(s, rawSymbol);
@@ -1746,39 +1262,25 @@ export class BacktestService {
       // готовое значение под рукой через ownedTrade (trade.session.cursorTime), но
       // ownedSession отдаёт только то, что уже проверено выше (status) — своё чтение
       // надёжнее, чем полагаться на непроверенный состав остальных полей.
-      const fresh = await tx.backtestSession.findUnique({
-        where: { id: sessionId },
-        select: { balance: true, cursorTime: true },
-      });
+      const fresh = await tx.backtestSession.findUnique({ where: { id: sessionId }, select: { balance: true, cursorTime: true } });
       const bumped = await this.bumpCursor(tx, sessionId, fresh!.cursorTime);
       if (bumped === 0) throw sessionFinished();
       const where = { sessionId, symbol, exitTime: null };
       const open = await tx.backtestTrade.findMany({ where });
       for (const trade of open) {
         // От остатка: `qty` — всё, что когда-либо вошло в сделку (см. addCore).
-        const margin =
-          ((trade.qty - trade.closedQty) * trade.entryPrice) / leverage;
+        const margin = ((trade.qty - trade.closedQty) * trade.entryPrice) / leverage;
         if (margin > fresh!.balance) {
-          throw new BadRequestException({
-            message: 'Маржа больше депозита',
-            code: 'BACKTEST_MARGIN_EXCEEDS_BALANCE',
-          });
+          throw new BadRequestException({ message: 'Маржа больше депозита', code: 'BACKTEST_MARGIN_EXCEEDS_BALANCE' });
         }
       }
       await tx.backtestTrade.updateMany({ where, data: { leverage } });
-      const trades = await tx.backtestTrade.findMany({
-        where,
-        include: TRADE_INCLUDE,
-      });
+      const trades = await tx.backtestTrade.findMany({ where, include: TRADE_INCLUDE });
       return { trades: trades.map(tradeView) };
     });
   }
 
-  async createCloseOrder(
-    userId: string,
-    tradeId: string,
-    input: { price: number; qty: number },
-  ) {
+  async createCloseOrder(userId: string, tradeId: string, input: { price: number; qty: number }) {
     const trade = await this.ownedTrade(userId, tradeId);
     if (trade.exitTime) throw tradeClosed();
     if (trade.session.status !== 'active') throw sessionFinished();
@@ -1806,19 +1308,10 @@ export class BacktestService {
   async createCloseGrid(
     userId: string,
     tradeId: string,
-    input: {
-      prices: number[];
-      qtys?: number[];
-      stops?: (number | null)[];
-      stopFollow: boolean;
-    },
+    input: { prices: number[]; qtys?: number[]; stops?: (number | null)[]; stopFollow: boolean },
   ) {
     const n = input.prices.length;
-    if (
-      (input.qtys && input.qtys.length !== n) ||
-      (input.stops && input.stops.length !== n)
-    )
-      throw gridInvalid();
+    if ((input.qtys && input.qtys.length !== n) || (input.stops && input.stops.length !== n)) throw gridInvalid();
     const trade = await this.ownedTrade(userId, tradeId);
     if (trade.exitTime) throw tradeClosed();
     if (trade.session.status !== 'active') throw sessionFinished();
@@ -1826,15 +1319,9 @@ export class BacktestService {
     return this.prisma.$transaction(async (tx) => {
       // Замок сессии: частичное закрытие между чтением выше и записью ниже
       // поменяло бы остаток, и сетка разошлась бы с позицией.
-      const bumped = await this.bumpCursor(
-        tx,
-        trade.sessionId,
-        trade.session.cursorTime,
-      );
+      const bumped = await this.bumpCursor(tx, trade.sessionId, trade.session.cursorTime);
       if (bumped === 0) throw sessionFinished();
-      const fresh = await tx.backtestTrade.findUnique({
-        where: { id: tradeId },
-      });
+      const fresh = await tx.backtestTrade.findUnique({ where: { id: tradeId } });
       if (!fresh || fresh.exitTime) throw tradeClosed();
       const remaining = fresh.qty - fresh.closedQty;
       const qtys = gridQtys(remaining, n, qtyStepOf(fresh.symbol), input.qtys);
@@ -1842,21 +1329,13 @@ export class BacktestService {
       await tx.backtestCloseOrder.deleteMany({ where: { tradeId } });
       // Сетка фиксации заменяет все лимиты закрытия, продажи бота тоже: позицию
       // забрал человек, и бот, продолжая докупать, ставил бы продажи поверх его сетки.
-      if (fresh.botId)
-        await this.haltBot(tx, fresh.botId, 'user', trade.session.cursorTime);
+      if (fresh.botId) await this.haltBot(tx, fresh.botId, 'user', trade.session.cursorTime);
       const closeOrders = [];
       for (const [i, price] of input.prices.entries()) {
         const stopAfter = input.stops?.[i] || null; // 0 — правило, как и null
-        closeOrders.push(
-          await tx.backtestCloseOrder.create({
-            data: { tradeId, price, qty: qtys[i], stopAfter },
-          }),
-        );
+        closeOrders.push(await tx.backtestCloseOrder.create({ data: { tradeId, price, qty: qtys[i], stopAfter } }));
       }
-      await tx.backtestTrade.update({
-        where: { id: tradeId },
-        data: { stopFollow: input.stopFollow },
-      });
+      await tx.backtestTrade.update({ where: { id: tradeId }, data: { stopFollow: input.stopFollow } });
       return { closeOrders };
     });
   }
@@ -1872,25 +1351,13 @@ export class BacktestService {
       where: { id: orderId },
       include: { trade: { include: { session: true } } },
     });
-    if (!order || order.trade.session.userId !== userId)
-      throw closeOrderNotFound();
+    if (!order || order.trade.session.userId !== userId) throw closeOrderNotFound();
     if (order.trade.exitTime) throw tradeClosed();
     if (order.trade.session.status !== 'active') throw sessionFinished();
-    const { count } = await this.prisma.backtestCloseOrder.updateMany({
-      where: { id: orderId },
-      data: { price },
-    });
+    const { count } = await this.prisma.backtestCloseOrder.updateMany({ where: { id: orderId }, data: { price } });
     // Успел исполниться или его сняли — как у снятия, 404, а не 500.
     if (count === 0) throw closeOrderNotFound();
-    return {
-      closeOrder: {
-        id: order.id,
-        tradeId: order.tradeId,
-        price,
-        qty: order.qty,
-        createdAt: order.createdAt,
-      },
-    };
+    return { closeOrder: { id: order.id, tradeId: order.tradeId, price, qty: order.qty, createdAt: order.createdAt } };
   }
 
   async cancelCloseOrder(userId: string, orderId: string) {
@@ -1898,50 +1365,32 @@ export class BacktestService {
       where: { id: orderId },
       include: { trade: { include: { session: true } } },
     });
-    if (!order || order.trade.session.userId !== userId)
-      throw closeOrderNotFound();
+    if (!order || order.trade.session.userId !== userId) throw closeOrderNotFound();
     await this.prisma.backtestCloseOrder.delete({ where: { id: orderId } });
     return { success: true as const };
   }
 
   async closeTrade(userId: string, tradeId: string, rawInput: CloseTradeInput) {
     const trade = await this.ownedTrade(userId, tradeId);
-    const input = await this.withServerExit(
-      trade.session,
-      rawInput,
-      trade.symbol,
-    );
+    const input = await this.withServerExit(trade.session, rawInput, trade.symbol);
     if (trade.exitTime) {
       // Уже закрыта целиком — повтор того же финального запроса не ошибка.
-      if (
-        trade.exitTime.getTime() === input.exitTime.getTime() &&
-        trade.exitPrice === input.exitPrice
-      ) {
-        const same = await this.prisma.backtestTrade.findUnique({
-          where: { id: tradeId },
-          include: TRADE_INCLUDE,
-        });
+      if (trade.exitTime.getTime() === input.exitTime.getTime() && trade.exitPrice === input.exitPrice) {
+        const same = await this.prisma.backtestTrade.findUnique({ where: { id: tradeId }, include: TRADE_INCLUDE });
         return { trade: tradeView(same!), balance: trade.session.balance };
       }
       throw tradeClosed();
     }
-    if (input.exitTime.getTime() <= trade.entryTime.getTime())
-      throw timeInvalid();
+    if (input.exitTime.getTime() <= trade.entryTime.getTime()) throw timeInvalid();
 
     const remaining = trade.qty - trade.closedQty;
     if ((input.qty ?? remaining) > remaining + QTY_EPS) {
-      throw new BadRequestException({
-        message: 'Объём закрытия больше остатка',
-        code: 'BACKTEST_QTY_EXCEEDS_REMAINING',
-      });
+      throw new BadRequestException({ message: 'Объём закрытия больше остатка', code: 'BACKTEST_QTY_EXCEEDS_REMAINING' });
     }
     // Часть позиции, выбранная человеком, — до шага лота; лимит закрытия несёт свой, уже округлённый.
     const exit =
       input.qty != null && !input.closeOrderId
-        ? {
-            ...input,
-            qty: closeQtyOf(input.qty, remaining, qtyStepOf(trade.symbol)),
-          }
+        ? { ...input, qty: closeQtyOf(input.qty, remaining, qtyStepOf(trade.symbol)) }
         : input;
     const qty = exit.qty ?? remaining;
 
@@ -1951,16 +1400,9 @@ export class BacktestService {
       const applied = await this.applyClose(tx, trade, exit);
       if (!applied) {
         // Гонка или потерянный-и-повторённый ответ — разбираемся по последнему exit.
-        const raced = await tx.backtestTrade.findUnique({
-          where: { id: tradeId },
-          include: TRADE_INCLUDE,
-        });
+        const raced = await tx.backtestTrade.findUnique({ where: { id: tradeId }, include: TRADE_INCLUDE });
         if (!raced) throw tradeClosed();
-        const exits = await tx.backtestTradeExit.findMany({
-          where: { tradeId },
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-        });
+        const exits = await tx.backtestTradeExit.findMany({ where: { tradeId }, orderBy: { createdAt: 'desc' }, take: 1 });
         const last = exits[0];
         const same =
           last != null &&
@@ -1969,17 +1411,11 @@ export class BacktestService {
           last.time.getTime() === exit.exitTime.getTime() &&
           last.reason === exit.reason;
         if (!same) throw tradeClosed();
-        const fresh = await tx.backtestSession.findUnique({
-          where: { id: trade.sessionId },
-          select: { balance: true },
-        });
+        const fresh = await tx.backtestSession.findUnique({ where: { id: trade.sessionId }, select: { balance: true } });
         return { trade: tradeView(raced), balance: fresh!.balance };
       }
 
-      const updated = await tx.backtestTrade.findUnique({
-        where: { id: tradeId },
-        include: TRADE_INCLUDE,
-      });
+      const updated = await tx.backtestTrade.findUnique({ where: { id: tradeId }, include: TRADE_INCLUDE });
       return { trade: tradeView(updated!), balance: applied.balance };
     });
   }
@@ -2015,15 +1451,8 @@ export class BacktestService {
     // чтением снаружи и замком позицию могли долить (покупка грид-бота в той же
     // минутке, что и стоп), и закрытие по старой строке оставило бы долитое
     // внутри уже «закрытой» сделки, а его убыток — не списанным.
-    const fresh = await tx.backtestTrade.findUnique({
-      where: { id: trade.id },
-    });
-    if (
-      !fresh ||
-      fresh.exitTime ||
-      Math.abs(fresh.closedQty - trade.closedQty) > QTY_EPS
-    )
-      return null;
+    const fresh = await tx.backtestTrade.findUnique({ where: { id: trade.id } });
+    if (!fresh || fresh.exitTime || Math.abs(fresh.closedQty - trade.closedQty) > QTY_EPS) return null;
     const remaining = fresh.qty - fresh.closedQty;
     const qty = Math.min(input.qty ?? remaining, remaining);
     if (qty <= QTY_EPS) return null;
@@ -2043,27 +1472,13 @@ export class BacktestService {
     // позиции, и она залипала навсегда (QA 2026-10-23). Дубликат сдвинул бы
     // closedQty на свой объём — это больше допуска, так что CAS его ловит.
     const cas = await tx.backtestTrade.updateMany({
-      where: {
-        id: trade.id,
-        closedQty: {
-          gte: trade.closedQty - QTY_EPS,
-          lte: trade.closedQty + QTY_EPS,
-        },
-      },
+      where: { id: trade.id, closedQty: { gte: trade.closedQty - QTY_EPS, lte: trade.closedQty + QTY_EPS } },
       data: { closedQty: { increment: qty } },
     });
     if (cas.count === 0) return null;
 
     await tx.backtestTradeExit.create({
-      data: {
-        tradeId: trade.id,
-        qty,
-        price: input.exitPrice,
-        time: input.exitTime,
-        reason: input.reason,
-        fee,
-        pnl,
-      },
+      data: { tradeId: trade.id, qty, price: input.exitPrice, time: input.exitTime, reason: input.reason, fee, pnl },
     });
     // Цель стопа сработавшего лимита (сетка фиксации) — до того, как он снят.
     let stopAfter: number | null = null;
@@ -2074,11 +1489,8 @@ export class BacktestService {
         select: { stopAfter: true, botId: true, botBuyPrice: true },
       });
       stopAfter = order?.stopAfter ?? null;
-      if (order?.botId && order.botBuyPrice != null)
-        botSell = { botId: order.botId, botBuyPrice: order.botBuyPrice };
-      await tx.backtestCloseOrder.deleteMany({
-        where: { id: input.closeOrderId, tradeId: trade.id },
-      });
+      if (order?.botId && order.botBuyPrice != null) botSell = { botId: order.botId, botBuyPrice: order.botBuyPrice };
+      await tx.backtestCloseOrder.deleteMany({ where: { id: input.closeOrderId, tradeId: trade.id } });
     }
     const session = await tx.backtestSession.update({
       where: { id: trade.sessionId },
@@ -2087,9 +1499,7 @@ export class BacktestService {
 
     const newClosedQty = fresh.closedQty + qty;
     if (newClosedQty >= fresh.qty - QTY_EPS) {
-      const exits = await tx.backtestTradeExit.findMany({
-        where: { tradeId: trade.id },
-      });
+      const exits = await tx.backtestTradeExit.findMany({ where: { tradeId: trade.id } });
       const totalFee = exits.reduce((s, e) => s + e.fee, 0);
       const totalPnl = exits.reduce((s, e) => s + e.pnl, 0);
       await tx.backtestTrade.update({
@@ -2113,30 +1523,16 @@ export class BacktestService {
 
     if (botSell) {
       const positionOpen = newClosedQty < fresh.qty - QTY_EPS;
-      await this.buyAfterBotSell(
-        tx,
-        botSell.botId,
-        fresh,
-        botSell.botBuyPrice,
-        input.exitPrice,
-        positionOpen,
-      );
+      await this.buyAfterBotSell(tx, botSell.botId, fresh, botSell.botBuyPrice, input.exitPrice, positionOpen);
     } else if (fresh.botId) {
       // Позицию бота закрыла не его продажа: стоп, тейк, рука, финал. Целиком —
       // бот кончился; частью — тоже, и его продажи снимаются: их сумма больше не
       // сходится с остатком, дальше позицию ведёт человек.
       // Продажи снимаются, только если бот остановлен этим закрытием: после
       // «Остановить» они уже лимиты человека, и частичное закрытие их не трогает.
-      const halted = await this.haltBot(
-        tx,
-        fresh.botId,
-        input.reason,
-        input.exitTime,
-      );
+      const halted = await this.haltBot(tx, fresh.botId, input.reason, input.exitTime);
       if (halted && newClosedQty < fresh.qty - QTY_EPS) {
-        await tx.backtestCloseOrder.deleteMany({
-          where: { tradeId: trade.id, botId: fresh.botId },
-        });
+        await tx.backtestCloseOrder.deleteMany({ where: { tradeId: trade.id, botId: fresh.botId } });
       }
     }
 
@@ -2159,12 +1555,7 @@ export class BacktestService {
    * Сделка читается здесь, под замком сессии, а не берётся у вызывающего: стоп
    * мог поменяться правкой между его чтением и транзакцией.
    */
-  protected async followStop(
-    tx: Prisma.TransactionClient,
-    tradeId: string,
-    fillPrice: number,
-    explicit: number | null = null,
-  ) {
+  protected async followStop(tx: Prisma.TransactionClient, tradeId: string, fillPrice: number, explicit: number | null = null) {
     const cur = await tx.backtestTrade.findUnique({ where: { id: tradeId } });
     if (!cur?.stopFollow) return;
     let target = explicit;
@@ -2175,18 +1566,13 @@ export class BacktestService {
         select: { price: true },
       });
       // Последний в списке — только что записанный выход; предыдущий — перед ним.
-      target =
-        limits.length >= 2 ? limits[limits.length - 2].price : cur.entryPrice;
+      target = limits.length >= 2 ? limits[limits.length - 2].price : cur.entryPrice;
     }
     const direction = cur.direction as Direction;
     if (!stopOnRightSide(direction, fillPrice, target)) return;
-    const tighter =
-      direction === 'long' ? target > cur.stopLoss : target < cur.stopLoss;
+    const tighter = direction === 'long' ? target > cur.stopLoss : target < cur.stopLoss;
     if (!tighter) return;
-    await tx.backtestTrade.update({
-      where: { id: tradeId },
-      data: { stopLoss: target },
-    });
+    await tx.backtestTrade.update({ where: { id: tradeId }, data: { stopLoss: target } });
   }
 
   /**
@@ -2200,24 +1586,16 @@ export class BacktestService {
   async trailTrade(userId: string, tradeId: string, stopLoss: number) {
     const trade = await this.ownedTrade(userId, tradeId);
     if (isLive(trade.session)) {
-      throw new ConflictException({
-        message: 'В эфире стоп ведёт сервер',
-        code: 'BACKTEST_TRAIL_LIVE',
-      });
+      throw new ConflictException({ message: 'В эфире стоп ведёт сервер', code: 'BACKTEST_TRAIL_LIVE' });
     }
     if (!trade.exitTime) await this.applyTrail(trade, stopLoss);
-    const fresh = await this.prisma.backtestTrade.findUnique({
-      where: { id: tradeId },
-      include: TRADE_INCLUDE,
-    });
+    const fresh = await this.prisma.backtestTrade.findUnique({ where: { id: tradeId }, include: TRADE_INCLUDE });
     return { trade: fresh ? tradeView(fresh) : null };
   }
 
   /** Подводящий стоп движком эфира — по экстремуму отрезка. `false` — стоп не сдвинулся. */
   async systemTrail(tradeId: string, stopLoss: number): Promise<boolean> {
-    const trade = await this.prisma.backtestTrade.findUnique({
-      where: { id: tradeId },
-    });
+    const trade = await this.prisma.backtestTrade.findUnique({ where: { id: tradeId } });
     if (!trade || trade.exitTime) return false;
     return this.applyTrail(trade, stopLoss);
   }
@@ -2229,29 +1607,15 @@ export class BacktestService {
    * находят строку, а стоп, подтянутый тем временем другим правилом, не ослабнет.
    */
   protected async applyTrail(
-    trade: {
-      id: string;
-      direction: string;
-      entryPrice: number;
-      stopLoss: number;
-      trailDist: number | null;
-    },
+    trade: { id: string; direction: string; entryPrice: number; stopLoss: number; trailDist: number | null },
     stopLoss: number,
   ): Promise<boolean> {
     if (trade.trailDist == null) return false;
     const long = trade.direction === 'long';
-    const target = long
-      ? Math.min(stopLoss, trade.entryPrice)
-      : Math.max(stopLoss, trade.entryPrice);
-    if (long ? !(target > trade.stopLoss) : !(target < trade.stopLoss))
-      return false;
+    const target = long ? Math.min(stopLoss, trade.entryPrice) : Math.max(stopLoss, trade.entryPrice);
+    if (long ? !(target > trade.stopLoss) : !(target < trade.stopLoss)) return false;
     const { count } = await this.prisma.backtestTrade.updateMany({
-      where: {
-        id: trade.id,
-        exitTime: null,
-        trailDist: { not: null },
-        stopLoss: long ? { lt: target } : { gt: target },
-      },
+      where: { id: trade.id, exitTime: null, trailDist: { not: null }, stopLoss: long ? { lt: target } : { gt: target } },
       data: { stopLoss: target },
     });
     return count > 0;
@@ -2266,9 +1630,7 @@ export class BacktestService {
    * следующем тике и не должен из-за этого прерывать обход остальных.
    */
   async systemClose(tradeId: string, input: CloseTradeInput): Promise<boolean> {
-    const trade = await this.prisma.backtestTrade.findUnique({
-      where: { id: tradeId },
-    });
+    const trade = await this.prisma.backtestTrade.findUnique({ where: { id: tradeId } });
     if (!trade || trade.exitTime) return false;
     if (trade.qty - trade.closedQty <= QTY_EPS) return false;
 
@@ -2290,10 +1652,7 @@ export class BacktestService {
    * уровень снимается). Ошибки базы уходят вызывающему.
    */
   async systemEnter(orderId: string, time: Date): Promise<boolean> {
-    const order = await this.prisma.backtestEntryOrder.findUnique({
-      where: { id: orderId },
-      include: { session: true },
-    });
+    const order = await this.prisma.backtestEntryOrder.findUnique({ where: { id: orderId }, include: { session: true } });
     if (!order || order.session.status !== 'active') return false;
 
     try {
@@ -2318,14 +1677,9 @@ export class BacktestService {
       if (e instanceof EntryOrderGone) return false;
       if (e instanceof HttpException) {
         if (isHopelessEntry(e)) {
-          await this.prisma.backtestEntryOrder.deleteMany({
-            where: { id: orderId },
-          });
+          await this.prisma.backtestEntryOrder.deleteMany({ where: { id: orderId } });
           // См. openTrade: безнадёжная покупка бота останавливает бота.
-          if (order.botId)
-            await this.prisma.$transaction((tx) =>
-              this.haltBot(tx, order.botId!, 'hopeless', time),
-            );
+          if (order.botId) await this.prisma.$transaction((tx) => this.haltBot(tx, order.botId!, 'hopeless', time));
         }
         return false;
       }
@@ -2342,11 +1696,7 @@ export class BacktestService {
    * Нет цены монеты открытой сделки — исключение и откат: закрыть её нечем, а
    * выдуманная цена попала бы в призы. Раннер повторит финал следующим тиком.
    */
-  async finishTournamentSession(
-    sessionId: string,
-    time: Date,
-    prices: Record<string, number>,
-  ): Promise<void> {
+  async finishTournamentSession(sessionId: string, time: Date, prices: Record<string, number>): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       await this.closeRemaining(tx, sessionId, time, (t) => {
         const price = prices[t.symbol];
@@ -2371,24 +1721,15 @@ export class BacktestService {
     await this.ownedTrade(userId, tradeId);
     const unique = [...new Set(tagIds)];
     if (unique.length > 0) {
-      const owned = await this.prisma.tag.count({
-        where: { userId, id: { in: unique } },
-      });
+      const owned = await this.prisma.tag.count({ where: { userId, id: { in: unique } } });
       if (owned !== unique.length) {
-        throw new BadRequestException({
-          message: 'Некоторые теги не найдены',
-          code: 'TAGS_NOT_FOUND',
-        });
+        throw new BadRequestException({ message: 'Некоторые теги не найдены', code: 'TAGS_NOT_FOUND' });
       }
     }
     await this.prisma.$transaction([
       this.prisma.backtestTradeTag.deleteMany({ where: { tradeId } }),
       ...(unique.length > 0
-        ? [
-            this.prisma.backtestTradeTag.createMany({
-              data: unique.map((tagId) => ({ tradeId, tagId })),
-            }),
-          ]
+        ? [this.prisma.backtestTradeTag.createMany({ data: unique.map((tagId) => ({ tradeId, tagId })) })]
         : []),
     ]);
     return { success: true as const };
@@ -2405,23 +1746,15 @@ export class BacktestService {
   async stats(userId: string, source: 'real' | 'synthetic' = 'real') {
     const dataSource = source === 'real' ? { in: ['real', 'live'] } : source;
     const [sessions, trades] = await Promise.all([
-      this.prisma.backtestSession.count({
-        where: { userId, dataSource, tournamentId: null },
-      }),
+      this.prisma.backtestSession.count({ where: { userId, dataSource, tournamentId: null } }),
       this.prisma.backtestTrade.findMany({
-        where: {
-          session: { userId, dataSource, tournamentId: null },
-          exitTime: { not: null },
-        },
+        where: { session: { userId, dataSource, tournamentId: null }, exitTime: { not: null } },
         include: TRADE_INCLUDE,
       }),
     ]);
 
     type TagRef = { id: string; name: string; color: string; type: string };
-    const buckets = new Map<
-      string,
-      { tag: TagRef; rows: { pnl: number; r: number }[] }
-    >();
+    const buckets = new Map<string, { tag: TagRef; rows: { pnl: number; r: number }[] }>();
     for (const t of trades) {
       // Сделка засчитывается целиком каждому своему тегу, как в журнале
       // (statsByTag): деление поровну обессмыслило бы число. Поэтому строки по
@@ -2439,14 +1772,8 @@ export class BacktestService {
     return {
       overall: { sessions, ...summarize(trades.map(closedNumbers)) },
       byTag: [...buckets.values()]
-        .map(({ tag, rows }) => ({
-          tag,
-          ...summarize(rows),
-          ...winLossR(rows),
-        }))
-        .sort(
-          (a, b) => b.trades - a.trades || a.tag.name.localeCompare(b.tag.name),
-        ),
+        .map(({ tag, rows }) => ({ tag, ...summarize(rows), ...winLossR(rows) }))
+        .sort((a, b) => b.trades - a.trades || a.tag.name.localeCompare(b.tag.name)),
     };
   }
 
@@ -2455,11 +1782,7 @@ export class BacktestService {
    * формуле. Любая другая цена была бы выдуманной, а удалить сделку нельзя — её
    * частичные закрытия уже в депозите.
    */
-  protected closeAtEntry(
-    tx: Prisma.TransactionClient,
-    sessionId: string,
-    time: Date,
-  ) {
+  protected closeAtEntry(tx: Prisma.TransactionClient, sessionId: string, time: Date) {
     return this.closeRemaining(tx, sessionId, time, (t) => t.entryPrice);
   }
 
@@ -2474,9 +1797,7 @@ export class BacktestService {
     time: Date,
     priceOf: (t: { entryPrice: number; symbol: string }) => number,
   ) {
-    const open = await tx.backtestTrade.findMany({
-      where: { sessionId, exitTime: null },
-    });
+    const open = await tx.backtestTrade.findMany({ where: { sessionId, exitTime: null } });
     for (const trade of open) {
       const exitPrice = priceOf(trade);
       const qty = trade.qty - trade.closedQty;
@@ -2489,24 +1810,11 @@ export class BacktestService {
           riskUsdt: trade.riskUsdt,
         });
         await tx.backtestTradeExit.create({
-          data: {
-            tradeId: trade.id,
-            qty,
-            price: exitPrice,
-            time,
-            reason: 'finish',
-            fee,
-            pnl,
-          },
+          data: { tradeId: trade.id, qty, price: exitPrice, time, reason: 'finish', fee, pnl },
         });
-        await tx.backtestSession.update({
-          where: { id: sessionId },
-          data: { balance: { increment: pnl } },
-        });
+        await tx.backtestSession.update({ where: { id: sessionId }, data: { balance: { increment: pnl } } });
       }
-      const exits = await tx.backtestTradeExit.findMany({
-        where: { tradeId: trade.id },
-      });
+      const exits = await tx.backtestTradeExit.findMany({ where: { tradeId: trade.id } });
       const totalFee = exits.reduce((a, e) => a + e.fee, 0);
       const totalPnl = exits.reduce((a, e) => a + e.pnl, 0);
       await tx.backtestTrade.update({
@@ -2531,10 +1839,7 @@ export class BacktestService {
       include: { session: { include: { tournament: true } } },
     });
     if (!trade || trade.session.userId !== userId) {
-      throw new NotFoundException({
-        message: 'Сделка не найдена',
-        code: 'BACKTEST_TRADE_NOT_FOUND',
-      });
+      throw new NotFoundException({ message: 'Сделка не найдена', code: 'BACKTEST_TRADE_NOT_FOUND' });
     }
     return trade;
   }
@@ -2542,16 +1847,10 @@ export class BacktestService {
   protected async ownedSession(userId: string, id: string) {
     // Турнир подтягивается всегда: от него зависит, кому верить в ценах и
     // времени, и отдельным чтением по месту это расходилось бы.
-    const s = await this.prisma.backtestSession.findUnique({
-      where: { id },
-      include: { tournament: true },
-    });
+    const s = await this.prisma.backtestSession.findUnique({ where: { id }, include: { tournament: true } });
     // 404, а не 403: чужая сессия не должна подтверждать, что она существует.
     if (!s || s.userId !== userId) {
-      throw new NotFoundException({
-        message: 'Сессия не найдена',
-        code: 'BACKTEST_SESSION_NOT_FOUND',
-      });
+      throw new NotFoundException({ message: 'Сессия не найдена', code: 'BACKTEST_SESSION_NOT_FOUND' });
     }
     return s;
   }
@@ -2570,9 +1869,7 @@ export class BacktestService {
    * иначе «закрыть по цене месячной давности» было бы вопросом одной правки в
    * devtools, а на кону призовой фонд.
    */
-  protected async serverPrice(
-    symbol: string,
-  ): Promise<{ time: Date; price: number }> {
+  protected async serverPrice(symbol: string): Promise<{ time: Date; price: number }> {
     return this.live.quote(symbol);
   }
 
@@ -2581,9 +1878,11 @@ export class BacktestService {
    * сессии бектеста возвращает присланное без изменений, поэтому вызывается
    * безусловно и ветки «а если турнир» по коду не расползаются.
    */
-  protected async withServerEntry<
-    T extends { entryTime: Date; entryPrice: number },
-  >(s: MaybeLive, input: T, symbol: string): Promise<T> {
+  protected async withServerEntry<T extends { entryTime: Date; entryPrice: number }>(
+    s: MaybeLive,
+    input: T,
+    symbol: string,
+  ): Promise<T> {
     if (!isLive(s)) return input;
     this.ensureNotEnded(s);
     const { time, price } = await this.serverPrice(symbol);
@@ -2595,11 +1894,7 @@ export class BacktestService {
    * лимитки исполняет серверный движок по живым минуткам, и принять такой выход
    * от браузера значило бы разрешить назначить себе цену срабатывания.
    */
-  protected async withServerExit(
-    s: MaybeLive,
-    input: CloseTradeInput,
-    symbol: string,
-  ): Promise<CloseTradeInput> {
+  protected async withServerExit(s: MaybeLive, input: CloseTradeInput, symbol: string): Promise<CloseTradeInput> {
     if (!isLive(s)) return input;
     if (input.reason !== 'manual') {
       throw new BadRequestException({
