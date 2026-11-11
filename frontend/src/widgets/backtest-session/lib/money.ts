@@ -95,6 +95,29 @@ export function pendingEntryQty(
   return previewSize(balance, o.riskPct, o.price, stop, o.leverage, o.direction, step)?.qty ?? null;
 }
 
+/**
+ * Подводящий стоп при правке уровней позиции (окно «Изменить уровни», жест на графике):
+ * включают — расстояние от цены сейчас до стопа; выключают — null; включён, а стоп
+ * перенесли руками — пересчёт от цены до нового стопа (иначе отпущенный ниже стоп
+ * подводящий тут же вернул бы назад); иначе — undefined, поле не трогается.
+ * `trail` не задан (жест) — галочка как была. Все цены — настоящие.
+ */
+export function trailDistOf(
+  trade: { stopLoss: number; trailDist: number | null },
+  priceNow: number,
+  stopLoss: number,
+  trail?: boolean,
+): number | null | undefined {
+  const was = trade.trailDist != null;
+  const on = trail ?? was;
+  if (!on) return was ? null : undefined;
+  // Стоп из окна приходит через экранный масштаб — сравнение с допуском, а не на равенство.
+  const moved = Math.abs(stopLoss - trade.stopLoss) > Math.abs(trade.stopLoss) * 1e-9;
+  if (was && !moved) return undefined;
+  const dist = Math.abs(priceNow - stopLoss);
+  return dist > 0 ? dist : undefined;
+}
+
 /** N цен уровней сетки, равномерно на отрезке [lower, upper] включительно. N=1 — середина отрезка. */
 export function gridPrices(lower: number, upper: number, count: number): number[] {
   const n = Math.max(1, Math.round(count));

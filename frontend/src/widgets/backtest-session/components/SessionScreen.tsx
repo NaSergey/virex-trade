@@ -13,8 +13,10 @@ import { SectionHead } from '@/shared/ui/SectionHead';
 import { Seg, type SegOption } from '@/shared/ui/Seg';
 import { Wrap } from '@/shared/ui/Wrap';
 import { formatPriceGrouped } from '@/shared/lib/utils/format';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   fetchCandles,
+  trailTrade,
   useBacktestSession,
   isLiveSession,
   useDecimalsOf,
@@ -55,6 +57,7 @@ import {
   liquidationPrice,
   openPnl,
   pendingEntryQty,
+  trailDistOf,
   toInput,
   roundLevel,
   toInputPrice,
@@ -69,6 +72,7 @@ import { useRangeCandles, type Load4h } from '../model/useRangeCandles';
 import { useMaxRisk } from '../model/useRiskSettings';
 import { useLiveSymbol } from '../model/useLiveSymbol';
 import { useDefaultLeverage } from '../model/useDefaultLeverage';
+import { useTrailSetting } from '../model/useTrailSetting';
 import { useDrawingTools } from '../model/useDrawingTools';
 import { SESSION_SOURCE, useLiveFeed, type LiveSource } from '../model/useLiveFeed';
 import { SPEEDS, useReplay } from '../model/useReplay';
@@ -372,6 +376,7 @@ export function Terminal({
   // любого действия над сделками и ордерами.
   const tAudio = useTranslations('audio');
   const [soundOn, setSoundOn] = useTerminalSoundOn();
+  const qc = useQueryClient();
 
   // Настройки графика — правая панель на месте панели ордера (шестерёнка над
   // графиком): индикаторы и верхняя граница ползунка риска.
@@ -477,6 +482,8 @@ export function Terminal({
       (actions.bot?.start.isPending ?? false) ||
       (actions.bot?.stop.isPending ?? false),
     !isLive,
+    // Подводящий стоп, подтянутый по минуткам истории, — на сервер.
+    (trade, stop) => trailTrade(qc, detail.session.id, trade.id, stop),
   );
   // Хуки нельзя вызывать по условию, поэтому вызываются оба, а спит тот, чья
   // очередь не настала: в эфире свечи идут живым хвостом, а не прокруткой.
@@ -557,6 +564,8 @@ export function Terminal({
   // уже загружен, то есть уже после гидрации, и здесь безопасно взять текущее
   // значение хранилища без риска разойтись с серверной разметкой.
   const [defaultLeverage, setDefaultLeverage] = useDefaultLeverage();
+  // Галочка «Подводящий» панели: ордер, открывший позицию, включит у неё подводящий стоп.
+  const [trailOn, setTrailOn] = useTrailSetting();
   const [draft, setDraft] = useState<Draft>({ risk: '1', stop: '', take: '', leverage: toInput(defaultLeverage) });
   const [orderTab, setOrderTab] = useState<OrderTab>('market');
   const [limitDraft, setLimitDraft] = useState<LimitDraft>({ risk: '1', stop: '', take: '', entry: '' });
@@ -1063,6 +1072,7 @@ export function Terminal({
         takeProfit: takeN != null ? fromScreen(takeN, scale) : undefined,
         riskPct: risk,
         leverage: draftLeverage,
+        trail: trailOn,
       }),
       // Ордер ушёл — его стоп и тейк теперь живут у сделки. Оставленный черновик лёг бы
       // линиями ровно поверх уровней новой позиции, и жест по ним тянул бы черновик.
@@ -1109,6 +1119,7 @@ export function Terminal({
         riskPct: risk,
         leverage: draftLeverage,
         prices: [fromScreen(lEntryN, scale)],
+        trail: trailOn,
       }),
       () => setLimitDraft((prev) => ({ ...prev, stop: '', take: '', entry: '' })),
     );
@@ -1169,6 +1180,7 @@ export function Terminal({
         prices: table.prices,
         riskPcts: table.riskPcts,
         stopsAfter: table.stopsAfter,
+        trail: trailOn,
       }),
       () => setScaledDraft((prev) => ({ ...prev, stop: '', take: '', upper: '', lower: '', qtyPins: {}, stopPins: {} })),
     );
@@ -1176,15 +1188,29 @@ export function Terminal({
 
   // Принимает screenPrice параметром, а не читает внешний: onDragLevel ниже зовёт её
   // из рефа, модалка «Изменить уровни» — из своего рендера, и цена у каждого своя.
-  const applyLevels = (trade: BacktestTrade, screenPriceNow: number, stop: number, take: number | null, onSettled?: () => void) => {
+  // `trail` — галочка подводящего из окна «Изменить уровни»; не задана (жест на графике) — как была.
+  const applyLevels = (
+    trade: BacktestTrade,
+    screenPriceNow: number,
+    stop: number,
+    take: number | null,
+    onSettled?: () => void,
+    trail?: boolean,
+  ) => {
     const err = checkLevels(trade.direction, screenPriceNow, stop, take);
     setPositionHint(err ? t(err) : null);
     if (err) {
       onSettled?.();
       return;
     }
+    const stopLoss = fromScreen(stop, scale);
     modifyM.mutate(
-      { tradeId: trade.id, stopLoss: fromScreen(stop, scale), takeProfit: take != null ? fromScreen(take, scale) : null },
+      {
+        tradeId: trade.id,
+        stopLoss,
+        takeProfit: take != null ? fromScreen(take, scale) : null,
+        trailDist: trailDistOf(trade, fromScreen(screenPriceNow, scale), stopLoss, trail),
+      },
       { onSuccess: () => setLevelsModalFor(null), onSettled },
     );
   };

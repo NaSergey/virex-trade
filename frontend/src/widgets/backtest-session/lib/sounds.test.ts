@@ -17,6 +17,7 @@ const trade = (over: Partial<BacktestTrade> = {}): BacktestTrade => ({
   leverage: 1,
   closedQty: 0,
   stopFollow: false,
+  trailDist: null,
   exitTime: null,
   exitPrice: null,
   exitReason: null,

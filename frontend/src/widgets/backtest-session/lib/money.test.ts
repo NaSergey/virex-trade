@@ -22,6 +22,7 @@ import {
   openPnl,
   parsePriceInput,
   pendingEntryQty,
+  trailDistOf,
   previewSize,
   roundLevel,
   riskAmount,
@@ -595,4 +596,18 @@ describe('pendingEntryQty', () => {
   it('шагом лота — вниз', () => {
     expect(pendingEntryQty({ ...order, stopLoss: 97 }, null, 1000, 0.1)).toBeCloseTo(3.3);
   });
+});
+
+describe('trailDistOf', () => {
+  const trade = { stopLoss: 98, trailDist: null as number | null };
+
+  it('включают — от цены сейчас до стопа', () => expect(trailDistOf(trade, 101, 98, true)).toBe(3));
+  it('выключают — null; выключенный и не включают — не трогать', () => {
+    expect(trailDistOf({ ...trade, trailDist: 2 }, 101, 98, false)).toBeNull();
+    expect(trailDistOf(trade, 101, 97)).toBeUndefined();
+  });
+  it('включён, стоп перенесли руками — пересчёт от цены до нового стопа', () =>
+    expect(trailDistOf({ ...trade, trailDist: 2 }, 101, 96)).toBe(5));
+  it('включён, стоп на месте (правили тейк) — не трогать', () =>
+    expect(trailDistOf({ ...trade, trailDist: 2 }, 101, 98.00000000001)).toBeUndefined());
 });

@@ -147,6 +147,7 @@ export function openTrade(s0: DemoState, v: OpenVars): DemoState {
     leverage: v.leverage,
     closedQty: 0,
     stopFollow: false,
+    trailDist: null,
     exitTime: null,
     exitPrice: null,
     exitReason: null,

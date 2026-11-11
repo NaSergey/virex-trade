@@ -54,6 +54,39 @@ const HISTORY_CHUNK = 500;
 /** Момент сохраняется на сервер не чаще, чем раз в столько. */
 const SAVE_EVERY_MS = 10000;
 
+type OwnTrail = { dist: number; stop: number };
+
+/**
+ * Стоп сделки для проверок прокрутки: свой подтянутый подводящим, если он теснее
+ * серверного и расстояние у сделки то же; иначе — серверный.
+ */
+export function stopWithTrail(trade: Pick<BacktestTrade, 'direction' | 'stopLoss' | 'trailDist'>, own: OwnTrail | undefined): number {
+  if (!own || trade.trailDist == null || own.dist !== trade.trailDist) return trade.stopLoss;
+  return trade.direction === 'long' ? Math.max(own.stop, trade.stopLoss) : Math.min(own.stop, trade.stopLoss);
+}
+
+/**
+ * Свой подтянутый стоп, который теснее серверного, — на сервер, по одному запросу на
+ * сделку. Отказ не показывается: свой стоп остаётся и уйдёт следующим тиком.
+ */
+export function sendTrails(
+  trades: BacktestTrade[],
+  trailed: Map<string, OwnTrail>,
+  sending: Set<string>,
+  send: ((trade: BacktestTrade, stopLoss: number) => Promise<unknown>) | undefined,
+) {
+  if (!send) return;
+  for (const trade of trades) {
+    const own = trailed.get(trade.id);
+    if (!own || sending.has(trade.id)) continue;
+    if (stopWithTrail(trade, own) === trade.stopLoss) continue;
+    sending.add(trade.id);
+    void send(trade, own.stop)
+      .catch(() => undefined)
+      .finally(() => sending.delete(trade.id));
+  }
+}
+
 export interface Replay {
   cursor: number;
   /**
@@ -124,6 +157,11 @@ export function useReplay(
    * очередь не настала.
    */
   enabled = true,
+  /**
+   * Стоп сделки, подтянутый подводящим по минуткам, — сохранить на сервере.
+   * Промис — чтобы знать, что запрос ещё в пути: второй на ту же сделку не уходит.
+   */
+  onTrail?: (trade: BacktestTrade, stopLoss: number) => Promise<unknown>,
 ): Replay {
   const sessionId = detail.session.id;
   const dataSource = detail.session.dataSource;
@@ -184,6 +222,20 @@ export function useReplay(
   onExitRef.current = onExit;
   const onEntryFillRef = useRef(onEntryFill);
   onEntryFillRef.current = onEntryFill;
+  const onTrailRef = useRef(onTrail);
+  useLayoutEffect(() => {
+    onTrailRef.current = onTrail;
+  });
+  /**
+   * Подводящий стоп, подтянутый прокруткой, — пока сервер его не принял. Проверки
+   * идут по более тесному из своего и серверного: перечитка отстаёт на запрос, и
+   * минутки между тиком и ответом иначе проверялись бы прежним стопом. Свой стоп
+   * действует, пока у сделки то же расстояние: ручной перенос стопа его меняет
+   * (`applyLevels`), и тогда верить надо серверу.
+   */
+  const trailed = useRef(new Map<string, OwnTrail>());
+  /** Сделки, чей подтянутый стоп уже в пути на сервер. */
+  const trailSending = useRef(new Set<string>());
   /** Уровень сетки, чьё срабатывание уже отправлено: как и closing ниже, не даёт
    * тому же уровню сработать второй раз, пока сессия не перечитана после ответа.
    * Три отказа подряд — уровень оставлен: постоянная ошибка не шлёт запрос на тике. */
@@ -363,17 +415,22 @@ export function useReplay(
           });
         }
         const openTrades = openTradesRef.current.filter((t) => !closing.has(t.id));
+        for (const id of trailed.current.keys()) {
+          if (!openTrades.some((t) => t.id === id)) trailed.current.delete(id);
+        }
         const positions: OpenPosition[] = openTrades.map((t) => ({
           tradeId: t.id,
           direction: t.direction,
-          stopLoss: t.stopLoss,
+          stopLoss: stopWithTrail(t, trailed.current.get(t.id)),
           takeProfit: t.takeProfit,
+          trailDist: t.trailDist,
+          entryPrice: t.entryPrice,
           // Та же цена, что на линии ликвидации графика и в таблице позиций.
           liqPrice: liquidationPrice(t.direction, t.entryPrice, t.leverage),
           entryTime: Date.parse(t.entryTime),
         }));
         const pendingEntryOrders = entryOrdersRef.current.filter((o) => !filling.has(o.id));
-        const { reach, complete, exits, entryFill } = advanceTo({
+        const { reach, complete, exits, entryFill, trails } = advanceTo({
           from,
           target,
           minutes: minutesRef.current,
@@ -385,6 +442,16 @@ export function useReplay(
           entryOrders: pendingEntryOrders.map((o) => ({ id: o.id, direction: o.direction, price: o.price })),
         });
         if (reach > from) {
+          for (const { tradeId, stopLoss } of trails) {
+            const trade = openTrades.find((t) => t.id === tradeId);
+            if (trade?.trailDist != null) trailed.current.set(tradeId, { dist: trade.trailDist, stop: stopLoss });
+          }
+          sendTrails(
+            openTrades.filter((t) => !exits.some((e) => e.tradeId === t.id)),
+            trailed.current,
+            trailSending.current,
+            onTrailRef.current,
+          );
           if (exits.length > 0 || entryFill) {
             for (const exit of exits) {
               const trade = openTrades.find((t) => t.id === exit.tradeId);
