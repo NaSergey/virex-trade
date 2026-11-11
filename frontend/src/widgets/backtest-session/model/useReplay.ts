@@ -54,14 +54,20 @@ const HISTORY_CHUNK = 500;
 /** Момент сохраняется на сервер не чаще, чем раз в столько. */
 const SAVE_EVERY_MS = 10000;
 
-type OwnTrail = { dist: number; stop: number };
+/** Свой подтянутый стоп и то, от чего он посчитан: расстояние и средний вход (предел — безубыток). */
+type OwnTrail = { dist: number; entry: number; stop: number };
 
 /**
  * Стоп сделки для проверок прокрутки: свой подтянутый подводящим, если он теснее
- * серверного и расстояние у сделки то же; иначе — серверный.
+ * серверного и посчитан от того же расстояния и среднего входа; иначе — серверный.
+ * Добор сдвигает средний вход, и свой стоп от прежнего мог бы стоять за новым
+ * безубытком; ручной перенос стопа меняет расстояние.
  */
-export function stopWithTrail(trade: Pick<BacktestTrade, 'direction' | 'stopLoss' | 'trailDist'>, own: OwnTrail | undefined): number {
-  if (!own || trade.trailDist == null || own.dist !== trade.trailDist) return trade.stopLoss;
+export function stopWithTrail(
+  trade: Pick<BacktestTrade, 'direction' | 'stopLoss' | 'trailDist' | 'entryPrice'>,
+  own: OwnTrail | undefined,
+): number {
+  if (!own || trade.trailDist == null || own.dist !== trade.trailDist || own.entry !== trade.entryPrice) return trade.stopLoss;
   return trade.direction === 'long' ? Math.max(own.stop, trade.stopLoss) : Math.min(own.stop, trade.stopLoss);
 }
 
@@ -73,7 +79,7 @@ export function sendTrails(
   trades: BacktestTrade[],
   trailed: Map<string, OwnTrail>,
   sending: Set<string>,
-  send: ((trade: BacktestTrade, stopLoss: number) => Promise<unknown>) | undefined,
+  send: ((trade: BacktestTrade, stopLoss: number, dist: number) => Promise<unknown>) | undefined,
 ) {
   if (!send) return;
   for (const trade of trades) {
@@ -81,7 +87,7 @@ export function sendTrails(
     if (!own || sending.has(trade.id)) continue;
     if (stopWithTrail(trade, own) === trade.stopLoss) continue;
     sending.add(trade.id);
-    void send(trade, own.stop)
+    void send(trade, own.stop, own.dist)
       .catch(() => undefined)
       .finally(() => sending.delete(trade.id));
   }
@@ -161,7 +167,7 @@ export function useReplay(
    * Стоп сделки, подтянутый подводящим по минуткам, — сохранить на сервере.
    * Промис — чтобы знать, что запрос ещё в пути: второй на ту же сделку не уходит.
    */
-  onTrail?: (trade: BacktestTrade, stopLoss: number) => Promise<unknown>,
+  onTrail?: (trade: BacktestTrade, stopLoss: number, dist: number) => Promise<unknown>,
 ): Replay {
   const sessionId = detail.session.id;
   const dataSource = detail.session.dataSource;
@@ -416,7 +422,7 @@ export function useReplay(
         }
         const openTrades = openTradesRef.current.filter((t) => !closing.has(t.id));
         for (const id of trailed.current.keys()) {
-          if (!openTrades.some((t) => t.id === id)) trailed.current.delete(id);
+          if (!openTrades.some((t) => t.id === id && t.trailDist != null)) trailed.current.delete(id);
         }
         const positions: OpenPosition[] = openTrades.map((t) => ({
           tradeId: t.id,
@@ -444,7 +450,7 @@ export function useReplay(
         if (reach > from) {
           for (const { tradeId, stopLoss } of trails) {
             const trade = openTrades.find((t) => t.id === tradeId);
-            if (trade?.trailDist != null) trailed.current.set(tradeId, { dist: trade.trailDist, stop: stopLoss });
+            if (trade?.trailDist != null) trailed.current.set(tradeId, { dist: trade.trailDist, entry: trade.entryPrice, stop: stopLoss });
           }
           sendTrails(
             openTrades.filter((t) => !exits.some((e) => e.tradeId === t.id)),

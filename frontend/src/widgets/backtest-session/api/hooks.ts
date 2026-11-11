@@ -251,8 +251,9 @@ export const useModifyTrade = (id: string) => {
  * до безубытка решает он). Не мутация экрана: шлёт прокрутка сама, по одному
  * запросу на сделку в полёте, и ошибку не показывает — следующий тик повторит.
  */
-export async function trailTrade(qc: QueryClient, sessionId: string, tradeId: string, stopLoss: number) {
-  await apiJson<{ trade: BacktestTrade | null }>(`/api/backtest/trades/${tradeId}/trail`, json('POST', { stopLoss }));
+export async function trailTrade(qc: QueryClient, sessionId: string, tradeId: string, stopLoss: number, dist: number) {
+  // `dist` — расстояние, от которого стоп посчитан: перенесённый руками стоп сервер не вернёт назад.
+  await apiJson<{ trade: BacktestTrade | null }>(`/api/backtest/trades/${tradeId}/trail`, json('POST', { stopLoss, dist }));
   await qc.invalidateQueries({ queryKey: sessionKey(sessionId) });
 }
 

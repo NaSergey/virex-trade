@@ -677,7 +677,7 @@ export class BacktestService {
         sessionId,
         symbol,
         // Галочка подводящего — у сработавшего ордера (браузер шлёт только его id).
-        { ...input, botId: order?.botId ?? undefined, trail: input.trail || order?.trail === true },
+        { ...input, botId: order?.botId ?? undefined, trail: order ? order.trail : input.trail },
         sizeStopOf(order),
       );
       if (xpFor && opened) await this.battlePass.award(tx, xpFor, 'trade.open', trade.id, XP_SOURCES['trade.open'].base);
@@ -1579,46 +1579,52 @@ export class BacktestService {
    * Подводящий стоп от прокрутки браузера: стоп, подтянутый по минуткам истории
    * (`trailStop` во `fills.ts` фронта), сохраняется — для графика, таблиц и
    * перезагрузки. Цену выхода по нему браузер присылает сам, как и у обычного стопа.
+   * `dist` — расстояние, с которым браузер его посчитал (см. `applyTrail`).
    *
    * Закрытая сделка и сделка без подводящего — тихий ответ: запрос мог разминуться с
    * закрытием или правкой. В эфире стоп ведёт движок (`systemTrail`).
    */
-  async trailTrade(userId: string, tradeId: string, stopLoss: number) {
+  async trailTrade(userId: string, tradeId: string, stopLoss: number, dist?: number) {
     const trade = await this.ownedTrade(userId, tradeId);
     if (isLive(trade.session)) {
       throw new ConflictException({ message: 'В эфире стоп ведёт сервер', code: 'BACKTEST_TRAIL_LIVE' });
     }
-    if (!trade.exitTime) await this.applyTrail(trade, stopLoss);
+    if (!trade.exitTime) await this.applyTrail(trade.id, trade.sessionId, stopLoss, dist);
     const fresh = await this.prisma.backtestTrade.findUnique({ where: { id: tradeId }, include: TRADE_INCLUDE });
     return { trade: fresh ? tradeView(fresh) : null };
   }
 
   /** Подводящий стоп движком эфира — по экстремуму отрезка. `false` — стоп не сдвинулся. */
-  async systemTrail(tradeId: string, stopLoss: number): Promise<boolean> {
-    const trade = await this.prisma.backtestTrade.findUnique({ where: { id: tradeId } });
+  async systemTrail(tradeId: string, stopLoss: number, dist?: number): Promise<boolean> {
+    const trade = await this.prisma.backtestTrade.findUnique({ where: { id: tradeId }, select: { sessionId: true, exitTime: true } });
     if (!trade || trade.exitTime) return false;
-    return this.applyTrail(trade, stopLoss);
+    return this.applyTrail(tradeId, trade.sessionId, stopLoss, dist);
   }
 
   /**
    * Стоп с подводящим (`trailDist`) — на новый уровень: только теснее и не дальше
-   * безубытка (средний вход). Условным `updateMany` — неравенство, а не равенство
-   * float: правка или закрытие, случившиеся между чтением и записью, просто не
-   * находят строку, а стоп, подтянутый тем временем другим правилом, не ослабнет.
+   * безубытка (средний вход). Под замком сессии и по свежей строке: стоп двигают и
+   * другие правила (`followStop`, `tightenStop`, правка) — тоже под этим замком, — а
+   * добор меняет средний вход. Без замка стоп, подтянутый ими между чтением и
+   * записью, ослаб бы, а предел остался бы от прежнего входа.
+   *
+   * `dist` — расстояние, с которым стоп посчитан: у сделки оно другое — стоп за это
+   * время перенесли руками (`trailDistOf`), и подтяжка от старого расстояния вернула
+   * бы его назад. `false` — стоп не сдвинулся.
    */
-  protected async applyTrail(
-    trade: { id: string; direction: string; entryPrice: number; stopLoss: number; trailDist: number | null },
-    stopLoss: number,
-  ): Promise<boolean> {
-    if (trade.trailDist == null) return false;
-    const long = trade.direction === 'long';
-    const target = long ? Math.min(stopLoss, trade.entryPrice) : Math.max(stopLoss, trade.entryPrice);
-    if (long ? !(target > trade.stopLoss) : !(target < trade.stopLoss)) return false;
-    const { count } = await this.prisma.backtestTrade.updateMany({
-      where: { id: trade.id, exitTime: null, trailDist: { not: null }, stopLoss: long ? { lt: target } : { gt: target } },
-      data: { stopLoss: target },
+  protected async applyTrail(tradeId: string, sessionId: string, stopLoss: number, dist?: number): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const session = await tx.backtestSession.findUnique({ where: { id: sessionId }, select: { cursorTime: true } });
+      if (!session || (await this.bumpCursor(tx, sessionId, session.cursorTime)) === 0) return false;
+      const cur = await tx.backtestTrade.findUnique({ where: { id: tradeId } });
+      if (!cur || cur.exitTime || cur.trailDist == null) return false;
+      if (dist !== undefined && Math.abs(cur.trailDist - dist) > 1e-9 * Math.max(1, Math.abs(dist))) return false;
+      const long = cur.direction === 'long';
+      const target = long ? Math.min(stopLoss, cur.entryPrice) : Math.max(stopLoss, cur.entryPrice);
+      if (long ? !(target > cur.stopLoss) : !(target < cur.stopLoss)) return false;
+      await tx.backtestTrade.update({ where: { id: tradeId }, data: { stopLoss: target } });
+      return true;
     });
-    return count > 0;
   }
 
   /**

@@ -113,6 +113,11 @@ export class ModifyTradeDto {
 export class TrailTradeDto {
   @IsPositive()
   stopLoss: number;
+
+  /** Расстояние, с которым стоп посчитан: у сделки другое — стоп перенесли руками, подтяжка не пишется. */
+  @IsOptional()
+  @IsPositive()
+  dist?: number;
 }
 
 export class AddToTradeDto {

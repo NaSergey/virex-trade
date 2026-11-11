@@ -187,7 +187,7 @@ export class LiveEngineService {
         // Выхода нет — подводящий стоп подтягивается по экстремуму отрезка и
         // действует со следующего: порядок цен внутри отрезка не восстановить.
         const next = trailStop(direction, trade.stopLoss, trade.trailDist, trade.entryPrice, direction === 'long' ? bar.h : bar.l);
-        if (next !== trade.stopLoss) await this.backtest.systemTrail(trade.id, next);
+        if (next !== trade.stopLoss) await this.backtest.systemTrail(trade.id, next, trade.trailDist ?? undefined);
         return;
       }
 

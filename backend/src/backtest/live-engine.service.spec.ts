@@ -240,7 +240,7 @@ describe('LiveEngineService — подводящий стоп', () => {
     await h.engine.run('s:s1', new Date(T), T + 2 * MIN, SCOPE);
 
     expect(h.backtest.systemClose).not.toHaveBeenCalled();
-    expect(h.backtest.systemTrail).toHaveBeenCalledWith('t1', 99);
+    expect(h.backtest.systemTrail).toHaveBeenCalledWith('t1', 99, 2);
   });
 
   it('отрезок закрыл позицию — подтягивать нечего', async () => {

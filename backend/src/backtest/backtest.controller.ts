@@ -81,7 +81,7 @@ export class BacktestController {
 
   @Post('trades/:id/trail')
   trail(@CurrentUser('userId') userId: string, @Param('id') id: string, @Body() dto: TrailTradeDto) {
-    return this.backtest.trailTrade(userId, id, dto.stopLoss);
+    return this.backtest.trailTrade(userId, id, dto.stopLoss, dto.dist);
   }
 
   @Post('trades/:id/add')
