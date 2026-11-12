@@ -87,6 +87,18 @@ export class HlWalletsController {
     return this.wallets.setStar(address, false);
   }
 
+  /** POST /api/admin/hl/saved/<адрес>/notify — включить колокольчик: сообщение в Telegram, когда кошелёк берёт позицию. */
+  @Post('saved/:address/notify')
+  notify(@Param('address') address: string) {
+    return this.wallets.setNotify(address, true);
+  }
+
+  /** DELETE /api/admin/hl/saved/<адрес>/notify — выключить колокольчик. */
+  @Delete('saved/:address/notify')
+  unnotify(@Param('address') address: string) {
+    return this.wallets.setNotify(address, false);
+  }
+
   /** PUT /api/admin/hl/saved/<адрес> — сохранить или сменить заметку. */
   @Put('saved/:address')
   save(@Param('address') address: string, @Body() dto: SaveWalletDto) {

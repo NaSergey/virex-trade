@@ -1,4 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { HlWalletsService } from './hl-wallets.service';
 import * as gate from '../hyperliquid/hl-gate';
 
@@ -195,8 +196,68 @@ describe('HlWalletsService — позиции', () => {
     await new HlWalletsService(prisma as never).unsave(ADDR);
     expect(prisma.hlWallet.updateMany).toHaveBeenCalledWith({
       where: { address: ADDR },
-      data: { savedAt: null, starredAt: null },
+      data: {
+        savedAt: null,
+        starredAt: null,
+        notifyAt: null,
+        notifySeen: Prisma.DbNull,
+      },
     });
+  });
+});
+
+describe('HlWalletsService — колокольчик', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('включение ставит время и стирает состояние: первая проверка запомнит открытое молча', async () => {
+    const prisma = makePrisma({ address: ADDR, savedAt: new Date(1), notifyAt: null });
+    await new HlWalletsService(prisma as never).setNotify(ADDR, true);
+    const { where, data } = prisma.hlWallet.update.mock.calls[0][0];
+    expect(where).toEqual({ address: ADDR });
+    expect(data.notifyAt).toBeInstanceOf(Date);
+    expect(data.notifySeen).toBe(Prisma.DbNull);
+  });
+
+  it('повторное включение ничего не пишет — базовая проверка не сбрасывается', async () => {
+    const prisma = makePrisma({
+      address: ADDR,
+      savedAt: new Date(1),
+      notifyAt: new Date(5),
+    });
+    await new HlWalletsService(prisma as never).setNotify(ADDR, true);
+    expect(prisma.hlWallet.update).not.toHaveBeenCalled();
+  });
+
+  it('выключение снимает колокольчик и стирает состояние', async () => {
+    const prisma = makePrisma({
+      address: ADDR,
+      savedAt: new Date(1),
+      notifyAt: new Date(5),
+    });
+    await new HlWalletsService(prisma as never).setNotify(ADDR, false);
+    expect(prisma.hlWallet.update.mock.calls[0][0].data).toEqual({
+      notifyAt: null,
+      notifySeen: Prisma.DbNull,
+    });
+  });
+
+  it('не сохранённому колокольчик не ставят — 404', async () => {
+    const svc = new HlWalletsService(
+      makePrisma({ address: ADDR, savedAt: null }) as never,
+    );
+    await expect(svc.setNotify(ADDR, true)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it('строка сохранённых говорит, включён ли колокольчик', async () => {
+    const prisma = makePrisma();
+    prisma.hlWallet.findMany.mockResolvedValue([
+      { address: ADDR, savedAt: new Date(1), notifyAt: new Date(5) },
+      { address: '0x' + 'b'.repeat(40), savedAt: new Date(1), notifyAt: null },
+    ]);
+    const { rows } = await new HlWalletsService(prisma as never).saved();
+    expect(rows.map((r) => r.notify)).toEqual([true, false]);
   });
 });
 

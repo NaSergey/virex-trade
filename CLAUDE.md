@@ -54,17 +54,17 @@
   нет: merge PR — это выкладка на прод.
 - **Один и тот же образ backend поднимается в трёх ролях, переменной `ROLE`**
   (`backend/src/role.ts`) — `api` (HTTP, без единого `setInterval`, без
-  telegram-поллинга и без игр), `games` (игры, см. ниже) и `worker` (пятнадцать фоновых сервисов — `trade-sync`,
+  telegram-поллинга и без игр), `games` (игры, см. ниже) и `worker` (шестнадцать фоновых сервисов — `trade-sync`,
   `price-sync`, `liquidity-snapshot`, `market-alerts`,
   `weekly-report`, `usage-tracker`, `refresh-token-cleanup`, `tron-watcher`,
   `tournament-runner`, `live-session-runner`, `terminal-stream`, `db-backup`, `hl-scout`,
-  `probability-stats`, `strategy-report` —
+  `probability-stats`, `strategy-report`, `hl-position-watch` —
   плюс telegram-поллинг, без HTTP-порта). `ROLE=all` (дефолт локального
   запуска) — всё вместе, как было до разделения. В `docker-compose.prod.yml`
   это три сервиса из одного образа; `worker` — **ровно один контейнер**, не
   масштабируется (см. «Уведомления в Telegram» про единственность поллера).
   Разделение — guard первой строкой в `onApplicationBootstrap()` каждого из
-  пятнадцати сервисов и `TelegramService`, а не условная регистрация провайдеров
+  шестнадцати сервисов и `TelegramService`, а не условная регистрация провайдеров
   в `AppModule`: они инжектятся и вызываются напрямую (например,
   `TelegramService.sendText` — чекерами уведомлений) и в обеих ролях должны
   остаться в графе DI.
@@ -2661,6 +2661,15 @@ standalone-сборке (`node .next/standalone/server.js` с `HOSTNAME=0.0.0.0`
   адреса только в шлюзе. **Отказ шлюза не сдвигает `analyzedAt`** — иначе каждый отказ «разбирал»
   бы следующий кошелёк без запроса, и очередь пустела бы за секунды.
 - Позиции сохранённых `api` читает вживую (`clearinghouseState`, кэш 15 с), а не из базы.
+- **Колокольчик у сохранённого кошелька — сообщение в Telegram о взятой позиции** (2026-11-12, спека
+  `docs/superpowers/specs/2026-11-12-hl-wallet-position-alerts-design.md`; решение владельца: включается
+  по одному кошельку, а не «все» и не «только со звёздочкой»). Ведёт `HlPositionWatchService` в `worker`: раз
+  в минуту читает `clearinghouseState` кошельков с `notifyAt` и сравнивает с `notifySeen`. **Взятие — новая
+  пара «монета + сторона»**; переворот лонга в шорт тоже, добор и закрытие — нет. Включение стирает состояние,
+  первая проверка только запоминает открытое и молчит. **Состояние пишется до отправки** (потерянное сообщение
+  лучше двух). Проверка стояла дольше 5 минут (перезапуск, пауза шлюза, нет чата) — в сообщении оговорка, а не
+  молчаливый пропуск. Чат — владельца по `OWNER_EMAIL`, без него к бирже не ходим. **Живым кошельком и живым
+  Telegram не проверялось.** Нужен `db push` (два столбца `hl_wallets`, только добавлены).
 - **Профиль кошелька — HyperDash** (`profileUrl` в `views/hl-wallets/model/format.ts`).
 
 ## Учебник английского в админке (2026-10-21)
