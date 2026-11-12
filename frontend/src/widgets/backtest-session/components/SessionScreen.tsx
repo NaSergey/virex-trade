@@ -769,6 +769,8 @@ export function Terminal({
       if (liq != null) {
         list.push({ id: `liq-${trade.id}`, kind: 'liq', tradeId: trade.id, price: toScreen(liq, scale), draggable: false });
       }
+      // Тейк позиции (или тот, что тянут) — нужен и линии стопа: шанс стопа — зеркало шанса тейка.
+      const takeNow = pending?.kind === 'take' ? pending.price : trade.takeProfit != null ? toScreen(trade.takeProfit, scale) : null;
       // Стопа у позиции биржи может не быть (0): линии тогда нет, пока её не потянут от плашки.
       if (trade.stopLoss > 0 || pending?.kind === 'stop') {
         list.push({
@@ -780,6 +782,14 @@ export function Terminal({
           qty: remaining,
           impactAt: impactAt(remaining),
           name: trade.trailDist != null ? t('level.trailStop') : undefined,
+          // Шанс стопа — 100 % минус шанс тейка: исходов два. Пока стоп тянут, число считается на цене под курсором.
+          oddsAt:
+            takeOddsOn && takeNow != null && screenPrice != null
+              ? (p) => {
+                  const take = takeOdds(screenPrice, p, takeNow);
+                  return take != null ? 100 - take : null;
+                }
+              : undefined,
         });
       }
       const take = pending?.kind === 'take' ? pending.price : trade.takeProfit != null ? toScreen(trade.takeProfit, scale) : null;

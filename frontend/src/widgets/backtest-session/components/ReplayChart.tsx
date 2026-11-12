@@ -1853,7 +1853,7 @@ export const ReplayChart = memo(function ReplayChart({
                   const fs = px(9);
                   const charW = charRatio * fs;
                   const isEntry = l.kind === 'entry';
-                  const odds = l.kind === 'take' ? (l.oddsAt?.(price) ?? null) : null;
+                  const odds = l.kind === 'take' || l.kind === 'stop' ? (l.oddsAt?.(price) ?? null) : null;
                   const first = l.label != null
                     ? l.label
                     : isEntry
