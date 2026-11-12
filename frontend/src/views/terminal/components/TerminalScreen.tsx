@@ -179,7 +179,6 @@ function ExchangeTerminal({ state, stale }: { state: TerminalState; stale: boole
         badge={badge}
         soundsOf={sounds}
         history={ExchangeHistory}
-        tagStatsFrom="journal"
       />
     </>
   );

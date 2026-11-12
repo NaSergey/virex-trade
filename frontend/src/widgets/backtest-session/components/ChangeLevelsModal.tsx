@@ -4,23 +4,27 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader, useDialogFade } from '@/shared/ui/dialog';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
-import { Field } from '@/shared/ui/Field';
-import { Slider } from '@/shared/ui/Slider';
-import { fmtPctSigned, formatPriceGrouped } from '@/shared/lib/utils/format';
+import { FieldGroup } from '@/shared/ui/Field';
+import { KeyValue } from '@/shared/ui/Lookup';
+import { fmtPctSigned, formatMoney, formatPriceGrouped } from '@/shared/lib/utils/format';
 import type { BacktestTrade, PositionLike } from '../api/types';
-import { checkLevels, levelSliderRange, toScreen } from '../lib/money';
+import { checkLevels, closeImpact, toScreen } from '../lib/money';
+import { StepRow } from './CloseFields';
 import { PriceInput } from './PriceInput';
 import { TrailToggle } from './TrailToggle';
-
-const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 /**
  * Правка стопа/тейка открытой сделки — модалка, а не инлайн-поля панели:
  * `OrderPanel` больше не смотрит на то, открыта ли сделка, значит редактировать
  * уже существующие уровни негде, кроме отдельного диалога.
+ *
+ * Раскладка — как у окон закрытия (и у окна TP/SL биржи): цена входа и рыночная
+ * строками, стоп и тейк полями со степперами, под каждым итог в рамке — сколько
+ * принесёт срабатывание на весь остаток. Ползунков нет: уровень тянут на графике.
  */
 export function ChangeLevelsModal({
   trade,
+  remaining,
   scale,
   screenPrice,
   onApply,
@@ -31,10 +35,12 @@ export function ChangeLevelsModal({
   showSymbol = true,
 }: {
   trade: PositionLike & Pick<BacktestTrade, 'trailDist'>;
+  /** Остаток открытой позиции в монете (qty - closedQty) — на него считается итог уровня. */
+  remaining: number;
   scale: number;
-  /** Текущая экранная цена — источник для диапазонов и процентов. */
+  /** Текущая экранная цена — от неё проценты уровней. */
   screenPrice: number;
-  /** `trail` — галочка подводящего стопа: включён ли он после применения. */
+  /** `trail` — подводящий стоп: включён ли он после применения. */
   onApply: (stop: number, take: number | null, trail: boolean) => void;
   onClose: () => void;
   isPending: boolean;
@@ -52,46 +58,45 @@ export function ChangeLevelsModal({
   const [take, setTake] = useState<number | null>(() => (trade.takeProfit != null ? toScreen(trade.takeProfit, scale) : null));
   // Подводящий стоп: включают — от цены сейчас до стопа в окне (`trailDistOf`).
   const [trail, setTrail] = useState(trade.trailDist != null);
-  const takeRange = levelSliderRange('take', screenPrice, trade.direction);
-  const stopRange = levelSliderRange('stop', screenPrice, trade.direction);
   const stopPct = ((stop - screenPrice) / screenPrice) * 100;
   const takePct = take != null ? ((take - screenPrice) / screenPrice) * 100 : null;
   const err = checkLevels(trade.direction, screenPrice, stop, take);
+
+  // Шаг степпера — последний знак цены монеты, как у окна лимита закрытия.
+  const digits = decimals ?? 2;
+  const step = 10 ** -digits;
+  const moved = (p: number, dir: 1 | -1) => Math.max(step, Number((p + dir * step).toFixed(digits)));
+  const hint = (price: number) =>
+    t('levelCloseHint', { price: formatPriceGrouped(price, decimals), pnl: formatMoney(closeImpact(trade, scale, price, remaining).usdt) });
 
   return (
     <Dialog open={!closing} onOpenChange={(v) => !v && close()}>
       <DialogContent>
         <DialogHeader
           title={t('changeLevelsTitle')}
-          subtitle={`${showSymbol ? `${trade.symbol} · ` : ''}${t(`direction.${trade.direction}`)} · ${formatPriceGrouped(toScreen(trade.entryPrice, scale), decimals)}`}
+          subtitle={`${showSymbol ? `${trade.symbol} · ` : ''}${t(`direction.${trade.direction}`)}`}
         />
         <DialogBody>
-          <Field
+          <KeyValue label={t('entryPrice')}>{formatPriceGrouped(toScreen(trade.entryPrice, scale), decimals)}</KeyValue>
+          <KeyValue label={t('marketPrice')}>{formatPriceGrouped(screenPrice, decimals)}</KeyValue>
+          {/* FieldGroup, а не Field: кнопка «Подводящий» внутри <label> поля — невалидная разметка. */}
+          <FieldGroup
             label={
               <span className="fld-head">
-                <span>{t('stop')}</span>
+                <span className="fld-left">
+                  <span>{t('stop')}</span>
+                  <TrailToggle on={trail} onChange={setTrail} />
+                </span>
                 <span className="fld-val">{fmtPctSigned(stopPct)}</span>
               </span>
             }
           >
-            {(id) => (
-              <>
-                <Slider
-                  value={clamp(stop, stopRange.min, stopRange.max)}
-                  min={stopRange.min}
-                  max={stopRange.max}
-                  step={(stopRange.max - stopRange.min) / 200 || 1}
-                  onChange={setStop}
-                  aria-label={t('stop')}
-                />
-                <PriceInput id={id} full value={stop} onChange={setStop} />
-              </>
-            )}
-          </Field>
-          <div className="trail-row">
-            <TrailToggle on={trail} onChange={setTrail} />
-          </div>
-          <Field
+            <StepRow label={t('stop')} onDec={() => setStop((p) => moved(p, -1))} onInc={() => setStop((p) => moved(p, 1))}>
+              <PriceInput full aria-label={t('stop')} value={stop} onChange={setStop} />
+            </StepRow>
+          </FieldGroup>
+          <p className="close-note">{hint(stop)}</p>
+          <FieldGroup
             label={
               <span className="fld-head">
                 <span>{t('take')}</span>
@@ -99,20 +104,15 @@ export function ChangeLevelsModal({
               </span>
             }
           >
-            {(id) => (
-              <>
-                <Slider
-                  value={clamp(take ?? screenPrice, takeRange.min, takeRange.max)}
-                  min={takeRange.min}
-                  max={takeRange.max}
-                  step={(takeRange.max - takeRange.min) / 200 || 1}
-                  onChange={setTake}
-                  aria-label={t('take')}
-                />
-                <PriceInput id={id} full value={take} onChange={setTake} onClear={() => setTake(null)} />
-              </>
-            )}
-          </Field>
+            <StepRow
+              label={t('take')}
+              onDec={() => setTake((p) => moved(p ?? screenPrice, -1))}
+              onInc={() => setTake((p) => moved(p ?? screenPrice, 1))}
+            >
+              <PriceInput full aria-label={t('take')} value={take} onChange={setTake} onClear={() => setTake(null)} />
+            </StepRow>
+          </FieldGroup>
+          <p className="close-note">{take != null ? hint(take) : t('levelNoTake')}</p>
           {err && <p className="neg">{t(err)}</p>}
           <ErrorNote error={error} fallback={t('actionFailed')} />
         </DialogBody>

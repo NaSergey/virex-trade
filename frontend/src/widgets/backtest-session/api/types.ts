@@ -245,10 +245,6 @@ export interface SessionListItem extends BacktestSession {
 
 export interface TagSummary extends Summary {
   tag: TagItem;
-  /** Средний R прибыльных сделок тега. */
-  avgWinR: number;
-  /** Средний |R| убыточных, ≥ 0. */
-  avgLossR: number;
 }
 
 export interface BacktestStats {

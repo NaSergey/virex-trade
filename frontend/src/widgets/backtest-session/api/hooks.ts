@@ -36,11 +36,10 @@ export const backtestSessionsQuery = queryOptions({
 
 export const useBacktestSessions = () => useQuery(backtestSessionsQuery);
 
-export const useBacktestStats = (source: StatsSource, enabled = true) =>
+export const useBacktestStats = (source: StatsSource) =>
   useQuery({
     queryKey: ['backtest', 'stats', source],
     queryFn: () => apiJson<BacktestStats>(`/api/backtest/stats${qs({ source })}`),
-    enabled,
   });
 
 /**

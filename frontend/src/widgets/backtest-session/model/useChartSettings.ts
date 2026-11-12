@@ -33,7 +33,7 @@ export const useRangesOn = (): [boolean, (on: boolean) => void] => {
  * их не включили в настройках графика; выбор на устройстве и общий для всех
  * терминалов, как у RSI.
  */
-export const EXP_IDS = ['take', 'tags', 'signals'] as const;
+export const EXP_IDS = ['take'] as const;
 export type ExpId = (typeof EXP_IDS)[number];
 
 const decodeOff = (raw: string | null) => raw === '1';
@@ -43,8 +43,6 @@ export const useExpOn = (id: ExpId) => usePersistentValue(`virex.terminal.exp.${
 
 export function useExpSettings() {
   const [take, setTake] = useExpOn('take');
-  const [tags, setTags] = useExpOn('tags');
-  const [signals, setSignals] = useExpOn('signals');
-  const setters: Record<ExpId, (on: boolean) => void> = { take: setTake, tags: setTags, signals: setSignals };
-  return { on: { take, tags, signals }, set: (id: ExpId, on: boolean) => setters[id](on) };
+  const setters: Record<ExpId, (on: boolean) => void> = { take: setTake };
+  return { on: { take }, set: (id: ExpId, on: boolean) => setters[id](on) };
 }
