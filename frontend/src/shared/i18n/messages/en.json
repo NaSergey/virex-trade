@@ -192,12 +192,6 @@
     "edgeScoreHint": "System stability score (SQN, Van Tharp) — not profitability, but the ratio of average result to variance. Needs ≥30 trades in the period."
   },
   "tags": {
-    "odds": {
-      "line": "{win}% · need {need}% · {n} tr.",
-      "plus": "in profit",
-      "minus": "losing",
-      "unclear": "unclear"
-    },
     "typeSetup": "Setup",
     "typeEmotion": "Emotion",
     "typeMistake": "Mistake",
@@ -1286,29 +1280,9 @@
     "exp": {
       "section": "Experimental",
       "hint": "Historical frequencies, not a forecast.",
-      "takeCol": "TP odds",
       "takeHint": "Chance to reach the take-profit before the stop if the market has no up or down bias: distance to stop / (to stop + to take) from the current price. A baseline, not a forecast: a setup that does not beat it loses over time. On the chart the stop shows the opposite number: 100 % minus the take-profit chance.",
       "toggle": {
-        "take": "Take-profit odds",
-        "tags": "Tag statistics",
-        "signals": "RSI divergences in history"
-      },
-      "plaque": {
-        "title": "Experiment · BTC",
-        "onlyBtc": "The experiment covers BTC only",
-        "loading": "Loading…",
-        "notYet": "Statistics are still being computed",
-        "noTf": "Divergences: no statistics for {tf}",
-        "noFresh": "No fresh RSI divergences",
-        "div": {
-          "bull": "Bullish RSI divergence {tf} · {ago, plural, =0 {on this candle} one {# candle ago} other {# candles ago}}",
-          "bear": "Bearish RSI divergence {tf} · {ago, plural, =0 {on this candle} one {# candle ago} other {# candles ago}}"
-        },
-        "stat": "{side} first {share}% · {n} cases · forward test {test}% of {testN}",
-        "side": { "up": "up", "down": "down" },
-        "holds": "holds",
-        "fails": "does not hold",
-        "fewCases": "no such cases in history"
+        "take": "Take-profit odds"
       }
     },
     "tf": {
@@ -1344,7 +1318,7 @@
       "gridStep": "order",
       "gridTake": "take",
       "pendingEntry": "limit"
-    },
+    },
     "drawings": {
       "toolbar": "Drawing tools",
       "tool": {
@@ -1506,6 +1480,8 @@
     "closingPrice": "Closing price",
     "closedQtyCoin": "Closed quantity",
     "limitCloseHint": "{qty} will close at {price}, result {pnl} USDT (fees included).",
+    "levelCloseHint": "At {price} the whole position closes, result {pnl} USDT (fees included).",
+    "levelNoTake": "No take profit — the position closes at the stop or manually.",
     "marketCloseHint": "{qty} closes right now, result {pnl} USDT (fees included).",
     "marketCloseTooSoon": "The position was opened this minute — it can be closed from the next one.",
     "limitCloseConfirm": "Place order",
@@ -1554,9 +1530,6 @@
     "marketPrice": "Market price",
     "stepUp": "up",
     "stepDown": "down",
-    "trailOnRow": "Trailing stop — turn on",
-    "trailOffRow": "Trailing stop is on — turn off",
-    "trailNoStop": "The position has no stop: the trailing stop has nothing to follow — set a stop first.",
     "trailStop": "Trailing stop",
     "gridStopAfter": "Stop after",
     "gridStopHint": "Where the position stop goes when this level fills. An empty field restores the rule: halfway from the stop to the last level to fill.",

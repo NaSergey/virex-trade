@@ -14,10 +14,6 @@
  *
  * Считается по всем загруженным свечам таймфрейма, как у TradingView по всем
  * барам графика: первые `length` свечей RSI не имеют.
- *
- * Файл живёт в двух местах: копия — `backend/src/probabilities/rsi.ts`
- * (частоты дивергенций в истории считает сервер), `rsi-copy.spec.ts` сверяет
- * их побайтно. Правка — в обоих; формат — prettier бэкенда.
  */
 
 export interface RsiOptions {
@@ -179,8 +175,6 @@ function divergencesOfSide(
   rsi: readonly number[],
   price: readonly number[],
   o: RsiOptions,
-  /** Сюда — каждое подтверждение по порядку, и то, что потом заменит продолжение. */
-  seen?: Divergence[],
 ): Divergence[] {
   // Знак стороны: «выше» у медвежьей — больше, у бычьей — меньше.
   const s = kind === 'bear' ? 1 : -1;
@@ -266,7 +260,6 @@ function divergencesOfSide(
           fromValue: a.value,
           toValue: here.value,
         };
-        seen?.push(dv);
         const was = started.get(a.bar);
         if (was === undefined) {
           started.set(a.bar, out.length);
@@ -294,38 +287,6 @@ export function divergencesOf(
     ...divergencesOfSide('bear', rsi, highs, o),
     ...divergencesOfSide('bull', rsi, lows, o),
   ].sort((a, b) => a.to - b.to);
-}
-
-/**
- * Каждое подтверждение дивергенции, как его видели в свою свечу: и те, что
- * потом удлинились (на графике продолжение заменяет их линию). Для частот «что
- * было после» (спека 2026-10-25): по `divergencesOf` удлинённые выпали бы из
- * выборки, хотя в свою свечу их было видно. Подтверждение — свеча `to + rightBars`.
- */
-export function divergenceEventsOf(
-  candles: readonly { h: number; l: number; c: number }[],
-  o: RsiOptions = RSI_DEFAULTS,
-): Divergence[] {
-  const rsi = rsiOf(
-    candles.map((c) => c.c),
-    o.length,
-  );
-  const seen: Divergence[] = [];
-  divergencesOfSide(
-    'bear',
-    rsi,
-    candles.map((c) => c.h),
-    o,
-    seen,
-  );
-  divergencesOfSide(
-    'bull',
-    rsi,
-    candles.map((c) => c.l),
-    o,
-    seen,
-  );
-  return seen.sort((a, b) => a.to - b.to);
 }
 
 /** Всё, что рисует панель RSI, по свечам графика. */

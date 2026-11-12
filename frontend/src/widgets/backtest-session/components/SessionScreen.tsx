@@ -66,8 +66,7 @@ import {
 } from '../lib/money';
 import type { TerminalSound } from '../lib/sounds';
 import { useSessionActions, type TerminalActions } from '../model/actions';
-import { EXP_IDS, useExpSettings, useRangesOn, useRsiOn, type ExpId } from '../model/useChartSettings';
-import { useTagOdds } from '../model/useTagOdds';
+import { useExpSettings, useRangesOn, useRsiOn } from '../model/useChartSettings';
 import { useRangeCandles, type Load4h } from '../model/useRangeCandles';
 import { useMaxRisk } from '../model/useRiskSettings';
 import { useLiveSymbol } from '../model/useLiveSymbol';
@@ -90,7 +89,6 @@ import { OrdersPanel } from './OrdersPanel';
 import { BotPanel, botFromDraft, type BotDraft } from './BotPanel';
 import { OrderPanel, type Draft, type LimitDraft, type OrderTab, type ScaledDraft } from './OrderPanel';
 import { ChartSettingsPanel } from './ChartSettingsPanel';
-import { OddsPlaque } from './OddsPlaque';
 import { ReplayChart, type Level, type LevelKind, type Marker } from './ReplayChart';
 import { SessionSummary } from './SessionSummary';
 import { SessionTrades } from './SessionTrades';
@@ -248,18 +246,7 @@ export interface TerminalProps {
    * настройки). Терминал на демо-счёте ставит сюда «Подключить биржу».
    */
   chartActions?: ReactNode;
-  /**
-   * Числа нашего сервера у экспериментальных индикаторов (теги, сигналы,
-   * деривативы); по умолчанию есть. На главной гость не вошёл — там только
-   * «Шанс тейка»: остальное получило бы 401.
-   */
-  serverStats?: boolean;
-  /** Откуда статистика тегов: журнал (биржевой терминал); не задано — бектест по источнику сессии. */
-  tagStatsFrom?: 'journal';
 }
-
-/** Экспериментальные индикаторы терминала без нашего сервера (главная): только шанс тейка. */
-const LANDING_EXP: readonly ExpId[] = ['take'];
 
 /**
  * Терминал — один на бектест, турнир и биржу. Состояние приходит снимком счёта
@@ -282,8 +269,6 @@ export function Terminal({
   tables = true,
   paused = false,
   chartActions,
-  serverStats = true,
-  tagStatsFrom,
 }: TerminalProps) {
   const t = useTranslations('backtest');
   const { locale } = useLocaleControl();
@@ -381,17 +366,11 @@ export function Terminal({
   // Настройки графика — правая панель на месте панели ордера (шестерёнка над
   // графиком): индикаторы и верхняя граница ползунка риска.
   const [rsiOn, setRsiOn] = useRsiOn();
-  // Экспериментальные индикаторы (спека 2026-10-25): без нашего сервера — только шанс тейка.
+  // Экспериментальные индикаторы (спека 2026-10-25).
   // Готовыми булевыми, а не функцией `expOn(id)`: зависимость из вызова такой
   // функции React Compiler считает изменчивой и снимает оптимизацию всего экрана.
   const exp = useExpSettings();
-  const expIds = serverStats ? EXP_IDS : LANDING_EXP;
   const takeOddsOn = exp.on.take;
-  const signalsOn = serverStats && exp.on.signals;
-  const tagOdds = useTagOdds(
-    tagStatsFrom ?? (session.dataSource === 'synthetic' ? 'synthetic' : 'real'),
-    tags && serverStats && exp.on.tags,
-  );
   const [chartSettingsOpen, setChartSettingsOpen] = useState(false);
   useSnapshotSound(
     detail,
@@ -557,28 +536,6 @@ export function Terminal({
   const screenPriceOf = (sym: string): number | null => {
     const p = priceOf(sym);
     return p != null ? toScreen(p, scale) : null;
-  };
-
-  /**
-   * Подводящий стоп позиции — одним нажатием из строки таблицы. Включают на расстоянии
-   * от цены сейчас до стопа позиции (как в окне «Изменить уровни», `trailDistOf`); без
-   * стопа подводящему не от чего идти. Стоп и тейк уходят как есть: у биржи пропущенный
-   * тейк снимается, и правка расстояния не должна его трогать.
-   */
-  const toggleTrail = (trade: BacktestTrade) => {
-    if (trade.trailDist != null) {
-      setPositionHint(null);
-      modifyM.mutate({ tradeId: trade.id, stopLoss: trade.stopLoss > 0 ? trade.stopLoss : undefined, takeProfit: trade.takeProfit, trailDist: null });
-      return;
-    }
-    const price = priceOf(trade.symbol);
-    const dist = price != null && trade.stopLoss > 0 ? Math.abs(price - trade.stopLoss) : 0;
-    if (!(dist > 0)) {
-      setPositionHint(t('trailNoStop'));
-      return;
-    }
-    setPositionHint(null);
-    modifyM.mutate({ tradeId: trade.id, stopLoss: trade.stopLoss, takeProfit: trade.takeProfit, trailDist: dist });
   };
 
   // Плечо новой сделки берёт последнее сохранённое (см. useDefaultLeverage) —
@@ -1578,9 +1535,6 @@ export function Terminal({
                 ) : (
                   <ChartSkeleton />
                 )}
-                {/* Дивергенции в истории — только живой рынок: в истории плашка выдала бы
-                    скрытую монету, у тренажёра статистика BTC ни о чём. */}
-                {replay.ready && isLive && signalsOn && <OddsPlaque tf={replay.shownTf} candles={screenCandles} symbol={symbol} />}
               </div>
             </div>
             {drawings.saveFailed && <p className="neg">{t('drawings.saveFailed')}</p>}
@@ -1646,7 +1600,6 @@ export function Terminal({
                 onRsi={setRsiOn}
                 rangesOn={rangesOn}
                 onRanges={setRangesOn}
-                expIds={expIds}
                 exp={exp.on}
                 onExp={exp.set}
                 maxRisk={maxRisk}
@@ -1767,12 +1720,10 @@ export function Terminal({
               onLimit={(trade) => setLimitModalFor(trade.id)}
               onMarket={(trade) => setMarketModalFor(trade.id)}
               onChangeLevels={(trade) => setLevelsModalFor(trade.id)}
-              onTrail={toggleTrail}
               onCloseGrid={(trade) => onCloseGrid(trade.id)}
               onTags={tags ? (trade) => setTagsModalFor(trade.id) : undefined}
               onSymbol={pickSymbol}
               showSymbol={symbolShown}
-              oddsOn={takeOddsOn}
             />
           )}
           {tab === 'orders' && (
@@ -1820,6 +1771,7 @@ export function Terminal({
         return trade && tradePrice != null ? (
           <ChangeLevelsModal
             trade={trade}
+            remaining={trade.qty - trade.closedQty}
             scale={scale}
             screenPrice={tradePrice}
             decimals={decimalsOf(trade.symbol)}
@@ -1883,7 +1835,6 @@ export function Terminal({
             error={tagsM.error}
             onSave={(tagIds) => tagsM.mutate({ tradeId: trade.id, tagIds }, { onSuccess: () => setTagsModalFor(null) })}
             onClose={() => setTagsModalFor(null)}
-            odds={tagOdds}
           />
         ) : null;
       })()}
@@ -1898,7 +1849,6 @@ export function Terminal({
             error={tagsM.error}
             onSave={(tagIds) => tagsM.mutate({ tradeId: trade.id, tagIds }, { onSuccess: () => setHistoryTagsFor(null) })}
             onClose={() => setHistoryTagsFor(null)}
-            odds={tagOdds}
           />
         ) : null;
       })()}

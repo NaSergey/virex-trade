@@ -33,7 +33,6 @@ import {
   summarize,
   takeOnRightSide,
   tradeResult,
-  winLossR,
   type Direction,
   type ExitReason,
   type StartWindow,
@@ -1778,7 +1777,7 @@ export class BacktestService {
     return {
       overall: { sessions, ...summarize(trades.map(closedNumbers)) },
       byTag: [...buckets.values()]
-        .map(({ tag, rows }) => ({ tag, ...summarize(rows), ...winLossR(rows) }))
+        .map(({ tag, rows }) => ({ tag, ...summarize(rows) }))
         .sort((a, b) => b.trades - a.trades || a.tag.name.localeCompare(b.tag.name)),
     };
   }
