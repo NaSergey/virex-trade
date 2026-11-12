@@ -12,6 +12,14 @@ import { formatPriceGrouped, formatQty, formatTradeDate } from '@/shared/lib/uti
 import type { BacktestCloseOrder, BacktestEntryOrder, BacktestTrade, Direction } from '../api/types';
 import { pendingEntryQty, toScreen } from '../lib/money';
 
+/** Стоп или тейк открытой позиции — строка вкладки «Ордера». */
+interface LevelRow {
+  key: string;
+  trade: BacktestTrade;
+  kind: 'stop' | 'take';
+  price: number;
+}
+
 /**
  * Ещё не сработавшие ордера сессии — своя вкладка, а не часть «Открытых
  * позиций»: до срабатывания это не позиция (ордер на вход) и не окончательный
@@ -39,6 +47,7 @@ export function OrdersPanel({
   onSymbol,
   balance,
   qtyStepOf,
+  onChangeLevels,
 }: {
   trades: BacktestTrade[];
   scale: number;
@@ -58,6 +67,8 @@ export function OrdersPanel({
   balance: number;
   /** Шаг лота монеты: объём лимита — вниз до него, как поставит сервер. */
   qtyStepOf: (symbol: string) => number;
+  /** Окно правки стопа и тейка позиции — из строки «Стоп и тейк»; не задано — кнопки нет. */
+  onChangeLevels?: (trade: BacktestTrade) => void;
 }) {
   const t = useTranslations('backtest');
   const tradeById = new Map(trades.map((x) => [x.id, x]));
@@ -79,7 +90,16 @@ export function OrdersPanel({
   // монеты стояли рядом.
   const entryRows = [...entryOrders].sort((a, b) => a.symbol.localeCompare(b.symbol) || a.price - b.price);
 
-  if (closeOrders.length === 0 && entryRows.length === 0) {
+  // Стоп и тейк открытых позиций — тоже ордера на продажу: на бирже они висят в той же
+  // вкладке (условные), и человек ждёт их здесь же. Объём — остаток позиции.
+  const levelRows: LevelRow[] = trades
+    .flatMap((trade) => [
+      ...(trade.stopLoss > 0 ? [{ key: `${trade.id}:stop`, trade, kind: 'stop' as const, price: trade.stopLoss }] : []),
+      ...(trade.takeProfit != null ? [{ key: `${trade.id}:take`, trade, kind: 'take' as const, price: trade.takeProfit }] : []),
+    ])
+    .sort((a, b) => a.trade.symbol.localeCompare(b.trade.symbol) || a.trade.direction.localeCompare(b.trade.direction) || a.price - b.price);
+
+  if (closeOrders.length === 0 && entryRows.length === 0 && levelRows.length === 0) {
     return <EmptyState title={t('noOrders')}>{t('noOrdersHint')}</EmptyState>;
   }
 
@@ -138,6 +158,47 @@ export function OrdersPanel({
     },
   ];
 
+  const levelColumns: LedgerColumn<LevelRow>[] = [
+    ...(showSymbol
+      ? [
+          {
+            key: 'symbol',
+            header: t('colOrderSymbol'),
+            render: (r: LevelRow) => <CoinSymbol symbol={r.trade.symbol} onPick={onSymbol} />,
+          } satisfies LedgerColumn<LevelRow>,
+        ]
+      : []),
+    { key: 'direction', header: t('colOrderDirection'), render: (r) => dir(r.trade.direction) },
+    {
+      key: 'kind',
+      header: t('colOrderType'),
+      render: (r) => (r.kind === 'take' ? t('take') : r.trade.trailDist != null ? t('level.trailStop') : t('stop')),
+    },
+    {
+      key: 'price',
+      header: t('colOrderPrice'),
+      align: 'right',
+      cellClassName: 'n',
+      render: (r) => copyable(price(r.price, r.trade.symbol)),
+    },
+    {
+      key: 'qty',
+      header: t('colOrderQty'),
+      align: 'right',
+      cellClassName: 'n',
+      render: (r) => copyable(formatQty(Number((r.trade.qty - r.trade.closedQty).toFixed(8)))),
+    },
+    {
+      key: 'actions',
+      render: (r) =>
+        onChangeLevels ? (
+          <Button tight onClick={() => onChangeLevels(r.trade)}>
+            {t('changeLevels')}
+          </Button>
+        ) : null,
+    },
+  ];
+
   const entryColumns: LedgerColumn<BacktestEntryOrder>[] = [
     ...(showSymbol
       ? [
@@ -183,14 +244,14 @@ export function OrdersPanel({
       align: 'right',
       cellClassName: 'n',
       // Ноль — стопа у ордера нет: так бывает у лимита биржи, выставленного мимо терминала.
-      render: (o) => (o.stopLoss > 0 ? price(o.stopLoss, o.symbol) : '—'),
+      render: (o) => (o.stopLoss > 0 ? copyable(price(o.stopLoss, o.symbol)) : '—'),
     },
     {
       key: 'take',
       header: t('take'),
       align: 'right',
       cellClassName: 'n',
-      render: (o) => (o.takeProfit != null ? price(o.takeProfit, o.symbol) : '—'),
+      render: (o) => (o.takeProfit != null ? copyable(price(o.takeProfit, o.symbol)) : '—'),
     },
     {
       key: 'risk',
@@ -218,6 +279,12 @@ export function OrdersPanel({
 
   return (
     <div>
+      {levelRows.length > 0 && (
+        <>
+          <SectionHead title={t('levelOrdersTitle')} />
+          <LedgerTable columns={levelColumns} rows={levelRows} rowKey={(r) => r.key} />
+        </>
+      )}
       {closeOrders.length > 0 && (
         <>
           <SectionHead title={t('limitCloseOrdersTitle')} />

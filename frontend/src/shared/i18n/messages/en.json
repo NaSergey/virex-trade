@@ -1549,6 +1549,8 @@
     "gridStopFollow": "Move the stop after a fill",
     "trail": "Trailing",
     "trailHint": "The stop follows the price at the same distance, only tightening, and stops at breakeven",
+    "levelOrdersTitle": "Position stop and take-profit",
+    "colOrderType": "Type",
     "marketPrice": "Market price",
     "stepUp": "up",
     "stepDown": "down",

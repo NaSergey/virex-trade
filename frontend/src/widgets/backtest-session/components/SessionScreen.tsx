@@ -1780,6 +1780,7 @@ export function Terminal({
               onSymbol={pickSymbol}
               balance={balance}
               qtyStepOf={qtyStepOf}
+              onChangeLevels={(trade) => setLevelsModalFor(trade.id)}
             />
             </div>
           )}
