@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { ChartNoAxesColumnIncreasing, Pencil, Tag as TagIcon, Target, Zap } from 'lucide-react';
+import { ChartNoAxesColumnIncreasing, Pencil, Tag as TagIcon, Target, TrendingUp, Zap } from 'lucide-react';
 import type { ExchangePosition } from '@/entities/position';
 import { Tags } from '@/entities/tag';
 import { useLocaleControl } from '@/shared/i18n';
@@ -57,6 +57,7 @@ export function OpenPositionsPanel({
   onLimit,
   onMarket,
   onChangeLevels,
+  onTrail,
   onCloseGrid,
   onTags,
   onSymbol,
@@ -77,6 +78,8 @@ export function OpenPositionsPanel({
   onLimit: (trade: BacktestTrade) => void;
   onMarket: (trade: BacktestTrade) => void;
   onChangeLevels: (trade: BacktestTrade) => void;
+  /** Включить или выключить подводящий стоп позиции одним нажатием; не задано — кнопки нет. */
+  onTrail?: (trade: BacktestTrade) => void;
   /** Сетка фиксации — лимиты закрытия и стоп за тейками. */
   onCloseGrid: (trade: BacktestTrade) => void;
   /** Теги позиции; не задано — кнопки нет. */
@@ -168,6 +171,18 @@ export function OpenPositionsPanel({
                 <Pencil size={ICON_SIZE} />
               </Button>
             </Tooltip>
+            {onTrail && (
+              <Tooltip text={trade.trailDist != null ? t('trailOffRow') : t('trailOnRow')}>
+                <Button
+                  tight
+                  aria-label={trade.trailDist != null ? t('trailOffRow') : t('trailOnRow')}
+                  aria-pressed={trade.trailDist != null}
+                  onClick={() => onTrail(trade)}
+                >
+                  <TrendingUp size={ICON_SIZE} />
+                </Button>
+              </Tooltip>
+            )}
             <Tooltip text={t('limitClose')}>
               <Button tight aria-label={t('limitClose')} onClick={() => onLimit(trade)}>
                 <Target size={ICON_SIZE} />

@@ -559,6 +559,28 @@ export function Terminal({
     return p != null ? toScreen(p, scale) : null;
   };
 
+  /**
+   * Подводящий стоп позиции — одним нажатием из строки таблицы. Включают на расстоянии
+   * от цены сейчас до стопа позиции (как в окне «Изменить уровни», `trailDistOf`); без
+   * стопа подводящему не от чего идти. Стоп и тейк уходят как есть: у биржи пропущенный
+   * тейк снимается, и правка расстояния не должна его трогать.
+   */
+  const toggleTrail = (trade: BacktestTrade) => {
+    if (trade.trailDist != null) {
+      setPositionHint(null);
+      modifyM.mutate({ tradeId: trade.id, stopLoss: trade.stopLoss > 0 ? trade.stopLoss : undefined, takeProfit: trade.takeProfit, trailDist: null });
+      return;
+    }
+    const price = priceOf(trade.symbol);
+    const dist = price != null && trade.stopLoss > 0 ? Math.abs(price - trade.stopLoss) : 0;
+    if (!(dist > 0)) {
+      setPositionHint(t('trailNoStop'));
+      return;
+    }
+    setPositionHint(null);
+    modifyM.mutate({ tradeId: trade.id, stopLoss: trade.stopLoss, takeProfit: trade.takeProfit, trailDist: dist });
+  };
+
   // Плечо новой сделки берёт последнее сохранённое (см. useDefaultLeverage) —
   // только на посев начального состояния: экран монтируется, когда `detail`
   // уже загружен, то есть уже после гидрации, и здесь безопасно взять текущее
@@ -747,6 +769,8 @@ export function Terminal({
       if (liq != null) {
         list.push({ id: `liq-${trade.id}`, kind: 'liq', tradeId: trade.id, price: toScreen(liq, scale), draggable: false });
       }
+      // Тейк позиции (или тот, что тянут) — нужен и линии стопа: шанс стопа — зеркало шанса тейка.
+      const takeNow = pending?.kind === 'take' ? pending.price : trade.takeProfit != null ? toScreen(trade.takeProfit, scale) : null;
       // Стопа у позиции биржи может не быть (0): линии тогда нет, пока её не потянут от плашки.
       if (trade.stopLoss > 0 || pending?.kind === 'stop') {
         list.push({
@@ -758,6 +782,14 @@ export function Terminal({
           qty: remaining,
           impactAt: impactAt(remaining),
           name: trade.trailDist != null ? t('level.trailStop') : undefined,
+          // Шанс стопа — 100 % минус шанс тейка: исходов два. Пока стоп тянут, число считается на цене под курсором.
+          oddsAt:
+            takeOddsOn && takeNow != null && screenPrice != null
+              ? (p) => {
+                  const take = takeOdds(screenPrice, p, takeNow);
+                  return take != null ? 100 - take : null;
+                }
+              : undefined,
         });
       }
       const take = pending?.kind === 'take' ? pending.price : trade.takeProfit != null ? toScreen(trade.takeProfit, scale) : null;
@@ -1182,7 +1214,6 @@ export function Terminal({
         prices: table.prices,
         riskPcts: table.riskPcts,
         stopsAfter: table.stopsAfter,
-        trail: trailOn,
       }),
       () => setScaledDraft((prev) => ({ ...prev, stop: '', take: '', upper: '', lower: '', qtyPins: {}, stopPins: {} })),
     );
@@ -1736,6 +1767,7 @@ export function Terminal({
               onLimit={(trade) => setLimitModalFor(trade.id)}
               onMarket={(trade) => setMarketModalFor(trade.id)}
               onChangeLevels={(trade) => setLevelsModalFor(trade.id)}
+              onTrail={toggleTrail}
               onCloseGrid={(trade) => onCloseGrid(trade.id)}
               onTags={tags ? (trade) => setTagsModalFor(trade.id) : undefined}
               onSymbol={pickSymbol}
@@ -1757,6 +1789,7 @@ export function Terminal({
               onSymbol={pickSymbol}
               balance={balance}
               qtyStepOf={qtyStepOf}
+              onChangeLevels={(trade) => setLevelsModalFor(trade.id)}
             />
             </div>
           )}

@@ -5,10 +5,12 @@ import { useTranslations } from 'next-intl';
 import { Dialog, DialogActions, DialogBody, DialogContent, DialogHeader, useDialogFade } from '@/shared/ui/dialog';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { Field, Input } from '@/shared/ui/Field';
+import { KeyValue } from '@/shared/ui/Lookup';
 import { Slider } from '@/shared/ui/Slider';
 import { formatMoney, formatPriceGrouped, formatQty } from '@/shared/lib/utils/format';
 import type { PositionLike } from '../api/types';
-import { closeImpact, closePart } from '../lib/money';
+import { closeImpact, closePart, toScreen } from '../lib/money';
+import { PctMarks, StepRow } from './CloseFields';
 
 const clampPct = (v: number) => Math.max(0, Math.min(100, v));
 
@@ -58,28 +60,38 @@ export function MarketCloseModal({
   const tooSmall = pct > 0 && pct < 100 && qtyStep > 0 && qty < qtyStep - 1e-12;
   // Итог закрытия сейчас — от входа позиции по текущей цене, с комиссиями.
   const impact = closeImpact(trade, scale, screenPrice, qty);
+  const lot = qtyStep > 0 ? qtyStep : 0.001;
+  const moveQty = (dir: 1 | -1) => {
+    const next = Math.max(0, Math.min(remaining, qty + dir * lot));
+    setPct(remaining > 0 ? clampPct((next / remaining) * 100) : 0);
+  };
 
   return (
     <Dialog open={!closing} onOpenChange={(v) => !v && close()}>
       <DialogContent>
-        <DialogHeader title={t('marketCloseTitle')} subtitle={`${showSymbol ? `${trade.symbol} · ` : ''}${t('unrealized')} ${formatPriceGrouped(screenPrice, decimals)}`} />
+        <DialogHeader title={t('marketCloseTitle')} subtitle={showSymbol ? trade.symbol : undefined} />
         <DialogBody>
+          <KeyValue label={t('entryPrice')}>{formatPriceGrouped(toScreen(trade.entryPrice, scale), decimals)}</KeyValue>
+          <KeyValue label={t('marketPrice')}>{formatPriceGrouped(screenPrice, decimals)}</KeyValue>
           <Field label={t('closedQtyCoin')}>
             {(id) => (
-              <Input
-                id={id}
-                full
-                inputMode="decimal"
-                value={formatQty(qty)}
-                onChange={(e) => {
-                  const v = Number(e.target.value);
-                  setPct(remaining > 0 ? clampPct((v / remaining) * 100) : 0);
-                }}
-              />
+              <StepRow label={t('closedQtyCoin')} onDec={() => moveQty(-1)} onInc={() => moveQty(1)}>
+                <Input
+                  id={id}
+                  full
+                  inputMode="decimal"
+                  value={formatQty(qty)}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setPct(remaining > 0 ? clampPct((v / remaining) * 100) : 0);
+                  }}
+                />
+              </StepRow>
             )}
           </Field>
           <Slider value={pct} min={0} max={100} step={1} onChange={(v) => setPct(clampPct(v))} aria-label={t('closedQtyCoin')} />
-          <p className="muted">{t('marketCloseHint', { qty: formatQty(qty), pnl: formatMoney(impact.usdt) })}</p>
+          <PctMarks pct={pct} onPick={setPct} />
+          <p className="close-note">{t('marketCloseHint', { qty: formatQty(qty), pnl: formatMoney(impact.usdt) })}</p>
           {/* Кнопка выключена — окно говорит почему, а не молчит (QA 2026-10-23). */}
           {!canClose && <p className="muted">{t('marketCloseTooSoon')}</p>}
           {tooSmall && minOrderHint && <p className="neg">{minOrderHint}</p>}

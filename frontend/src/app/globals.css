@@ -1304,6 +1304,35 @@
   .trail-chip:hover { color: var(--ink); border-color: var(--ink-3); }
   .trail-chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--ground); }
   .trail-row { margin-top: var(--s2); }
+  /* Окна закрытия: поле со степперами «− +» в одну строку, деления доли под ползунком, итог в рамке. */
+  .step-row { display: flex; gap: var(--s1); align-items: stretch; }
+  .step-row > :first-child { flex: 1; min-width: 0; }
+  .step-row .btn { min-width: 40px; justify-content: center; }
+  .pct-marks { display: flex; justify-content: space-between; gap: var(--s1); margin-top: var(--s1); }
+  .pct-mark {
+    appearance: none;
+    cursor: pointer;
+    background: none;
+    border: 1px solid transparent;
+    color: var(--ink-3);
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    letter-spacing: 0.06em;
+    padding: 3px 6px;
+    transition: color 150ms ease, border-color 150ms ease;
+  }
+  .pct-mark:hover { color: var(--ink); }
+  .pct-mark.on { color: var(--ink); border-color: var(--rule); }
+  .close-note {
+    margin: var(--s2) 0 0;
+    padding: var(--s2) var(--s3);
+    border: 1px solid var(--rule);
+    color: var(--ink-2);
+    font-size: var(--t-xs);
+    line-height: 1.5;
+  }
+  /* Включённый переключатель в строке позиции (подводящий стоп) — залит, как выбранная вкладка. */
+  .row-actions .btn[aria-pressed="true"] { background: var(--ink); color: var(--ground); }
   /* Группа с кнопкой выравнивается по центру строки, а не по базовой линии: у кнопки
      своя рамка и кегль, и по базовой её текст стоял ниже подписи «Стоп». */
   .fld-left:has(.trail-chip) { align-items: center; }
