@@ -559,6 +559,28 @@ export function Terminal({
     return p != null ? toScreen(p, scale) : null;
   };
 
+  /**
+   * Подводящий стоп позиции — одним нажатием из строки таблицы. Включают на расстоянии
+   * от цены сейчас до стопа позиции (как в окне «Изменить уровни», `trailDistOf`); без
+   * стопа подводящему не от чего идти. Стоп и тейк уходят как есть: у биржи пропущенный
+   * тейк снимается, и правка расстояния не должна его трогать.
+   */
+  const toggleTrail = (trade: BacktestTrade) => {
+    if (trade.trailDist != null) {
+      setPositionHint(null);
+      modifyM.mutate({ tradeId: trade.id, stopLoss: trade.stopLoss > 0 ? trade.stopLoss : undefined, takeProfit: trade.takeProfit, trailDist: null });
+      return;
+    }
+    const price = priceOf(trade.symbol);
+    const dist = price != null && trade.stopLoss > 0 ? Math.abs(price - trade.stopLoss) : 0;
+    if (!(dist > 0)) {
+      setPositionHint(t('trailNoStop'));
+      return;
+    }
+    setPositionHint(null);
+    modifyM.mutate({ tradeId: trade.id, stopLoss: trade.stopLoss, takeProfit: trade.takeProfit, trailDist: dist });
+  };
+
   // Плечо новой сделки берёт последнее сохранённое (см. useDefaultLeverage) —
   // только на посев начального состояния: экран монтируется, когда `detail`
   // уже загружен, то есть уже после гидрации, и здесь безопасно взять текущее
@@ -1736,6 +1758,7 @@ export function Terminal({
               onLimit={(trade) => setLimitModalFor(trade.id)}
               onMarket={(trade) => setMarketModalFor(trade.id)}
               onChangeLevels={(trade) => setLevelsModalFor(trade.id)}
+              onTrail={toggleTrail}
               onCloseGrid={(trade) => onCloseGrid(trade.id)}
               onTags={tags ? (trade) => setTagsModalFor(trade.id) : undefined}
               onSymbol={pickSymbol}
