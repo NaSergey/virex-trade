@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { HlWallet } from '@prisma/client';
+import { Prisma, type HlWallet } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { hlInfo, WEIGHT } from '../hyperliquid/hl-gate';
 import { styleOf } from './exposure';
@@ -58,6 +58,7 @@ function rowOf(w: HlWallet) {
     note: w.note,
     viewedAt: w.viewedAt,
     starred: w.starredAt != null,
+    notify: w.notifyAt != null,
     weeklyT: w.weeklyT,
     netExposure: w.netExposure,
     grossExposure: w.grossExposure,
@@ -161,6 +162,30 @@ export class HlWalletsService {
     await this.prisma.hlWallet.update({
       where: { address },
       data: { starredAt: on ? (w.starredAt ?? new Date()) : null },
+    });
+    return { ok: true };
+  }
+
+  /**
+   * Колокольчик — только сохранённому, как звезда. Включение стирает состояние:
+   * первая проверка запомнит уже открытые позиции и промолчит, иначе включение
+   * объявило бы «взятыми» все, что кошелёк держит давно. Повторное включение
+   * ничего не пишет — оно не должно сбросить базовую проверку.
+   */
+  async setNotify(raw: string, on: boolean) {
+    const address = addressOf(raw);
+    const w = await this.prisma.hlWallet.findUnique({ where: { address } });
+    if (!w?.savedAt)
+      throw new NotFoundException({
+        message: 'Кошелёк не сохранён',
+        code: 'HL_WALLET_NOT_FOUND',
+      });
+    if (on && w.notifyAt) return { ok: true };
+    await this.prisma.hlWallet.update({
+      where: { address },
+      data: on
+        ? { notifyAt: new Date(), notifySeen: Prisma.DbNull }
+        : { notifyAt: null, notifySeen: Prisma.DbNull },
     });
     return { ok: true };
   }
@@ -307,7 +332,12 @@ export class HlWalletsService {
   async unsave(raw: string) {
     await this.prisma.hlWallet.updateMany({
       where: { address: addressOf(raw) },
-      data: { savedAt: null, starredAt: null },
+      data: {
+        savedAt: null,
+        starredAt: null,
+        notifyAt: null,
+        notifySeen: Prisma.DbNull,
+      },
     });
     this.cache = null;
     return { ok: true };

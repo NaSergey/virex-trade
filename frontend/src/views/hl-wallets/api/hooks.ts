@@ -49,6 +49,8 @@ export interface HlWalletRow {
   viewedAt: string | null;
   /** Звёздочка владельца: кошельку доверяют. Только у сохранённых. */
   starred: boolean;
+  /** Колокольчик: сообщение в Telegram, когда кошелёк берёт позицию. Только у сохранённых. */
+  notify: boolean;
   /** Позиции к балансу: (лонг − шорт) / баланс и (лонг + шорт) / баланс; null — снимка ещё не было. */
   /** t-статистика недельной доходности: ≥ 2 — плюс отличим от везения. */
   weeklyT: number | null;
@@ -214,6 +216,22 @@ export function useStarWallet() {
       );
     },
     // Порядок строк (звёздные первыми) определяет сервер — перечитываем в любом исходе.
+    onSettled: () => void qc.invalidateQueries({ queryKey: ['hlSaved'] }),
+  });
+}
+
+/** Колокольчик: включается и выключается сразу в кэше, сервер запоминает и ведёт проверку в `worker`. */
+export function useNotifyWallet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ address, notify }: { address: string; notify: boolean }) =>
+      apiJson<{ ok: true }>(`${BASE}/saved/${address}/notify`, { method: notify ? 'POST' : 'DELETE' }),
+    onMutate: ({ address, notify }) => {
+      qc.setQueryData<{ rows: HlWalletRow[] }>(['hlSaved'], (d) =>
+        d && { ...d, rows: d.rows.map((r) => (r.address === address ? { ...r, notify } : r)) },
+      );
+    },
+    // Отказ (кошелёк уже убрали из сохранённых) возвращает кэш к серверной правде.
     onSettled: () => void qc.invalidateQueries({ queryKey: ['hlSaved'] }),
   });
 }

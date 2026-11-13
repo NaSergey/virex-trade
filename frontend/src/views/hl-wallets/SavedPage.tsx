@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
+import { Bell } from 'lucide-react';
 import { useAuth } from '@/features/auth';
 import { Wrap } from '@/shared/ui/Wrap';
 import { PageHead } from '@/shared/ui/PageHead';
@@ -11,7 +12,14 @@ import { Seg } from '@/shared/ui/Seg';
 import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { LedgerTable, type LedgerColumn } from '@/shared/ui/LedgerTable';
 import { dateFormat } from '@/shared/lib/utils/intl';
-import { useHlPositions, useHlSaved, useSaveWallet, useStarWallet, type HlWalletRow } from './api/hooks';
+import {
+  useHlPositions,
+  useHlSaved,
+  useNotifyWallet,
+  useSaveWallet,
+  useStarWallet,
+  type HlWalletRow,
+} from './api/hooks';
 import { pct } from './model/format';
 import { walletColumns } from './components/walletColumns';
 import { groupByCoin } from './model/coins';
@@ -37,6 +45,7 @@ export function HlSavedPage() {
   const positions = useHlPositions(enabled);
   const { unsave } = useSaveWallet();
   const star = useStarWallet();
+  const notify = useNotifyWallet();
 
   // Причина выпадения важнее «не торгует»: она говорит, почему кошелёк больше
   // не годится, а мёртвый кошелёк в отборе — уже следствие.
@@ -83,6 +92,29 @@ export function HlSavedPage() {
       </Button>
     ),
   };
+  // Колокольчик — «сообщи в Telegram, когда этот кошелёк возьмёт позицию»: залитый у включённых.
+  const bellCol: LedgerColumn<HlWalletRow> = {
+    key: 'bell',
+    width: 28,
+    cellClassName: 'pin-cell',
+    noSkeleton: true,
+    render: (r) => (
+      <Button
+        variant="none"
+        className="pin"
+        aria-pressed={r.notify}
+        aria-label={r.notify ? t('unnotifyWallet') : t('notifyWallet')}
+        title={r.notify ? t('unnotifyTitle') : t('notifyTitle')}
+        // Строка раскрывается по клику, и колокольчик не должен её раскрывать.
+        onClick={(e) => {
+          e.stopPropagation();
+          notify.mutate({ address: r.address, notify: !r.notify });
+        }}
+      >
+        <Bell size={14} aria-hidden fill={r.notify ? 'currentColor' : 'none'} />
+      </Button>
+    ),
+  };
   // Первой колонкой, а не последней: таблица широкая, и крайняя справа кнопка
   // уезжала за край экрана вместе с горизонтальной прокруткой.
   const remove: LedgerColumn<HlWalletRow> = {
@@ -121,9 +153,9 @@ export function HlSavedPage() {
     <Wrap page>
       <PageHead title={t('savedTitle')} lede={t('savedLede')} />
       <AddWalletForm />
-      <ErrorNote error={saved.error ?? unsave.error ?? star.error} fallback={t('loadFailed')} />
+      <ErrorNote error={saved.error ?? unsave.error ?? star.error ?? notify.error} fallback={t('loadFailed')} />
       <LedgerTable
-        columns={walletColumns(t, [starCol, remove], [status])}
+        columns={walletColumns(t, [starCol, bellCol, remove], [status])}
         rows={saved.data?.rows ?? []}
         rowKey={(r) => r.address}
         minWidth={1400}

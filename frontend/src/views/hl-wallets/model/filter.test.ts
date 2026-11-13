@@ -25,6 +25,7 @@ const row = (o: Partial<HlWalletRow>): HlWalletRow => ({
   note: null,
   viewedAt: null,
   starred: false,
+  notify: false,
   weeklyT: 3,
   netExposure: 0.8,
   grossExposure: 1,
