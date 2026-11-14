@@ -66,7 +66,7 @@ import {
 } from '../lib/money';
 import type { TerminalSound } from '../lib/sounds';
 import { useSessionActions, type TerminalActions } from '../model/actions';
-import { useExpSettings, useRangesOn, useRsiOn } from '../model/useChartSettings';
+import { useExpSettings, useRangesOn, useRsiOn, useTagPromptOn } from '../model/useChartSettings';
 import { useRangeCandles, type Load4h } from '../model/useRangeCandles';
 import { useMaxRisk } from '../model/useRiskSettings';
 import { useLiveSymbol } from '../model/useLiveSymbol';
@@ -371,6 +371,7 @@ export function Terminal({
   // функции React Compiler считает изменчивой и снимает оптимизацию всего экрана.
   const exp = useExpSettings();
   const takeOddsOn = exp.on.take;
+  const [tagPromptOn] = useTagPromptOn();
   const [chartSettingsOpen, setChartSettingsOpen] = useState(false);
   useSnapshotSound(
     detail,
@@ -595,6 +596,15 @@ export function Terminal({
   // терминала: там нечего менять, панель ордера просто стоит.
   const [panelSwapped, setPanelSwapped] = useState(false);
   const [tagsModalFor, setTagsModalFor] = useState<string | null>(null);
+  /**
+   * Эксперимент «Теги после открытия»: позиция уже открыта, ждём, когда она
+   * появится в списке (у биржи — после перечитки счёта), и предлагаем теги.
+   * Новая — та, чьего id не было среди открытых в момент нажатия.
+   */
+  const [tagPrompt, setTagPrompt] = useState<{ symbol: string; direction: Direction; known: string[] } | null>(null);
+  const promptedTrade = tagPrompt
+    ? openTrades.find((x) => x.symbol === tagPrompt.symbol && x.direction === tagPrompt.direction && !tagPrompt.known.includes(x.id))
+    : undefined;
   /** Теги закрытой сделки из истории — отдельно от tagsModalFor: тот ищет среди
       openTrades, а история правит сделки, которых там уже нет. */
   const [historyTagsFor, setHistoryTagsFor] = useState<string | null>(null);
@@ -1067,7 +1077,10 @@ export function Terminal({
       }),
       // Ордер ушёл — его стоп и тейк теперь живут у сделки. Оставленный черновик лёг бы
       // линиями ровно поверх уровней новой позиции, и жест по ним тянул бы черновик.
-      () => setDraft((prev) => ({ ...prev, stop: '', take: '' })),
+      () => {
+        setDraft((prev) => ({ ...prev, stop: '', take: '' }));
+        if (tags && tagPromptOn) setTagPrompt({ symbol, direction, known: openTrades.map((x) => x.id) });
+      },
     );
   };
 
@@ -1838,6 +1851,17 @@ export function Terminal({
           />
         ) : null;
       })()}
+      {promptedTrade && tagsModalFor == null && (
+        <TagsDialog
+          title={t('positionTagsTitle')}
+          subtitle={`${coinPrefix(promptedTrade.symbol)}${t(`direction.${promptedTrade.direction}`)} · ${formatPriceGrouped(toScreen(promptedTrade.entryPrice, scale), decimalsOf(promptedTrade.symbol))}`}
+          initialTagIds={promptedTrade.tags.map((g) => g.id)}
+          isPending={tagsM.isPending}
+          error={tagsM.error}
+          onSave={(tagIds) => tagsM.mutate({ tradeId: promptedTrade.id, tagIds }, { onSuccess: () => setTagPrompt(null) })}
+          onClose={() => setTagPrompt(null)}
+        />
+      )}
       {historyTagsFor != null && (() => {
         const trade = trades.find((x) => x.id === historyTagsFor);
         return trade ? (

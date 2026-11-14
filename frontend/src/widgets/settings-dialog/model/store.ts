@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react';
 
 /** Вкладки окна настроек — в порядке строки вкладок. */
-export const SETTINGS_TABS = ['profile', 'exchange', 'notifications'] as const;
+export const SETTINGS_TABS = ['profile', 'exchange', 'terminal', 'notifications'] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 /**

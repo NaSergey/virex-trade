@@ -11,11 +11,13 @@ import { cn } from '@/shared/lib/utils/css';
 import { SETTINGS_TABS, closeSettings, openSettings, useSettingsTab, type SettingsTab } from '../model/store';
 import { ExchangeTab } from './ExchangeTab';
 import { NotificationsTab } from './NotificationsTab';
+import { TerminalTab } from './TerminalTab';
 import { ProfileTab } from './ProfileTab';
 
 const TAB_LABEL: Record<SettingsTab, string> = {
   profile: 'tabProfile',
   exchange: 'tabExchange',
+  terminal: 'tabTerminal',
   notifications: 'tabNotifications',
 };
 
@@ -74,6 +76,7 @@ function SettingsDialog({ tab }: { tab: SettingsTab }) {
         <div className="stg-body" role="tabpanel">
           {tab === 'profile' && <ProfileTab locked={demo} />}
           {tab === 'exchange' && <ExchangeTab />}
+          {tab === 'terminal' && <TerminalTab />}
           {tab === 'notifications' && <NotificationsTab />}
         </div>
         <div className="stg-foot">
