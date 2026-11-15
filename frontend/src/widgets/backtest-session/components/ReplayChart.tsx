@@ -23,6 +23,7 @@ import {
 import type { Candle } from '../lib/candles';
 import { RSI_DEFAULTS, rsiSeries } from '../lib/rsi';
 import type { ChartRange } from '../lib/ranges';
+import { findFvgs, findOrderBlocks, type Zone } from '../lib/zones';
 
 const W = 720;
 /** Высота холста до первого замера коробки; дальше её задаёт сама коробка (см. H в компоненте). */
@@ -277,6 +278,8 @@ export const ReplayChart = memo(function ReplayChart({
   onCloseGrid,
   rsi = false,
   ranges,
+  fvg = false,
+  orderBlocks = false,
   defaultCount = DEFAULT_COUNT,
 }: {
   /** ТФ свечей в `candles`, в минутах. */
@@ -322,6 +325,9 @@ export const ReplayChart = memo(function ReplayChart({
    * экранных ценах. Ссылка стабильная — см. memo.
    */
   ranges?: ChartRange[];
+  /** Экспериментальные зоны (`lib/zones.ts`) по свечам открытого ТФ: имбалансы (FVG) и ордерблоки. */
+  fvg?: boolean;
+  orderBlocks?: boolean;
   /** Сколько свечей видно на старте и после сброса вида; без него — обычное окно терминала. */
   defaultCount?: number;
 }) {
@@ -1357,6 +1363,47 @@ export const ReplayChart = memo(function ReplayChart({
   }, [ranges, candles, frameStart, slot, plotBottom, hi, lo, timeframe, PW]);
 
   /**
+   * Зоны FVG и ордерблоков — по закрытым свечам открытого ТФ (формирующаяся не
+   * участвует: зона на ней появлялась бы и пропадала с каждым тиком). Считаются
+   * заново только с новым рядом свечей; путь — на кадр, как у рамок боковиков.
+   */
+  const zones = useMemo(() => {
+    if (!fvg && !orderBlocks) return null;
+    const closed = candles.slice(0, -1);
+    const out: Zone[] = [];
+    if (fvg) out.push(...findFvgs(closed));
+    if (orderBlocks) out.push(...findOrderBlocks(closed));
+    return out;
+  }, [fvg, orderBlocks, candles]);
+  const zonePaths = useMemo(() => {
+    if (!zones || zones.length === 0 || candles.length === 0) return null;
+    const r = (v: number) => Math.round(v * 100) / 100;
+    const xAt = (t: number) => (frameAtTime(candles, t) - frameStart) * slot;
+    const plotHeight = plotBottom - PT;
+    const yOf = (p: number) => PT + ((hi - p) / (hi - lo)) * plotHeight;
+    const right = xAt(candles[candles.length - 1].t) + slot;
+    const paths = { upLive: '', downLive: '', upDone: '', downDone: '', obEdge: '' };
+    const labels: { key: string; x: number; y: number; text: string; up: boolean }[] = [];
+    for (const z of zones) {
+      const x0 = xAt(z.from);
+      const x1 = z.end == null ? right : xAt(z.end);
+      if (x1 < -slot || x0 > PW + slot) continue;
+      const yt = yOf(z.hi);
+      const yb = yOf(z.lo);
+      if (yb < PT || yt > plotBottom) continue;
+      const box = `M${r(x0)} ${r(yt)}H${r(x1)}V${r(yb)}H${r(x0)}z`;
+      const live = z.end == null;
+      const up = z.dir === 1;
+      if (live) paths[up ? 'upLive' : 'downLive'] += box;
+      else paths[up ? 'upDone' : 'downDone'] += box;
+      if (z.kind === 'ob' && live) paths.obEdge += box;
+      // FVG подписан у верха зоны, ордерблок — у низа: зоны с одной свечи не слипаются подписями.
+      if (live) labels.push({ key: `${z.kind}:${z.from}:${z.dir}`, x: x0 + 3 * u, y: z.kind === 'ob' ? yb - 3 * u : yt + 10 * u, text: z.kind === 'ob' ? 'OB' : 'FVG', up });
+    }
+    return { ...paths, labels };
+  }, [zones, candles, frameStart, slot, plotBottom, hi, lo, PW, u]);
+
+  /**
    * Последняя свеча, линия текущей цены и её плашка пишутся прямо в DOM, как
    * перекрестие (см. updateCross): кадр анимации зовёт это без рендера, а после
    * каждого рендера эффект ниже ставит их заново по новой геометрии — пан, зум и
@@ -1591,6 +1638,29 @@ export const ReplayChart = memo(function ReplayChart({
                   strokeWidth={px(1)}
                   strokeDasharray={`${px(2)} ${px(3)}`}
                 />
+              </g>
+            )}
+            {/* Зоны FVG и ордерблоков — под свечами, как рамки боковиков. Живые — ярче,
+                закрытые — едва заметной заливкой до свечи, закрывшей их; у ордерблока рамка. */}
+            {zonePaths && (
+              <g pointerEvents="none">
+                <path d={zonePaths.upDone} fill="var(--profit)" fillOpacity={0.05} />
+                <path d={zonePaths.downDone} fill="var(--loss)" fillOpacity={0.05} />
+                <path d={zonePaths.upLive} fill="var(--profit)" fillOpacity={0.14} />
+                <path d={zonePaths.downLive} fill="var(--loss)" fillOpacity={0.14} />
+                <path d={zonePaths.obEdge} fill="none" stroke="var(--color-fg)" strokeOpacity={0.35} strokeWidth={px(1)} />
+                {zonePaths.labels.map((l) => (
+                  <text
+                    key={l.key}
+                    x={l.x}
+                    y={l.y}
+                    fill={l.up ? 'var(--profit)' : 'var(--loss)'}
+                    fontSize={px(9)}
+                    fontFamily="var(--font-mono)"
+                  >
+                    {l.text}
+                  </text>
+                ))}
               </g>
             )}
             <path d={candlePaths.upWicks} stroke="var(--profit)" strokeWidth={px(1)} fill="none" />

@@ -29,11 +29,12 @@ export const useRangesOn = (): [boolean, (on: boolean) => void] => {
 };
 
 /**
- * Экспериментальные индикаторы терминала (спека 2026-10-25) — выключены, пока
- * их не включили в настройках графика; выбор на устройстве и общий для всех
- * терминалов, как у RSI.
+ * Экспериментальное в терминале (спека 2026-10-25) — выключено, пока не включили в
+ * настройках графика; выбор на устройстве и общий для всех терминалов, как у RSI.
+ * `take` — шанс тейка на подписях уровней; `tagPrompt` — окно тегов после открытия
+ * позиции по рынку; `fvg` и `ob` — зоны имбалансов и ордерблоков (`lib/zones.ts`).
  */
-export const EXP_IDS = ['take'] as const;
+export const EXP_IDS = ['take', 'tagPrompt', 'fvg', 'ob'] as const;
 export type ExpId = (typeof EXP_IDS)[number];
 
 const decodeOff = (raw: string | null) => raw === '1';
@@ -43,12 +44,9 @@ export const useExpOn = (id: ExpId) => usePersistentValue(`virex.terminal.exp.${
 
 export function useExpSettings() {
   const [take, setTake] = useExpOn('take');
-  const setters: Record<ExpId, (on: boolean) => void> = { take: setTake };
-  return { on: { take }, set: (id: ExpId, on: boolean) => setters[id](on) };
+  const [tagPrompt, setTagPrompt] = useExpOn('tagPrompt');
+  const [fvg, setFvg] = useExpOn('fvg');
+  const [ob, setOb] = useExpOn('ob');
+  const setters: Record<ExpId, (on: boolean) => void> = { take: setTake, tagPrompt: setTagPrompt, fvg: setFvg, ob: setOb };
+  return { on: { take, tagPrompt, fvg, ob }, set: (id: ExpId, on: boolean) => setters[id](on) };
 }
-
-/**
- * Экспериментально: после открытия позиции по рынку предлагать теги. Включается
- * в окне настроек, вкладка «Терминал»; выбор на устройстве.
- */
-export const useTagPromptOn = () => usePersistentValue('virex.terminal.exp.tagPrompt', decodeOff, false, encodeOff);

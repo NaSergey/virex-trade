@@ -66,7 +66,7 @@ import {
 } from '../lib/money';
 import type { TerminalSound } from '../lib/sounds';
 import { useSessionActions, type TerminalActions } from '../model/actions';
-import { useExpSettings, useRangesOn, useRsiOn, useTagPromptOn } from '../model/useChartSettings';
+import { EXP_IDS, useExpSettings, useRangesOn, useRsiOn } from '../model/useChartSettings';
 import { useRangeCandles, type Load4h } from '../model/useRangeCandles';
 import { useMaxRisk } from '../model/useRiskSettings';
 import { useLiveSymbol } from '../model/useLiveSymbol';
@@ -371,7 +371,9 @@ export function Terminal({
   // функции React Compiler считает изменчивой и снимает оптимизацию всего экрана.
   const exp = useExpSettings();
   const takeOddsOn = exp.on.take;
-  const [tagPromptOn] = useTagPromptOn();
+  const tagPromptOn = exp.on.tagPrompt;
+  const fvgOn = exp.on.fvg;
+  const obOn = exp.on.ob;
   const [chartSettingsOpen, setChartSettingsOpen] = useState(false);
   useSnapshotSound(
     detail,
@@ -1544,6 +1546,8 @@ export function Terminal({
                     priceDecimals={chartDecimals}
                     rsi={rsiOn}
                     ranges={chartRanges}
+                    fvg={fvgOn}
+                    orderBlocks={obOn}
                   />
                 ) : (
                   <ChartSkeleton />
@@ -1615,6 +1619,7 @@ export function Terminal({
                 onRanges={setRangesOn}
                 exp={exp.on}
                 onExp={exp.set}
+                expIds={tags ? EXP_IDS : EXP_IDS.filter((id) => id !== 'tagPrompt')}
                 maxRisk={maxRisk}
                 onMaxRisk={setMaxRisk}
                 onClose={() => setChartSettingsOpen(false)}

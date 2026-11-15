@@ -391,10 +391,6 @@
     "tabProfile": "Profile",
     "tabExchange": "Exchange",
     "tabNotifications": "Notifications",
-    "tabTerminal": "Terminal",
-    "termExpTitle": "Experimental",
-    "termTagPrompt": "Tag prompt after opening a position",
-    "termTagPromptHint": "Press Long or Short — the position opens at once, then a window offers to tag it.",
     "demoLocked": "The demo account is shared — its picture, name and password stay as they are.",
     "playerTitle": "Player",
     "avatarChange": "Change",
@@ -1286,7 +1282,10 @@
       "hint": "Historical frequencies, not a forecast.",
       "takeHint": "Chance to reach the take-profit before the stop if the market has no up or down bias: distance to stop / (to stop + to take) from the current price. A baseline, not a forecast: a setup that does not beat it loses over time. On the chart the stop shows the opposite number: 100 % minus the take-profit chance.",
       "toggle": {
-        "take": "Take-profit odds"
+        "take": "Take-profit odds",
+        "tagPrompt": "Tag prompt after opening a position",
+        "fvg": "FVG (imbalances)",
+        "ob": "Order blocks"
       }
     },
     "tf": {

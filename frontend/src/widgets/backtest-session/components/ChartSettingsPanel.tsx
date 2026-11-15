@@ -27,6 +27,7 @@ export function ChartSettingsPanel({
   onRanges,
   exp,
   onExp,
+  expIds = EXP_IDS,
   maxRisk,
   onMaxRisk,
   onClose,
@@ -41,6 +42,8 @@ export function ChartSettingsPanel({
   /** Экспериментальные индикаторы: что включено. */
   exp: Record<ExpId, boolean>;
   onExp: (id: ExpId, on: boolean) => void;
+  /** Какие экспериментальные выключатели показать — у терминала без тегов окна тегов нет. */
+  expIds?: readonly ExpId[];
   maxRisk: number;
   onMaxRisk: (value: number) => void;
   onClose: () => void;
@@ -69,7 +72,7 @@ export function ChartSettingsPanel({
       )}
 
       <p className="cs-group muted">{t('exp.section')}</p>
-      {EXP_IDS.map((id) => (
+      {expIds.map((id) => (
         <Button key={id} variant="none" className="cs-indicator" aria-pressed={exp[id]} onClick={() => onExp(id, !exp[id])}>
           {t(`exp.toggle.${id}`)}
         </Button>
