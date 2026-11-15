@@ -46,3 +46,9 @@ export function useExpSettings() {
   const setters: Record<ExpId, (on: boolean) => void> = { take: setTake };
   return { on: { take }, set: (id: ExpId, on: boolean) => setters[id](on) };
 }
+
+/**
+ * Экспериментально: после открытия позиции по рынку предлагать теги. Включается
+ * в окне настроек, вкладка «Терминал»; выбор на устройстве.
+ */
+export const useTagPromptOn = () => usePersistentValue('virex.terminal.exp.tagPrompt', decodeOff, false, encodeOff);
