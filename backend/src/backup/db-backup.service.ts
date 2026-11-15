@@ -18,9 +18,10 @@ const DUMP_TIMEOUT_MS = 10 * 60_000;
 const PART_BYTES = 45 * 1024 * 1024;
 /**
  * Рыночные данные BTC — не данные пользователей (решение владельца): свечи
- * синк дольёт с Binance сам. Структура таблиц в дампе остаётся.
+ * синк дольёт с Binance сам. Структура таблиц в дампе остаётся. Ликвидации —
+ * тоже рынок, хотя заново их не скачать: с ними дамп рос бы каждую неделю.
  */
-const MARKET_TABLES = ['price_candles', 'liquidity_snapshots'];
+const MARKET_TABLES = ['price_candles', 'liquidity_snapshots', 'liquidation_minutes', 'liquidation_feed_sessions'];
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 

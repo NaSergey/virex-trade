@@ -31,7 +31,7 @@
 ## Стек и структура
 
 - **backend** — NestJS + Prisma + PostgreSQL. Модули: `admin`, `analytics`, `auth`, `bots`,
-  `bybit`, `credentials`, `english`, `exchanges`, `hl-scout`, `market-events`, `profile`, `settings`, `tags`,
+  `bybit`, `credentials`, `english`, `exchanges`, `hl-scout`, `liquidations`, `market-events`, `profile`, `settings`, `tags`,
   `telegram`, `terminal`, `trades`.
 - **frontend** — Next.js App Router + FSD.
 - **Docker Compose**, `start.bat` / `stop.bat` для локального запуска.
@@ -54,11 +54,11 @@
   нет: merge PR — это выкладка на прод.
 - **Один и тот же образ backend поднимается в трёх ролях, переменной `ROLE`**
   (`backend/src/role.ts`) — `api` (HTTP, без единого `setInterval`, без
-  telegram-поллинга и без игр), `games` (игры, см. ниже) и `worker` (пятнадцать фоновых сервисов — `trade-sync`,
+  telegram-поллинга и без игр), `games` (игры, см. ниже) и `worker` (шестнадцать фоновых сервисов — `trade-sync`,
   `price-sync`, `liquidity-snapshot`, `market-alerts`,
   `weekly-report`, `usage-tracker`, `refresh-token-cleanup`, `tron-watcher`,
   `tournament-runner`, `live-session-runner`, `terminal-stream`, `db-backup`, `hl-scout`,
-  `strategy-report`, `hl-position-watch` —
+  `strategy-report`, `hl-position-watch`, `liquidation-recorder` —
   плюс telegram-поллинг, без HTTP-порта). `ROLE=all` (дефолт локального
   запуска) — всё вместе, как было до разделения. В `docker-compose.prod.yml`
   это три сервиса из одного образа; `worker` — **ровно один контейнер**, не
@@ -2788,6 +2788,25 @@ Pearson) и общий словарь на ~3300 слов; вкладки — с
   поэтому решать по свечам Bybit. На них: 2 года 70 сделок, винрейт 73 %, +0,07R; с 2022 года до них 81 сделка, +0,11R. Это лучшая из примерно 100
   вариантов, но не доказанная прибыль: заранее записанный критерий не пройден, проскальзывание не учтено (снимок — `model/check.ts`). Скальп на
   5m и 15m снят: −0,12…−0,30R, без комиссии около нуля. Оценка сетапов моделью снята: на ~1800 кандидатах не сортирует. Ордера стратегия не отправляет.
+
+## Запись ликвидаций Binance и Bybit (2026-11-15)
+
+`backend/src/liquidations` — `worker` слушает публичные потоки ликвидаций (Bybit `allLiquidation.<монета>`, Binance
+`<монета>@forceOrder`) по BTC, ETH и SOL (`LIQ_SYMBOLS`) и пишет сводку по минутам в `liquidation_minutes`. Цель
+владельца — проверить, куда идёт цена после крупных ликвидаций; бесплатной истории ликвидаций у бирж нет, поэтому
+история копится с момента запуска. Анализ — скриптом позже, страницы и API нет.
+- **`side` — сторона ликвидированной позиции.** У Bybit `S: Buy` — ликвидирован лонг (так в документации); у Binance
+  `o.S` — сторона ордера ликвидации, `SELL` — ликвидирован лонг. Разбор сверен с живыми сообщениями.
+- **Binance отдаёт не больше одной ликвидации на монету в секунду** (снимок) — его суммы нижняя граница; у Bybit поток
+  полный. Сравнивать биржи по сумме нельзя. Цена у Bybit — банкротства (другой поток не даёт), у Binance — средняя.
+- **Адрес Binance — маршрут `/market`** (`fstream.binance.com/market/stream`): с 2026 года адрес без маршрута ведёт себя
+  как `/public` и рыночные потоки может не отдавать.
+- **Минута без строки — не «ликвидаций не было»:** покрытие — `liquidation_feed_sessions` (сеанс на соединение, конец
+  двигается каждые 10 с). Анализ обязан брать только минуты внутри сеанса обеих бирж.
+- Запись — сложением (`ON CONFLICT DO UPDATE count + …`), поэтому только `worker`: второй процесс удвоил бы суммы.
+  Соединение Bybit одно, но лимит новых соединений на IP (500 за 5 минут) делится с `terminal-stream`.
+- В бэкап в Telegram данные таблиц не входят (`MARKET_TABLES`): заново их не скачать, но дамп рос бы каждую неделю.
+- Новая монета — строка в `LIQ_SYMBOLS`; история по ней пойдёт с момента добавления.
 
 ## Бэкап базы в Telegram (2026-10-15)
 

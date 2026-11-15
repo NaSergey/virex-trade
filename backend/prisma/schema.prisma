@@ -898,6 +898,37 @@ model LiquiditySnapshot {
   @@map("liquidity_snapshots")
 }
 
+// Ликвидации Binance и Bybit по минутам — запись с публичных потоков
+// (backend/src/liquidations, пишет worker сложением). side — сторона
+// ЛИКВИДИРОВАННОЙ позиции. У Binance поток отдаёт не больше одной ликвидации
+// на монету в секунду, поэтому его суммы — нижняя граница.
+model LiquidationMinute {
+  exchange String // 'binance' | 'bybit'
+  symbol   String // 'BTCUSDT'
+  side     String // 'long' | 'short'
+  minute   DateTime // начало минуты UTC
+  count    Int
+  qty      Float // монет
+  usd      Float // USDT
+  maxUsd   Float // крупнейшая одиночная за минуту, USDT
+
+  @@id([exchange, symbol, side, minute])
+  @@index([symbol, minute])
+  @@map("liquidation_minutes")
+}
+
+// Сеансы соединений записи ликвидаций: минута вне сеанса — не «ликвидаций не
+// было», а «записи не было».
+model LiquidationFeedSession {
+  id        String   @id @default(uuid())
+  exchange  String
+  startedAt DateTime
+  seenAt    DateTime // последний признак жизни соединения
+
+  @@index([exchange, startedAt])
+  @@map("liquidation_feed_sessions")
+}
+
 // Бэкап базы, отправленный владельцу в Telegram (backend/src/backup). Последняя
 // строка — точка отсчёта недели: в памяти процесса её держать нельзя,
 // перезапуск worker слал бы бэкап заново.

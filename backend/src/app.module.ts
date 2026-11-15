@@ -26,6 +26,7 @@ import { TerminalModule } from './terminal/terminal.module';
 import { ProfileModule } from './profile/profile.module';
 import { BackupModule } from './backup/backup.module';
 import { HlScoutModule } from './hl-scout/hl-scout.module';
+import { LiquidationsModule } from './liquidations/liquidations.module';
 import { EnglishModule } from './english/english.module';
 import { PlanModule } from './plan/plan.module';
 import { StrategyModule } from './strategy/strategy.module';
@@ -70,6 +71,7 @@ import { runsGames } from './role';
     ProfileModule,
     BackupModule,
     HlScoutModule,
+    LiquidationsModule,
     EnglishModule,
     PlanModule,
     StrategyModule,
