@@ -1,5 +1,6 @@
 import {
   alertText,
+  closedPositions,
   newPositions,
   parseSeen,
   seenOf,
@@ -27,9 +28,7 @@ describe('newPositions', () => {
   });
 
   it('позиция, которая уже была, не новая', () => {
-    expect(
-      newPositions([{ coin: 'BTC', side: 'long' }], [pos()]),
-    ).toEqual([]);
+    expect(newPositions([{ coin: 'BTC', side: 'long' }], [pos()])).toEqual([]);
   });
 
   it('новая монета — взятие', () => {
@@ -46,7 +45,7 @@ describe('newPositions', () => {
     ]);
   });
 
-  it('закрытие и добор уведомлений не дают', () => {
+  it('закрытие и добор взятием не считаются', () => {
     expect(newPositions([{ coin: 'BTC', side: 'long' }], [])).toEqual([]);
     expect(
       newPositions([{ coin: 'BTC', side: 'long' }], [pos({ size: 5 })]),
@@ -59,6 +58,23 @@ describe('newPositions', () => {
   });
 });
 
+describe('closedPositions', () => {
+  it('базовой проверки не было — молчит', () => {
+    expect(closedPositions(null, [])).toEqual([]);
+  });
+
+  it('пропавшая пара — закрытие, оставшаяся и добранная — нет', () => {
+    const btc = { coin: 'BTC', side: 'long' as const };
+    const eth = { coin: 'ETH', side: 'short' as const };
+    expect(closedPositions([btc, eth], [pos({ size: 5 })])).toEqual([eth]);
+  });
+
+  it('переворот: лонг закрыт, шорт — новая позиция', () => {
+    const btc = { coin: 'BTC', side: 'long' as const };
+    expect(closedPositions([btc], [pos({ side: 'short' })])).toEqual([btc]);
+  });
+});
+
 describe('parseSeen', () => {
   it('нет состояния или оно не той формы — базовой проверки не было', () => {
     expect(parseSeen(null)).toBeNull();
@@ -68,10 +84,7 @@ describe('parseSeen', () => {
   });
 
   it('читает то, что записал seenOf, и выбрасывает битые строки позиций', () => {
-    expect(parseSeen(seenOf(5, [pos()]))).toEqual({
-      at: 5,
-      positions: [{ coin: 'BTC', side: 'long' }],
-    });
+    expect(parseSeen(seenOf(5, [pos()]))).toEqual(seenOf(5, [pos()]));
     expect(
       parseSeen({
         at: 5,
@@ -82,14 +95,32 @@ describe('parseSeen', () => {
 });
 
 describe('seenOf', () => {
-  it('запоминает только монету и сторону', () => {
+  it('запоминает монету, сторону и то, что нужно сообщению о закрытии', () => {
     expect(seenOf(1234, [pos(), pos({ coin: 'ETH', side: 'short' })])).toEqual({
       at: 1234,
       positions: [
-        { coin: 'BTC', side: 'long' },
-        { coin: 'ETH', side: 'short' },
+        {
+          coin: 'BTC',
+          side: 'long',
+          notional: 100_000,
+          entryPx: 98_450,
+          leverage: 10,
+        },
+        {
+          coin: 'ETH',
+          side: 'short',
+          notional: 100_000,
+          entryPx: 98_450,
+          leverage: 10,
+        },
       ],
     });
+  });
+
+  it('состояние прежней формы (только монета и сторона) читается', () => {
+    expect(
+      parseSeen({ at: 1, positions: [{ coin: 'BTC', side: 'long' }] }),
+    ).toEqual({ at: 1, positions: [{ coin: 'BTC', side: 'long' }] });
   });
 });
 
@@ -100,7 +131,9 @@ describe('alertText', () => {
     const t = alertText({
       address,
       note: 'Тихий шортист',
-      positions: [pos({ side: 'short', notional: 1_250_000, entryPx: 98_450.5 })],
+      positions: [
+        pos({ side: 'short', notional: 1_250_000, entryPx: 98_450.5 }),
+      ],
       gapMin: 1,
     });
     expect(t).toContain('Тихий шортист');
@@ -154,6 +187,63 @@ describe('alertText', () => {
       gapMin: 1,
     });
     expect(t).toContain('вход 0.000012346');
+  });
+
+  it('закрытие: строка с тем, что было, без выдуманного результата', () => {
+    const t = alertText({
+      address,
+      note: 'Кит',
+      positions: [],
+      closed: [
+        {
+          coin: 'ETH',
+          side: 'short',
+          notional: 5000,
+          entryPx: 3200,
+          leverage: 4,
+        },
+      ],
+      gapMin: 1,
+    });
+    expect(t).toContain('закрыл позицию');
+    expect(t).toContain('ETH · шорт · был $5 000 · вход 3 200 · плечо 4x');
+    expect(t).not.toContain('взял');
+  });
+
+  it('закрытие позиции из старого состояния — только монета и сторона', () => {
+    const t = alertText({
+      address,
+      note: null,
+      positions: [],
+      closed: [{ coin: 'BTC', side: 'long' }],
+      gapMin: 1,
+    });
+    expect(t).toContain('BTC · лонг');
+    expect(t).not.toContain('был');
+  });
+
+  it('взял и закрыл — два блока в одном сообщении, оговорка про закрытие', () => {
+    const t = alertText({
+      address,
+      note: null,
+      positions: [pos({ side: 'short' })],
+      closed: [{ coin: 'BTC', side: 'long' }],
+      gapMin: STALE_GAP_MIN + 1,
+    });
+    expect(t).toContain('взял позицию');
+    expect(t).toContain('закрыл позицию');
+    expect(t.match(/Профиль/g)).toHaveLength(1);
+  });
+
+  it('оговорка о простое при закрытии говорит «закрыться»', () => {
+    const t = alertText({
+      address,
+      note: null,
+      positions: [],
+      closed: [{ coin: 'BTC', side: 'long' }],
+      gapMin: STALE_GAP_MIN + 1,
+    });
+    expect(t).toContain('могла закрыться раньше');
   });
 
   it('нет цены входа и плеча — строка не ломается', () => {

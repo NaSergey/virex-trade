@@ -30,7 +30,10 @@ const state = (...coins: [string, string][]) => ({
   })),
 });
 
-const seen = (minAgo: number, ...positions: { coin: string; side: string }[]) => ({
+const seen = (
+  minAgo: number,
+  ...positions: { coin: string; side: string }[]
+) => ({
   at: NOW - minAgo * 60_000,
   positions,
 });
@@ -99,7 +102,15 @@ describe('HlPositionWatchService.tick', () => {
       data: {
         notifySeen: {
           at: NOW,
-          positions: [{ coin: 'BTC', side: 'long' }],
+          positions: [
+            {
+              coin: 'BTC',
+              side: 'long',
+              notional: 5000,
+              entryPx: 100,
+              leverage: 3,
+            },
+          ],
         },
       },
     });
@@ -127,6 +138,45 @@ describe('HlPositionWatchService.tick', () => {
     expect(prisma.hlWallet.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
       telegram.sendText.mock.invocationCallOrder[0],
     );
+  });
+
+  it('позиция закрыта — сообщение о закрытии с тем, что запомнила прошлая проверка', async () => {
+    const { prisma, telegram, svc } = make([
+      {
+        address: A,
+        note: 'Тихий шортист',
+        notifySeen: seen(1, {
+          coin: 'BTC',
+          side: 'long',
+          notional: 80_000,
+          entryPx: 97_000,
+          leverage: 5,
+        } as never),
+      },
+    ]);
+    (gate.hlInfo as jest.Mock).mockResolvedValue(state());
+    await svc.tick(NOW);
+
+    expect(telegram.sendText).toHaveBeenCalledTimes(1);
+    const [, text] = telegram.sendText.mock.calls[0] as [string, string];
+    expect(text).toContain('Тихий шортист');
+    expect(text).toContain('закрыл позицию');
+    expect(text).toContain('BTC · лонг · был $80 000 · вход 97 000 · плечо 5x');
+    expect(prisma.hlWallet.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+      telegram.sendText.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('переворот: одно сообщение — и закрыл лонг, и взял шорт', async () => {
+    const { telegram, svc } = make([
+      { address: A, notifySeen: seen(1, { coin: 'BTC', side: 'long' }) },
+    ]);
+    (gate.hlInfo as jest.Mock).mockResolvedValue(state(['BTC', '-1']));
+    await svc.tick(NOW);
+    expect(telegram.sendText).toHaveBeenCalledTimes(1);
+    const [, text] = telegram.sendText.mock.calls[0] as [string, string];
+    expect(text).toContain('взял позицию');
+    expect(text).toContain('закрыл позицию');
   });
 
   it('новых позиций нет — состояние обновляется, сообщения нет', async () => {

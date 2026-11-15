@@ -18,6 +18,7 @@ import {
 import { positionsOf } from './positions';
 import {
   alertText,
+  closedPositions,
   newPositions,
   parseSeen,
   seenOf,
@@ -28,7 +29,7 @@ import type { ClearinghouseState } from './hl-types';
 const TICK_MS = 60_000;
 
 /**
- * Уведомления о взятии позиции на сохранённых кошельках — фоновый сервис
+ * Уведомления о взятии и закрытии позиции на сохранённых кошельках — фоновый сервис
  * `worker` (спека `docs/superpowers/specs/2026-11-12-hl-wallet-position-alerts-design.md`).
  *
  * Шлёт только `worker`: два процесса прислали бы каждое сообщение дважды.
@@ -108,6 +109,7 @@ export class HlPositionWatchService
 
         const seen = parseSeen(w.notifySeen);
         const fresh = newPositions(seen?.positions ?? null, current);
+        const closed = closedPositions(seen?.positions ?? null, current);
         const written = await this.prisma.hlWallet.updateMany({
           where: { address: w.address, notifyAt: { not: null } },
           data: {
@@ -117,7 +119,8 @@ export class HlPositionWatchService
             ) as unknown as Prisma.InputJsonValue,
           },
         });
-        if (written.count === 0 || fresh.length === 0) continue;
+        if (written.count === 0 || (fresh.length === 0 && closed.length === 0))
+          continue;
 
         const sent = await this.telegram.sendText(
           chatId,
@@ -125,11 +128,11 @@ export class HlPositionWatchService
             address: w.address,
             note: w.note,
             positions: fresh,
+            closed,
             gapMin: seen ? Math.round((now - seen.at) / 60_000) : 0,
           }),
         );
-        if (!sent)
-          this.logger.warn(`сообщение о позиции ${w.address} не ушло`);
+        if (!sent) this.logger.warn(`сообщение о позиции ${w.address} не ушло`);
       }
     } finally {
       this.running = false;
