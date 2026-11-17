@@ -35,7 +35,7 @@ function setup(klines: (params: Record<string, string>) => string[][]) {
     publicGet: jest.fn(async (path: string, params: Record<string, string>) => {
       if (path === '/market/instruments-info') return { list: [INSTRUMENT, { ...INSTRUMENT, symbol: 'ETHUSDC', quoteCoin: 'USDC' }] };
       if (path === '/market/tickers') {
-        return { list: [{ symbol: 'BTCUSDT', lastPrice: '60000', markPrice: '60010', turnover24h: '5' }] };
+        return { list: [{ symbol: 'BTCUSDT', lastPrice: '60000', markPrice: '60010', turnover24h: '5', price24hPcnt: '0.0125' }] };
       }
       if (path === '/market/kline') {
         calls.push(params);
@@ -109,6 +109,15 @@ describe('TerminalMarketService', () => {
     expect(await market.symbols()).toEqual([
       { symbol: 'BTCUSDT', base: 'BTC', decimals: 2, qtyStep: 0.001, maxLeverage: 100, turnover24h: 5 },
     ]);
+  });
+
+  it('тикеры — из того же запроса, что маркировка: цена и изменение за 24 ч в процентах', async () => {
+    const { market, bybit } = setup(() => []);
+    const tickers = () => bybit.publicGet.mock.calls.filter(([p]) => p === '/market/tickers').length;
+
+    expect(await market.tickers()).toEqual([{ symbol: 'BTCUSDT', last: 60_000, change24h: 1.25 }]);
+    expect((await market.markPrices()).get('BTCUSDT')).toBe(60_010);
+    expect(tickers()).toBe(1);
   });
 
   it('маркировка — один запрос на все монеты, кэш 2 с, после сбоя — прошлый ответ до 30 с', async () => {

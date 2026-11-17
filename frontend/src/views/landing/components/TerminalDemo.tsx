@@ -102,7 +102,7 @@ export function TerminalDemo() {
           перерисовывалось каждый кадр с самой загрузки, пока гость смотрит на
           первый экран. */}
       <div ref={root} data-far={onScreen ? undefined : ''}>
-        {client && near ? <DemoTerminal paused={!onScreen} /> : <TerminalSkeleton live badge={false} leave={false} tables={false} />}
+        {client && near ? <DemoTerminal paused={!onScreen} /> : <TerminalSkeleton live badge={false} leave={false} tables={false} rail={false} />}
       </div>
     </Wrap>
   );
@@ -122,6 +122,7 @@ function DemoTerminal({ paused }: { paused: boolean }) {
         qtyStepOf={demoQtyStepOf}
         priceOf={priceOf}
         badge={false}
+        rail={false}
         tags={false}
         tables={false}
         paused={paused}

@@ -96,6 +96,10 @@ const LIVE_POLL_MS = 3000;
 export const fetchLiveTail = (symbol: string) =>
   apiJson<{ serverTime: string; minutes: ApiCandle[] }>(`/api/market-data/live${qs({ symbol })}`);
 
+/** Цена и изменение за сутки монет эфира — список монет справа от графика. */
+export const fetchLiveTickers = () =>
+  apiJson<{ tickers: { symbol: string; last: number; change24h: number }[] }>('/api/market-data/live/tickers').then((r) => r.tickers);
+
 /** Монеты эфира. Список меняется только с выкладкой сервера — перечитывать незачем. */
 export const liveSymbolsQuery = queryOptions({
   queryKey: ['market', 'liveSymbols'],

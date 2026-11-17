@@ -40,6 +40,7 @@ export function TerminalPage() {
     return (
       <TerminalSkeleton
         live
+        multiChart
         badge={loading ? null : demoChosen ? undefined : tt('realBadge')}
         leave={demoChosen}
       />

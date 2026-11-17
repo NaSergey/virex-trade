@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { Settings as SettingsIcon, Volume2, VolumeX } from 'lucide-react';
+import { Maximize, Minimize, Settings as SettingsIcon, Volume2, VolumeX } from 'lucide-react';
 import { TagsDialog } from '@/entities/tag';
 import { useAuth } from '@/features/auth';
 import { useLocaleControl } from '@/shared/i18n';
@@ -12,6 +12,7 @@ import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { Seg, type SegOption } from '@/shared/ui/Seg';
 import { Wrap } from '@/shared/ui/Wrap';
+import { cn } from '@/shared/lib/utils/css';
 import { formatPriceGrouped } from '@/shared/lib/utils/format';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -38,7 +39,8 @@ import { TIMEFRAMES, dayNumber, scaleCandle } from '../lib/candles';
 import { terminalIntl, timeLabelFormats } from '../lib/time-labels';
 import { CLOSE_GRID_FIRST_ID, CLOSE_GRID_LAST_ID, closeGridLevels, initCloseGrid, type CloseGridDraft } from '../lib/close-grid';
 import { draftLevels } from '../lib/draft-levels';
-import { takeOdds } from '../lib/odds';
+import { positionLevels, tradeMarkers } from '../lib/chart-levels';
+import { drawingScope } from '../lib/drawings/store';
 import { atrOf, findRanges, toChartRanges, type ChartRange } from '../lib/ranges';
 import { entryGridTable, gridOrderCount } from '../lib/level-table';
 import { BOT_ENABLED, BOT_MAX_LEVELS } from '../lib/bot-grid';
@@ -53,10 +55,6 @@ import {
   fromScreen,
   gridPrices,
   levelDirection,
-  levelMove,
-  liquidationPrice,
-  openPnl,
-  pendingEntryQty,
   trailDistOf,
   toInput,
   roundLevel,
@@ -66,7 +64,14 @@ import {
 } from '../lib/money';
 import type { TerminalSound } from '../lib/sounds';
 import { useSessionActions, type TerminalActions } from '../model/actions';
-import { useExpSettings, useRangesOn, useRsiOn, useTagPromptOn } from '../model/useChartSettings';
+import { useExpSettings, useRailPanel, useRangesOn, useRsiOn, useTagPromptOn, useVolumeOn, type RailPanel } from '../model/useChartSettings';
+import { useFullscreen } from '../model/useFullscreen';
+import { usePanes } from '../model/usePanes';
+import { useMediaQuery } from '@/shared/lib/hooks/useMediaQuery';
+import { ChartPane, type ChartProps } from './ChartPane';
+import { LayoutPicker } from './LayoutPicker';
+import { TerminalRail } from './TerminalRail';
+import { Watchlist } from './Watchlist';
 import { useRangeCandles, type Load4h } from '../model/useRangeCandles';
 import { useMaxRisk } from '../model/useRiskSettings';
 import { useLiveSymbol } from '../model/useLiveSymbol';
@@ -108,6 +113,7 @@ export function SessionScreen({
   onLeave,
   live = false,
   chartActions,
+  multiChart = false,
 }: {
   id: string;
   onLeave: () => void;
@@ -115,6 +121,8 @@ export function SessionScreen({
   live?: boolean;
   /** Узел слева от кнопок графика — см. `TerminalProps.chartActions`. */
   chartActions?: ReactNode;
+  /** Сетка графиков — см. `TerminalProps.multiChart`. */
+  multiChart?: boolean;
 }) {
   const t = useTranslations('backtest');
   const { data, error } = useBacktestSession(id);
@@ -124,7 +132,7 @@ export function SessionScreen({
         <ErrorNote error={error} fallback={t('loadFailed')} />
       </Wrap>
     );
-  if (!data) return <TerminalSkeleton live={live} />;
+  if (!data) return <TerminalSkeleton live={live} multiChart={multiChart} />;
   if (data.session.status === 'finished')
     return (
       <Wrap page>
@@ -137,7 +145,7 @@ export function SessionScreen({
         <OutdatedSession detail={data} onLeave={onLeave} />
       </Wrap>
     );
-  return <ActiveSession detail={data} onLeave={onLeave} chartActions={chartActions} />;
+  return <ActiveSession detail={data} onLeave={onLeave} chartActions={chartActions} multiChart={multiChart} />;
 }
 
 /**
@@ -183,13 +191,15 @@ function ActiveSession({
   detail,
   onLeave,
   chartActions,
+  multiChart,
 }: {
   detail: SessionDetail;
   onLeave: () => void;
   chartActions?: ReactNode;
+  multiChart?: boolean;
 }) {
   const actions = useSessionActions(detail.session.id);
-  return <Terminal detail={detail} actions={actions} onLeave={onLeave} chartActions={chartActions} />;
+  return <Terminal detail={detail} actions={actions} onLeave={onLeave} chartActions={chartActions} multiChart={multiChart} />;
 }
 
 /**
@@ -246,6 +256,21 @@ export interface TerminalProps {
    * настройки). Терминал на демо-счёте ставит сюда «Подключить биржу».
    */
   chartActions?: ReactNode;
+  /**
+   * Рейка справа «Терминал / Монеты» со сворачиванием колонки; по умолчанию
+   * есть. Терминал на главной её убирает: узкая секция, и списка монет гостю не нужно.
+   */
+  rail?: boolean;
+  /**
+   * Источник цен в легенде графика — «Bybit», «Bybit Demo». Не задан — «Binance»
+   * в эфире (рынок продукта и главной), у истории и тренажёра — без источника.
+   */
+  sourceLabel?: string;
+  /**
+   * Сетка из нескольких графиков (спека 2026-11-17) — только `/terminal`: биржа и
+   * демо-счёт. Работает в эфире и на широком экране; иначе график один.
+   */
+  multiChart?: boolean;
 }
 
 /**
@@ -269,6 +294,9 @@ export function Terminal({
   tables = true,
   paused = false,
   chartActions,
+  rail = true,
+  sourceLabel,
+  multiChart = false,
 }: TerminalProps) {
   const t = useTranslations('backtest');
   const { locale } = useLocaleControl();
@@ -322,8 +350,26 @@ export function Terminal({
   // ни символа в подзаголовках окон. Раскрывает её итог завершённой сессии.
   const symbolShown = !session.hideSymbol || reveal;
   const coinPrefix = (sym: string) => (symbolShown ? `${sym} · ` : '');
-  const symbol = isLive ? liveSymbol : localSymbol;
-  const setSymbol = isLive ? setLiveSymbol : setLocalSymbol;
+  // Рынок — свой у того, кто его передал (биржа); иначе монеты и цены эфира с сервера.
+  const { data: symbolsData } = useLiveSymbols(isLive && !symbols);
+  const coins = symbols ?? symbolsData?.symbols;
+
+  /**
+   * Сетка графиков (спека 2026-11-17): активный график — это график терминала,
+   * его монета и ТФ — у активной ячейки. Монету пишем и в `useLiveSymbol`: её
+   * читают прогрев терминала и предзагрузка ленты.
+   */
+  const wide = useMediaQuery('(min-width: 1101px)');
+  const coinIds = useMemo(() => (coins ?? []).map((c) => c.symbol), [coins]);
+  const panesState = usePanes(coinIds, liveSymbol);
+  const multi = multiChart && isLive && wide;
+  const activePane = multi ? panesState.panes[panesState.active] : null;
+  const symbol = activePane ? activePane.symbol : isLive ? liveSymbol : localSymbol;
+  const setSymbol = (next: string) => {
+    if (activePane) panesState.setPane(panesState.active, { symbol: next });
+    if (isLive) setLiveSymbol(next);
+    else setLocalSymbol(next);
+  };
   // Своим useMemo — по той же причине, что и openTrades: levels сверяет по ссылке.
   const chartTrades = useMemo(() => openTrades.filter((x) => x.symbol === symbol), [openTrades, symbol]);
   // Стороны монеты графика с открытой позицией: «Лонг/Шорт» по ним доливает
@@ -372,6 +418,7 @@ export function Terminal({
   const exp = useExpSettings();
   const takeOddsOn = exp.on.take;
   const [tagPromptOn] = useTagPromptOn();
+  const [volumeOn, setVolumeOn] = useVolumeOn();
   const [chartSettingsOpen, setChartSettingsOpen] = useState(false);
   useSnapshotSound(
     detail,
@@ -473,7 +520,7 @@ export function Terminal({
     () => openTrades.map((x) => Date.parse(x.entryTime)).filter(Number.isFinite),
     [openTrades],
   );
-  const liveFeed = useLiveFeed(detail, isLive, symbol, source, paused, entryAnchors);
+  const liveFeed = useLiveFeed(detail, isLive, symbol, source, paused, entryAnchors, activePane?.tf);
   const replay = isLive ? liveFeed : replayFeed;
   // Клавиши — там же, где кнопки скорости: в эфире время ведут часы.
   useReplayKeys({
@@ -486,7 +533,7 @@ export function Terminal({
   // значит. Ключ BTC прежний — рисунки, сделанные до монет, не теряются.
   const drawings = useDrawingTools(
     user?.id ?? 'anon',
-    symbol === DEFAULT_SYMBOL ? session.id : `${session.id}:${symbol}`,
+    drawingScope(session.id, symbol, DEFAULT_SYMBOL),
     scale,
     replay.shownTf * 60_000,
   );
@@ -504,9 +551,18 @@ export function Terminal({
   const candles4h = useRangeCandles(rangesOn, loadRange4h, `${session.id}:${symbol}`, replay.ready ? replay.cursor : null);
   const rangeBoxes = useMemo(() => (rangesOn ? findRanges(candles4h) : []), [rangesOn, candles4h]);
 
-  // Рынок — свой у того, кто его передал (биржа); иначе монеты и цены эфира с сервера.
-  const { data: symbolsData } = useLiveSymbols(isLive && !symbols);
-  const coins = symbols ?? symbolsData?.symbols;
+  /**
+   * Правая колонка: панель ордера, список монет или ничего — колонка свёрнута, и
+   * график шире (рейка, как у TradingView). Список — только где монет несколько
+   * и у рынка есть тикеры; где его нет, запомненное «Монеты» значит панель ордера.
+   */
+  const [railPanel, setRailPanel] = useRailPanel();
+  const watchSource = (source ?? SESSION_SOURCE).tickers;
+  const hasWatch = rail && isLive && watchSource != null && (coins?.length ?? 0) > 1;
+  const panel: RailPanel = railPanel === 'watch' && !hasWatch ? 'order' : rail ? railPanel : 'order';
+  // Во весь экран — корень терминала вместе с таблицами под графиком.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const fullscreen = useFullscreen(rootRef);
   // Знаки цены монеты — в эфире и у истории с видимой ценой; скрытую цену масштаб
   // приводит к 100–1000, и ей хватает общего правила.
   const coinDecimals = isLive || (session.dataSource === 'real' && (!session.hidePrice || reveal));
@@ -714,90 +770,26 @@ export function Terminal({
           qtyStep: chartQtyStep,
         });
 
-    // Уровни уже открытых сделок монеты графика — от их собственных
-    // stopLoss/takeProfit, не от черновика панели: с хеджем сделок может быть
-    // две, у каждой свои уровни.
-    for (const trade of chartTrades) {
-      const remaining = trade.qty - trade.closedQty;
-      const impactAt = (qty: number) => (p: number) => levelMove(trade.direction, trade.entryPrice, fromScreen(p, scale), qty);
-      const pending = pendingLevel?.tradeId === trade.id ? pendingLevel : null;
-      list.push({
-        id: `entry-${trade.id}`,
-        kind: 'entry',
-        tradeId: trade.id,
-        price: toScreen(trade.entryPrice, scale),
-        draggable: false,
-        qty: remaining,
-        direction: trade.direction,
-        pnl: openPnl(trade, livePrice),
-      });
-      // Биржа называет цену ликвидации сама (или не называет вовсе — null); у сделки сессии она считается.
-      const liq = trade.liqPrice !== undefined ? trade.liqPrice : liquidationPrice(trade.direction, trade.entryPrice, trade.leverage);
-      if (liq != null) {
-        list.push({ id: `liq-${trade.id}`, kind: 'liq', tradeId: trade.id, price: toScreen(liq, scale), draggable: false });
-      }
-      // Тейк позиции (или тот, что тянут) — нужен и линии стопа: шанс стопа — зеркало шанса тейка.
-      const takeNow = pending?.kind === 'take' ? pending.price : trade.takeProfit != null ? toScreen(trade.takeProfit, scale) : null;
-      // Стопа у позиции биржи может не быть (0): линии тогда нет, пока её не потянут от плашки.
-      if (trade.stopLoss > 0 || pending?.kind === 'stop') {
-        list.push({
-          id: `stop-${trade.id}`,
-          kind: 'stop',
-          tradeId: trade.id,
-          price: pending?.kind === 'stop' ? pending.price : toScreen(trade.stopLoss, scale),
-          draggable: true,
-          qty: remaining,
-          impactAt: impactAt(remaining),
-          name: trade.trailDist != null ? t('level.trailStop') : undefined,
-          // Шанс стопа — 100 % минус шанс тейка: исходов два. Пока стоп тянут, число считается на цене под курсором.
-          oddsAt:
-            takeOddsOn && takeNow != null && screenPrice != null
-              ? (p) => {
-                  const take = takeOdds(screenPrice, p, takeNow);
-                  return take != null ? 100 - take : null;
-                }
-              : undefined,
-        });
-      }
-      const take = pending?.kind === 'take' ? pending.price : trade.takeProfit != null ? toScreen(trade.takeProfit, scale) : null;
-      if (take != null) {
-        // Шанс — от текущей цены и стопа, каким он стоит (или его тянут): меняется вместе с ценой.
-        const stopNow = pending?.kind === 'stop' ? pending.price : trade.stopLoss > 0 ? toScreen(trade.stopLoss, scale) : null;
-        list.push({
-          id: `take-${trade.id}`,
-          kind: 'take',
-          tradeId: trade.id,
-          price: take,
-          draggable: true,
-          qty: remaining,
-          impactAt: impactAt(remaining),
-          oddsAt: takeOddsOn && stopNow != null && screenPrice != null ? (p) => takeOdds(screenPrice, stopNow, p) : undefined,
-        });
-      }
-      for (const o of detail.closeOrders) {
-        if (o.tradeId !== trade.id) continue;
-        list.push({
-          id: o.id,
-          kind: 'limitClose',
-          tradeId: o.tradeId,
-          price: pendingOrder?.id === o.id ? pendingOrder.price : toScreen(o.price, scale),
-          draggable: true,
-          qty: o.qty,
-          impactAt: impactAt(o.qty),
-        });
-      }
-    }
-    // Ещё не сработавшие лимиты на вход — независимо от того, есть ли уже
-    // сделка этого направления: до срабатывания это не её уровень. Объём — тот,
-    // что сервер посчитает на срабатывании (`pendingEntryQty`), тот же, что в
-    // таблице ордеров. Депозит к срабатыванию может смениться, поэтому число — на сейчас.
-    for (const o of detail.entryOrders) {
-      if (o.symbol !== symbol) continue;
-      const posStop = chartTrades.find((x) => x.direction === o.direction)?.stopLoss;
-      const qty = pendingEntryQty(o, posStop, balance, qtyStepOf(o.symbol)) ?? undefined;
-      const price = pendingOrder?.id === o.id ? pendingOrder.price : toScreen(o.price, scale);
-      list.push({ id: o.id, kind: 'pendingEntry', price, draggable: true, qty });
-    }
+    // Позиции и висящие ордера монеты графика — общий расчёт с неактивными
+    // графиками сетки (`positionLevels`), здесь с перетаскиванием.
+    list.push(
+      ...positionLevels({
+        trades: chartTrades,
+        closeOrders: detail.closeOrders,
+        entryOrders: detail.entryOrders,
+        symbol,
+        scale,
+        livePrice,
+        screenPrice,
+        balance,
+        qtyStepOf,
+        draggable: true,
+        oddsOn: takeOddsOn,
+        trailName: t('level.trailStop'),
+        pendingLevel,
+        pendingOrder,
+      }),
+    );
     // Уровни сетки фиксации — последними, поверх уровней позиции, а не под ними,
     // как черновик ордера: в этом режиме человек занят сеткой, и совпавшая с ней
     // линия позиции не должна перехватывать захват.
@@ -858,41 +850,7 @@ export function Terminal({
   // же причине, что и levels выше: ReplayChart сверяет массив по ссылке.
   // Берутся из всех сделок сессии, не только открытых: разбор в том и состоит,
   // чтобы видеть свои прошлые входы на тех же свечах, а не только в таблице.
-  const markers = useMemo<Marker[]>(() => {
-    const list: Marker[] = [];
-    for (const trade of trades) {
-      if (trade.symbol !== symbol) continue;
-      // Одна стрелка на каждое исполнение (открытие + каждый добор сеткой), а
-      // не одна на entryPrice/entryTime сделки — те усреднены по всем входам и
-      // держат только время самого первого. У сделок, заведённых до этой
-      // истории, entries пуст — тогда синтезируем одну запись из самой сделки,
-      // иначе старые сессии остались бы вовсе без стрелки входа.
-      const entries = trade.entries.length > 0 ? trade.entries : [{ id: trade.id, qty: trade.qty, price: trade.entryPrice, time: trade.entryTime }];
-      for (const entry of entries) {
-        // Время открытия позиции биржи бывает неизвестно — стрелку ставить некуда.
-        if (!Number.isFinite(Date.parse(entry.time))) continue;
-        list.push({
-          id: `m-entry-${trade.id}-${entry.id}`,
-          kind: 'entry',
-          time: Date.parse(entry.time),
-          price: toScreen(entry.price, scale),
-          direction: trade.direction,
-        });
-      }
-      if (trade.exitTime != null && trade.exitPrice != null) {
-        list.push({
-          id: `m-exit-${trade.id}`,
-          kind: 'exit',
-          time: Date.parse(trade.exitTime),
-          price: toScreen(trade.exitPrice, scale),
-          direction: trade.direction,
-          // Ноль — не прибыль и не убыток: у такой сделки нейтральный цвет.
-          tone: trade.pnl == null || trade.pnl === 0 ? null : trade.pnl > 0 ? 'profit' : 'loss',
-        });
-      }
-    }
-    return list;
-  }, [trades, scale, symbol]);
+  const markers = useMemo<Marker[]>(() => tradeMarkers(trades, symbol, scale), [trades, scale, symbol]);
 
   // Скрытая дата: день недели и время суток видны (биржевые сессии, выходные),
   // год и число — нет; вместо даты — номер дня от старта. useCallback по той же
@@ -978,6 +936,27 @@ export function Terminal({
     clearDraftLevels();
     setCloseGrid(null);
   };
+
+  /**
+   * Нажатие на неактивный график сетки — он становится графиком терминала: его
+   * монета у панели ордера и списка монет, черновики прежней монеты сброшены, как
+   * при смене монеты. Колбэк стабильный (свежая версия — в рефе): ячейки — memo,
+   * и новая функция на каждый рендер перерисовывала бы все графики.
+   */
+  const activateLatest = useRef<(i: number) => void>(() => undefined);
+  useLayoutEffect(() => {
+    activateLatest.current = (i: number) => {
+      const next = panesState.panes[i];
+      if (!next || i === panesState.active) return;
+      clearDraftLevels();
+      setCloseGrid(null);
+      setLiveSymbol(next.symbol);
+      panesState.activate(i);
+    };
+  });
+  const activatePane = useCallback((i: number) => activateLatest.current(i), []);
+  // Смена ТФ в верхней панели — у активного графика сетки: лента терминала берёт ТФ из сетки.
+  const setChartTf = activePane ? (tf: number) => panesState.setPane(panesState.active, { tf }) : replay.setTf;
 
   // График — ради прокрутки к нему, когда монету выбирают в таблице под ним.
   const chartRef = useRef<HTMLDivElement>(null);
@@ -1408,6 +1387,39 @@ export function Terminal({
   };
 
   const tfOptions: SegOption<number>[] = TIMEFRAMES.map((tf) => ({ value: tf, label: t(`tf.${tf}`) }));
+  // Первая строка легенды графика. Строкой, а не объектом: ReplayChart — memo.
+  // Скрытая монета истории не называется и здесь — как в таблицах.
+  const legendSource = sourceLabel ?? (isLive ? 'Binance' : null);
+  const legendTitle = [
+    symbolShown ? symbol : session.dataSource === 'synthetic' ? t('legend.synthetic') : t('legend.history'),
+    t(`tf.${replay.shownTf}`),
+    legendSource,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  // Пропсы графика терминала — один набор на одиночный график и на активную ячейку сетки.
+  const mainChart: ChartProps = {
+    timeframe: replay.shownTf,
+    candles: screenCandles,
+    levels,
+    markers,
+    labelFor,
+    levelLabel,
+    glide: screenGlide,
+    onDragLevel,
+    onCloseTrade,
+    onClearTake,
+    onCancelOrder,
+    onCloseGrid,
+    onNeedHistory: replay.loadMoreHistory,
+    historyLoading: replay.historyLoading,
+    drawing: drawings.chart,
+    priceDecimals: chartDecimals,
+    rsi: rsiOn,
+    ranges: chartRanges,
+    legend: legendTitle,
+    volume: volumeOn,
+  };
   // Скорость — свечей выбранного ТФ в секунду; чего ТФ не тянет — выключено, а не тихо медленнее.
   const speedOptions: SegOption<number>[] = [
     { value: 0, label: t('pause'), title: t('pauseHint') },
@@ -1442,15 +1454,20 @@ export function Terminal({
     // Терминал во всю ширину окна — единственное место продукта без .wrap
     // (см. комментарий у SessionScreen). Итог той же сессии после завершения
     // возвращается в обычную читательскую колонку сам, через SessionScreen.
-    <div className="bt-live px-4">
-      <div className="asym terminal">
+    <div className="bt-live px-4" ref={rootRef}>
+      <div
+        className={cn('asym terminal', rail && 'has-rail')}
+        // Свёрнутость колонки решает CSS; настройки графика и сетка фиксации
+        // разворачивают её на время сами собой.
+        data-rail={chartSettingsOpen || gridTrade ? 'open' : panel}
+      >
         <div className="terminal-main">
           <div className="terminal-chart" ref={chartRef}>
-            {/* Без заголовка «Таймфрейм» — сами кнопки ТФ слева и есть подпись себе.
-                Разметка та же, что у SectionHead (.h2row: линейка снизу, выключка вправо),
-                но без <h2>: он тут просто нечем заполнить. */}
-            <div className="h2row">
-              <div className="flex items-center gap-3">
+            {/* Верхняя панель графика, как у TradingView: монета, таймфреймы, справа —
+                действие страницы, звук, настройки и полный экран. Без заголовка
+                «Таймфрейм» — сами кнопки ТФ и есть подпись себе. */}
+            <div className="chart-top">
+              <div className="chart-top-l">
                 {/* Монета — только в эфире: у истории и тренажёра она одна. Пока
                     список едет — заглушка того же размера, а не пустое место. */}
                 {isLive &&
@@ -1461,12 +1478,14 @@ export function Terminal({
                   ))}
                 {/* Раскрытая история называет свою монету — иначе её не видно нигде. */}
                 {reveal && <span className="muted">{coinBase(symbol)}</span>}
-                <Seg options={tfOptions} value={replay.tf} onChange={replay.setTf} ariaLabel={t('timeframe')} />
+                {(isLive || reveal) && <span className="chart-top-sep" aria-hidden />}
+                <Seg options={tfOptions} value={replay.tf} onChange={setChartTf} ariaLabel={t('timeframe')} />
               </div>
-              <div className="flex items-center gap-1">
+              <div className="chart-top-r">
                 {/* Отступ — свой: кнопки графика стоят вплотную друг к другу, а
                     действие страницы к ним не относится. */}
                 {chartActions && <div className="mr-3 flex items-center">{chartActions}</div>}
+                {multi && <LayoutPicker value={panesState.layout} onChange={panesState.setLayout} />}
                 <Button
                   variant="bare"
                   tight
@@ -1492,6 +1511,18 @@ export function Terminal({
                 >
                   <SettingsIcon size={16} />
                 </Button>
+                {fullscreen.supported && (
+                  <Button
+                    variant="bare"
+                    tight
+                    aria-label={fullscreen.on ? t('exitFullscreen') : t('fullscreen')}
+                    title={fullscreen.on ? t('exitFullscreen') : t('fullscreen')}
+                    aria-pressed={fullscreen.on}
+                    onClick={fullscreen.toggle}
+                  >
+                    {fullscreen.on ? <Minimize size={16} /> : <Maximize size={16} />}
+                  </Button>
+                )}
               </div>
             </div>
             <div className="chart-tools">
@@ -1522,29 +1553,37 @@ export function Terminal({
                     onCopy={() => drawings.copy() && drawings.paste()}
                   />
                 )}
-                {replay.ready ? (
-                  <ReplayChart
-                    // Не key: пересоздание на каждой смене ТФ перерисовывало график с нуля.
-                    // Окно показа при смене ТФ сбрасывает сам ReplayChart.
-                    timeframe={replay.shownTf}
-                    candles={screenCandles}
-                    levels={levels}
-                    markers={markers}
-                    labelFor={labelFor}
-                    levelLabel={levelLabel}
-                    glide={screenGlide}
-                    onDragLevel={onDragLevel}
-                    onCloseTrade={onCloseTrade}
-                    onClearTake={onClearTake}
-                    onCancelOrder={onCancelOrder}
-                    onCloseGrid={onCloseGrid}
-                    onNeedHistory={replay.loadMoreHistory}
-                    historyLoading={replay.historyLoading}
-                    drawing={drawings.chart}
-                    priceDecimals={chartDecimals}
-                    rsi={rsiOn}
-                    ranges={chartRanges}
-                  />
+                {/* Не key: пересоздание на каждой смене ТФ перерисовывало график с нуля.
+                    Окно показа при смене ТФ сбрасывает сам ReplayChart. */}
+                {multi ? (
+                  <div className="panes" data-layout={panesState.layout}>
+                    {panesState.panes.map((pane, i) => (
+                      <ChartPane
+                        key={i}
+                        index={i}
+                        pane={pane}
+                        active={i === panesState.active}
+                        main={i === panesState.active ? mainChart : null}
+                        mainReady={replay.ready && replay.shownTf === pane.tf}
+                        detail={detail}
+                        source={source}
+                        scale={scale}
+                        decimalsOf={decimalsOf}
+                        qtyStepOf={qtyStepOf}
+                        labelFor={labelFor}
+                        levelLabel={levelLabel}
+                        rsi={rsiOn}
+                        volume={volumeOn}
+                        oddsOn={takeOddsOn}
+                        userId={user?.id ?? 'anon'}
+                        drawingsHidden={drawings.hidden}
+                        sourceLabel={legendSource}
+                        onActivate={activatePane}
+                      />
+                    ))}
+                  </div>
+                ) : replay.ready ? (
+                  <ReplayChart {...mainChart} />
                 ) : (
                   <ChartSkeleton />
                 )}
@@ -1600,8 +1639,21 @@ export function Terminal({
           {/* Сетка фиксации стоит на месте панели ордера, а не окном поверх: её
               уровни — на графике, и смотреть на них, настраивая, нужно рядом.
               Смена панели — сменой ключа: новая въезжает анимацией (.panel-swap). */}
+          {/* Узкий экран: рейки нет, панель стоит под графиком — переключатель над ней. */}
+          {hasWatch && !chartSettingsOpen && !gridTrade && (
+            <Seg
+              className="rail-seg"
+              options={[
+                { value: 'order' as const, label: t('rail.order') },
+                { value: 'watch' as const, label: t('rail.watch') },
+              ]}
+              value={panel === 'watch' ? 'watch' : 'order'}
+              onChange={setRailPanel}
+              ariaLabel={t('rail.label')}
+            />
+          )}
           <div
-            key={chartSettingsOpen ? 'settings' : gridTrade ? 'grid' : 'order'}
+            key={chartSettingsOpen ? 'settings' : gridTrade ? 'grid' : panel === 'watch' ? 'watch' : 'order'}
             className="panel-swap panel-swap-fill"
             data-swap={panelSwapped ? (gridTrade || chartSettingsOpen ? 'in' : 'back') : undefined}
           >
@@ -1611,6 +1663,8 @@ export function Terminal({
                 onReveal={revealable ? toggleReveal : undefined}
                 rsiOn={rsiOn}
                 onRsi={setRsiOn}
+                volumeOn={volumeOn}
+                onVolume={setVolumeOn}
                 rangesOn={rangesOn}
                 onRanges={setRangesOn}
                 exp={exp.on}
@@ -1635,6 +1689,8 @@ export function Terminal({
                 isPending={closeGridM.isPending}
                 error={closeGridM.error}
               />
+            ) : panel === 'watch' && hasWatch && coins && watchSource ? (
+              <Watchlist coins={coins} value={symbol} source={watchSource} decimalsOf={decimalsOf} onPick={switchSymbol} />
             ) : (
               <>
                 <OrderPanel
@@ -1693,6 +1749,7 @@ export function Terminal({
             )}
           </div>
         </div>
+        {rail && <TerminalRail value={panel} watch={hasWatch} onChange={setRailPanel} />}
       </div>
 
       {closeM.isError && closeM.variables && (

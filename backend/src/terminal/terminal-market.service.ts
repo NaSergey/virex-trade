@@ -42,6 +42,18 @@ export interface TerminalSymbol {
   turnover24h: number;
 }
 
+/** Цена и изменение монеты за сутки — строка списка монет. */
+export interface Ticker {
+  symbol: string;
+  last: number;
+  /** Изменение за 24 часа, проценты. */
+  change24h: number;
+}
+
+interface TickerRow extends Ticker {
+  mark: number;
+}
+
 export interface CandleQuery {
   timeframe: number;
   from?: Date;
@@ -159,41 +171,61 @@ export class TerminalMarketService {
     return value;
   }
 
-  private marks: Cached<Map<string, number>> | null = null;
-  private marksInflight: Promise<Map<string, number>> | null = null;
-  /** Когда запрос маркировки последний раз упал: столько же, сколько живёт кэш, к бирже не идём. */
-  private marksFailedAt = Number.NEGATIVE_INFINITY;
+  private board: Cached<TickerRow[]> | null = null;
+  /** Карта маркировки строится один раз на ответ биржи: её читают на каждом опросе счёта. */
+  private marksOf: { rows: TickerRow[]; map: ReadonlyMap<string, number> } | null = null;
+  private boardInflight: Promise<TickerRow[]> | null = null;
+  /** Когда запрос тикеров последний раз упал: столько же, сколько живёт кэш, к бирже не идём. */
+  private boardFailedAt = Number.NEGATIVE_INFINITY;
 
   /**
-   * Цена маркировки всех USDT-перпов — для PnL позиций и депозита потока
-   * счёта: изменение цены событий приватного потока не даёт.
+   * Тикеры всех USDT-перпов одним публичным запросом — на всех пользователей
+   * процесса, раз в 2 с. Из него и маркировка (PnL позиций и депозит потока
+   * счёта: изменение цены событий приватного потока не даёт), и список монет.
    */
-  async markPrices(): Promise<ReadonlyMap<string, number>> {
+  private async tickerBoard(): Promise<TickerRow[]> {
     const now = this.now();
-    const stale = () => (this.marks && now - this.marks.at < MARKS_STALE_MS ? this.marks.value : new Map<string, number>());
-    if (this.marks && now - this.marks.at < MARKS_TTL_MS) return this.marks.value;
+    const stale = () => (this.board && now - this.board.at < MARKS_STALE_MS ? this.board.value : []);
+    if (this.board && now - this.board.at < MARKS_TTL_MS) return this.board.value;
     // Биржа только что не ответила: каждый опрос экрана повторял бы запрос, пока она лежит.
-    if (now - this.marksFailedAt < MARKS_TTL_MS) return stale();
-    this.marksInflight ??= this.bybit
+    if (now - this.boardFailedAt < MARKS_TTL_MS) return stale();
+    this.boardInflight ??= this.bybit
       .publicGet('/market/tickers', { category: 'linear' })
       .then((result) => {
-        const value = new Map<string, number>();
+        const value: TickerRow[] = [];
         for (const t of result.list ?? []) {
+          const last = parseFloat(t.lastPrice);
           const mark = parseFloat(t.markPrice);
-          if (mark > 0) value.set(String(t.symbol), mark);
+          if (!(last > 0) && !(mark > 0)) continue;
+          value.push({ symbol: String(t.symbol), last, mark, change24h: (parseFloat(t.price24hPcnt) || 0) * 100 });
         }
-        this.marks = { at: this.now(), value };
+        this.board = { at: this.now(), value };
         return value;
       })
       .finally(() => {
-        this.marksInflight = null;
+        this.boardInflight = null;
       });
     try {
-      return await this.marksInflight;
+      return await this.boardInflight;
     } catch {
-      this.marksFailedAt = this.now();
+      this.boardFailedAt = this.now();
       return stale();
     }
+  }
+
+  /** Цена маркировки всех USDT-перпов; монеты без маркировки в карте нет. */
+  async markPrices(): Promise<ReadonlyMap<string, number>> {
+    const rows = await this.tickerBoard();
+    if (this.marksOf?.rows !== rows) {
+      this.marksOf = { rows, map: new Map(rows.filter((r) => r.mark > 0).map((r) => [r.symbol, r.mark])) };
+    }
+    return this.marksOf.map;
+  }
+
+  /** Цена и изменение за 24 ч всех монет — список монет справа от графика. */
+  async tickers(): Promise<Ticker[]> {
+    const rows = await this.tickerBoard();
+    return rows.filter((r) => r.last > 0).map(({ symbol, last, change24h }) => ({ symbol, last, change24h }));
   }
 
   /** Последняя цена монеты — от неё считается объём рыночного ордера. Без кэша: устаревшая цена — неверный размер. */

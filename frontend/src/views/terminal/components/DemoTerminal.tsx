@@ -59,6 +59,7 @@ export function DemoTerminal({
       <SessionScreen
         id={id}
         live
+        multiChart
         onLeave={() => router.push('/backtest')}
         chartActions={
           connect && (
@@ -80,5 +81,5 @@ export function DemoTerminal({
         </Button>
       </Wrap>
     );
-  return <TerminalSkeleton live />;
+  return <TerminalSkeleton live multiChart />;
 }

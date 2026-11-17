@@ -1,8 +1,13 @@
 import { indexAtOrAfter } from '../motion';
 import type { DPoint, Drawing, DrawingKind } from './types';
 
-/** Сколько кликов ставит фигуру. `drag` — кисть: рисуется, пока указатель прижат. */
-export function placement(kind: DrawingKind): 1 | 2 | 'drag' {
+/**
+ * Сколько кликов ставит фигуру. `drag` — кисть: рисуется, пока указатель прижат;
+ * `open` — ломаная и путь: сколько угодно точек, конец — двойной клик, Enter или
+ * клик по последней точке. Две точки — протяжкой или двумя кликами, от трёх —
+ * только кликами (`useDrawingGestures`).
+ */
+export function placement(kind: DrawingKind): number | 'open' | 'drag' {
   switch (kind) {
     case 'hline':
     case 'hray':
@@ -13,13 +18,53 @@ export function placement(kind: DrawingKind): 1 | 2 | 'drag' {
     case 'arrowDown':
     case 'long':
     case 'short':
+    case 'priceLabel':
+    case 'flag':
+    case 'vwap':
       return 1;
     case 'brush':
       return 'drag';
+    case 'polyline':
+    case 'path':
+      return 'open';
+    case 'pitchfork':
+    case 'fibExt':
+    case 'fibChannel':
+    case 'triangle':
+    case 'curve':
+    case 'arc':
+      return 3;
+    case 'elliottCorrection':
+      return 4;
+    case 'xabcd':
+      return 5;
+    case 'elliottImpulse':
+      return 6;
+    case 'headShoulders':
+      return 7;
     default:
       return 2;
   }
 }
+
+/** Ломаная и путь: больше точек не бывает — запись в хранилище иначе росла бы без предела. */
+export const OPEN_MAX_POINTS = 200;
+
+/**
+ * Сколько точек у сохранённой фигуры нового вида — для проверки хранилища.
+ * `null` — у вида свои правила (старые виды проверяются, как раньше).
+ */
+export function storedPoints(kind: DrawingKind): { min: number; max: number } | null {
+  if (kind === 'polyline' || kind === 'path') return { min: 2, max: OPEN_MAX_POINTS };
+  if (kind === 'fibChannel') return { min: 3, max: 3 };
+  const how = placement(kind);
+  const LEGACY: readonly DrawingKind[] = ['hline', 'hray', 'vline', 'cross', 'text', 'arrowUp', 'arrowDown', 'long', 'short', 'brush', 'channel'];
+  if (LEGACY.includes(kind) || typeof how !== 'number') return null;
+  return how === 2 && !NEW_TWO_POINT.has(kind) ? null : { min: how, max: how };
+}
+
+/** Двухточечные новые виды — у старых двухточечных число точек не проверялось. */
+const NEW_TWO_POINT: ReadonlySet<DrawingKind> = new Set(['regression', 'fibFan', 'fibTime', 'gannFan', 'ellipse', 'callout', 'cycleLines', 'volumeProfile']);
 
 /**
  * Уровни и цвета — набор TradingView по умолчанию, включая расширения за 1:

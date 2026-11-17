@@ -7,23 +7,32 @@ import {
   ArrowUp,
   ArrowUpRight,
   Brush,
+  ChartBarBig,
+  Circle,
+  Flag,
   Eye,
   EyeOff,
   Keyboard,
   Magnet,
+  MessageSquareText,
   Minus,
   MoveDiagonal,
   MoveUpRight,
   Plus,
   Ruler,
+  Route,
   RulerDimensionLine,
+  Spline,
   Square,
   SeparatorVertical,
   Slash,
+  Tag,
+  Triangle,
   TrendingDown,
   TrendingUp,
   Trash2,
   Type,
+  Waypoints,
 } from 'lucide-react';
 import { Button } from '@/shared/ui/Button';
 import { cn } from '@/shared/lib/utils/css';
@@ -31,6 +40,22 @@ import { TOOL_KEYS, toolShortcut } from '../../lib/drawings/hotkeys';
 import { SPEEDS } from '../../lib/playback';
 import type { ToolId } from '../../lib/drawings/types';
 import { ChannelIcon, FibIcon, HRayIcon } from './FibIcon';
+import {
+  ArcIcon,
+  CycleLinesIcon,
+  ElliottCorrectionIcon,
+  ElliottImpulseIcon,
+  FibChannelIcon,
+  FibExtIcon,
+  FibFanIcon,
+  FibTimeIcon,
+  GannFanIcon,
+  HeadShouldersIcon,
+  PitchforkIcon,
+  RegressionIcon,
+  VwapIcon,
+  XabcdIcon,
+} from './ToolIcons';
 
 const ICON = 16;
 
@@ -56,20 +81,44 @@ const TOOL_ICON: Record<ToolId, Icon> = {
   rect: Square,
   text: Type,
   ruler: Ruler,
+  regression: RegressionIcon,
+  pitchfork: PitchforkIcon,
+  fibExt: FibExtIcon,
+  fibChannel: FibChannelIcon,
+  fibFan: FibFanIcon,
+  fibTime: FibTimeIcon,
+  gannFan: GannFanIcon,
+  ellipse: Circle,
+  triangle: Triangle,
+  polyline: Waypoints,
+  path: Route,
+  curve: Spline,
+  arc: ArcIcon,
+  callout: MessageSquareText,
+  priceLabel: Tag,
+  flag: Flag,
+  xabcd: XabcdIcon,
+  headShoulders: HeadShouldersIcon,
+  elliottImpulse: ElliottImpulseIcon,
+  elliottCorrection: ElliottCorrectionIcon,
+  cycleLines: CycleLinesIcon,
+  volumeProfile: ChartBarBig,
+  vwap: VwapIcon,
 };
 
 /**
  * Кнопка панели — группа инструментов; у группы из одного выпадающего списка нет.
- * Состав групп — как у TradingView: линии с каналом, Фибоначчи, прогнозы и
- * измерения, фигуры, стрелки, текст.
+ * Состав групп — как у TradingView: линии с каналами и вилами, Фибоначчи и Ганн,
+ * паттерны и волны, прогнозы и измерения (с объёмами), фигуры, стрелки, метки.
  */
 const GROUPS: ToolId[][] = [
-  ['trend', 'ray', 'extended', 'hline', 'hray', 'vline', 'cross', 'channel'],
-  ['fib'],
-  ['long', 'short', 'range'],
-  ['brush', 'rect'],
+  ['trend', 'ray', 'extended', 'hline', 'hray', 'vline', 'cross', 'channel', 'regression', 'pitchfork'],
+  ['fib', 'fibExt', 'fibChannel', 'fibFan', 'fibTime', 'gannFan'],
+  ['xabcd', 'headShoulders', 'elliottImpulse', 'elliottCorrection', 'cycleLines'],
+  ['long', 'short', 'range', 'volumeProfile', 'vwap'],
+  ['brush', 'rect', 'ellipse', 'triangle', 'polyline', 'path', 'curve', 'arc'],
   ['arrow', 'arrowUp', 'arrowDown'],
-  ['text'],
+  ['text', 'callout', 'priceLabel', 'flag'],
   ['ruler'],
 ];
 

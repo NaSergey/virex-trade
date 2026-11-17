@@ -23,6 +23,8 @@ export function ChartSettingsPanel({
   onReveal,
   rsiOn,
   onRsi,
+  volumeOn,
+  onVolume,
   rangesOn,
   onRanges,
   exp,
@@ -36,6 +38,8 @@ export function ChartSettingsPanel({
   onReveal?: (on: boolean) => void;
   rsiOn: boolean;
   onRsi: (on: boolean) => void;
+  volumeOn: boolean;
+  onVolume: (on: boolean) => void;
   rangesOn: boolean;
   onRanges: (on: boolean) => void;
   /** Экспериментальные индикаторы: что включено. */
@@ -61,6 +65,9 @@ export function ChartSettingsPanel({
         onClick={() => onRsi(!rsiOn)}
       >
         {t('indicatorRsi')}
+      </Button>
+      <Button variant="none" className="cs-indicator" aria-pressed={volumeOn} onClick={() => onVolume(!volumeOn)}>
+        {t('indicatorVolume')}
       </Button>
       {RANGES_ENABLED && (
         <Button variant="none" className="cs-indicator" aria-pressed={rangesOn} onClick={() => onRanges(!rangesOn)}>

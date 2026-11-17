@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { ListIndentIncrease } from 'lucide-react';
 import { cn } from '@/shared/lib/utils/css';
@@ -43,10 +43,83 @@ export function CoinPickerFace({
 }
 
 /**
+ * Список монет с поиском — меню кнопки монеты графика и кнопки «+» списка монет.
+ * Поиск — не украшение: у биржевого терминала в списке все USDT-перпы Bybit,
+ * сотни строк. Escape закрывает, Enter берёт первую найденную. Положение меню
+ * задаёт родитель (`.coin-menu` стоит под своей кнопкой).
+ */
+export function CoinMenu({
+  coins,
+  value,
+  onPick,
+  onClose,
+  className,
+}: {
+  coins: readonly PickerCoin[];
+  /** Отмеченная монета; у «+» списка монет её нет. */
+  value?: string;
+  onPick: (symbol: string) => void;
+  onClose: () => void;
+  className?: string;
+}) {
+  const t = useTranslations('backtest');
+  const [query, setQuery] = useState('');
+  const q = query.trim().toUpperCase();
+  const shown = q ? coins.filter((c) => c.symbol.includes(q)) : coins;
+
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') onClose();
+    if (e.key === 'Enter' && shown[0]) onPick(shown[0].symbol);
+  };
+
+  return (
+    <div className={cn('coin-menu', className)} onKeyDown={onKey}>
+      <Input
+        full
+        autoFocus
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder={t('coinSearch')}
+        aria-label={t('coinSearch')}
+      />
+      <div className="coin-menu-list" role="listbox" aria-label={t('coin')}>
+        {shown.map((c) => (
+          <Button
+            key={c.symbol}
+            variant="none"
+            role="option"
+            aria-selected={c.symbol === value}
+            className={cn('coin-menu-row', c.symbol === value && 'on')}
+            onClick={() => onPick(c.symbol)}
+          >
+            <CoinLogo base={c.base} size={18} />
+            {c.symbol}
+            {c.turnover24h != null && c.turnover24h > 0 && (
+              <span className="coin-menu-vol n">{formatVolume(c.turnover24h)}</span>
+            )}
+          </Button>
+        ))}
+        {shown.length === 0 && <p className="coin-menu-empty muted">{t('coinNotFound')}</p>}
+      </div>
+    </div>
+  );
+}
+
+/** Закрыть меню по нажатию мимо узла `root`. */
+export function useOutsideClose(open: boolean, root: { current: HTMLElement | null }, close: () => void) {
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!root.current?.contains(e.target as Node)) close();
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [open, root, close]);
+}
+
+/**
  * Выбор монеты графика — панелька по образцу Bybit: логотип и тикер, по
- * нажатию — список с поиском. Поиск — не украшение: у биржевого терминала в
- * списке все USDT-перпы Bybit, сотни строк, а прежний select хотя бы
- * перескакивал по первой букве.
+ * нажатию — список с поиском (`CoinMenu`).
  *
  * Ширина кнопки постоянная (`.coin-pick-btn`): линейка ТФ справа не ездит ни
  * при смене монеты, ни когда список приходит после заглушки.
@@ -62,78 +135,29 @@ export function CoinPicker({
 }) {
   const t = useTranslations('backtest');
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: PointerEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('pointerdown', onDown);
-    return () => document.removeEventListener('pointerdown', onDown);
-  }, [open]);
+  const close = useCallback(() => setOpen(false), []);
+  useOutsideClose(open, rootRef, close);
 
   const current = coins.find((c) => c.symbol === value);
-  const q = query.trim().toUpperCase();
-  const shown = q ? coins.filter((c) => c.symbol.includes(q)) : coins;
-
-  const close = () => {
-    setOpen(false);
-    setQuery('');
-  };
   const pick = (symbol: string) => {
     close();
     if (symbol !== value) onChange(symbol);
   };
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') close();
-    if (e.key === 'Enter' && shown[0]) pick(shown[0].symbol);
-  };
 
   return (
-    <div className="coin-pick" ref={rootRef} onKeyDown={onKey}>
+    <div className="coin-pick" ref={rootRef}>
       <Button
         variant="none"
         className="coin-pick-btn"
         aria-label={t('coin')}
         aria-haspopup="listbox"
         aria-expanded={open}
-        onClick={() => (open ? close() : setOpen(true))}
+        onClick={() => setOpen((v) => !v)}
       >
         <CoinPickerFace symbol={value} base={current?.base ?? value.replace(/USDT$/, '')} />
       </Button>
-      {open && (
-        <div className="coin-menu">
-          <Input
-            full
-            autoFocus
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t('coinSearch')}
-            aria-label={t('coinSearch')}
-          />
-          <div className="coin-menu-list" role="listbox" aria-label={t('coin')}>
-            {shown.map((c) => (
-              <Button
-                key={c.symbol}
-                variant="none"
-                role="option"
-                aria-selected={c.symbol === value}
-                className={cn('coin-menu-row', c.symbol === value && 'on')}
-                onClick={() => pick(c.symbol)}
-              >
-                <CoinLogo base={c.base} size={18} />
-                {c.symbol}
-                {c.turnover24h != null && c.turnover24h > 0 && (
-                  <span className="coin-menu-vol n">{formatVolume(c.turnover24h)}</span>
-                )}
-              </Button>
-            ))}
-            {shown.length === 0 && <p className="coin-menu-empty muted">{t('coinNotFound')}</p>}
-          </div>
-        </div>
-      )}
+      {open && <CoinMenu coins={coins} value={value} onPick={pick} onClose={close} />}
     </div>
   );
 }

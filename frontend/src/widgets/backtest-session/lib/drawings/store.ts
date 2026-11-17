@@ -1,4 +1,5 @@
 import { DRAWING_COLORS, DRAWING_KINDS, TEXT_MAX, type DPoint, type Drawing } from './types';
+import { storedPoints } from './geometry';
 
 /**
  * Хранение рисунков сессии — единственное место, которое знает про localStorage.
@@ -14,6 +15,19 @@ export type DrawingStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem' 
 /** Пользователь в ключе: на одном браузере бывают разные учётки (демо и своя), и чистка
     сирот по списку сессий одной не должна стирать рисунки другой. */
 export const drawingsKey = (userId: string, sessionId: string) => `${PREFIX}${userId}:${sessionId}`;
+
+/**
+ * Чьи рисунки — сессии и монеты. Рисунки BTC — под ключом самой сессии (так они
+ * лежали до монет эфира), остальных монет — с монетой после двоеточия.
+ */
+export const drawingScope = (sessionId: string, symbol: string, defaultSymbol: string) =>
+  symbol === defaultSymbol ? sessionId : `${sessionId}:${symbol}`;
+
+/** Число точек нового вида — то, что ставит его постановка (`storedPoints`). */
+const pointsFit = (d: Drawing): boolean => {
+  const need = storedPoints(d.kind);
+  return need == null || (d.points.length >= need.min && d.points.length <= need.max);
+};
 
 const isPoint = (v: unknown): v is DPoint =>
   !!v && typeof v === 'object' && Number.isFinite((v as DPoint).t) && Number.isFinite((v as DPoint).p);
@@ -31,7 +45,8 @@ function isDrawing(v: unknown): v is Drawing {
     d.points.every(isPoint) &&
     (d.text === undefined || (typeof d.text === 'string' && d.text.length <= TEXT_MAX)) &&
     (d.locked === undefined || typeof d.locked === 'boolean') &&
-    (d.kind !== 'channel' || d.points.length === 3)
+    (d.kind !== 'channel' || d.points.length === 3) &&
+    pointsFit(d)
   );
 }
 

@@ -141,6 +141,34 @@ describe('LiveMarketService', () => {
     });
   });
 
+  describe('tickers', () => {
+    it('один запрос на весь список эфира, кэш 2 с', async () => {
+      const { service, binance, setNow } = make();
+      const fetchTickers24h = jest.fn().mockResolvedValue([{ symbol: 'BTCUSDT', last: 1, change24h: 2 }]);
+      Object.assign(binance, { fetchTickers24h });
+      expect(await service.tickers()).toEqual([{ symbol: 'BTCUSDT', last: 1, change24h: 2 }]);
+      setNow(T0 + 21_000);
+      await service.tickers();
+      expect(fetchTickers24h).toHaveBeenCalledTimes(1);
+      expect(fetchTickers24h.mock.calls[0][0]).toContain('ETHUSDT');
+      setNow(T0 + 23_000);
+      await service.tickers();
+      expect(fetchTickers24h).toHaveBeenCalledTimes(2);
+    });
+
+    it('биржа не ответила — прошлый ответ, а без него пустой список, а не 500', async () => {
+      const { service, binance, setNow } = make();
+      const fetchTickers24h = jest.fn().mockRejectedValue(new Error('down'));
+      Object.assign(binance, { fetchTickers24h });
+      expect(await service.tickers()).toEqual([]);
+      fetchTickers24h.mockResolvedValueOnce([{ symbol: 'BTCUSDT', last: 1, change24h: 2 }]);
+      setNow(T0 + 23_000);
+      await service.tickers();
+      setNow(T0 + 26_000);
+      expect(await service.tickers()).toEqual([{ symbol: 'BTCUSDT', last: 1, change24h: 2 }]);
+    });
+  });
+
   describe('history — история монеты без хранилища', () => {
     const H = 60 * MIN;
 

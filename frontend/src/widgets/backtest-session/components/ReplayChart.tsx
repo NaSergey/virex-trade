@@ -22,6 +22,7 @@ import {
 } from '../lib/motion';
 import type { Candle } from '../lib/candles';
 import { RSI_DEFAULTS, rsiSeries } from '../lib/rsi';
+import { legendOf } from '../lib/legend';
 import type { ChartRange } from '../lib/ranges';
 
 const W = 720;
@@ -89,6 +90,16 @@ const VPAN_THRESHOLD_PX = 4;
 const PRICE_DRAG_PX = 260;
 /** Панель RSI — доля высоты холста, как у TradingView: около четверти. */
 const RSI_FRAC = 0.24;
+/** Высота самого большого столбика объёма — доля поля цены, как у Volume в TradingView. */
+const VOLUME_FRAC = 0.18;
+
+/** Объём коротко: 1.2K, 3.4M — в легенде место на одно число. */
+function compactVolume(v: number): string {
+  if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
+  if (v >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
+  if (v >= 1e3) return `${(v / 1e3).toFixed(2)}K`;
+  return v >= 10 ? v.toFixed(0) : v.toFixed(2);
+}
 /** Не ниже и не выше этого, в экранных пикселях: на низком экране линия не сплющится в полоску. */
 const RSI_MIN_PX = 64;
 const RSI_MAX_PX = 200;
@@ -278,6 +289,8 @@ export const ReplayChart = memo(function ReplayChart({
   rsi = false,
   ranges,
   defaultCount = DEFAULT_COUNT,
+  legend,
+  volume = false,
 }: {
   /** ТФ свечей в `candles`, в минутах. */
   timeframe: number;
@@ -324,6 +337,14 @@ export const ReplayChart = memo(function ReplayChart({
   ranges?: ChartRange[];
   /** Сколько свечей видно на старте и после сброса вида; без него — обычное окно терминала. */
   defaultCount?: number;
+  /**
+   * Первая строка легенды слева вверху — «BTCUSDT · 15м · Bybit». Под ней цены
+   * свечи под перекрестием (без курсора — последней) и изменение; их пишет
+   * `paintLegend` прямо в DOM. Не задано — легенды нет.
+   */
+  legend?: string;
+  /** Гистограмма объёма у нижнего края поля цены и объём в легенде (индикатор «Объём»). */
+  volume?: boolean;
 }) {
   const t = useTranslations('backtest');
   const svgRef = useRef<SVGSVGElement>(null);
@@ -799,6 +820,58 @@ export const ReplayChart = memo(function ReplayChart({
     };
   });
 
+  /** Узлы чисел легенды — их пишет paintLegend, React в них ничего не рендерит. */
+  const legendVals = useRef<Record<'o' | 'h' | 'l' | 'c' | 'change', SVGTSpanElement | null>>({
+    o: null,
+    h: null,
+    l: null,
+    c: null,
+    change: null,
+  });
+  const legendRsi = useRef<SVGTSpanElement>(null);
+  const legendVol = useRef<SVGTSpanElement>(null);
+
+  /**
+   * Легенда, как в TradingView: O H L C и изменение свечи под перекрестием, без
+   * курсора (или вне поля) — последней, вместе с её анимацией; в панели RSI —
+   * его значение у той же свечи. Пишется в DOM, а не состоянием: зовётся на
+   * каждое движение мыши и каждый кадр анимации последней свечи, и состояние
+   * перерисовывало бы весь график ради одной строки.
+   */
+  const paintLegend = () => {
+    const pos = crossPos.current;
+    let f = lastIdx;
+    if (pos && !drag) {
+      const x = svgX(pos.x);
+      const yy = svgY(pos.y);
+      if (x >= 0 && x <= PW && yy >= PT && yy <= (rsi ? rsiBottom : plotBottom)) {
+        const i = Math.round(frameStart + (x - slot / 2) / slot);
+        if (i >= 0 && i < candles.length) f = i;
+      }
+    }
+    if (f < 0) return;
+    if (legend) {
+      const a = animRef.current;
+      const real = candles[f];
+      const bar = f === lastIdx && a != null && a.tf === timeframe && a.t === real.t ? a : real;
+      const line = legendOf(bar, f > 0 ? candles[f - 1] : undefined, priceDecimals);
+      const color = line.up ? 'var(--profit)' : 'var(--loss)';
+      for (const k of ['o', 'h', 'l', 'c', 'change'] as const) {
+        const node = legendVals.current[k];
+        if (!node) continue;
+        node.textContent = line[k];
+        node.setAttribute('fill', color);
+      }
+      const vol = legendVol.current;
+      if (vol) vol.textContent = bar.v != null ? compactVolume(bar.v) : '—';
+    }
+    const r = legendRsi.current;
+    if (r) {
+      const v = rsiData?.rsi[f];
+      r.textContent = v != null && Number.isFinite(v) ? v.toFixed(2) : '';
+    }
+  };
+
   /**
    * Перекрестие по мыши, как в TradingView: пунктир по горизонтали и вертикали,
    * цена на полосе справа и время внизу. Вертикаль липнет к центру свечи под
@@ -863,6 +936,7 @@ export const ReplayChart = memo(function ReplayChart({
     if (e.pointerType === 'mouse') {
       crossPos.current = { x: e.clientX, y: e.clientY };
       updateCross();
+      paintLegend();
     }
     onMove(e);
   };
@@ -870,6 +944,7 @@ export const ReplayChart = memo(function ReplayChart({
   const onSvgLeave = () => {
     crossPos.current = null;
     updateCross();
+    paintLegend();
   };
 
   /** Правая кнопка — меню «Копировать цену» на уровне курсора. */
@@ -1247,6 +1322,33 @@ export const ReplayChart = memo(function ReplayChart({
   }, [candles, lastIdx, startIdx, endIdx, frameStart, slot, lo, hi, bodyW, u, plotBottom]);
 
   /**
+   * Гистограмма объёма: столбики от нижнего края поля цены, самый большой в кадре —
+   * `VOLUME_FRAC` высоты поля. Своей шкалы нет — важно соотношение, а не число
+   * (число — в легенде). Свечи без объёма (тренажёр) столбиков не дают.
+   */
+  const volumePaths = useMemo(() => {
+    if (!volume) return null;
+    let max = 0;
+    for (let i = startIdx; i < endIdx; i++) max = Math.max(max, candles[i]?.v ?? 0);
+    if (!(max > 0)) return null;
+    const hMax = (plotBottom - PT) * VOLUME_FRAC;
+    const r = (v: number) => Math.round(v * 100) / 100;
+    let up = '';
+    let down = '';
+    for (let i = startIdx; i < endIdx; i++) {
+      const c = candles[i];
+      const v = c.v ?? 0;
+      if (!(v > 0)) continue;
+      const x = (i - frameStart) * slot + slot / 2;
+      const h = Math.max(u, (v / max) * hMax);
+      const bar = `M${r(x - bodyW / 2)} ${r(plotBottom - h)}h${r(bodyW)}v${r(h)}h${r(-bodyW)}z`;
+      if (c.c >= c.o) up += bar;
+      else down += bar;
+    }
+    return { up, down };
+  }, [volume, candles, startIdx, endIdx, frameStart, slot, bodyW, u, plotBottom]);
+
+  /**
    * RSI — по всем загруженным свечам таймфрейма, как у TradingView по всем
    * барам графика (иначе у левого края кадра был бы разгон), а пути — только
    * по видимым, тем же приёмом, что свечи: несколько узлов на весь кадр.
@@ -1416,8 +1518,11 @@ export const ReplayChart = memo(function ReplayChart({
     if (priceTagText.current) priceTagText.current.textContent = formatPriceGrouped(bar.c, priceDecimals);
   };
   useLayoutEffect(() => {
-    paintLastRef.current = paintLast;
-    paintLast();
+    paintLastRef.current = () => {
+      paintLast();
+      paintLegend();
+    };
+    paintLastRef.current();
   });
 
   // Маркеры в кадре: позиция — своя свеча (floor от дробного места во
@@ -1593,6 +1698,12 @@ export const ReplayChart = memo(function ReplayChart({
                 />
               </g>
             )}
+            {volumePaths && (
+              <g pointerEvents="none" opacity={0.35}>
+                <path d={volumePaths.up} fill="var(--profit)" />
+                <path d={volumePaths.down} fill="var(--loss)" />
+              </g>
+            )}
             <path d={candlePaths.upWicks} stroke="var(--profit)" strokeWidth={px(1)} fill="none" />
             <path d={candlePaths.downWicks} stroke="var(--loss)" strokeWidth={px(1)} fill="none" />
             <path d={candlePaths.upBodies} fill="var(--profit)" />
@@ -1763,7 +1874,8 @@ export const ReplayChart = memo(function ReplayChart({
             ))}
             <text x={px(6)} y={rsiTop + px(11)} fontSize={px(10)} fontFamily="var(--font-mono)">
               <tspan fill="var(--color-muted)">RSI {RSI_DEFAULTS.length} </tspan>
-              {!Number.isNaN(rsiLast) && <tspan fill="var(--color-fg)">{rsiLast.toFixed(2)}</tspan>}
+              {/* Значение у свечи под перекрестием, без курсора — последнее: пишет paintLegend. */}
+              <tspan ref={legendRsi} fill="var(--color-fg)" />
             </text>
             {!Number.isNaN(rsiLast) && (
               <>
@@ -2018,6 +2130,46 @@ export const ReplayChart = memo(function ReplayChart({
             шкала RSI не тянется. */}
         <rect x={PW} y={0} width={W - PW} height={plotBottom} fill="transparent" style={{ cursor: 'ns-resize' }} />
         {rsi && <rect x={PW} y={rsiTop} width={W - PW} height={rsiH} fill="transparent" style={{ cursor: 'ns-resize' }} />}
+
+        {legend && (
+          // Обводка цветом фона — чтобы строка читалась поверх свечей, которые под ней проходят.
+          <text
+            x={px(8)}
+            y={PT + px(12)}
+            fontSize={px(11)}
+            fontFamily="var(--font-mono)"
+            pointerEvents="none"
+            stroke="var(--color-app)"
+            strokeWidth={px(3)}
+            paintOrder="stroke"
+          >
+            <tspan fill="var(--color-fg)" fontWeight={600}>
+              {legend}
+            </tspan>
+            {(['o', 'h', 'l', 'c'] as const).map((k, i) => (
+              <tspan key={k} x={i === 0 ? px(8) : undefined} dy={i === 0 ? px(16) : undefined} dx={i === 0 ? undefined : px(8)}>
+                <tspan fill="var(--color-muted)">{t(`legend.${k}`)} </tspan>
+                <tspan
+                  ref={(node) => {
+                    legendVals.current[k] = node;
+                  }}
+                />
+              </tspan>
+            ))}
+            <tspan
+              dx={px(8)}
+              ref={(node) => {
+                legendVals.current.change = node;
+              }}
+            />
+            {volume && (
+              <tspan dx={px(8)}>
+                <tspan fill="var(--color-muted)">{t('legend.v')} </tspan>
+                <tspan ref={legendVol} fill="var(--color-fg)" />
+              </tspan>
+            )}
+          </text>
+        )}
 
         {/* Перекрестие — поверх всего, событий не ловит; положение пишет updateCross. */}
         <g ref={crossRef} pointerEvents="none" style={{ visibility: 'hidden' }}>

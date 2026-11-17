@@ -2,7 +2,8 @@
 
 import type { ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { ChevronDown, Settings as SettingsIcon, Volume2 } from 'lucide-react';
+import { ArrowDownUp, ChevronDown, List, Maximize, Plus, Settings as SettingsIcon, Volume2 } from 'lucide-react';
+import { cn } from '@/shared/lib/utils/css';
 import { Button } from '@/shared/ui/Button';
 import { Field } from '@/shared/ui/Field';
 import { KeyValue } from '@/shared/ui/Lookup';
@@ -11,6 +12,10 @@ import { Skeleton } from '@/shared/ui/Skeleton';
 import { DEFAULT_TIMEFRAME, TIMEFRAMES } from '../lib/candles';
 import { SPEEDS } from '../model/useReplay';
 import { CoinPickerFace } from './CoinPicker';
+import { useRailPanel } from '../model/useChartSettings';
+import { useStoredLayout } from '../model/usePanes';
+import { paneCount } from '../lib/panes';
+import { useMediaQuery } from '@/shared/lib/hooks/useMediaQuery';
 import { DrawingToolbar } from './drawings/DrawingToolbar';
 import { SliderSlot } from './OrderPanel';
 
@@ -70,6 +75,41 @@ export interface TerminalSkeletonProps {
   leave?: boolean;
   /** Вкладки таблиц под графиком; у терминала на главной их нет. */
   tables?: boolean;
+  /** Рейка справа «Терминал / Монеты»; у терминала на главной её нет. */
+  rail?: boolean;
+  /** Сетка графиков `/terminal` — заглушка рисует сохранённую раскладку. */
+  multiChart?: boolean;
+}
+
+/** Каркас списка монет (`Watchlist`): шапка и строки той же высоты, без цен. */
+function WatchSkeleton() {
+  const t = useTranslations('backtest');
+  return (
+    <section className="watch" aria-label={t('watch.title')}>
+      <div className="watch-head">
+        <span className="watch-title">{t('watch.title')}</span>
+        <Button variant="bare" tight aria-label={t('watch.add')}>
+          <Plus size={16} />
+        </Button>
+      </div>
+      <div className="watch-cols muted" aria-hidden>
+        <span>{t('watch.symbol')}</span>
+        <span>{t('watch.last')}</span>
+        <span>{t('watch.change')}</span>
+      </div>
+      <div className="watch-list">
+        {Array.from({ length: 9 }, (_, i) => (
+          <div key={i} className="watch-row">
+            <span className="watch-pick">
+              <Skeleton as="span" inline width={72} height={12} flush />
+              <Skeleton as="span" inline width={64} height={12} flush />
+              <Skeleton as="span" inline width={44} height={12} flush />
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 /**
@@ -84,18 +124,35 @@ export interface TerminalSkeletonProps {
  *
  * Корень — `inert`: кнопки видны, но не нажимаются и не берут фокус.
  */
-export function TerminalSkeleton({ live = false, badge, leave = true, tables = true }: TerminalSkeletonProps) {
+export function TerminalSkeleton({
+  live = false,
+  badge,
+  leave = true,
+  tables = true,
+  rail = true,
+  multiChart = false,
+}: TerminalSkeletonProps) {
   const t = useTranslations('backtest');
   const tAudio = useTranslations('audio');
+  // Свёрнута ли колонка — тот же выбор на устройстве, что у терминала: иначе
+  // приход данных раскрывал бы или сворачивал её на глазах.
+  const [railPanel] = useRailPanel();
+  // Сетка графиков — та же, что у терминала (и так же только на широком экране).
+  const storedLayout = useStoredLayout();
+  const wide = useMediaQuery('(min-width: 1101px)');
+  const layout = multiChart && live && wide ? storedLayout : '1';
+  // Список монет бывает только в эфире; у истории запомненное «Монеты» — панель ордера, как у экрана.
+  const watch = rail && live && railPanel === 'watch';
 
   return (
     <div className="bt-live px-4" aria-busy="true" inert>
-      <div className="asym terminal">
+      <div className={cn('asym terminal', rail && 'has-rail')} data-rail={railPanel}>
         <div className="terminal-main">
           <div className="terminal-chart">
-            <div className="h2row">
-              <div className="flex items-center gap-3">
+            <div className="chart-top">
+              <div className="chart-top-l">
                 {live && <CoinSkeleton />}
+                {live && <span className="chart-top-sep" aria-hidden />}
                 <Seg
                   options={TIMEFRAMES.map((tf) => ({ value: tf, label: t(`tf.${tf}`) }))}
                   value={DEFAULT_TIMEFRAME}
@@ -103,7 +160,7 @@ export function TerminalSkeleton({ live = false, badge, leave = true, tables = t
                   ariaLabel={t('timeframe')}
                 />
               </div>
-              <div className="flex items-center gap-1">
+              <div className="chart-top-r">
                 <Button variant="bare" tight aria-label={tAudio('sound')}>
                   <Volume2 size={16} />
                 </Button>
@@ -112,6 +169,9 @@ export function TerminalSkeleton({ live = false, badge, leave = true, tables = t
                     <SettingsIcon size={16} />
                   </Button>
                 </div>
+                <Button variant="bare" tight aria-label={t('fullscreen')}>
+                  <Maximize size={16} />
+                </Button>
               </div>
             </div>
             <div className="chart-tools">
@@ -126,7 +186,17 @@ export function TerminalSkeleton({ live = false, badge, leave = true, tables = t
                 onClear={noop}
               />
               <div className="chart-tools-main">
-                <ChartSkeleton />
+                {layout === '1' ? (
+                  <ChartSkeleton />
+                ) : (
+                  <div className="panes" data-layout={layout}>
+                    {Array.from({ length: paneCount(layout) }, (_, i) => (
+                      <div key={i} className={cn('pane', i === 0 && 'on')}>
+                        <ChartSkeleton />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -172,8 +242,24 @@ export function TerminalSkeleton({ live = false, badge, leave = true, tables = t
         </div>
 
         <div className="marg">
-          {/* Та же разметка, что у OrderPanel на вкладке «Маркет», — без чисел. */}
+          {rail && live && (
+            <Seg
+              className="rail-seg"
+              options={[
+                { value: 'order' as const, label: t('rail.order') },
+                { value: 'watch' as const, label: t('rail.watch') },
+              ]}
+              value={watch ? 'watch' : 'order'}
+              onChange={noop}
+              ariaLabel={t('rail.label')}
+            />
+          )}
+          {/* Та же разметка, что у OrderPanel на вкладке «Маркет», — без чисел;
+              у запомненного списка монет — каркас списка. */}
           <div className="panel-swap panel-swap-fill">
+          {watch ? (
+            <WatchSkeleton />
+          ) : (
           <div className="order-panel">
             <div className="panel-top">
               <div className="lev">
@@ -242,8 +328,21 @@ export function TerminalSkeleton({ live = false, badge, leave = true, tables = t
               </div>
             </div>
           </div>
+          )}
           </div>
         </div>
+        {rail && (
+          <nav className="term-rail" aria-label={t('rail.label')}>
+            <Button variant="bare" className={cn('rail-btn', railPanel !== 'none' && !watch && 'on')} aria-label={t('rail.order')}>
+              <ArrowDownUp size={20} />
+            </Button>
+            {live && (
+              <Button variant="bare" className={cn('rail-btn', watch && 'on')} aria-label={t('rail.watch')}>
+                <List size={20} />
+              </Button>
+            )}
+          </nav>
+        )}
       </div>
     </div>
   );

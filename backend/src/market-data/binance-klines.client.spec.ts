@@ -41,6 +41,23 @@ function makeClient() {
 describe('BinanceKlinesClient', () => {
   afterEach(() => jest.restoreAllMocks());
 
+  it('тикеры за 24 ч — одним запросом на весь список', async () => {
+    const fetch = mockFetch({ body: [{ symbol: 'BTCUSDT', lastPrice: '60000.5', priceChangePercent: '-1.20', volume: '1' }] });
+    const { client } = makeClient();
+    expect(await client.fetchTickers24h(['BTCUSDT', 'ETHUSDT'])).toEqual([{ symbol: 'BTCUSDT', last: 60000.5, change24h: -1.2 }]);
+    const url = String(fetch.mock.calls[0][0]);
+    expect(url).toContain('/api/v3/ticker/24hr?symbols=');
+    expect(decodeURIComponent(url.split('symbols=')[1])).toBe('["BTCUSDT","ETHUSDT"]');
+  });
+
+  it('тикеры идут через ту же паузу после 429, что и свечи', async () => {
+    const fetch = mockFetch({ status: 429, retryAfter: '1' }, { body: [{ symbol: 'BTCUSDT', lastPrice: '1', priceChangePercent: '0' }] });
+    const { client, sleep } = makeClient();
+    expect(await client.fetchTickers24h(['BTCUSDT'])).toEqual([{ symbol: 'BTCUSDT', last: 1, change24h: 0 }]);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledWith(1000);
+  });
+
   it('разбирает строки Binance в свечи', async () => {
     mockFetch({ body: [row(1_700_000_000_000)] });
     const { client } = makeClient();

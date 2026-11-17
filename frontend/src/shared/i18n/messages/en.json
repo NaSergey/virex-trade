@@ -1278,6 +1278,7 @@
     "chartSettings": "Chart settings",
     "indicators": "Indicators",
     "indicatorRsi": "RSI with divergences",
+    "indicatorVolume": "Volume",
     "indicatorRanges": "Ranges after an impulse",
     "revealHidden": "Show coin, prices and dates",
     "revealHiddenHint": "Only in this session and until you leave it.",
@@ -1344,7 +1345,30 @@
         "cross": "Cross line",
         "channel": "Parallel channel",
         "range": "Date and price range",
-        "text": "Text"
+        "text": "Text",
+        "regression": "Regression trend",
+        "pitchfork": "Pitchfork",
+        "fibExt": "Trend-based Fib extension",
+        "fibChannel": "Fib channel",
+        "fibFan": "Fib speed fan",
+        "fibTime": "Fib time zone",
+        "gannFan": "Gann fan",
+        "ellipse": "Ellipse",
+        "triangle": "Triangle",
+        "polyline": "Polyline",
+        "path": "Path",
+        "curve": "Curve",
+        "arc": "Arc",
+        "callout": "Callout",
+        "priceLabel": "Price label",
+        "flag": "Flag mark",
+        "xabcd": "XABCD pattern",
+        "headShoulders": "Head and shoulders",
+        "elliottImpulse": "Elliott impulse wave (12345)",
+        "elliottCorrection": "Elliott correction wave (ABC)",
+        "cycleLines": "Cycle lines",
+        "volumeProfile": "Fixed range volume profile",
+        "vwap": "Anchored VWAP"
       },
       "magnet": "Magnet to O/H/L/C",
       "hide": "Hide drawings",
@@ -1394,7 +1418,10 @@
         "cancel": "Drop tool",
         "speed": "Autoplay speed ×1 … ×32",
         "pause": "Pause and resume"
-      }
+      },
+      "hsLeft": "LS",
+      "hsHead": "Head",
+      "hsRight": "RS"
     },
     "orderType": "Market order",
     "balance": "Deposit",
@@ -1584,7 +1611,40 @@
       "long": "Long takes go above the entry and the current price",
       "short": "Short takes go below the entry and the current price"
     },
-    "closeGridConfirm": "Place grid"
+    "closeGridConfirm": "Place grid",
+    "watch": {
+      "title": "Watchlist",
+      "add": "Add symbol",
+      "remove": "Remove from list",
+      "symbol": "Symbol",
+      "last": "Last",
+      "change": "24h",
+      "empty": "The list is empty — add a coin with “+”."
+    },
+    "rail": {
+      "label": "Panels",
+      "order": "Trade",
+      "watch": "Watchlist"
+    },
+    "legend": {
+      "o": "O",
+      "h": "H",
+      "l": "L",
+      "c": "C",
+      "history": "History",
+      "synthetic": "Simulator",
+      "v": "V"
+    },
+    "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit fullscreen",
+    "layout": {
+      "label": "Layout",
+      "1": "One chart",
+      "2h": "Two side by side",
+      "2v": "Two stacked",
+      "3": "Three",
+      "4": "Four"
+    }
   },
   "onboarding": {
     "askTitle": "Take the tour?",

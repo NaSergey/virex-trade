@@ -1,7 +1,7 @@
 'use client';
 
 import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { fetchCandles, fetchLiveTail } from '../api/hooks';
+import { fetchCandles, fetchLiveTail, fetchLiveTickers } from '../api/hooks';
 import {
   DAY,
   DEFAULT_TIMEFRAME,
@@ -16,6 +16,7 @@ import {
 import { liveAnchor, mergeMinutes, mergeTagged, nextChange, ofSymbol, type TaggedMinutes } from '../lib/live';
 import { recallFeed, rememberClosed, rememberMinutes, rememberSkew, type ClosedMemo } from './feedMemory';
 import type { Replay } from './useReplay';
+import type { WatchKind } from '../lib/watchlist';
 
 /** Как часто забирать живой хвост. Столько же, сколько тик серверного движка. */
 const TAIL_MS = 2000;
@@ -42,12 +43,26 @@ export interface LiveSource {
   tail: (symbol: string) => Promise<{ serverTime: string; minutes: ApiCandle[] }>;
   /** Закрытые свечи таймфрейма — в той же форме, что `fetchCandles`. */
   candles: (tf: number, range: { from?: number; to?: number; limit: number }, symbol: string) => Promise<Candle[]>;
+  /**
+   * Цена и изменение за 24 ч всех монет — список монет справа от графика. `kind` —
+   * чей это рынок: у биржи и эфира списки хранятся отдельно. Нет — у этого рынка
+   * списка монет нет (терминал на главной).
+   */
+  tickers?: { kind: WatchKind; fetch: () => Promise<Ticker[]> };
+}
+
+/** Строка списка монет: последняя цена и изменение за сутки в процентах. */
+export interface Ticker {
+  symbol: string;
+  last: number;
+  change24h: number;
 }
 
 /** Рынок продукта: у свечей `real` id сессии в адрес не входит. */
 export const SESSION_SOURCE: LiveSource = {
   tail: fetchLiveTail,
   candles: (tf, range, symbol) => fetchCandles({ id: '', dataSource: 'real' }, tf, range, symbol),
+  tickers: { kind: 'live', fetch: fetchLiveTickers },
 };
 
 /** Что ленте нужно от сессии: чей это график и где он кончается. У биржевого терминала конца нет. */
@@ -129,14 +144,25 @@ export function useLiveFeed(
    * от них «закрыть можно» и возраст позиции (`nextChange`).
    */
   anchors: readonly number[] = NO_ANCHORS,
+  /**
+   * ТФ задан снаружи — у графиков сетки терминала (спека 2026-11-17): ТФ каждого
+   * графика хранит состояние сетки, и второго источника у ленты быть не должно.
+   * С ним `setTf` ничего не делает. Не задан — ТФ свой, как раньше.
+   */
+  fixedTf?: number,
 ): Replay {
   const { session } = detail;
   const endTime = session.endTime ? Date.parse(session.endTime) : null;
 
-  const [memo] = useState(() => recallFeed(source, symbol, DEFAULT_TIMEFRAME));
-  const [tf, setTf] = useState<number>(DEFAULT_TIMEFRAME);
+  const startTf = fixedTf ?? DEFAULT_TIMEFRAME;
+  const [memo] = useState(() => recallFeed(source, symbol, startTf));
+  const [ownTf, setOwnTf] = useState<number>(startTf);
+  const tf = fixedTf ?? ownTf;
+  const setTf = useCallback((next: number) => {
+    if (fixedTf == null) setOwnTf(next);
+  }, [fixedTf]);
   const [closedState, setClosedState] = useState<ClosedState | null>(() =>
-    memo?.closed ? { symbol, tf: DEFAULT_TIMEFRAME, rows: memo.closed.rows, anchor: memo.closed.anchor } : null,
+    memo?.closed ? { symbol, tf: startTf, rows: memo.closed.rows, anchor: memo.closed.anchor } : null,
   );
   const [minutesState, setMinutesState] = useState<TaggedMinutes>(() => ({ symbol, rows: memo?.minutes ?? [] }));
   const [now, setNow] = useState<number>(() => Date.now() - (memo?.skew ?? 0));

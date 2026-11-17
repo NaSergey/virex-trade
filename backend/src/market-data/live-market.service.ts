@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { BinanceKlinesClient, type BinanceCandle } from './binance-klines.client';
 import { MarketDataService, type Candle } from './market-data.service';
-import { DEFAULT_SYMBOL } from './symbols';
+import { DEFAULT_SYMBOL, LIVE_SYMBOL_IDS } from './symbols';
 import { SYMBOL, TIMEFRAMES, isClosed, isValidTimeframe } from './timeframes';
 
 /** Сколько последних минуток держать: синк хранилища отстаёт не больше чем на 15. */
@@ -14,6 +14,18 @@ const QUOTE_MAX_AGE_MS = 1000;
 const STORED_LIMIT = 5000;
 /** Больше Binance за один запрос свечей не отдаёт. */
 const BINANCE_PAGE = 1000;
+/** Тикеры монет эфира — не чаще одного запроса за столько на весь сервер. */
+const TICKERS_MS = 2000;
+/** Столько после сбоя отдаётся прошлый ответ; дальше — пустой список. */
+const TICKERS_STALE_MS = 30_000;
+
+/** Цена и изменение монеты за сутки — строка списка монет. */
+export interface Ticker {
+  symbol: string;
+  last: number;
+  /** Изменение за 24 часа, проценты. */
+  change24h: number;
+}
 
 export interface LiveSnapshot {
   /** Когда хвост получен, мс сервера. */
@@ -95,6 +107,39 @@ export class LiveMarketService {
         });
     }
     return state.inflight;
+  }
+
+  private tickersCache: { at: number; value: Ticker[] } | null = null;
+  private tickersInflight: Promise<Ticker[]> | null = null;
+  private tickersFailedAt = Number.NEGATIVE_INFINITY;
+
+  /**
+   * Цена и изменение за 24 ч всех монет эфира — список монет справа от графика.
+   * Один запрос к Binance на весь список и на всех пользователей процесса. Биржа
+   * не ответила — прошлый ответ не старше 30 с, иначе пустой список: список
+   * монет не стоит ошибки всей страницы.
+   */
+  async tickers(): Promise<Ticker[]> {
+    const now = this.now();
+    const stale = () => (this.tickersCache && now - this.tickersCache.at < TICKERS_STALE_MS ? this.tickersCache.value : []);
+    if (this.tickersCache && now - this.tickersCache.at < TICKERS_MS) return this.tickersCache.value;
+    if (now - this.tickersFailedAt < TICKERS_MS) return stale();
+    this.tickersInflight ??= this.binance
+      .fetchTickers24h(LIVE_SYMBOL_IDS)
+      .then((rows) => {
+        const value = rows.filter((r) => r.last > 0);
+        this.tickersCache = { at: this.now(), value };
+        return value;
+      })
+      .finally(() => {
+        this.tickersInflight = null;
+      });
+    try {
+      return await this.tickersInflight;
+    } catch {
+      this.tickersFailedAt = this.now();
+      return stale();
+    }
   }
 
   /** Хвост для ответа наружу: без биржи — 503 с кодом, а не 500. */

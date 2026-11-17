@@ -44,7 +44,7 @@ export {
   type StatsSource,
 } from './api/types';
 export type { TerminalAction, TerminalActions } from './model/actions';
-export type { LiveSource } from './model/useLiveFeed';
+export type { LiveSource, Ticker } from './model/useLiveFeed';
 export { fromApi, type ApiCandle } from './lib/candles';
 export { belowMinOrder, floorToLot } from './lib/money';
 export { trailStop } from './lib/fills';

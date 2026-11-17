@@ -52,6 +52,12 @@ describe('aggregate', () => {
     expect(c).toEqual({ t: at(12), o: 100, h: 159.5, l: 99.5, c: 159.25 });
   });
 
+  it('объём свечи — сумма объёмов минуток; без объёма у минуток его нет и у свечи', () => {
+    const withV = mins(at(12), 3).map((m, i) => ({ ...m, v: i + 1 }));
+    expect(aggregate(withV, 60, at(12), at(13))[0].v).toBe(6);
+    expect(aggregate(mins(at(12), 3), 60, at(12), at(13))[0].v).toBeUndefined();
+  });
+
   it('берёт только минутки из [from, to)', () => {
     const out = aggregate(mins(at(11), 180), 60, at(12), at(13));
     expect(out.map((x) => x.t)).toEqual([at(12)]);
