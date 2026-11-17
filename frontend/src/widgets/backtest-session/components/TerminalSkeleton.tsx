@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { ArrowDownUp, ChevronDown, Maximize, Settings as SettingsIcon, Volume2 } from 'lucide-react';
+import { ArrowDownUp, ChevronDown, List, Maximize, Plus, Settings as SettingsIcon, Volume2 } from 'lucide-react';
 import { cn } from '@/shared/lib/utils/css';
 import { Button } from '@/shared/ui/Button';
 import { Field } from '@/shared/ui/Field';
@@ -76,6 +76,37 @@ export interface TerminalSkeletonProps {
   rail?: boolean;
 }
 
+/** Каркас списка монет (`Watchlist`): шапка и строки той же высоты, без цен. */
+function WatchSkeleton() {
+  const t = useTranslations('backtest');
+  return (
+    <section className="watch" aria-label={t('watch.title')}>
+      <div className="watch-head">
+        <span className="watch-title">{t('watch.title')}</span>
+        <Button variant="bare" tight aria-label={t('watch.add')}>
+          <Plus size={16} />
+        </Button>
+      </div>
+      <div className="watch-cols muted" aria-hidden>
+        <span>{t('watch.symbol')}</span>
+        <span>{t('watch.last')}</span>
+        <span>{t('watch.change')}</span>
+      </div>
+      <div className="watch-list">
+        {Array.from({ length: 9 }, (_, i) => (
+          <div key={i} className="watch-row">
+            <span className="watch-pick">
+              <Skeleton as="span" inline width={72} height={12} flush />
+              <Skeleton as="span" inline width={64} height={12} flush />
+              <Skeleton as="span" inline width={44} height={12} flush />
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 /**
  * Экран терминала до прихода данных.
  *
@@ -94,6 +125,8 @@ export function TerminalSkeleton({ live = false, badge, leave = true, tables = t
   // Свёрнута ли колонка — тот же выбор на устройстве, что у терминала: иначе
   // приход данных раскрывал бы или сворачивал её на глазах.
   const [railPanel] = useRailPanel();
+  // Список монет бывает только в эфире; у истории запомненное «Монеты» — панель ордера, как у экрана.
+  const watch = rail && live && railPanel === 'watch';
 
   return (
     <div className="bt-live px-4" aria-busy="true" inert>
@@ -183,8 +216,24 @@ export function TerminalSkeleton({ live = false, badge, leave = true, tables = t
         </div>
 
         <div className="marg">
-          {/* Та же разметка, что у OrderPanel на вкладке «Маркет», — без чисел. */}
+          {rail && live && (
+            <Seg
+              className="rail-seg"
+              options={[
+                { value: 'order' as const, label: t('rail.order') },
+                { value: 'watch' as const, label: t('rail.watch') },
+              ]}
+              value={watch ? 'watch' : 'order'}
+              onChange={noop}
+              ariaLabel={t('rail.label')}
+            />
+          )}
+          {/* Та же разметка, что у OrderPanel на вкладке «Маркет», — без чисел;
+              у запомненного списка монет — каркас списка. */}
           <div className="panel-swap panel-swap-fill">
+          {watch ? (
+            <WatchSkeleton />
+          ) : (
           <div className="order-panel">
             <div className="panel-top">
               <div className="lev">
@@ -253,13 +302,19 @@ export function TerminalSkeleton({ live = false, badge, leave = true, tables = t
               </div>
             </div>
           </div>
+          )}
           </div>
         </div>
         {rail && (
           <nav className="term-rail" aria-label={t('rail.label')}>
-            <Button variant="bare" className={cn('rail-btn', railPanel === 'order' && 'on')} aria-label={t('rail.order')}>
+            <Button variant="bare" className={cn('rail-btn', railPanel !== 'none' && !watch && 'on')} aria-label={t('rail.order')}>
               <ArrowDownUp size={20} />
             </Button>
+            {live && (
+              <Button variant="bare" className={cn('rail-btn', watch && 'on')} aria-label={t('rail.watch')}>
+                <List size={20} />
+              </Button>
+            )}
           </nav>
         )}
       </div>

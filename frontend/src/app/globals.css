@@ -5251,6 +5251,8 @@
   .watch-last, .watch-chg { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .watch-x { position: absolute; right: 2px; visibility: hidden; color: var(--ink-3); }
   .watch-row:hover .watch-x, .watch-x:focus-visible { visibility: visible; }
+  /* Без мыши наведения нет — ✕ виден всегда, иначе монету с телефона не убрать. */
+  @media (hover: none) { .watch-x { visibility: visible; } }
   .watch-empty { padding: var(--s3) var(--s1); font-size: var(--t-xs); }
 
   /* Кому движение мешает — тому ровная краска чуть плотнее обычной, чтобы
