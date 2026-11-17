@@ -172,9 +172,11 @@ export class TerminalMarketService {
   }
 
   private board: Cached<TickerRow[]> | null = null;
+  /** Карта маркировки строится один раз на ответ биржи: её читают на каждом опросе счёта. */
+  private marksOf: { rows: TickerRow[]; map: ReadonlyMap<string, number> } | null = null;
   private boardInflight: Promise<TickerRow[]> | null = null;
   /** Когда запрос тикеров последний раз упал: столько же, сколько живёт кэш, к бирже не идём. */
-  private marksFailedAt = Number.NEGATIVE_INFINITY;
+  private boardFailedAt = Number.NEGATIVE_INFINITY;
 
   /**
    * Тикеры всех USDT-перпов одним публичным запросом — на всех пользователей
@@ -186,7 +188,7 @@ export class TerminalMarketService {
     const stale = () => (this.board && now - this.board.at < MARKS_STALE_MS ? this.board.value : []);
     if (this.board && now - this.board.at < MARKS_TTL_MS) return this.board.value;
     // Биржа только что не ответила: каждый опрос экрана повторял бы запрос, пока она лежит.
-    if (now - this.marksFailedAt < MARKS_TTL_MS) return stale();
+    if (now - this.boardFailedAt < MARKS_TTL_MS) return stale();
     this.boardInflight ??= this.bybit
       .publicGet('/market/tickers', { category: 'linear' })
       .then((result) => {
@@ -206,7 +208,7 @@ export class TerminalMarketService {
     try {
       return await this.boardInflight;
     } catch {
-      this.marksFailedAt = this.now();
+      this.boardFailedAt = this.now();
       return stale();
     }
   }
@@ -214,7 +216,10 @@ export class TerminalMarketService {
   /** Цена маркировки всех USDT-перпов; монеты без маркировки в карте нет. */
   async markPrices(): Promise<ReadonlyMap<string, number>> {
     const rows = await this.tickerBoard();
-    return new Map(rows.filter((r) => r.mark > 0).map((r) => [r.symbol, r.mark]));
+    if (this.marksOf?.rows !== rows) {
+      this.marksOf = { rows, map: new Map(rows.filter((r) => r.mark > 0).map((r) => [r.symbol, r.mark])) };
+    }
+    return this.marksOf.map;
   }
 
   /** Цена и изменение за 24 ч всех монет — список монет справа от графика. */
