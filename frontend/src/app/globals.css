@@ -935,11 +935,17 @@
      а не доля листа, — на широком мониторе резиновые 3/11 растянули бы поля
      ввода и кнопки до нечитаемых пропорций. Ширину диктует сам тикет, график
      забирает всё, что осталось. */
-  .asym.terminal { grid-template-columns: minmax(0, 1fr) 360px; }
+  /* Три дорожки: график, разделитель (`PanelSplitter`, он же весь промежуток между
+     ними) и правая колонка шириной из `--panel-w` — её тянут разделителем
+     (владелец 2026-11-17). Графику остаётся не меньше 480 px. */
+  .asym.terminal {
+    grid-template-columns: minmax(0, 1fr) 12px clamp(300px, var(--panel-w, 360px), calc(100% - 492px));
+    column-gap: 0;
+  }
   /* Тикет — сам законченная панель со своей рамкой; вторая линия рядом с ней
      читалась бы как задвоенная рамка, поэтому дорожку здесь не делит линейка
      .marg, только её отступ. */
-  .asym.terminal > .marg { border-left: 0; }
+  .asym.terminal > .marg { border-left: 0; padding-left: 0; }
   /* Дорожки без линейки между ними. На странице игры справа стоит лидерборд —
      такая же таблица, как две слева, — и вертикальная линия между ними
      читалась бы рамкой вокруг одной из них. Расстояние держит gap сетки,
@@ -996,7 +1002,7 @@
     .terminal-chart { grid-column: 1; grid-row: 1; }
     /* overflow-x: hidden — сдвиг входящей панели (.panel-swap) иначе на время
        анимации заводил бы в колонке горизонтальную прокрутку. */
-    .asym.terminal > .marg { grid-column: 2; grid-row: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+    .asym.terminal > .marg { grid-column: 3; grid-row: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
     .terminal-controls { grid-row: 2; }
   }
   /* Узкое окно: колонки складываются, и тикет уходит под первый экран. Окном
@@ -1609,7 +1615,33 @@
     /* Без полей по бокам: терминал — единственное место продукта во всю
        ширину окна, и поле здесь съедало бы ровно ту ширину, ради которой
        график и таблицы отказались от читательской колонки. */
-    padding: var(--s4) 0 var(--s6);
+    padding: var(--s4) var(--s2) var(--s6);
+  }
+  /* На телефоне поле шире — под палец, а не под мышь. */
+  @media (max-width: 720px) {
+    .bt-live { padding-inline: var(--s3); }
+  }
+  /* Разделитель графика и правой колонки: тонкая линия, под курсором и при
+     перетаскивании — темнее, с ручкой из двух черт посередине. Без теней и
+     заливок. На узком экране колонки стоят друг под другом — разделителя нет. */
+  .term-split { display: none; }
+  @media (min-width: 1101px) {
+    .term-split {
+      display: block; position: relative; grid-column: 2; grid-row: 1;
+      cursor: col-resize; touch-action: none; outline: none;
+    }
+    .term-split::before {
+      content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px;
+      translate: -50% 0; background: var(--hair); transition: background 120ms;
+    }
+    .term-split::after {
+      content: ''; position: absolute; top: 50%; left: 50%; width: 5px; height: 28px;
+      translate: -50% -50%; background: var(--ground);
+      border-left: 1px solid var(--ink-3); border-right: 1px solid var(--ink-3);
+      opacity: 0; transition: opacity 120ms;
+    }
+    .term-split:hover::before, .term-split[data-drag]::before, .term-split:focus-visible::before { background: var(--ink-3); }
+    .term-split:hover::after, .term-split[data-drag]::after, .term-split:focus-visible::after { opacity: 1; }
   }
   /* Открытые позиции/История сделок идут обычным потоком под графиком, и
      страница прокручивается целиком, как любая другая.

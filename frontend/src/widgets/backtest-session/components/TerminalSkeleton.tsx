@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { ChevronDown, Plus, Settings as SettingsIcon, Volume2 } from 'lucide-react';
 import { cn } from '@/shared/lib/utils/css';
@@ -12,7 +12,7 @@ import { Skeleton } from '@/shared/ui/Skeleton';
 import { DEFAULT_TIMEFRAME, TIMEFRAMES } from '../lib/candles';
 import { SPEEDS } from '../model/useReplay';
 import { CoinPickerFace } from './CoinPicker';
-import { useRailPanel } from '../model/useChartSettings';
+import { usePanelWidth, useRailPanel } from '../model/useChartSettings';
 import { useStoredLayout } from '../model/usePanes';
 import { LayoutPicker } from './LayoutPicker';
 import { paneCount } from '../lib/panes';
@@ -138,6 +138,8 @@ export function TerminalSkeleton({
   // Свёрнута ли колонка — тот же выбор на устройстве, что у терминала: иначе
   // приход данных раскрывал бы или сворачивал её на глазах.
   const [railPanel] = useRailPanel();
+  // Ширина колонки — та же, что у терминала, иначе приход данных сдвигал бы её.
+  const [panelWidth] = usePanelWidth();
   // Сетка графиков — та же, что у терминала (и так же только на широком экране).
   const storedLayout = useStoredLayout();
   const wide = useMediaQuery('(min-width: 1101px)');
@@ -147,8 +149,8 @@ export function TerminalSkeleton({
   const watch = watchlist && live && railPanel === 'watch';
 
   return (
-    <div className="bt-live px-4" aria-busy="true" inert>
-      <div className="asym terminal">
+    <div className="bt-live" aria-busy="true" inert>
+      <div className="asym terminal" style={{ '--panel-w': `${panelWidth}px` } as CSSProperties}>
         <div className="terminal-main">
           <div className="terminal-chart">
             <div className="chart-top">
@@ -245,6 +247,8 @@ export function TerminalSkeleton({
             )}
           </div>
         </div>
+
+        <div className="term-split" aria-hidden />
 
         <div className="marg">
           {watchlist && live && (

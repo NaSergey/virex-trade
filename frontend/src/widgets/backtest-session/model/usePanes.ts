@@ -16,15 +16,17 @@ const encodeLayout = (v: string | null) => (v === '1' ? null : v);
 /**
  * Сетка графиков терминала (спека 2026-11-17): раскладка, монета и ТФ каждого
  * графика, номер активного. Всё — на устройстве (`virex.terminal.layout`,
- * `…panes`, `…activePane`).
+ * `…panes.<рынок>`, `…activePane`).
  *
  * `coins` — монеты рынка по порядку списка: из них берутся монеты новых графиков.
  * Пока список не пришёл, сохранённые монеты не трогаются, а недостающие графики
  * получают `fallbackSymbol` — монету графика терминала.
  */
-export function usePanes(coins: readonly string[], fallbackSymbol: string) {
+export function usePanes(coins: readonly string[], fallbackSymbol: string, kind: string) {
   const [layoutRaw, setLayoutRaw] = useLayoutValue();
-  const [panesRaw, setPanesRaw] = usePersistentValue<string | null>('virex.terminal.panes', raw, null, raw);
+  // Монеты графиков — у каждого рынка свои (биржа и эфир): у Bybit сотни перпов, у эфира
+  // девять монет, и общий список подменял бы монеты одного рынка монетами другого.
+  const [panesRaw, setPanesRaw] = usePersistentValue<string | null>(`virex.terminal.panes.${kind}`, raw, null, raw);
   const [activeRaw, setActiveRaw] = usePersistentValue<number>('virex.terminal.activePane', decodeIndex, 0, encodeIndex);
 
   const layout = decodeLayout(layoutRaw);

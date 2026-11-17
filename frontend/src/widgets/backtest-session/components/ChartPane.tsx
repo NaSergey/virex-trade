@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useMemo, type ComponentProps, type PointerEvent } from 'react';
+import { memo, useMemo, type ComponentProps } from 'react';
 import { useTranslations } from 'next-intl';
 import { cn } from '@/shared/lib/utils/css';
 import { DEFAULT_SYMBOL, type SessionDetail } from '../api/types';
@@ -34,8 +34,8 @@ const noop = () => undefined;
  *   монеты и ТФ — сразу после переключения, — рисуются свои последние свечи.
  * - Активная ячейка рисует график терминала целиком: черновик, жесты, рисование.
  * - Неактивная — свою монету: позиции и ордера без перетаскивания, отметки
- *   сделок и рисунки без правки. Нажатие делает её активной и дальше не идёт —
- *   жест на неактивном графике не начинается. Перекрестие и колесо работают.
+ *   сделок и рисунки без правки. Нажатие делает её активной и тут же двигает
+ *   график. Перекрестие и колесо работают.
  *
  * memo: неактивная ячейка перерисовывается на свой хвост и смену счёта, а не на
  * каждую перерисовку терминала.
@@ -134,11 +134,11 @@ export const ChartPane = memo(function ChartPane({
   );
   const legend = [pane.symbol, t(`tf.${pane.tf}`), sourceLabel].filter(Boolean).join(' · ');
 
-  const activate = (e: PointerEvent<HTMLDivElement>) => {
-    if (active) return;
-    e.stopPropagation();
-    e.preventDefault();
-    onActivate(index);
+  // Нажатие делает ячейку активной и идёт дальше, к графику: сдвиг начинается тем же
+  // нажатием (владелец 2026-11-17: «надо 2 раза нажимать»). Тянуть уровни и рисовать
+  // этим нажатием нельзя — у неактивной их нет; это — со следующего.
+  const activate = () => {
+    if (!active) onActivate(index);
   };
 
   let chart;

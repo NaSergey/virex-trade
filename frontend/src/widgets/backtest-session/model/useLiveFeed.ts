@@ -165,6 +165,22 @@ export function useLiveFeed(
     memo?.closed ? { symbol, tf: startTf, rows: memo.closed.rows, anchor: memo.closed.anchor } : null,
   );
   const [minutesState, setMinutesState] = useState<TaggedMinutes>(() => ({ symbol, rows: memo?.minutes ?? [] }));
+  /**
+   * Сменились монета или ТФ (переключение графика сетки, выбор монеты): то, что
+   * о них уже известно (`feedMemory` — её пишут и ленты соседних графиков), кладём
+   * сразу, в том же рендере, а не ждём запроса. Иначе цена на миг пропадала, и
+   * панель ордера мигала заглушками (владелец 2026-11-17). Свежее ляжет поверх.
+   */
+  const feedKey = `${symbol}|${tf}`;
+  const [seenKey, setSeenKey] = useState(feedKey);
+  if (seenKey !== feedKey) {
+    setSeenKey(feedKey);
+    const known = recallFeed(source, symbol, tf);
+    if (known && known.minutes.length > 0 && minutesState.symbol !== symbol) setMinutesState({ symbol, rows: known.minutes });
+    if (known?.closed && !(closedState?.symbol === symbol && closedState.tf === tf)) {
+      setClosedState({ symbol, tf, rows: known.closed.rows, anchor: known.closed.anchor });
+    }
+  }
   const [now, setNow] = useState<number>(() => Date.now() - (memo?.skew ?? 0));
   const [error, setError] = useState<unknown>(null);
   const [historyLoading, setHistoryLoading] = useState(false);

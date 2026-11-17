@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { Settings as SettingsIcon, Volume2, VolumeX } from 'lucide-react';
 import { TagsDialog } from '@/entities/tag';
@@ -64,7 +64,8 @@ import {
 } from '../lib/money';
 import type { TerminalSound } from '../lib/sounds';
 import { useSessionActions, type TerminalActions } from '../model/actions';
-import { useExpSettings, useRailPanel, useRangesOn, useRsiOn, useTagPromptOn, useVolumeOn, type RailPanel } from '../model/useChartSettings';
+import { useExpSettings, usePanelWidth, useRailPanel, useRangesOn, useRsiOn, useTagPromptOn, useVolumeOn, type RailPanel } from '../model/useChartSettings';
+import { PanelSplitter } from './PanelSplitter';
 import { usePanes } from '../model/usePanes';
 import { useMediaQuery } from '@/shared/lib/hooks/useMediaQuery';
 import { ChartPane, type ChartProps } from './ChartPane';
@@ -360,7 +361,7 @@ export function Terminal({
    */
   const wide = useMediaQuery('(min-width: 1101px)');
   const coinIds = useMemo(() => (coins ?? []).map((c) => c.symbol), [coins]);
-  const panesState = usePanes(coinIds, liveSymbol);
+  const panesState = usePanes(coinIds, liveSymbol, (source ?? SESSION_SOURCE).tickers?.kind ?? 'live');
   const multi = multiChart && isLive && wide;
   const activePane = multi ? panesState.panes[panesState.active] : null;
   const symbol = activePane ? activePane.symbol : isLive ? liveSymbol : localSymbol;
@@ -560,6 +561,9 @@ export function Terminal({
   const watchSource = (source ?? SESSION_SOURCE).tickers;
   const hasWatch = watchlist && isLive && watchSource != null && (coins?.length ?? 0) > 1;
   const panel: RailPanel = railPanel === 'watch' && hasWatch ? 'watch' : 'order';
+  // Ширина правой колонки — разделителем между графиком и колонкой.
+  const [panelWidth, setPanelWidth] = usePanelWidth();
+  const gridRef = useRef<HTMLDivElement>(null);
   // Знаки цены монеты — в эфире и у истории с видимой ценой; скрытую цену масштаб
   // приводит к 100–1000, и ей хватает общего правила.
   const coinDecimals = isLive || (session.dataSource === 'real' && (!session.hidePrice || reveal));
@@ -1451,8 +1455,8 @@ export function Terminal({
     // Терминал во всю ширину окна — единственное место продукта без .wrap
     // (см. комментарий у SessionScreen). Итог той же сессии после завершения
     // возвращается в обычную читательскую колонку сам, через SessionScreen.
-    <div className="bt-live px-4">
-      <div className="asym terminal">
+    <div className="bt-live">
+      <div className="asym terminal" ref={gridRef} style={{ '--panel-w': `${panelWidth}px` } as CSSProperties}>
         <div className="terminal-main">
           <div className="terminal-chart" ref={chartRef}>
             {/* Верхняя панель графика, как у TradingView: монета, таймфреймы, справа —
@@ -1619,6 +1623,8 @@ export function Terminal({
             <ErrorNote error={replay.error} fallback={t('loadFailed')} />
           </div>
         </div>
+
+        <PanelSplitter gridRef={gridRef} width={panelWidth} onCommit={setPanelWidth} />
 
         <div className="marg">
           {/* Сетка фиксации стоит на месте панели ордера, а не окном поверх: её
