@@ -29,7 +29,7 @@ function labelled(c: ShapeCtx, pts: readonly (readonly [number, number])[], labe
   );
 }
 
-const ratio = (v: number | null) => (v == null ? '—' : v.toFixed(3));
+const ratio = (v: number | null) => (v == null ? '—' : v.toFixed(2));
 
 const xabcd: ShapeRenderer = (d, c) => {
   const pts = xy(d, c);
@@ -96,7 +96,7 @@ const cycleLines: ShapeRenderer = (d, c) => {
   const tEnd = last + tfMs * Math.max(0, (PW - xOf(last)) / Math.max(1, xOf(last + tfMs) - xOf(last)));
   return (
     <>
-      {cycleTs(a, b, tEnd).map((t) => {
+      {cycleTs(a, b, tEnd, 200, candles.find((k) => xOf(k.t) >= 0)?.t ?? -Infinity).map((t) => {
         const x = xOf(t);
         if (x < 0 || x > PW) return null;
         return (

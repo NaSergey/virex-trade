@@ -110,12 +110,17 @@ export function necklineOf(pts: readonly DPoint[]): [DPoint, DPoint] {
   ];
 }
 
-/** Циклические линии: от левой из двух точек вправо с шагом |B − A| до `tEnd`, не больше `max`. */
-export function cycleTs(a: DPoint, b: DPoint, tEnd: number, max = 200): number[] {
+/**
+ * Циклические линии: от левой из двух точек вправо с шагом |B − A| до `tEnd`.
+ * Считать — с `tFrom` (левый край экрана), а не с начала: иначе на мелком шаге
+ * лимит `max` кончался бы раньше видимой части.
+ */
+export function cycleTs(a: DPoint, b: DPoint, tEnd: number, max = 200, tFrom = -Infinity): number[] {
   const step = Math.abs(b.t - a.t);
   const start = Math.min(a.t, b.t);
   if (step === 0) return [start];
+  const k0 = Math.max(0, Math.ceil((tFrom - start) / step));
   const out: number[] = [];
-  for (let t = start; t <= tEnd && out.length < max; t += step) out.push(t);
+  for (let t = start + k0 * step; t <= tEnd && out.length < max; t += step) out.push(t);
   return out;
 }

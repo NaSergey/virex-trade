@@ -13,6 +13,22 @@ export interface SeriesCandle {
   v?: number;
 }
 
+/**
+ * Кэш расчётов по ряду свечей: слой рисунков перерисовывается на каждый кадр пана
+ * и зума, а результат зависит только от свечей и времени точек, не от пикселей.
+ * Новый ряд (пришёл хвост) — новая ссылка, и старые записи уходят вместе с ним.
+ */
+const cache = new WeakMap<readonly SeriesCandle[], Map<string, unknown>>();
+function memo<T>(candles: readonly SeriesCandle[], key: string, calc: () => T): T {
+  let byKey = cache.get(candles);
+  if (!byKey) {
+    byKey = new Map();
+    cache.set(candles, byKey);
+  }
+  if (!byKey.has(key)) byKey.set(key, calc());
+  return byKey.get(key) as T;
+}
+
 const inRange = (candles: readonly SeriesCandle[], t1: number, t2: number) => {
   const lo = Math.min(t1, t2);
   const hi = Math.max(t1, t2);
@@ -24,6 +40,14 @@ const inRange = (candles: readonly SeriesCandle[], t1: number, t2: number) => {
  * остатков. Меньше двух свечей — null.
  */
 export function regression(
+  candles: readonly SeriesCandle[],
+  t1: number,
+  t2: number,
+): { from: { t: number; p: number }; to: { t: number; p: number }; sigma: number } | null {
+  return memo(candles, `r:${t1}:${t2}`, () => calcRegression(candles, t1, t2));
+}
+
+function calcRegression(
   candles: readonly SeriesCandle[],
   t1: number,
   t2: number,
@@ -79,10 +103,20 @@ export const VALUE_AREA = 0.7;
  * Без объёма у свечей участка — null.
  */
 export function volumeProfile(candles: readonly SeriesCandle[], t1: number, t2: number, count = 24): VolumeProfile | null {
+  return memo(candles, `p:${t1}:${t2}:${count}`, () => calcProfile(candles, t1, t2, count));
+}
+
+function calcProfile(candles: readonly SeriesCandle[], t1: number, t2: number, count: number): VolumeProfile | null {
   const rows = inRange(candles, t1, t2);
-  const lo = Math.min(...rows.map((r) => r.l));
-  const hi = Math.max(...rows.map((r) => r.h));
-  if (rows.length === 0 || !(hi > lo)) return null;
+  if (rows.length === 0) return null;
+  // Циклом, а не Math.min(...): разворот сотни тысяч минуток в аргументы переполнил бы стек.
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const r of rows) {
+    if (r.l < lo) lo = r.l;
+    if (r.h > hi) hi = r.h;
+  }
+  if (!(hi > lo)) return null;
   const step = (hi - lo) / count;
   const vol = new Array<number>(count).fill(0);
   let total = 0;
@@ -116,6 +150,10 @@ export function volumeProfile(candles: readonly SeriesCandle[], t1: number, t2: 
  * Свечи без объёма линию не двигают; без объёма вовсе — пусто.
  */
 export function anchoredVwap(candles: readonly SeriesCandle[], anchor: number): { t: number; p: number }[] {
+  return memo(candles, `v:${anchor}`, () => calcVwap(candles, anchor));
+}
+
+function calcVwap(candles: readonly SeriesCandle[], anchor: number): { t: number; p: number }[] {
   const out: { t: number; p: number }[] = [];
   let pv = 0;
   let vv = 0;

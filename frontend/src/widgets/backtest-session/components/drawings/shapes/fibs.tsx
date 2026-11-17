@@ -165,7 +165,16 @@ const regressionShape: ShapeRenderer = (d, c) => {
   const { xOf, yOf } = c.geo;
   const r = regression(c.geo.candles, a.t, b.t);
   // Свечей на участке нет (ушёл за загруженную историю) — видно хотя бы, где он.
-  if (!r) return guide(c, [[xOf(a.t), yOf(a.p)], [xOf(b.t), yOf(b.p)]]);
+  if (!r)
+    return (
+      <>
+        {guide(c, [
+          [xOf(a.t), yOf(a.p)],
+          [xOf(b.t), yOf(b.p)],
+        ])}
+        {c.hitLine(xOf(a.t), yOf(a.p), xOf(b.t), yOf(b.p))}
+      </>
+    );
   const k = 2 * r.sigma;
   const x1 = xOf(r.from.t);
   const x2 = xOf(r.to.t);
