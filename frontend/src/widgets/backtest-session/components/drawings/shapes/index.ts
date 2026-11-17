@@ -4,6 +4,7 @@ import { FIB_SHAPES } from './fibs';
 import { FIGURE_SHAPES } from './figures';
 import { LABEL_SHAPES } from './labels';
 import { PATTERN_SHAPES } from './patterns';
+import { VOLUME_SHAPES } from './volume';
 
 /**
  * Отрисовка новых видов (спека 2026-11-17) — по группам, в своих файлах. Вид без
@@ -14,6 +15,7 @@ const RENDERERS: Partial<Record<DrawingKind, ShapeRenderer>> = {
   ...FIGURE_SHAPES,
   ...LABEL_SHAPES,
   ...PATTERN_SHAPES,
+  ...VOLUME_SHAPES,
 };
 
 export const renderExtra: ShapeRenderer = (d, c) => (RENDERERS[d.kind] ?? polylineShape)(d, c);
