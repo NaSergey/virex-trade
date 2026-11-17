@@ -66,12 +66,6 @@ export interface TerminalSkeletonProps {
    * выбор монеты. Не задано — экран прокрутки истории.
    */
   live?: boolean;
-  /**
-   * Надпись на месте кнопок прокрутки у эфира («Эфир», «Bybit · настоящий счёт»).
-   * `null` — ещё неизвестно, чей это экран: на её месте серая полоса; `false` —
-   * подписи нет (терминал на главной).
-   */
-  badge?: string | null | false;
   /** Есть ли кнопка «К списку» — у биржевого терминала её нет. */
   leave?: boolean;
   /** Вкладки таблиц под графиком; у терминала на главной их нет. */
@@ -127,7 +121,6 @@ function WatchSkeleton() {
  */
 export function TerminalSkeleton({
   live = false,
-  badge,
   leave = true,
   tables = true,
   watchlist = true,
@@ -150,7 +143,7 @@ export function TerminalSkeleton({
 
   return (
     <div className="bt-live" aria-busy="true" inert>
-      <div className="asym terminal" style={{ '--panel-w': `${panelWidth}px` } as CSSProperties}>
+      <div className={cn('asym terminal', live && 'chart-full')} style={{ '--panel-w': `${panelWidth}px` } as CSSProperties}>
         <div className="terminal-main">
           <div className="terminal-chart">
             <div className="chart-top">
@@ -171,6 +164,11 @@ export function TerminalSkeleton({
                 )}
               </div>
               <div className="chart-top-r">
+                {leave && (
+                  <Button tight className="mr-2">
+                    {t('backToList')}
+                  </Button>
+                )}
                 <Button variant="bare" tight aria-label={tAudio('sound')}>
                   <Volume2 size={16} />
                 </Button>
@@ -207,45 +205,22 @@ export function TerminalSkeleton({
               </div>
             </div>
           </div>
-          <div className="terminal-controls">
-            {(!live || badge !== false || tables || leave) && (
+          {/* Строка под графиком — только у прокрутки истории; в эфире её нет, график до низа. */}
+          {!live && (
+            <div className="terminal-controls">
               <div className="replay-controls">
-                {live ? (
-                  badge === null ? (
-                    <Skeleton as="span" inline width={160} height={12} flush />
-                  ) : (
-                    <span className="muted">{badge ?? t('liveBadge')}</span>
-                  )
-                ) : (
-                  <>
-                    <Button variant="solid" disabled>
-                      {t('step')} ▶
-                    </Button>
-                    <Seg
-                      options={[{ value: 0, label: t('pause') }, ...SPEEDS.map((s) => ({ value: s, label: `×${s}` }))]}
-                      value={0}
-                      onChange={noop}
-                      ariaLabel={t('speed')}
-                    />
-                  </>
-                )}
-                {leave && <Button tight>{t('backToList')}</Button>}
-                {tables && (
-                  <Seg
-                    className="view-switch"
-                    options={[
-                      { value: 'open' as const, label: t('openPositionsTab') },
-                      { value: 'orders' as const, label: t('ordersTab') },
-                      { value: 'history' as const, label: t('historyTab') },
-                    ]}
-                    value="open"
-                    onChange={noop}
-                    ariaLabel={t('openPositionsTab')}
-                  />
-                )}
+                <Button variant="solid" disabled>
+                  {t('step')} ▶
+                </Button>
+                <Seg
+                  options={[{ value: 0, label: t('pause') }, ...SPEEDS.map((s) => ({ value: s, label: `×${s}` }))]}
+                  value={0}
+                  onChange={noop}
+                  ariaLabel={t('speed')}
+                />
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         <div className="term-split" aria-hidden />
@@ -337,6 +312,15 @@ export function TerminalSkeleton({
           )}
           </div>
         </div>
+        {tables && (
+          <div className="table-tabs" role="tablist" aria-label={t('openPositionsTab')}>
+            {(['open', 'orders', 'history'] as const).map((id) => (
+              <Button key={id} variant="none" role="tab" className={cn('panel-tab', id === 'open' && 'on')}>
+                {t(`tabShort.${id}`)}
+              </Button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

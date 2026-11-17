@@ -1,0 +1,381 @@
+//@version=6
+// Свип и пробой ликвидности — отрывок видео SanchoDT «Интрадей стратегия с нуля» (5:32–11:11):
+// https://www.youtube.com/watch?v=E_V5B7jpEcY
+// Определения — те же, что в Trade Play, backend/src/strategy (series.ts, events.ts, author-check.ts).
+//
+// Пул ликвидности — пятисвечный свинг (хай строго выше двух свечей слева и двух справа), ещё не снятый ценой.
+// Свип — тень прошла за один или несколько пулов, закрытие по свою сторону от всех: ждём разворот.
+// Пробой — закрытие за уровнем; глубина — насколько закрылись за ним, в ATR.
+// Подтверждение свипа — в 10 свечах после него: FVG (первая свеча не раньше свипа) и BOS (закрытие за
+// последним свингом по другую сторону до свипа). Цена за экстремумом свипа сетап ломает. FVG + BOS — A+.
+// Всё считается на закрытой свече и не перерисовывается.
+indicator("Свип и пробой ликвидности", shorttitle = "Свип/Проб", overlay = true, max_labels_count = 500, max_lines_count = 500)
+
+// ─── Настройки ───────────────────────────────────────────────────────────────
+const string G_SHOW = "Что рисовать"
+const string G_CALC = "Расчёт"
+const string G_FLT  = "Фильтр шума"
+
+bool showSweeps  = input.bool(true, "Свипы", group = G_SHOW)
+bool showConfirm = input.bool(true, "Подтверждения: FVG, BOS, A+", group = G_SHOW)
+bool showBreaks  = input.bool(true, "Пробои", group = G_SHOW)
+bool showLevels  = input.bool(true, "Снятый уровень — линией", group = G_SHOW)
+int  poolsN      = input.int(3, "Ближайших пулов ликвидности с каждой стороны", minval = 0, maxval = 20, group = G_SHOW)
+bool showStats   = input.bool(true, "Таблица: цифры автора против этого графика", group = G_SHOW)
+bool onlyAplus   = input.bool(false, "Рисовать только A+ (без простых свипов, FVG и BOS)", group = G_SHOW)
+string trendMode = input.string("Структура графика", "Фильтр по тренду", options = ["Выкл", "Структура графика", "Структура старшего ТФ"], group = G_FLT, tooltip = "Сигналы против тренда не рисуются и не попадают в таблицу. Лонг-свип (сняты лоу) — только при восходящей структуре, шорт-свип — при нисходящей; пробой — только по тренду.")
+string htfTf     = input.timeframe("240", "Старший ТФ для структуры", group = G_FLT)
+float  minPierce = input.float(0.0, "Мин. прокол свипа, ATR", minval = 0.0, step = 0.05, group = G_FLT, tooltip = "Свипы, где тень ушла за уровень меньше этого, пропускаются. Ноль — не фильтровать.")
+int  atrLen      = input.int(14, "Период ATR", minval = 1, group = G_CALC)
+int  confirmWin  = input.int(10, "Окно подтверждения после свипа, свечей", minval = 1, group = G_CALC)
+int  horizon     = input.int(24, "Горизонт проверки исхода, свечей", minval = 1, group = G_CALC)
+
+const color C_UP = #26a69a
+const color C_DN = #ef5350
+
+// Строки статистики.
+const int C_SWEEP  = 0
+const int C_FVG_EV = 1
+const int C_FVG_CF = 2
+const int C_BOS_EV = 3
+const int C_BOS_CF = 4
+const int C_ALL_EV = 5
+const int C_ALL_CF = 6
+const int C_BR     = 7
+const int C_BR_LO  = 8
+const int C_BR_MID = 9
+const int C_BR_HI  = 10
+
+// ─── Типы ────────────────────────────────────────────────────────────────────
+// Свип, у которого ещё идёт окно подтверждения или проверка исхода.
+type SweepEv
+    int   bar
+    int   dir
+    float extreme
+    float bosLevel
+    float up
+    float dn
+    int   fvgBar  = -1
+    int   bosBar  = -1
+    bool  dead    = false
+    int   outcome = 2
+
+// Проверка исхода от одной свечи: какая граница ±1 ATR задета первой за horizon свечей.
+type Probe
+    int   bar
+    int   dir
+    float up
+    float dn
+    int   cat
+
+// ─── Состояние ───────────────────────────────────────────────────────────────
+var array<float>   lowP      = array.new<float>()
+var array<int>     lowX      = array.new<int>()
+var array<float>   highP     = array.new<float>()
+var array<int>     highX     = array.new<int>()
+var float          lastHigh  = na
+var float          lastLow   = na
+var array<SweepEv> sweeps    = array.new<SweepEv>()
+var array<Probe>   probes    = array.new<Probe>()
+var array<int>     okC       = array.new<int>(11, 0)
+var array<int>     nC        = array.new<int>(11, 0)
+var array<line>    poolLines = array.new<line>()
+var table          tb        = na
+
+// ─── Функции ─────────────────────────────────────────────────────────────────
+// Вставка в массив по возрастанию; второй массив — бар свинга, параллельно.
+insertSorted(array<float> p, array<int> x, float v, int xi) =>
+    int lo = 0
+    int hi = p.size()
+    while lo < hi
+        int mid = math.floor((lo + hi) / 2)
+        if p.get(mid) < v
+            lo := mid + 1
+        else
+            hi := mid
+    p.insert(lo, v)
+    x.insert(lo, xi)
+
+// TradingView не рисует линии дальше ~5000 свечей назад: начало линии подтягиваем.
+nearBar(int x) =>
+    math.max(x, bar_index - 4500)
+
+// Какая граница задета на этой свече: 1 — верх, −1 — низ, 0 — обе сразу, 2 — ни одна.
+hitOf(float up, float dn) =>
+    bool hu = high >= up
+    bool hd = low <= dn
+    hu and hd ? 0 : hu ? 1 : hd ? -1 : 2
+
+// Решившийся исход — в статистику; 0 (обе границы в одной свече или ни одной) не считается.
+addStat(array<int> okA, array<int> nA, int cat, int outcome, int dir) =>
+    if outcome == 1 or outcome == -1
+        nA.set(cat, nA.get(cat) + 1)
+        if outcome == dir
+            okA.set(cat, okA.get(cat) + 1)
+
+num(float x, string f) =>
+    str.replace_all(str.tostring(x, f), ".", ",")
+
+pct(float x) =>
+    num(x * 100, "0.0") + " %"
+
+wilson(int k, int n) =>
+    float z = 1.96
+    float p = k * 1.0 / n
+    float d = 1 + z * z / n
+    float c = (p + z * z / (2 * n)) / d
+    float m = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d
+    [math.max(0.0, c - m), math.min(1.0, c + m)]
+
+mark(bool below, string txt, color bg, string sz, string tip) =>
+    label.new(bar_index, below ? low : high, txt, yloc = below ? yloc.belowbar : yloc.abovebar, style = below ? label.style_label_up : label.style_label_down, color = bg, textcolor = color.white, size = sz, tooltip = tip)
+
+sweepTip(int dir, float lvl, float pierce) =>
+    string head = dir == 1 ? "Свип лоу " : "Свип хая "
+    head + str.tostring(lvl, format.mintick) + ": тень за уровнем на " + num(pierce, "0.00") + " ATR, закрытие вернулось. Ждём " + (dir == 1 ? "рост" : "падение") + ".\nУ автора разворот после свипа — 62,2 %; с FVG — 84 %, с BOS — 89 %, все три — 92 %."
+
+breakTip(int dir, float depth, float lvl) =>
+    string cls = depth < 0.2 ? "< 0,2 ATR — у автора истинный в 49,2 %" : depth <= 0.5 ? "0,2–0,5 ATR — у автора истинный в 53,9 %" : "> 0,5 ATR — у автора истинный в 66,5 %"
+    "Пробой " + (dir == 1 ? "вверх" : "вниз") + " уровня " + str.tostring(lvl, format.mintick) + ": закрытие за ним на " + num(depth, "0.00") + " ATR.\n" + cls + "."
+
+breakCat(float depth) =>
+    depth < 0.2 ? C_BR_LO : depth <= 0.5 ? C_BR_MID : C_BR_HI
+
+statCell(table t, int col, int row, array<int> okA, array<int> nA, int cat) =>
+    int n = nA.get(cat)
+    string txt = "—"
+    string tip = "Случаев пока нет"
+    if n > 0
+        int k = okA.get(cat)
+        [lo, hi] = wilson(k, n)
+        txt := pct(k * 1.0 / n)
+        tip := "95 % интервал: " + pct(lo) + " – " + pct(hi) + ", случаев " + str.tostring(n)
+    table.cell(t, col, row, txt, text_color = chart.fg_color, text_size = size.small, tooltip = tip)
+
+statRow(table t, int row, string name, string author, array<int> okA, array<int> nA, int catEv, int catCf) =>
+    table.cell(t, 0, row, name, text_color = chart.fg_color, text_size = size.small, text_halign = text.align_left)
+    table.cell(t, 1, row, author, text_color = chart.fg_color, text_size = size.small)
+    statCell(t, 2, row, okA, nA, catEv)
+    if catCf >= 0
+        statCell(t, 3, row, okA, nA, catCf)
+    else
+        table.cell(t, 3, row, "", text_size = size.small)
+    table.cell(t, 4, row, str.tostring(nA.get(catEv)), text_color = chart.fg_color, text_size = size.small)
+
+headCell(table t, int col, string txt, string tip) =>
+    table.cell(t, col, 0, txt, text_color = chart.fg_color, text_size = size.small, tooltip = tip)
+
+// Структура: восходящая (1), пока закрытие не ушло ниже последнего подтверждённого свинг-лоу; нисходящая (−1) — наоборот.
+structTrend() =>
+    var float hi = na
+    var float lo = na
+    var int tr = 0
+    if bar_index >= 4
+        if high[2] > high[1] and high[2] > high and high[2] > high[3] and high[2] > high[4]
+            hi := high[2]
+        if low[2] < low[1] and low[2] < low and low[2] < low[3] and low[2] < low[4]
+            lo := low[2]
+    if not na(lo) and close < lo
+        tr := -1
+    else if not na(hi) and close > hi
+        tr := 1
+    tr
+
+// ─── Ряд ─────────────────────────────────────────────────────────────────────
+float atrV      = ta.atr(atrLen)
+int   trendHere = structTrend()
+int   trendHtf  = request.security(syminfo.tickerid, htfTf, structTrend()[1], lookahead = barmerge.lookahead_on)
+int   trendNow  = trendMode == "Выкл" ? 0 : trendMode == "Структура графика" ? trendHere : trendHtf
+passDir(int d) => trendMode == "Выкл" or d == trendNow
+bool  drawSweep = showSweeps and not onlyAplus
+bool  drawConf  = showConfirm and not onlyAplus
+bool  drawLevel = showLevels and not onlyAplus
+bool  swingHigh = bar_index >= 4 and high[2] > high[1] and high[2] > high and high[2] > high[3] and high[2] > high[4]
+bool  swingLow  = bar_index >= 4 and low[2] < low[1] and low[2] < low and low[2] < low[3] and low[2] < low[4]
+bool  fvgUp     = bar_index >= 2 and low > high[2]
+bool  fvgDn     = bar_index >= 2 and high < low[2]
+
+bool evSweep = false
+bool evAplus = false
+bool evBreak = false
+
+if barstate.isconfirmed
+    // 1. Исходы открытых проверок (подтверждения и пробои прошлых свечей).
+    int j = probes.size() - 1
+    while j >= 0
+        Probe pr = probes.get(j)
+        int r1 = hitOf(pr.up, pr.dn)
+        if r1 == 2 and bar_index - pr.bar >= horizon
+            r1 := 0
+        if r1 != 2
+            addStat(okC, nC, pr.cat, r1, pr.dir)
+            probes.remove(j)
+        j -= 1
+
+    // 2. Свипы прошлых свечей: подтверждение в окне и исход от закрытия свипа.
+    j := sweeps.size() - 1
+    while j >= 0
+        SweepEv sw = sweeps.get(j)
+        int age = bar_index - sw.bar
+        if not sw.dead and age <= confirmWin
+            bool beyond = sw.dir == 1 ? low < sw.extreme : high > sw.extreme
+            if beyond
+                sw.dead := true
+            else
+                bool newF = sw.fvgBar < 0 and age >= 2 and (sw.dir == 1 ? fvgUp : fvgDn)
+                bool newB = sw.bosBar < 0 and not na(sw.bosLevel) and (sw.dir == 1 ? close > sw.bosLevel : close < sw.bosLevel)
+                if newF
+                    sw.fvgBar := bar_index
+                    probes.push(Probe.new(bar_index, sw.dir, close + atrV, close - atrV, C_FVG_CF))
+                if newB
+                    sw.bosBar := bar_index
+                    probes.push(Probe.new(bar_index, sw.dir, close + atrV, close - atrV, C_BOS_CF))
+                color cc = sw.dir == 1 ? C_UP : C_DN
+                if (newF or newB) and sw.fvgBar >= 0 and sw.bosBar >= 0
+                    probes.push(Probe.new(bar_index, sw.dir, close + atrV, close - atrV, C_ALL_CF))
+                    evAplus := true
+                    if showConfirm
+                        mark(sw.dir == 1, "A+", cc, size.small, "Свип + FVG + BOS — все три фактора. У автора разворот в 92 %.\nСколько на этом графике от этой свечи — столбец «От подтв.» таблицы.")
+                else if drawConf and newF
+                    mark(sw.dir == 1, "FVG", color.new(cc, 55), size.tiny, "Имбаланс после свипа. У автора свип + FVG — 84 %.")
+                else if drawConf and newB
+                    mark(sw.dir == 1, "BOS", color.new(cc, 55), size.tiny, "Слом структуры: закрытие за " + str.tostring(sw.bosLevel, format.mintick) + ", последним свингом до свипа. У автора свип + BOS — 89 %.")
+        if sw.outcome == 2
+            int r2 = hitOf(sw.up, sw.dn)
+            if r2 == 2 and age >= horizon
+                r2 := 0
+            sw.outcome := r2
+        if sw.outcome != 2 and (sw.dead or age >= confirmWin)
+            addStat(okC, nC, C_SWEEP, sw.outcome, sw.dir)
+            if sw.fvgBar >= 0
+                addStat(okC, nC, C_FVG_EV, sw.outcome, sw.dir)
+            if sw.bosBar >= 0
+                addStat(okC, nC, C_BOS_EV, sw.outcome, sw.dir)
+            if sw.fvgBar >= 0 and sw.bosBar >= 0
+                addStat(okC, nC, C_ALL_EV, sw.outcome, sw.dir)
+            sweeps.remove(j)
+        j -= 1
+
+    // 3. Пулы, задетые этой свечой: свип или пробой.
+    bool measurable = not na(atrV) and atrV > 0
+
+    float nearL  = na
+    float deepL  = na
+    int   nearLx = na
+    int   deepLx = na
+    while lowP.size() > 0
+        if lowP.last() > low
+            float pL = lowP.pop()
+            int   xL = lowX.pop()
+            if na(nearL)
+                nearL  := pL
+                nearLx := xL
+            deepL  := pL
+            deepLx := xL
+        else
+            break
+
+    float nearH  = na
+    float deepH  = na
+    int   nearHx = na
+    int   deepHx = na
+    while highP.size() > 0
+        if highP.first() < high
+            float pH = highP.shift()
+            int   xH = highX.shift()
+            if na(nearH)
+                nearH  := pH
+                nearHx := xH
+            deepH  := pH
+            deepHx := xH
+        else
+            break
+
+    if not na(nearL) and measurable
+        if close > nearL
+            if passDir(1) and (deepL - low) / atrV >= minPierce
+                sweeps.push(SweepEv.new(bar = bar_index, dir = 1, extreme = low, bosLevel = lastHigh, up = close + atrV, dn = close - atrV))
+                evSweep := true
+                if drawSweep
+                    mark(true, "свип", color.new(C_UP, 15), size.tiny, sweepTip(1, deepL, (deepL - low) / atrV))
+                if drawLevel
+                    line.new(nearBar(deepLx), deepL, bar_index, deepL, color = color.new(C_UP, 30), style = line.style_dotted, width = 1)
+        else if passDir(-1)
+            float depthL = (nearL - close) / atrV
+            probes.push(Probe.new(bar_index, -1, close + atrV, close - atrV, C_BR))
+            probes.push(Probe.new(bar_index, -1, close + atrV, close - atrV, breakCat(depthL)))
+            evBreak := true
+            if showBreaks and not onlyAplus
+                mark(true, "пробой", color.new(C_DN, depthL < 0.2 ? 65 : depthL <= 0.5 ? 40 : 10), size.tiny, breakTip(-1, depthL, nearL))
+            if drawLevel
+                line.new(nearBar(nearLx), nearL, bar_index, nearL, color = color.new(C_DN, 30), style = line.style_solid, width = 1)
+
+    if not na(nearH) and measurable
+        if close < nearH
+            if passDir(-1) and (high - deepH) / atrV >= minPierce
+                sweeps.push(SweepEv.new(bar = bar_index, dir = -1, extreme = high, bosLevel = lastLow, up = close + atrV, dn = close - atrV))
+                evSweep := true
+                if drawSweep
+                    mark(false, "свип", color.new(C_DN, 15), size.tiny, sweepTip(-1, deepH, (high - deepH) / atrV))
+                if drawLevel
+                    line.new(nearBar(deepHx), deepH, bar_index, deepH, color = color.new(C_DN, 30), style = line.style_dotted, width = 1)
+        else if passDir(1)
+            float depthH = (close - nearH) / atrV
+            probes.push(Probe.new(bar_index, 1, close + atrV, close - atrV, C_BR))
+            probes.push(Probe.new(bar_index, 1, close + atrV, close - atrV, breakCat(depthH)))
+            evBreak := true
+            if showBreaks and not onlyAplus
+                mark(false, "пробой", color.new(C_UP, depthH < 0.2 ? 65 : depthH <= 0.5 ? 40 : 10), size.tiny, breakTip(1, depthH, nearH))
+            if drawLevel
+                line.new(nearBar(nearHx), nearH, bar_index, nearH, color = color.new(C_UP, 30), style = line.style_solid, width = 1)
+
+    // 4. Свинги, подтверждённые этой свечой, становятся пулами со следующей.
+    if swingHigh
+        lastHigh := high[2]
+        insertSorted(highP, highX, high[2], bar_index - 2)
+    if swingLow
+        lastLow := low[2]
+        insertSorted(lowP, lowX, low[2], bar_index - 2)
+
+// ─── Ближайшие нетронутые пулы ───────────────────────────────────────────────
+if barstate.islast
+    for l in poolLines
+        l.delete()
+    poolLines.clear()
+    color poolColor = color.new(chart.fg_color, 65)
+    int nl = math.min(poolsN, lowP.size())
+    if nl > 0
+        for k = 0 to nl - 1
+            int idx = lowP.size() - 1 - k
+            float pv = lowP.get(idx)
+            poolLines.push(line.new(nearBar(lowX.get(idx)), pv, bar_index, pv, extend = extend.right, color = poolColor, style = line.style_dashed, width = 1))
+    int nh = math.min(poolsN, highP.size())
+    if nh > 0
+        for k = 0 to nh - 1
+            float pv = highP.get(k)
+            poolLines.push(line.new(nearBar(highX.get(k)), pv, bar_index, pv, extend = extend.right, color = poolColor, style = line.style_dashed, width = 1))
+
+// ─── Таблица ─────────────────────────────────────────────────────────────────
+if barstate.islast and showStats
+    if na(tb)
+        tb := table.new(position.top_right, 5, 10, bgcolor = chart.bg_color, frame_color = color.new(chart.fg_color, 75), frame_width = 1, border_color = color.new(chart.fg_color, 88), border_width = 1)
+        table.merge_cells(tb, 0, 9, 4, 9)
+    headCell(tb, 0, "Сигнал", "")
+    headCell(tb, 1, "Автор", "Цифры видео (5:32–11:11): 88 активов, 1H, с 2020 года.")
+    headCell(tb, 2, "От события", "Исход от закрытия свипа или пробоя. У строк с FVG и BOS условие выполнилось позже, в " + str.tostring(confirmWin) + " свечах после свипа, — так, по-видимому, считал автор, и это завышает процент: слом вверх «после» уже значит, что цена пошла вверх.")
+    headCell(tb, 3, "От подтв.", "Исход от закрытия свечи, на которой выполнилось последнее условие. Отсюда можно войти — это честная цифра.")
+    headCell(tb, 4, "Случаев", "Решившихся случаев «от события» на загруженной истории графика.")
+    statRow(tb, 1, "Свип", "62,2 %", okC, nC, C_SWEEP, -1)
+    statRow(tb, 2, "Свип + FVG", "84 %", okC, nC, C_FVG_EV, C_FVG_CF)
+    statRow(tb, 3, "Свип + BOS", "89 %", okC, nC, C_BOS_EV, C_BOS_CF)
+    statRow(tb, 4, "Все три (A+)", "92 %", okC, nC, C_ALL_EV, C_ALL_CF)
+    statRow(tb, 5, "Пробой", "61 %", okC, nC, C_BR, -1)
+    statRow(tb, 6, "   закрытие < 0,2 ATR", "49,2 %", okC, nC, C_BR_LO, -1)
+    statRow(tb, 7, "   0,2–0,5 ATR", "53,9 %", okC, nC, C_BR_MID, -1)
+    statRow(tb, 8, "   > 0,5 ATR", "66,5 %", okC, nC, C_BR_HI, -1)
+    table.cell(tb, 0, 9, "Успех: свип — разворот, пробой — продолжение. Исход — какая граница ±1 ATR\nот закрытия задета первой за " + str.tostring(horizon) + " свечей; монетка — 50 %. По загруженной истории.", text_color = color.new(chart.fg_color, 30), text_size = size.tiny, text_halign = text.align_left)
+
+// ─── Оповещения ──────────────────────────────────────────────────────────────
+alertcondition(evSweep, "Свип", "Свип ликвидности: {{ticker}}, {{interval}}")
+alertcondition(evAplus, "A+: свип + FVG + BOS", "A+ сетап: {{ticker}}, {{interval}}")
+alertcondition(evBreak, "Пробой", "Пробой уровня ликвидности: {{ticker}}, {{interval}}")

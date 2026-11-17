@@ -1645,7 +1645,12 @@
       "button": "Charts",
       "settings": "Charts on screen"
     },
-    "panelResize": "Panel width — drag; double-click resets"
+    "panelResize": "Panel width — drag; double-click resets",
+    "tabShort": {
+      "open": "Positions",
+      "orders": "Orders",
+      "history": "History"
+    }
   },
   "onboarding": {
     "askTitle": "Take the tour?",

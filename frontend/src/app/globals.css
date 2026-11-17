@@ -978,7 +978,7 @@
      (обе колонки грида), а не внутри узкой колонки графика: тикет обычно
      короче графика по высоте, и место под ним справа иначе просто пустовало
      бы, пока переключателю в одной только колонке графика было тесно. */
-  .terminal-controls { grid-column: 1 / -1; }
+  .terminal-controls { grid-column: 1; }
   /* Терминал — ровно одно окно: график, тикет и кнопки шага/скорости/«к списку»
      видны вместе и без прокрутки, на любом экране. Высоту график не выбирает
      сам (раньше она шла от ширины по пропорции 720×380, и на широком мониторе
@@ -1097,7 +1097,6 @@
      (см. .terminal-controls выше, растягивающую эту строку на обе колонки
      грида). margin-left: auto — без justify-content: space-between у
      .replay-controls, который раздвинул бы и левые кнопки между собой. */
-  .replay-controls .view-switch { margin-left: auto; }
   /* Копия переключателя над таблицей — только на телефоне. Два класса, а не
      один: `.seg { display: flex }` ниже в том же слое и с той же
      специфичностью перебивал одиночный класс, и на десктопе стояли два
@@ -1625,9 +1624,24 @@
      перетаскивании — темнее, с ручкой из двух черт посередине. Без теней и
      заливок. На узком экране колонки стоят друг под другом — разделителя нет. */
   .term-split { display: none; }
+  /* Вкладки таблиц — под колонкой справа, тем же видом, что «Терминал / Монеты»
+     над ней (владелец 2026-11-17). В эфире строки под графиком нет, и график
+     идёт до низа (`.chart-full`). На телефоне — копия над самой таблицей. */
+  .table-tabs {
+    display: flex; align-items: stretch; gap: var(--s4);
+    min-height: 30px; margin-top: var(--s2); padding-top: var(--s2);
+    border-top: 1px solid var(--rule);
+  }
+  @media (max-width: 720px) {
+    .table-tabs { display: none; }
+  }
+  @media (min-width: 1101px) {
+    .table-tabs { grid-column: 3; grid-row: 2; }
+    .asym.terminal.chart-full .terminal-chart { grid-row: 1 / -1; }
+  }
   @media (min-width: 1101px) {
     .term-split {
-      display: block; position: relative; grid-column: 2; grid-row: 1;
+      display: block; position: relative; grid-column: 2; grid-row: 1 / -1;
       cursor: col-resize; touch-action: none; outline: none;
     }
     .term-split::before {
@@ -6038,7 +6052,6 @@
   /* Таблицы переключаются над ними самими, а не в строке шага: под строкой
      на телефоне стоит вся панель ордера. Переключатель липнет под шапкой,
      как вкладки приложения. */
-  .replay-controls .view-switch { display: none; }
   .view-switch-m {
     display: flex;
     position: sticky;

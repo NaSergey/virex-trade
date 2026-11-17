@@ -222,8 +222,6 @@ export interface TerminalProps {
   qtyStepOf?: (symbol: string) => number;
   /** Цена монеты, которой нет на графике; не задано — цены эфира с сервера. */
   priceOf?: (symbol: string) => number | null;
-  /** Подпись у переключателя таблиц вместо «Эфир»; `false` — без подписи (терминал на главной). */
-  badge?: string | false;
   /** Сигналы по разнице снимков; не задано — правила сессии (`soundsOf`). Ссылка — стабильная. */
   soundsOf?: (was: SessionDetail, next: SessionDetail) => readonly TerminalSound[];
   /**
@@ -287,7 +285,6 @@ export function Terminal({
   decimalsOf: decimalsOfProp,
   qtyStepOf: qtyStepOfProp,
   priceOf: priceOfProp,
-  badge,
   soundsOf,
   history: History,
   tags = true,
@@ -666,9 +663,11 @@ export function Terminal({
       openTrades, а история правит сделки, которых там уже нет. */
   const [historyTagsFor, setHistoryTagsFor] = useState<string | null>(null);
   const [tab, setTab] = useState<'open' | 'orders' | 'history'>('open');
-  // Строка под графиком: кнопки прокрутки, подпись счёта, «К списку», вкладки.
-  // У терминала на главной нет ничего из этого — строки нет вовсе.
-  const controlsShown = !isLive || badge !== false || tables || Boolean(onLeave);
+  // Строка под графиком — только кнопки прокрутки истории и тренажёра. В эфире её нет:
+  // подпись счёта снята, «К списку» — в верхней панели, вкладки таблиц — под колонкой
+  // справа (владелец 2026-11-17: «там теперь будет место для графика»). Сообщения о
+  // конце истории и об ошибке ленты встают туда же, когда они есть.
+  const controlsRow = !isLive || replay.ended || replay.error != null;
   // Ошибки действий над открытыми позициями — своя строка над таблицей позиций, а не
   // `hint` панели ордера: панель про следующий ордер и чужих отказов не показывает.
   const [positionHint, setPositionHint] = useState<string | null>(null);
@@ -1456,7 +1455,11 @@ export function Terminal({
     // (см. комментарий у SessionScreen). Итог той же сессии после завершения
     // возвращается в обычную читательскую колонку сам, через SessionScreen.
     <div className="bt-live">
-      <div className="asym terminal" ref={gridRef} style={{ '--panel-w': `${panelWidth}px` } as CSSProperties}>
+      <div
+        className={cn('asym terminal', !controlsRow && 'chart-full')}
+        ref={gridRef}
+        style={{ '--panel-w': `${panelWidth}px` } as CSSProperties}
+      >
         <div className="terminal-main">
           <div className="terminal-chart" ref={chartRef}>
             {/* Верхняя панель графика, как у TradingView: монета, таймфреймы, справа —
@@ -1487,6 +1490,11 @@ export function Terminal({
                 {/* Отступ — свой: кнопки графика стоят вплотную друг к другу, а
                     действие страницы к ним не относится. */}
                 {chartActions && <div className="mr-3 flex items-center">{chartActions}</div>}
+                {onLeave && (
+                  <Button tight className="mr-2" onClick={() => void leave()}>
+                    {detail.tournament ? t('backToTournament') : t('backToList')}
+                  </Button>
+                )}
                 <Button
                   variant="bare"
                   tight
@@ -1587,41 +1595,26 @@ export function Terminal({
               растянута на обе колонки грида, а не сидит в узкой колонке графика:
               место под тикетом справа иначе пустовало бы, а переключателю
               таблицы было бы тесно. */}
-          <div className="terminal-controls">
-            {controlsShown && (
-              <div className="replay-controls">
-                {/* В эфире время ведут часы, а не участник: шагать и ускорять
-                    нечего, и кнопки, которые ничего не делают, тут не стоят. */}
-                {!isLive && (
-                  <>
-                    <Button variant="solid" onClick={() => void replay.step()} disabled={!replay.ready || replay.ended}>
-                      {t('step')} ▶
-                    </Button>
-                    <Seg
-                      options={speedOptions}
-                      value={replay.speed ?? 0}
-                      onChange={(v) => replay.setSpeed(v || null)}
-                      ariaLabel={t('speed')}
-                    />
-                  </>
-                )}
-                {isLive && badge !== false && (
-                  <span className="muted" data-tour="term-badge">
-                    {badge ?? t('liveBadge')}
-                  </span>
-                )}
-                {session.dataSource === 'synthetic' && <span className="muted">{t('syntheticBadge')}</span>}
-                {onLeave && (
-                  <Button tight onClick={() => void leave()}>
-                    {detail.tournament ? t('backToTournament') : t('backToList')}
+          {controlsRow && (
+            <div className="terminal-controls">
+              {!isLive && (
+                <div className="replay-controls">
+                  <Button variant="solid" onClick={() => void replay.step()} disabled={!replay.ready || replay.ended}>
+                    {t('step')} ▶
                   </Button>
-                )}
-                {tables && tableSwitch('view-switch')}
-              </div>
-            )}
-            {replay.ended && <p className="muted">{t('historyEnded')}</p>}
-            <ErrorNote error={replay.error} fallback={t('loadFailed')} />
-          </div>
+                  <Seg
+                    options={speedOptions}
+                    value={replay.speed ?? 0}
+                    onChange={(v) => replay.setSpeed(v || null)}
+                    ariaLabel={t('speed')}
+                  />
+                  {session.dataSource === 'synthetic' && <span className="muted">{t('syntheticBadge')}</span>}
+                </div>
+              )}
+              {replay.ended && <p className="muted">{t('historyEnded')}</p>}
+              <ErrorNote error={replay.error} fallback={t('loadFailed')} />
+            </div>
+          )}
         </div>
 
         <PanelSplitter gridRef={gridRef} width={panelWidth} onCommit={setPanelWidth} />
@@ -1755,6 +1748,25 @@ export function Terminal({
             )}
           </div>
         </div>
+
+        {/* Вкладки таблиц — под колонкой справа, коротко, в том же виде, что
+            «Терминал / Монеты» сверху. На телефоне — копия над самой таблицей. */}
+        {tables && (
+          <div className="table-tabs" role="tablist" aria-label={t('openPositionsTab')}>
+            {(['open', 'orders', 'history'] as const).map((id) => (
+              <Button
+                key={id}
+                variant="none"
+                role="tab"
+                aria-selected={tab === id}
+                className={cn('panel-tab', tab === id && 'on')}
+                onClick={() => setTab(id)}
+              >
+                {t(`tabShort.${id}`)}
+              </Button>
+            ))}
+          </div>
+        )}
       </div>
 
       {closeM.isError && closeM.variables && (
