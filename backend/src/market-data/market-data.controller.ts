@@ -61,6 +61,12 @@ export class MarketDataController {
     return { serverTime: new Date().toISOString(), prices: await this.live.prices(symbols) };
   }
 
+  /** Цена и изменение за сутки монет эфира — список монет справа от графика. */
+  @Get('live/tickers')
+  async getLiveTickers() {
+    return { tickers: await this.live.tickers() };
+  }
+
   @Get('candles')
   async getCandles(
     @Query('tf') tf?: string,

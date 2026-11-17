@@ -11,6 +11,7 @@ export interface BinanceCandle {
 }
 
 const BASE_URL = 'https://api.binance.com/api/v3/klines';
+const TICKER_URL = 'https://api.binance.com/api/v3/ticker/24hr';
 const MAX_RETRIES = 3;
 
 /**
@@ -37,7 +38,7 @@ export class BinanceKlinesClient {
     startTimeMs: number,
     limit = 1000,
   ): Promise<BinanceCandle[]> {
-    return this.request(
+    return this.klines(
       `${BASE_URL}?symbol=${symbol}&interval=${toBinanceInterval(timeframe)}` +
         `&startTime=${startTimeMs}&limit=${limit}`,
     );
@@ -49,7 +50,7 @@ export class BinanceKlinesClient {
    * формирующуюся свечу в хранилище писать нельзя (см. `isClosed`).
    */
   async fetchRecent(symbol: string, timeframe: number, limit: number): Promise<BinanceCandle[]> {
-    return this.request(`${BASE_URL}?symbol=${symbol}&interval=${toBinanceInterval(timeframe)}&limit=${limit}`);
+    return this.klines(`${BASE_URL}?symbol=${symbol}&interval=${toBinanceInterval(timeframe)}&limit=${limit}`);
   }
 
   /**
@@ -67,7 +68,21 @@ export class BinanceKlinesClient {
       (range.startTime != null ? `&startTime=${range.startTime}` : '') +
       (range.endTime != null ? `&endTime=${range.endTime}` : '') +
       `&limit=${range.limit}`;
-    return this.request(`${BASE_URL}?${params}`);
+    return this.klines(`${BASE_URL}?${params}`);
+  }
+
+  /**
+   * Цена и изменение за 24 ч монет списком — один запрос на весь список (вес 2
+   * до двадцати монет). Список монет справа от графика эфира.
+   */
+  async fetchTickers24h(symbols: string[]): Promise<{ symbol: string; last: number; change24h: number }[]> {
+    const url = `${TICKER_URL}?symbols=${encodeURIComponent(JSON.stringify(symbols))}`;
+    const rows = (await this.getJson(url)) as { symbol: string; lastPrice: string; priceChangePercent: string }[];
+    return rows.map((r) => ({
+      symbol: r.symbol,
+      last: parseFloat(r.lastPrice),
+      change24h: parseFloat(r.priceChangePercent) || 0,
+    }));
   }
 
   /**
@@ -77,7 +92,7 @@ export class BinanceKlinesClient {
    */
   private pause: Promise<void> | null = null;
 
-  private async request(url: string): Promise<BinanceCandle[]> {
+  private async getJson(url: string): Promise<unknown> {
     for (let attempt = 0; ; attempt++) {
       if (this.pause) await this.pause;
       // Умолчания undici — 300 секунд: зависший запрос держал бы флаг
@@ -88,7 +103,7 @@ export class BinanceKlinesClient {
       // 429 — превышен вес запросов; 418 — бан за то, что 429 игнорировали.
       if (res.status === 429 || res.status === 418) {
         if (attempt >= MAX_RETRIES) {
-          throw new Error(`Binance klines: ${res.status} после ${MAX_RETRIES} повторов`);
+          throw new Error(`Binance: ${res.status} после ${MAX_RETRIES} повторов`);
         }
         const wait = this.backoffMs(res, attempt);
         this.logger.warn(`Binance ответил ${res.status}, повтор через ${wait} мс`);
@@ -101,19 +116,22 @@ export class BinanceKlinesClient {
         continue;
       }
 
-      if (!res.ok) throw new Error(`Binance klines: HTTP ${res.status}`);
-
-      // [openTime, open, high, low, close, volume, closeTime, ...] — по возрастанию.
-      const rows = (await res.json()) as unknown[][];
-      return rows.map((k) => ({
-        time: Number(k[0]),
-        open: parseFloat(String(k[1])),
-        high: parseFloat(String(k[2])),
-        low: parseFloat(String(k[3])),
-        close: parseFloat(String(k[4])),
-        volume: parseFloat(String(k[5])),
-      }));
+      if (!res.ok) throw new Error(`Binance: HTTP ${res.status}`);
+      return res.json();
     }
+  }
+
+  private async klines(url: string): Promise<BinanceCandle[]> {
+    // [openTime, open, high, low, close, volume, closeTime, ...] — по возрастанию.
+    const rows = (await this.getJson(url)) as unknown[][];
+    return rows.map((k) => ({
+      time: Number(k[0]),
+      open: parseFloat(String(k[1])),
+      high: parseFloat(String(k[2])),
+      low: parseFloat(String(k[3])),
+      close: parseFloat(String(k[4])),
+      volume: parseFloat(String(k[5])),
+    }));
   }
 
   private backoffMs(res: { headers: { get(name: string): string | null } }, attempt: number): number {
