@@ -34,15 +34,18 @@ export function usePanes(coins: readonly string[], fallbackSymbol: string) {
   // Весь сохранённый состав, вместе с графиками сверх раскладки: вернувшийся с
   // 4 графиков на 2 и обратно видит прежние монеты. Ссылки держатся между
   // рендерами — ячейки сетки сверяют `pane` по ссылке (memo).
+  // Разбор — отдельно от добора: смена активного графика пересчитывает добор,
+  // но сохранённые ячейки остаются теми же объектами (`fillPanes` их не
+  // копирует), и memo ячеек не сбивается на каждое переключение.
+  const stored = useMemo(() => decodePanes(panesRaw, TIMEFRAMES), [panesRaw]);
   const all = useMemo(() => {
-    const stored = decodePanes(panesRaw, TIMEFRAMES);
     const base = stored.length > 0 ? stored : [{ symbol: fallbackSymbol, tf: DEFAULT_TIMEFRAME }];
     const tf = base[Math.min(active, base.length - 1)].tf;
     if (coins.length > 0) return fillPanes(base, count, coins, tf);
     const out = [...base];
     while (out.length < count) out.push({ symbol: fallbackSymbol, tf });
     return out;
-  }, [panesRaw, fallbackSymbol, active, count, coins]);
+  }, [stored, fallbackSymbol, active, count, coins]);
   const panes = useMemo(() => all.slice(0, count), [all, count]);
 
   const setPane = useCallback(

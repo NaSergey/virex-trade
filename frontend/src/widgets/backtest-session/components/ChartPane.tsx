@@ -82,7 +82,10 @@ export const ChartPane = memo(function ChartPane({
   onActivate: (index: number) => void;
 }) {
   const t = useTranslations('backtest');
-  const feed = useLiveFeed(detail, true, pane.symbol, source, active, NO_ANCHORS, pane.tf);
+  // У активной ячейки своя лента выключена целиком: свечи той же монеты и ТФ уже
+  // грузит лента терминала, второй запрос был бы лишним. Загруженное остаётся —
+  // им ячейка и рисует, пока лента терминала догоняет переключение.
+  const feed = useLiveFeed(detail, !active, pane.symbol, source, active, NO_ANCHORS, pane.tf);
   const candles = useMemo(() => feed.candles.map((c) => scaleCandle(c, scale)), [feed.candles, scale]);
   const { trades, closeOrders, entryOrders, session } = detail;
   const price = feed.price;
