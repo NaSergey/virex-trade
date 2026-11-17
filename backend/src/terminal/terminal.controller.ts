@@ -48,6 +48,12 @@ export class TerminalController {
     return { symbols: await this.market.symbols() };
   }
 
+  /** Цена и изменение за сутки всех монет — список монет справа от графика. */
+  @Get('tickers')
+  async tickers() {
+    return { tickers: await this.market.tickers() };
+  }
+
   /** Хвост минуток монеты и время сервера — источник живого края графика. */
   @Get('live')
   async live(@Query('symbol') symbol: string) {
