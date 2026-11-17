@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { Maximize, Minimize, Settings as SettingsIcon, Volume2, VolumeX } from 'lucide-react';
+import { Settings as SettingsIcon, Volume2, VolumeX } from 'lucide-react';
 import { TagsDialog } from '@/entities/tag';
 import { useAuth } from '@/features/auth';
 import { useLocaleControl } from '@/shared/i18n';
@@ -65,12 +65,10 @@ import {
 import type { TerminalSound } from '../lib/sounds';
 import { useSessionActions, type TerminalActions } from '../model/actions';
 import { useExpSettings, useRailPanel, useRangesOn, useRsiOn, useTagPromptOn, useVolumeOn, type RailPanel } from '../model/useChartSettings';
-import { useFullscreen } from '../model/useFullscreen';
 import { usePanes } from '../model/usePanes';
 import { useMediaQuery } from '@/shared/lib/hooks/useMediaQuery';
 import { ChartPane, type ChartProps } from './ChartPane';
 import { LayoutPicker } from './LayoutPicker';
-import { TerminalRail } from './TerminalRail';
 import { Watchlist } from './Watchlist';
 import { useRangeCandles, type Load4h } from '../model/useRangeCandles';
 import { useMaxRisk } from '../model/useRiskSettings';
@@ -257,10 +255,11 @@ export interface TerminalProps {
    */
   chartActions?: ReactNode;
   /**
-   * Рейка справа «Терминал / Монеты» со сворачиванием колонки; по умолчанию
-   * есть. Терминал на главной её убирает: узкая секция, и списка монет гостю не нужно.
+   * Вкладки «Терминал / Монеты» над правой колонкой и список монет; по
+   * умолчанию есть (где монет несколько). Терминал на главной их убирает: узкая
+   * секция, и списка монет гостю не нужно.
    */
-  rail?: boolean;
+  watchlist?: boolean;
   /**
    * Источник цен в легенде графика — «Bybit», «Bybit Demo». Не задан — «Binance»
    * в эфире (рынок продукта и главной), у истории и тренажёра — без источника.
@@ -294,7 +293,7 @@ export function Terminal({
   tables = true,
   paused = false,
   chartActions,
-  rail = true,
+  watchlist = true,
   sourceLabel,
   multiChart = false,
 }: TerminalProps) {
@@ -552,17 +551,15 @@ export function Terminal({
   const rangeBoxes = useMemo(() => (rangesOn ? findRanges(candles4h) : []), [rangesOn, candles4h]);
 
   /**
-   * Правая колонка: панель ордера, список монет или ничего — колонка свёрнута, и
-   * график шире (рейка, как у TradingView). Список — только где монет несколько
-   * и у рынка есть тикеры; где его нет, запомненное «Монеты» значит панель ордера.
+   * Правая колонка: панель ордера или список монет — вкладками над ней
+   * (владелец 2026-11-17: одно место, сверху и компактно; боковая рейка и
+   * сворачивание колонки сняты). Список — только где монет несколько и у рынка
+   * есть тикеры; где его нет, запомненное «Монеты» значит панель ордера.
    */
   const [railPanel, setRailPanel] = useRailPanel();
   const watchSource = (source ?? SESSION_SOURCE).tickers;
-  const hasWatch = rail && isLive && watchSource != null && (coins?.length ?? 0) > 1;
-  const panel: RailPanel = railPanel === 'watch' && !hasWatch ? 'order' : rail ? railPanel : 'order';
-  // Во весь экран — корень терминала вместе с таблицами под графиком.
-  const rootRef = useRef<HTMLDivElement>(null);
-  const fullscreen = useFullscreen(rootRef);
+  const hasWatch = watchlist && isLive && watchSource != null && (coins?.length ?? 0) > 1;
+  const panel: RailPanel = railPanel === 'watch' && hasWatch ? 'watch' : 'order';
   // Знаки цены монеты — в эфире и у истории с видимой ценой; скрытую цену масштаб
   // приводит к 100–1000, и ей хватает общего правила.
   const coinDecimals = isLive || (session.dataSource === 'real' && (!session.hidePrice || reveal));
@@ -1454,13 +1451,8 @@ export function Terminal({
     // Терминал во всю ширину окна — единственное место продукта без .wrap
     // (см. комментарий у SessionScreen). Итог той же сессии после завершения
     // возвращается в обычную читательскую колонку сам, через SessionScreen.
-    <div className="bt-live px-4" ref={rootRef}>
-      <div
-        className={cn('asym terminal', rail && 'has-rail')}
-        // Свёрнутость колонки решает CSS; настройки графика и сетка фиксации
-        // разворачивают её на время сами собой.
-        data-rail={chartSettingsOpen || gridTrade ? 'open' : panel}
-      >
+    <div className="bt-live px-4">
+      <div className="asym terminal">
         <div className="terminal-main">
           <div className="terminal-chart" ref={chartRef}>
             {/* Верхняя панель графика, как у TradingView: монета, таймфреймы, справа —
@@ -1480,12 +1472,17 @@ export function Terminal({
                 {reveal && <span className="muted">{coinBase(symbol)}</span>}
                 {(isLive || reveal) && <span className="chart-top-sep" aria-hidden />}
                 <Seg options={tfOptions} value={replay.tf} onChange={setChartTf} ariaLabel={t('timeframe')} />
+                {multi && (
+                  <>
+                    <span className="chart-top-sep" aria-hidden />
+                    <LayoutPicker value={panesState.layout} onChange={panesState.setLayout} />
+                  </>
+                )}
               </div>
               <div className="chart-top-r">
                 {/* Отступ — свой: кнопки графика стоят вплотную друг к другу, а
                     действие страницы к ним не относится. */}
                 {chartActions && <div className="mr-3 flex items-center">{chartActions}</div>}
-                {multi && <LayoutPicker value={panesState.layout} onChange={panesState.setLayout} />}
                 <Button
                   variant="bare"
                   tight
@@ -1511,18 +1508,6 @@ export function Terminal({
                 >
                   <SettingsIcon size={16} />
                 </Button>
-                {fullscreen.supported && (
-                  <Button
-                    variant="bare"
-                    tight
-                    aria-label={fullscreen.on ? t('exitFullscreen') : t('fullscreen')}
-                    title={fullscreen.on ? t('exitFullscreen') : t('fullscreen')}
-                    aria-pressed={fullscreen.on}
-                    onClick={fullscreen.toggle}
-                  >
-                    {fullscreen.on ? <Minimize size={16} /> : <Maximize size={16} />}
-                  </Button>
-                )}
               </div>
             </div>
             <div className="chart-tools">
@@ -1639,18 +1624,31 @@ export function Terminal({
           {/* Сетка фиксации стоит на месте панели ордера, а не окном поверх: её
               уровни — на графике, и смотреть на них, настраивая, нужно рядом.
               Смена панели — сменой ключа: новая въезжает анимацией (.panel-swap). */}
-          {/* Узкий экран: рейки нет, панель стоит под графиком — переключатель над ней. */}
-          {hasWatch && !chartSettingsOpen && !gridTrade && (
-            <Seg
-              className="rail-seg"
-              options={[
-                { value: 'order' as const, label: t('rail.order') },
-                { value: 'watch' as const, label: t('rail.watch') },
-              ]}
-              value={panel === 'watch' ? 'watch' : 'order'}
-              onChange={setRailPanel}
-              ariaLabel={t('rail.label')}
-            />
+          {/* Вкладки колонки — на одной линии с верхней панелью графика, места
+              по высоте не отнимают. Настройки и сетка фиксации стоят поверх
+              вкладки; нажатие на вкладку их закрывает. */}
+          {hasWatch && (
+            <div className="panel-tabs" role="tablist" aria-label={t('rail.label')}>
+              {(['order', 'watch'] as const).map((id) => {
+                const on = !chartSettingsOpen && !gridTrade && panel === id;
+                return (
+                  <Button
+                    key={id}
+                    variant="none"
+                    role="tab"
+                    aria-selected={on}
+                    className={cn('panel-tab', on && 'on')}
+                    onClick={() => {
+                      setChartSettingsOpen(false);
+                      setCloseGrid(null);
+                      setRailPanel(id);
+                    }}
+                  >
+                    {t(`rail.${id}`)}
+                  </Button>
+                );
+              })}
+            </div>
           )}
           <div
             key={chartSettingsOpen ? 'settings' : gridTrade ? 'grid' : panel === 'watch' ? 'watch' : 'order'}
@@ -1665,6 +1663,8 @@ export function Terminal({
                 onRsi={setRsiOn}
                 volumeOn={volumeOn}
                 onVolume={setVolumeOn}
+                layout={multi ? panesState.layout : undefined}
+                onLayout={multi ? panesState.setLayout : undefined}
                 rangesOn={rangesOn}
                 onRanges={setRangesOn}
                 exp={exp.on}
@@ -1749,7 +1749,6 @@ export function Terminal({
             )}
           </div>
         </div>
-        {rail && <TerminalRail value={panel} watch={hasWatch} onChange={setRailPanel} />}
       </div>
 
       {closeM.isError && closeM.variables && (

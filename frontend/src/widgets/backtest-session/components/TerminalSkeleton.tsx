@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { ArrowDownUp, ChevronDown, List, Maximize, Plus, Settings as SettingsIcon, Volume2 } from 'lucide-react';
+import { ChevronDown, Plus, Settings as SettingsIcon, Volume2 } from 'lucide-react';
 import { cn } from '@/shared/lib/utils/css';
 import { Button } from '@/shared/ui/Button';
 import { Field } from '@/shared/ui/Field';
@@ -14,6 +14,7 @@ import { SPEEDS } from '../model/useReplay';
 import { CoinPickerFace } from './CoinPicker';
 import { useRailPanel } from '../model/useChartSettings';
 import { useStoredLayout } from '../model/usePanes';
+import { LayoutPicker } from './LayoutPicker';
 import { paneCount } from '../lib/panes';
 import { useMediaQuery } from '@/shared/lib/hooks/useMediaQuery';
 import { DrawingToolbar } from './drawings/DrawingToolbar';
@@ -75,8 +76,8 @@ export interface TerminalSkeletonProps {
   leave?: boolean;
   /** Вкладки таблиц под графиком; у терминала на главной их нет. */
   tables?: boolean;
-  /** Рейка справа «Терминал / Монеты»; у терминала на главной её нет. */
-  rail?: boolean;
+  /** Вкладки «Терминал / Монеты» над правой колонкой; у терминала на главной их нет. */
+  watchlist?: boolean;
   /** Сетка графиков `/terminal` — заглушка рисует сохранённую раскладку. */
   multiChart?: boolean;
 }
@@ -129,7 +130,7 @@ export function TerminalSkeleton({
   badge,
   leave = true,
   tables = true,
-  rail = true,
+  watchlist = true,
   multiChart = false,
 }: TerminalSkeletonProps) {
   const t = useTranslations('backtest');
@@ -140,13 +141,14 @@ export function TerminalSkeleton({
   // Сетка графиков — та же, что у терминала (и так же только на широком экране).
   const storedLayout = useStoredLayout();
   const wide = useMediaQuery('(min-width: 1101px)');
-  const layout = multiChart && live && wide ? storedLayout : '1';
+  const multi = multiChart && live && wide;
+  const layout = multi ? storedLayout : '1';
   // Список монет бывает только в эфире; у истории запомненное «Монеты» — панель ордера, как у экрана.
-  const watch = rail && live && railPanel === 'watch';
+  const watch = watchlist && live && railPanel === 'watch';
 
   return (
     <div className="bt-live px-4" aria-busy="true" inert>
-      <div className={cn('asym terminal', rail && 'has-rail')} data-rail={railPanel}>
+      <div className="asym terminal">
         <div className="terminal-main">
           <div className="terminal-chart">
             <div className="chart-top">
@@ -159,6 +161,12 @@ export function TerminalSkeleton({
                   onChange={noop}
                   ariaLabel={t('timeframe')}
                 />
+                {multi && (
+                  <>
+                    <span className="chart-top-sep" aria-hidden />
+                    <LayoutPicker value={layout} onChange={noop} />
+                  </>
+                )}
               </div>
               <div className="chart-top-r">
                 <Button variant="bare" tight aria-label={tAudio('sound')}>
@@ -169,9 +177,6 @@ export function TerminalSkeleton({
                     <SettingsIcon size={16} />
                   </Button>
                 </div>
-                <Button variant="bare" tight aria-label={t('fullscreen')}>
-                  <Maximize size={16} />
-                </Button>
               </div>
             </div>
             <div className="chart-tools">
@@ -242,17 +247,14 @@ export function TerminalSkeleton({
         </div>
 
         <div className="marg">
-          {rail && live && (
-            <Seg
-              className="rail-seg"
-              options={[
-                { value: 'order' as const, label: t('rail.order') },
-                { value: 'watch' as const, label: t('rail.watch') },
-              ]}
-              value={watch ? 'watch' : 'order'}
-              onChange={noop}
-              ariaLabel={t('rail.label')}
-            />
+          {watchlist && live && (
+            <div className="panel-tabs" role="tablist" aria-label={t('rail.label')}>
+              {(['order', 'watch'] as const).map((id) => (
+                <Button key={id} variant="none" role="tab" className={cn('panel-tab', (id === 'watch') === watch && 'on')}>
+                  {t(`rail.${id}`)}
+                </Button>
+              ))}
+            </div>
           )}
           {/* Та же разметка, что у OrderPanel на вкладке «Маркет», — без чисел;
               у запомненного списка монет — каркас списка. */}
@@ -331,18 +333,6 @@ export function TerminalSkeleton({
           )}
           </div>
         </div>
-        {rail && (
-          <nav className="term-rail" aria-label={t('rail.label')}>
-            <Button variant="bare" className={cn('rail-btn', railPanel !== 'none' && !watch && 'on')} aria-label={t('rail.order')}>
-              <ArrowDownUp size={20} />
-            </Button>
-            {live && (
-              <Button variant="bare" className={cn('rail-btn', watch && 'on')} aria-label={t('rail.watch')}>
-                <List size={20} />
-              </Button>
-            )}
-          </nav>
-        )}
       </div>
     </div>
   );

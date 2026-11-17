@@ -1,6 +1,8 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import type { LayoutId } from '../lib/panes';
+import { LayoutOptions } from './LayoutPicker';
 import { Button } from '@/shared/ui/Button';
 import { Field } from '@/shared/ui/Field';
 import { SectionHead } from '@/shared/ui/SectionHead';
@@ -25,6 +27,8 @@ export function ChartSettingsPanel({
   onRsi,
   volumeOn,
   onVolume,
+  layout,
+  onLayout,
   rangesOn,
   onRanges,
   exp,
@@ -40,6 +44,9 @@ export function ChartSettingsPanel({
   onRsi: (on: boolean) => void;
   volumeOn: boolean;
   onVolume: (on: boolean) => void;
+  /** Раскладка графиков — только где их несколько (`/terminal`, широкий экран). */
+  layout?: LayoutId;
+  onLayout?: (layout: LayoutId) => void;
   rangesOn: boolean;
   onRanges: (on: boolean) => void;
   /** Экспериментальные индикаторы: что включено. */
@@ -56,6 +63,13 @@ export function ChartSettingsPanel({
   return (
     <div className="order-panel cg-panel">
       <SectionHead title={t('chartSettings')} className="cg-head" />
+
+      {layout && onLayout && (
+        <>
+          <p className="cs-group muted">{t('layout.settings')}</p>
+          <LayoutOptions value={layout} onChange={onLayout} />
+        </>
+      )}
 
       {/* Весь ряд — переключатель: включённый индикатор подсвечен по всей своей площади. */}
       <Button

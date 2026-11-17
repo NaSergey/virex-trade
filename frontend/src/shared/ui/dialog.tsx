@@ -4,7 +4,6 @@ import * as React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { useTranslations } from 'next-intl';
 import { cn } from '@/shared/lib/utils/css';
-import { portalContainer } from '@/shared/lib/utils/fullscreen';
 import { Button, type ButtonVariant } from '@/shared/ui/Button';
 
 /**
@@ -67,10 +66,7 @@ export function useDialogFade(onClose: () => void) {
   return { closing, close };
 }
 
-/** Портал окна — в полноэкранный элемент, если он есть (`portalContainer`). */
-const DialogPortal = (props: React.ComponentProps<typeof DialogPrimitive.Portal>) => (
-  <DialogPrimitive.Portal container={portalContainer()} {...props} />
-);
+const DialogPortal = DialogPrimitive.Portal;
 const DialogClose = DialogPrimitive.Close;
 /** Название окна без шапки `.dh` (окно настроек: вместо шапки — строка вкладок). */
 const DialogTitle = DialogPrimitive.Title;

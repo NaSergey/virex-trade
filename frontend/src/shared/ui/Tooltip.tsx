@@ -1,7 +1,6 @@
 'use client';
 
 import * as TooltipPrimitive from '@radix-ui/react-tooltip';
-import { portalContainer } from '@/shared/lib/utils/fullscreen';
 
 /**
  * Всплывающая подсказка при наведении/фокусе — через Radix (та же библиотека,
@@ -26,7 +25,7 @@ export function Tooltip({ text, children }: { text: string; children: React.Reac
     <TooltipPrimitive.Provider delayDuration={0}>
       <TooltipPrimitive.Root>
         <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
-        <TooltipPrimitive.Portal container={portalContainer()}>
+        <TooltipPrimitive.Portal>
           <TooltipPrimitive.Content className="tooltip-bubble" sideOffset={6}>
             {text}
             <TooltipPrimitive.Arrow className="tooltip-arrow" />
