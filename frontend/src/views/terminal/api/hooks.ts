@@ -3,7 +3,7 @@
 import { queryOptions, useQuery } from '@tanstack/react-query';
 import { TERMINAL_KEY } from '@/entities/terminal';
 import { apiJson, qs } from '@/shared/api/http';
-import { fromApi, type ApiCandle, type LiveSource } from '@/widgets/backtest-session';
+import { fromApi, type ApiCandle, type LiveSource, type Ticker } from '@/widgets/backtest-session';
 import type { TerminalState, TerminalSymbol } from './types';
 
 export const STATE_KEY = [...TERMINAL_KEY, 'state'] as const;
@@ -73,5 +73,9 @@ export const EXCHANGE_SOURCE: LiveSource = {
       `/api/terminal/candles${qs({ symbol, tf, from: range.from, to: range.to, limit: range.limit })}`,
     );
     return rows.map(fromApi);
+  },
+  tickers: {
+    kind: 'bybit',
+    fetch: () => apiJson<{ tickers: Ticker[] }>('/api/terminal/tickers').then((r) => r.tickers),
   },
 };

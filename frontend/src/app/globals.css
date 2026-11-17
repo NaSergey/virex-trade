@@ -5188,6 +5188,34 @@
   /* Оборот за 24 часа — справа в строке, тише тикера: это подсказка к выбору, а не сам выбор. */
   .coin-menu-vol { margin-left: auto; color: var(--ink-3); }
 
+  /* Список монет справа от графика (`Watchlist`): строка — монета, цена и
+     изменение за сутки; ✕ убрать — по наведению на строку. Колонки — одна
+     сетка у шапки и строк, чтобы цифры стояли друг под другом. */
+  .watch { display: flex; flex-direction: column; min-height: 0; }
+  .watch-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: var(--s2); border-bottom: 1px solid var(--rule); }
+  .watch-title { font-size: var(--t-s); font-weight: 600; color: var(--ink); }
+  .watch-add { position: relative; }
+  .watch-menu { left: auto; right: 0; }
+  .watch-cols, .watch-pick {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto 4.5rem; gap: var(--s2); align-items: center;
+  }
+  .watch-cols { padding: var(--s2) 22px var(--s1) var(--s1); font-size: var(--t-xs); }
+  .watch-cols > :not(:first-child) { text-align: right; }
+  .watch-list { display: flex; flex-direction: column; overflow-y: auto; min-height: 0; }
+  .watch-row { position: relative; display: flex; align-items: center; }
+  .watch-row:hover, .watch-row.on { background: rgb(var(--ink-rgb) / 0.06); }
+  .watch-row.on { box-shadow: inset 2px 0 0 var(--ink); }
+  .watch-pick {
+    flex: 1; min-width: 0; height: 34px; padding: 0 22px 0 var(--s1);
+    font-family: var(--font-mono); font-size: var(--t-xs); color: var(--ink-2); text-align: left; cursor: pointer;
+  }
+  .watch-row.on .watch-pick, .watch-pick:hover { color: var(--ink); }
+  .watch-sym { display: inline-flex; align-items: center; gap: var(--s2); min-width: 0; overflow: hidden; white-space: nowrap; font-weight: 700; }
+  .watch-last, .watch-chg { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .watch-x { position: absolute; right: 2px; visibility: hidden; color: var(--ink-3); }
+  .watch-row:hover .watch-x, .watch-x:focus-visible { visibility: visible; }
+  .watch-empty { padding: var(--s3) var(--s1); font-size: var(--t-xs); }
+
   /* Кому движение мешает — тому ровная краска чуть плотнее обычной, чтобы
      заглушка оставалась заметной без волны. */
   @media (prefers-reduced-motion: reduce) {

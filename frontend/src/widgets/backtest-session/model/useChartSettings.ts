@@ -52,3 +52,12 @@ export function useExpSettings() {
  * в окне настроек, вкладка «Терминал»; выбор на устройстве.
  */
 export const useTagPromptOn = () => usePersistentValue('virex.terminal.exp.tagPrompt', decodeOff, false, encodeOff);
+
+/** Что открыто в правой колонке терминала: панель ордера, список монет или ничего (свёрнута). */
+export type RailPanel = 'order' | 'watch' | 'none';
+
+const decodeRail = (raw: string | null): RailPanel => (raw === 'watch' || raw === 'none' ? raw : 'order');
+const encodeRail = (v: RailPanel) => (v === 'order' ? null : v);
+
+/** Выбор рейки справа от графика; на устройстве и общий для всех терминалов, как настройки графика. */
+export const useRailPanel = () => usePersistentValue('virex.terminal.rail', decodeRail, 'order', encodeRail);

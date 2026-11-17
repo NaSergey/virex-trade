@@ -1584,7 +1584,31 @@
       "long": "Long takes go above the entry and the current price",
       "short": "Short takes go below the entry and the current price"
     },
-    "closeGridConfirm": "Place grid"
+    "closeGridConfirm": "Place grid",
+    "watch": {
+      "title": "Watchlist",
+      "add": "Add symbol",
+      "remove": "Remove from list",
+      "symbol": "Symbol",
+      "last": "Last",
+      "change": "24h",
+      "empty": "The list is empty — add a coin with “+”."
+    },
+    "rail": {
+      "label": "Panels",
+      "order": "Trade",
+      "watch": "Watchlist"
+    },
+    "legend": {
+      "o": "O",
+      "h": "H",
+      "l": "L",
+      "c": "C",
+      "history": "History",
+      "synthetic": "Simulator"
+    },
+    "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit fullscreen"
   },
   "onboarding": {
     "askTitle": "Take the tour?",
