@@ -22,7 +22,30 @@ export type DrawingKind =
   | 'short'
   | 'range'
   | 'text'
-  | 'brush';
+  | 'brush'
+  | 'regression'
+  | 'pitchfork'
+  | 'fibExt'
+  | 'fibChannel'
+  | 'fibFan'
+  | 'fibTime'
+  | 'gannFan'
+  | 'ellipse'
+  | 'triangle'
+  | 'polyline'
+  | 'path'
+  | 'curve'
+  | 'arc'
+  | 'callout'
+  | 'priceLabel'
+  | 'flag'
+  | 'xabcd'
+  | 'headShoulders'
+  | 'elliottImpulse'
+  | 'elliottCorrection'
+  | 'cycleLines'
+  | 'volumeProfile'
+  | 'vwap';
 
 /** Инструмент панели. Линейка — не фигура: она временная и в хранилище не попадает. */
 export type ToolId = DrawingKind | 'ruler';
@@ -40,7 +63,8 @@ export type DrawingWidth = 1 | 2 | 3;
  * - `trend`, `ray`, `extended`, `arrow`, `rect`, `fib`, `range` — две;
  * - `channel` — три: две точки основной линии и точка параллельной над первой `(a.t, a.p + сдвиг)`;
  * - `long` / `short` — три: вход `(t0, entry)`, стоп `(tEnd, stop)`, тейк `(tEnd, take)`;
- * - `brush` — сколько угодно, уже упрощённые.
+ * - `brush` — сколько угодно, уже упрощённые;
+ * - новые виды (спека 2026-11-17) — столько, сколько кликов у них в `placement`; `polyline` и `path` — 2–200.
  */
 export interface Drawing {
   id: string;
@@ -73,6 +97,29 @@ export const DRAWING_KINDS: readonly DrawingKind[] = [
   'range',
   'text',
   'brush',
+  'regression',
+  'pitchfork',
+  'fibExt',
+  'fibChannel',
+  'fibFan',
+  'fibTime',
+  'gannFan',
+  'ellipse',
+  'triangle',
+  'polyline',
+  'path',
+  'curve',
+  'arc',
+  'callout',
+  'priceLabel',
+  'flag',
+  'xabcd',
+  'headShoulders',
+  'elliottImpulse',
+  'elliottCorrection',
+  'cycleLines',
+  'volumeProfile',
+  'vwap',
 ];
 
 /** Длина надписи: заметка на графике, а не текст статьи. */

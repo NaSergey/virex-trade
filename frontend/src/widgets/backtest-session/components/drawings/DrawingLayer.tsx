@@ -3,9 +3,11 @@
 import type { PointerEvent, ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { formatPriceGrouped } from '@/shared/lib/utils/format';
-import { anchorsOf, extend, fibLevels, positionOutcome, positionStats, rulerStats } from '../../lib/drawings/geometry';
+import { anchorsOf, extend, fibLevels, placement, positionOutcome, positionStats, rulerStats } from '../../lib/drawings/geometry';
 import { COLOR_VAR, type Drawing } from '../../lib/drawings/types';
 import type { Ruler } from './useDrawingGestures';
+import { polylineShape, type ShapeCtx } from './shapes/ctx';
+import { renderExtra } from './shapes';
 
 /** Прозрачная толщина вокруг линии, за которую её хватают, — в экранных px. */
 const HIT_PX = 10;
@@ -79,11 +81,35 @@ export function DrawingLayer({
     return `${bx - Math.sin(ang) * half},${by + Math.cos(ang) * half} ${x2},${y2} ${bx + Math.sin(ang) * half},${by - Math.cos(ang) * half}`;
   };
 
+  /** Набор для веток новых видов (`shapes/`): та же краска и тот же хит, что здесь. */
+  const ctxOf = (d: Drawing): ShapeCtx => {
+    const color = COLOR_VAR[d.color];
+    const sw = px(d.width);
+    return {
+      geo,
+      color,
+      sw,
+      line: { stroke: color, strokeWidth: sw, strokeLinecap: 'round', pointerEvents: 'none' },
+      font,
+      reach,
+      hitLine: (x1, y1, x2, y2, key) => hitLine(d, x1, y1, x2, y2, key),
+      hitPath: (p, key) => (
+        <path key={key} d={p} fill="none" stroke="transparent" strokeWidth={px(HIT_PX)} pointerEvents="stroke" {...hitProps(d)} />
+      ),
+      hitProps: () => hitProps(d),
+      arrowHead,
+      t: (key) => t(key as Parameters<typeof t>[0]),
+    };
+  };
+
   const shape = (d: Drawing): ReactNode => {
     const color = COLOR_VAR[d.color];
     const sw = px(d.width);
     const line = { stroke: color, strokeWidth: sw, strokeLinecap: 'round' as const, pointerEvents: 'none' as const };
     const [a, b] = d.points;
+    // Фигура из нескольких кликов, пока её ставят, — ломаная по уже поставленным точкам.
+    const need = placement(d.kind);
+    if (typeof need === 'number' && need >= 3 && d.points.length < need) return polylineShape(d, ctxOf(d));
     switch (d.kind) {
       case 'hline': {
         const y = yOf(a.p);
@@ -347,6 +373,8 @@ export function DrawingLayer({
           </>
         );
       }
+      default:
+        return renderExtra(d, ctxOf(d));
     }
   };
 

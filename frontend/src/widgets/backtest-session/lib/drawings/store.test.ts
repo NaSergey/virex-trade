@@ -73,3 +73,23 @@ describe('store', () => {
     );
   });
 });
+
+describe('новые виды (спека 2026-11-17)', () => {
+  const pts = (n: number) => Array.from({ length: n }, (_, i) => ({ t: i + 1, p: 100 + i }));
+  const shape = (kind: Drawing['kind'], n: number): Drawing => ({ id: `${kind}-${n}`, kind, color: 'blue', width: 2, points: pts(n) });
+  const roundTrip = (d: Drawing[]) => parseDrawings(serializeDrawings(d)).map((x) => x.id);
+
+  it('читаются с числом точек своей постановки', () => {
+    const ok = [shape('xabcd', 5), shape('headShoulders', 7), shape('pitchfork', 3), shape('fibFan', 2), shape('vwap', 1), shape('polyline', 4)];
+    expect(roundTrip(ok)).toEqual(ok.map((d) => d.id));
+  });
+
+  it('неверное число точек отбрасывается', () => {
+    const bad = [shape('xabcd', 4), shape('fibFan', 3), shape('polyline', 1), shape('vwap', 2), shape('path', 201)];
+    expect(roundTrip(bad)).toEqual([]);
+  });
+
+  it('старые виды проверяются, как раньше', () => {
+    expect(roundTrip([shape('trend', 2), shape('brush', 9), shape('hline', 1)])).toEqual(['trend-2', 'brush-9', 'hline-1']);
+  });
+});

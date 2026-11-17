@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent, type RefObject } from 'react';
-import { magnetPrice, makeChannel, makePosition, moveAnchor, placement, simplifyIdx, translate } from '../../lib/drawings/geometry';
+import { OPEN_MAX_POINTS, magnetPrice, makeChannel, makePosition, moveAnchor, placement, simplifyIdx, translate } from '../../lib/drawings/geometry';
 import type { DPoint, Drawing, DrawingColor, DrawingKind, DrawingWidth, ToolId } from '../../lib/drawings/types';
 
 /** Всё, что график отдаёт слою рисунков. Объект обязан быть стабильным между рендерами — график в memo. */
@@ -66,6 +66,12 @@ const DBLCLICK_GUARD_MS = 450;
 type Gesture =
   | { type: 'create'; kind: DrawingKind | 'ruler'; pointerId: number; downX: number; downY: number; a: DPoint; b: DPoint; phase: 'drag' | 'await' }
   | { type: 'brush'; pointerId: number; pts: DPoint[]; xs: number[]; ys: number[] }
+  /**
+   * Фигура из трёх и больше точек (вилы, XABCD…) или ломаная: только кликами.
+   * `need` — сколько точек поставит фигуру; `open` — пока не закончат (двойной
+   * клик, Enter, клик по последней точке). `lastX/lastY` — где был прошлый клик.
+   */
+  | { type: 'multi'; kind: DrawingKind; pts: DPoint[]; need: number | 'open'; lastX: number; lastY: number }
   | { type: 'move'; pointerId: number; orig: Drawing; start: DPoint; next: Drawing | null }
   | { type: 'anchor'; pointerId: number; orig: Drawing; i: number; next: Drawing | null };
 
@@ -135,7 +141,7 @@ export function useDrawingGestures(opts: ChartDrawingProps | undefined, geoRef: 
   const tool = opts?.tool ?? null;
   useEffect(() => {
     const g = gesture.current;
-    if (g && (g.type === 'create' || g.type === 'brush')) cancel();
+    if (g && (g.type === 'create' || g.type === 'brush' || g.type === 'multi')) cancel();
   }, [tool, cancel]);
 
   useEffect(() => {
@@ -147,6 +153,35 @@ export function useDrawingGestures(opts: ChartDrawingProps | undefined, geoRef: 
   }, [cancel]);
 
   useEffect(() => () => cancelAnimationFrame(raf.current), []);
+
+  /** Фигура из нескольких кликов поставлена (или ломаная закончена). Меньше двух точек — ничего. */
+  const finishMulti = (g: Extract<Gesture, { type: 'multi' }>, pts: DPoint[]) => {
+    const o = optsRef.current;
+    gesture.current = null;
+    setPreview(null);
+    lastAction.current = performance.now();
+    if (pts.length < 2) return;
+    const d = draft(g.kind, pts);
+    o?.onCommit(d);
+    o?.onSelect(d.id);
+    o?.onToolDone();
+  };
+  const finishOpen = () => {
+    const g = gesture.current;
+    if (g?.type === 'multi' && g.need === 'open') finishMulti(g, g.pts);
+  };
+  const enterRef = useRef(finishOpen);
+  useLayoutEffect(() => {
+    enterRef.current = finishOpen;
+  });
+  // Enter заканчивает ломаную и путь — как двойной клик.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') enterRef.current();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const finishCreate = (g: Extract<Gesture, { type: 'create' }>, b: DPoint) => {
     const o = optsRef.current;
@@ -180,6 +215,9 @@ export function useDrawingGestures(opts: ChartDrawingProps | undefined, geoRef: 
       g.xs.push(geo.svgX(at.x));
       g.ys.push(geo.svgY(at.y));
       setPreview(draft('brush', [...g.pts], 'preview'));
+    } else if (g.type === 'multi') {
+      const cur = pointAt(at.x, at.y, true, true, at.mods.invertMagnet);
+      setPreview(draft(g.kind, [...g.pts, cur], 'preview'));
     } else if (g.type === 'move') {
       const pt = pointAt(at.x, at.y, true, false);
       // С Shift фигура едет только по времени — уровень остаётся на своей цене.
@@ -219,6 +257,25 @@ export function useDrawingGestures(opts: ChartDrawingProps | undefined, geoRef: 
       finishCreate(g, secondAt(g, e.clientX, e.clientY, modsOf(e)));
       return true;
     }
+    if (g?.type === 'multi') {
+      capture(e);
+      // Клик по последней точке (и второй клик двойного) заканчивает ломаную.
+      const again = Math.hypot(e.clientX - g.lastX, e.clientY - g.lastY) < CLICK_PX;
+      if (again) {
+        if (g.need === 'open') finishMulti(g, g.pts);
+        return true;
+      }
+      const pts = [...g.pts, pointAt(e.clientX, e.clientY, true, true, e.ctrlKey || e.metaKey)];
+      if (pts.length >= (g.need === 'open' ? OPEN_MAX_POINTS : g.need)) {
+        finishMulti(g, pts);
+        return true;
+      }
+      g.pts = pts;
+      g.lastX = e.clientX;
+      g.lastY = e.clientY;
+      setPreview(draft(g.kind, [...pts, pts[pts.length - 1]], 'preview'));
+      return true;
+    }
     // Shift+клик без инструмента — линейка, как в TradingView: мерить чаще, чем рисовать.
     const tool = o.tool ?? (e.shiftKey && e.button === 0 ? 'ruler' : null);
     if (!tool) {
@@ -244,6 +301,11 @@ export function useDrawingGestures(opts: ChartDrawingProps | undefined, geoRef: 
       setPreview(draft('brush', [p], 'preview'));
       return true;
     }
+    if (tool !== 'ruler' && (how === 'open' || (typeof how === 'number' && how >= 3))) {
+      gesture.current = { type: 'multi', kind: tool, pts: [pt], need: how, lastX: e.clientX, lastY: e.clientY };
+      setPreview(draft(tool, [pt, pt], 'preview'));
+      return true;
+    }
     gesture.current = { type: 'create', kind: tool, pointerId: e.pointerId, downX: e.clientX, downY: e.clientY, a: pt, b: pt, phase: 'drag' };
     return true;
   };
@@ -251,8 +313,9 @@ export function useDrawingGestures(opts: ChartDrawingProps | undefined, geoRef: 
   const move = (e: PointerEvent<SVGSVGElement>): boolean => {
     const g = gesture.current;
     if (!g) return false;
-    // Ожидание второй точки идёт за любым указателем, в том числе без нажатия (наведение мыши).
-    if (!(g.type === 'create' && g.phase === 'await') && e.pointerId !== g.pointerId) return false;
+    // Ожидание следующей точки идёт за любым указателем, в том числе без нажатия (наведение мыши).
+    const follows = (g.type === 'create' && g.phase === 'await') || g.type === 'multi';
+    if (!follows && 'pointerId' in g && e.pointerId !== g.pointerId) return false;
     pending.current = { x: e.clientX, y: e.clientY, mods: modsOf(e) };
     if (!raf.current) {
       raf.current = requestAnimationFrame(() => {
@@ -266,7 +329,7 @@ export function useDrawingGestures(opts: ChartDrawingProps | undefined, geoRef: 
   const up = (e: PointerEvent<SVGSVGElement>): boolean => {
     const g = gesture.current;
     if (!g) return false;
-    if (g.type === 'create' && g.phase === 'await') return true;
+    if ((g.type === 'create' && g.phase === 'await') || g.type === 'multi') return true;
     if (e.pointerId !== g.pointerId) return false;
     flush();
     const o = optsRef.current;
