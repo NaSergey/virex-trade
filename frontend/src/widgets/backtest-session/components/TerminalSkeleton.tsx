@@ -2,7 +2,8 @@
 
 import type { ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { ChevronDown, Settings as SettingsIcon, Volume2 } from 'lucide-react';
+import { ArrowDownUp, ChevronDown, Maximize, Settings as SettingsIcon, Volume2 } from 'lucide-react';
+import { cn } from '@/shared/lib/utils/css';
 import { Button } from '@/shared/ui/Button';
 import { Field } from '@/shared/ui/Field';
 import { KeyValue } from '@/shared/ui/Lookup';
@@ -11,6 +12,7 @@ import { Skeleton } from '@/shared/ui/Skeleton';
 import { DEFAULT_TIMEFRAME, TIMEFRAMES } from '../lib/candles';
 import { SPEEDS } from '../model/useReplay';
 import { CoinPickerFace } from './CoinPicker';
+import { useRailPanel } from '../model/useChartSettings';
 import { DrawingToolbar } from './drawings/DrawingToolbar';
 import { SliderSlot } from './OrderPanel';
 
@@ -70,6 +72,8 @@ export interface TerminalSkeletonProps {
   leave?: boolean;
   /** Вкладки таблиц под графиком; у терминала на главной их нет. */
   tables?: boolean;
+  /** Рейка справа «Терминал / Монеты»; у терминала на главной её нет. */
+  rail?: boolean;
 }
 
 /**
@@ -84,18 +88,22 @@ export interface TerminalSkeletonProps {
  *
  * Корень — `inert`: кнопки видны, но не нажимаются и не берут фокус.
  */
-export function TerminalSkeleton({ live = false, badge, leave = true, tables = true }: TerminalSkeletonProps) {
+export function TerminalSkeleton({ live = false, badge, leave = true, tables = true, rail = true }: TerminalSkeletonProps) {
   const t = useTranslations('backtest');
   const tAudio = useTranslations('audio');
+  // Свёрнута ли колонка — тот же выбор на устройстве, что у терминала: иначе
+  // приход данных раскрывал бы или сворачивал её на глазах.
+  const [railPanel] = useRailPanel();
 
   return (
     <div className="bt-live px-4" aria-busy="true" inert>
-      <div className="asym terminal">
+      <div className={cn('asym terminal', rail && 'has-rail')} data-rail={railPanel}>
         <div className="terminal-main">
           <div className="terminal-chart">
-            <div className="h2row">
-              <div className="flex items-center gap-3">
+            <div className="chart-top">
+              <div className="chart-top-l">
                 {live && <CoinSkeleton />}
+                {live && <span className="chart-top-sep" aria-hidden />}
                 <Seg
                   options={TIMEFRAMES.map((tf) => ({ value: tf, label: t(`tf.${tf}`) }))}
                   value={DEFAULT_TIMEFRAME}
@@ -103,7 +111,7 @@ export function TerminalSkeleton({ live = false, badge, leave = true, tables = t
                   ariaLabel={t('timeframe')}
                 />
               </div>
-              <div className="flex items-center gap-1">
+              <div className="chart-top-r">
                 <Button variant="bare" tight aria-label={tAudio('sound')}>
                   <Volume2 size={16} />
                 </Button>
@@ -112,6 +120,9 @@ export function TerminalSkeleton({ live = false, badge, leave = true, tables = t
                     <SettingsIcon size={16} />
                   </Button>
                 </div>
+                <Button variant="bare" tight aria-label={t('fullscreen')}>
+                  <Maximize size={16} />
+                </Button>
               </div>
             </div>
             <div className="chart-tools">
@@ -244,6 +255,13 @@ export function TerminalSkeleton({ live = false, badge, leave = true, tables = t
           </div>
           </div>
         </div>
+        {rail && (
+          <nav className="term-rail" aria-label={t('rail.label')}>
+            <Button variant="bare" className={cn('rail-btn', railPanel === 'order' && 'on')} aria-label={t('rail.order')}>
+              <ArrowDownUp size={20} />
+            </Button>
+          </nav>
+        )}
       </div>
     </div>
   );

@@ -1010,10 +1010,47 @@
   /* Ряд таймфреймов — семь кнопок в строку — на телефоне не влезает в 358 px:
      прокручивается вбок внутри себя, а не раздувает шапку графика. */
   @media (max-width: 640px) {
-    .terminal-chart .h2row > div { min-width: 0; max-width: 100%; }
-    .terminal-chart .h2row .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
-    .terminal-chart .h2row .seg::-webkit-scrollbar { display: none; }
+    .chart-top-l { max-width: 100%; }
+    .chart-top .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+    .chart-top .seg::-webkit-scrollbar { display: none; }
   }
+
+  /* Верхняя панель графика, как у TradingView: монета и ТФ слева, кнопки
+     графика справа, группы делит тонкая черта. Линейка снизу — та же, что у
+     .h2row, которую панель заменила. */
+  .chart-top {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--s3); flex-wrap: wrap;
+    border-bottom: 1px solid var(--rule); padding-bottom: var(--s2); margin-bottom: var(--s3);
+  }
+  .chart-top-l, .chart-top-r { display: flex; align-items: center; min-width: 0; }
+  .chart-top-l { gap: var(--s2); }
+  .chart-top-r { gap: var(--s1); }
+  .chart-top-sep { align-self: stretch; width: 1px; background: var(--hair); }
+
+  /* Рейка у правого края терминала (`TerminalRail`): иконка — панель справа,
+     повторное нажатие сворачивает колонку, и график забирает её ширину. На
+     узком экране колонка и так стоит под графиком — там вместо рейки
+     переключатель над панелью (.rail-seg). */
+  .term-rail { display: none; }
+  .rail-seg { margin-bottom: var(--s3); }
+  @media (min-width: 1101px) {
+    .asym.terminal.has-rail { grid-template-columns: minmax(0, 1fr) 360px 44px; }
+    .asym.terminal.has-rail[data-rail="none"] { grid-template-columns: minmax(0, 1fr) 44px; }
+    .asym.terminal.has-rail[data-rail="none"] > .marg { display: none; }
+    .asym.terminal.has-rail .terminal-controls { grid-column: 1 / -2; }
+    .term-rail {
+      grid-column: -2 / -1; grid-row: 1 / -1;
+      display: flex; flex-direction: column; align-items: center; gap: var(--s1);
+      border-left: 1px solid var(--hair);
+    }
+    .rail-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; color: var(--ink-3); }
+    .rail-btn:hover { color: var(--ink); }
+    .rail-btn.on { color: var(--ink); background: rgb(var(--ink-rgb) / 0.1); }
+    .rail-seg { display: none; }
+  }
+  /* Во весь экран: шапки приложения нет, высоту терминалу задаёт окно. Таблицы
+     под графиком остаются — корень прокручивается сам. */
+  .bt-live:fullscreen { --bt-screen: calc(100dvh - var(--s4) * 2); overflow-y: auto; background: var(--ground); }
 
   /* ═══════════════ БЕКТЕСТ ═══════════════ */
   /* touch-action: none — иначе на телефоне перетаскивание стопа прокручивало бы страницу. */

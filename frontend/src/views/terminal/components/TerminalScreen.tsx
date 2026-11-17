@@ -131,6 +131,8 @@ function useAccountBadge(): string {
 function ExchangeTerminal({ state, stale }: { state: TerminalState; stale: boolean }) {
   const tt = useTranslations('terminal');
   const badge = useAccountBadge();
+  // Источник цен в легенде графика: у демо-ключа свой адрес биржи (Demo Trading).
+  const sourceLabel = useTerminalAccess().data?.exchange === 'bybit-demo' ? 'Bybit Demo' : 'Bybit';
   const actions = useExchangeActions();
   const { data: symbolsData } = useTerminalSymbols();
 
@@ -177,6 +179,7 @@ function ExchangeTerminal({ state, stale }: { state: TerminalState; stale: boole
         priceOf={priceOf}
         // Какой это счёт (настоящий или демо Bybit) — сказано словами: экран тот же, что у бектеста, и спутать их можно ровно один раз.
         badge={badge}
+        sourceLabel={sourceLabel}
         soundsOf={sounds}
         history={ExchangeHistory}
       />

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { Settings as SettingsIcon, Volume2, VolumeX } from 'lucide-react';
+import { Maximize, Minimize, Settings as SettingsIcon, Volume2, VolumeX } from 'lucide-react';
 import { TagsDialog } from '@/entities/tag';
 import { useAuth } from '@/features/auth';
 import { useLocaleControl } from '@/shared/i18n';
@@ -12,6 +12,7 @@ import { ErrorNote } from '@/shared/ui/ErrorNote';
 import { SectionHead } from '@/shared/ui/SectionHead';
 import { Seg, type SegOption } from '@/shared/ui/Seg';
 import { Wrap } from '@/shared/ui/Wrap';
+import { cn } from '@/shared/lib/utils/css';
 import { formatPriceGrouped } from '@/shared/lib/utils/format';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -66,7 +67,10 @@ import {
 } from '../lib/money';
 import type { TerminalSound } from '../lib/sounds';
 import { useSessionActions, type TerminalActions } from '../model/actions';
-import { useExpSettings, useRangesOn, useRsiOn, useTagPromptOn } from '../model/useChartSettings';
+import { useExpSettings, useRailPanel, useRangesOn, useRsiOn, useTagPromptOn, type RailPanel } from '../model/useChartSettings';
+import { useFullscreen } from '../model/useFullscreen';
+import { TerminalRail } from './TerminalRail';
+import { Watchlist } from './Watchlist';
 import { useRangeCandles, type Load4h } from '../model/useRangeCandles';
 import { useMaxRisk } from '../model/useRiskSettings';
 import { useLiveSymbol } from '../model/useLiveSymbol';
@@ -246,6 +250,16 @@ export interface TerminalProps {
    * настройки). Терминал на демо-счёте ставит сюда «Подключить биржу».
    */
   chartActions?: ReactNode;
+  /**
+   * Рейка справа «Терминал / Монеты» со сворачиванием колонки; по умолчанию
+   * есть. Терминал на главной её убирает: узкая секция, и списка монет гостю не нужно.
+   */
+  rail?: boolean;
+  /**
+   * Источник цен в легенде графика — «Bybit», «Bybit Demo». Не задан — «Binance»
+   * в эфире (рынок продукта и главной), у истории и тренажёра — без источника.
+   */
+  sourceLabel?: string;
 }
 
 /**
@@ -269,6 +283,8 @@ export function Terminal({
   tables = true,
   paused = false,
   chartActions,
+  rail = true,
+  sourceLabel,
 }: TerminalProps) {
   const t = useTranslations('backtest');
   const { locale } = useLocaleControl();
@@ -507,6 +523,19 @@ export function Terminal({
   // Рынок — свой у того, кто его передал (биржа); иначе монеты и цены эфира с сервера.
   const { data: symbolsData } = useLiveSymbols(isLive && !symbols);
   const coins = symbols ?? symbolsData?.symbols;
+
+  /**
+   * Правая колонка: панель ордера, список монет или ничего — колонка свёрнута, и
+   * график шире (рейка, как у TradingView). Список — только где монет несколько
+   * и у рынка есть тикеры; где его нет, запомненное «Монеты» значит панель ордера.
+   */
+  const [railPanel, setRailPanel] = useRailPanel();
+  const watchSource = (source ?? SESSION_SOURCE).tickers;
+  const hasWatch = rail && isLive && watchSource != null && (coins?.length ?? 0) > 1;
+  const panel: RailPanel = railPanel === 'watch' && !hasWatch ? 'order' : rail ? railPanel : 'order';
+  // Во весь экран — корень терминала вместе с таблицами под графиком.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const fullscreen = useFullscreen(rootRef);
   // Знаки цены монеты — в эфире и у истории с видимой ценой; скрытую цену масштаб
   // приводит к 100–1000, и ей хватает общего правила.
   const coinDecimals = isLive || (session.dataSource === 'real' && (!session.hidePrice || reveal));
@@ -1408,6 +1437,15 @@ export function Terminal({
   };
 
   const tfOptions: SegOption<number>[] = TIMEFRAMES.map((tf) => ({ value: tf, label: t(`tf.${tf}`) }));
+  // Первая строка легенды графика. Строкой, а не объектом: ReplayChart — memo.
+  // Скрытая монета истории не называется и здесь — как в таблицах.
+  const legendTitle = [
+    symbolShown ? symbol : session.dataSource === 'synthetic' ? t('legend.synthetic') : t('legend.history'),
+    t(`tf.${replay.shownTf}`),
+    sourceLabel ?? (isLive ? 'Binance' : null),
+  ]
+    .filter(Boolean)
+    .join(' · ');
   // Скорость — свечей выбранного ТФ в секунду; чего ТФ не тянет — выключено, а не тихо медленнее.
   const speedOptions: SegOption<number>[] = [
     { value: 0, label: t('pause'), title: t('pauseHint') },
@@ -1442,15 +1480,20 @@ export function Terminal({
     // Терминал во всю ширину окна — единственное место продукта без .wrap
     // (см. комментарий у SessionScreen). Итог той же сессии после завершения
     // возвращается в обычную читательскую колонку сам, через SessionScreen.
-    <div className="bt-live px-4">
-      <div className="asym terminal">
+    <div className="bt-live px-4" ref={rootRef}>
+      <div
+        className={cn('asym terminal', rail && 'has-rail')}
+        // Свёрнутость колонки решает CSS; настройки графика и сетка фиксации
+        // разворачивают её на время сами собой.
+        data-rail={chartSettingsOpen || gridTrade ? 'open' : panel}
+      >
         <div className="terminal-main">
           <div className="terminal-chart" ref={chartRef}>
-            {/* Без заголовка «Таймфрейм» — сами кнопки ТФ слева и есть подпись себе.
-                Разметка та же, что у SectionHead (.h2row: линейка снизу, выключка вправо),
-                но без <h2>: он тут просто нечем заполнить. */}
-            <div className="h2row">
-              <div className="flex items-center gap-3">
+            {/* Верхняя панель графика, как у TradingView: монета, таймфреймы, справа —
+                действие страницы, звук, настройки и полный экран. Без заголовка
+                «Таймфрейм» — сами кнопки ТФ и есть подпись себе. */}
+            <div className="chart-top">
+              <div className="chart-top-l">
                 {/* Монета — только в эфире: у истории и тренажёра она одна. Пока
                     список едет — заглушка того же размера, а не пустое место. */}
                 {isLive &&
@@ -1461,9 +1504,10 @@ export function Terminal({
                   ))}
                 {/* Раскрытая история называет свою монету — иначе её не видно нигде. */}
                 {reveal && <span className="muted">{coinBase(symbol)}</span>}
+                {(isLive || reveal) && <span className="chart-top-sep" aria-hidden />}
                 <Seg options={tfOptions} value={replay.tf} onChange={replay.setTf} ariaLabel={t('timeframe')} />
               </div>
-              <div className="flex items-center gap-1">
+              <div className="chart-top-r">
                 {/* Отступ — свой: кнопки графика стоят вплотную друг к другу, а
                     действие страницы к ним не относится. */}
                 {chartActions && <div className="mr-3 flex items-center">{chartActions}</div>}
@@ -1492,6 +1536,18 @@ export function Terminal({
                 >
                   <SettingsIcon size={16} />
                 </Button>
+                {fullscreen.supported && (
+                  <Button
+                    variant="bare"
+                    tight
+                    aria-label={fullscreen.on ? t('exitFullscreen') : t('fullscreen')}
+                    title={fullscreen.on ? t('exitFullscreen') : t('fullscreen')}
+                    aria-pressed={fullscreen.on}
+                    onClick={fullscreen.toggle}
+                  >
+                    {fullscreen.on ? <Minimize size={16} /> : <Maximize size={16} />}
+                  </Button>
+                )}
               </div>
             </div>
             <div className="chart-tools">
@@ -1544,6 +1600,7 @@ export function Terminal({
                     priceDecimals={chartDecimals}
                     rsi={rsiOn}
                     ranges={chartRanges}
+                    legend={legendTitle}
                   />
                 ) : (
                   <ChartSkeleton />
@@ -1600,8 +1657,21 @@ export function Terminal({
           {/* Сетка фиксации стоит на месте панели ордера, а не окном поверх: её
               уровни — на графике, и смотреть на них, настраивая, нужно рядом.
               Смена панели — сменой ключа: новая въезжает анимацией (.panel-swap). */}
+          {/* Узкий экран: рейки нет, панель стоит под графиком — переключатель над ней. */}
+          {hasWatch && !chartSettingsOpen && !gridTrade && (
+            <Seg
+              className="rail-seg"
+              options={[
+                { value: 'order' as const, label: t('rail.order') },
+                { value: 'watch' as const, label: t('rail.watch') },
+              ]}
+              value={panel === 'watch' ? 'watch' : 'order'}
+              onChange={setRailPanel}
+              ariaLabel={t('rail.label')}
+            />
+          )}
           <div
-            key={chartSettingsOpen ? 'settings' : gridTrade ? 'grid' : 'order'}
+            key={chartSettingsOpen ? 'settings' : gridTrade ? 'grid' : panel === 'watch' ? 'watch' : 'order'}
             className="panel-swap panel-swap-fill"
             data-swap={panelSwapped ? (gridTrade || chartSettingsOpen ? 'in' : 'back') : undefined}
           >
@@ -1635,6 +1705,8 @@ export function Terminal({
                 isPending={closeGridM.isPending}
                 error={closeGridM.error}
               />
+            ) : panel === 'watch' && hasWatch && coins && watchSource ? (
+              <Watchlist coins={coins} value={symbol} source={watchSource} decimalsOf={decimalsOf} onPick={switchSymbol} />
             ) : (
               <>
                 <OrderPanel
@@ -1693,6 +1765,7 @@ export function Terminal({
             )}
           </div>
         </div>
+        {rail && <TerminalRail value={panel} watch={hasWatch} onChange={setRailPanel} />}
       </div>
 
       {closeM.isError && closeM.variables && (
