@@ -90,6 +90,16 @@ const VPAN_THRESHOLD_PX = 4;
 const PRICE_DRAG_PX = 260;
 /** Панель RSI — доля высоты холста, как у TradingView: около четверти. */
 const RSI_FRAC = 0.24;
+/** Высота самого большого столбика объёма — доля поля цены, как у Volume в TradingView. */
+const VOLUME_FRAC = 0.18;
+
+/** Объём коротко: 1.2K, 3.4M — в легенде место на одно число. */
+function compactVolume(v: number): string {
+  if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
+  if (v >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
+  if (v >= 1e3) return `${(v / 1e3).toFixed(2)}K`;
+  return v >= 10 ? v.toFixed(0) : v.toFixed(2);
+}
 /** Не ниже и не выше этого, в экранных пикселях: на низком экране линия не сплющится в полоску. */
 const RSI_MIN_PX = 64;
 const RSI_MAX_PX = 200;
@@ -280,6 +290,7 @@ export const ReplayChart = memo(function ReplayChart({
   ranges,
   defaultCount = DEFAULT_COUNT,
   legend,
+  volume = false,
 }: {
   /** ТФ свечей в `candles`, в минутах. */
   timeframe: number;
@@ -332,6 +343,8 @@ export const ReplayChart = memo(function ReplayChart({
    * `paintLegend` прямо в DOM. Не задано — легенды нет.
    */
   legend?: string;
+  /** Гистограмма объёма у нижнего края поля цены и объём в легенде (индикатор «Объём»). */
+  volume?: boolean;
 }) {
   const t = useTranslations('backtest');
   const svgRef = useRef<SVGSVGElement>(null);
@@ -816,6 +829,7 @@ export const ReplayChart = memo(function ReplayChart({
     change: null,
   });
   const legendRsi = useRef<SVGTSpanElement>(null);
+  const legendVol = useRef<SVGTSpanElement>(null);
 
   /**
    * Легенда, как в TradingView: O H L C и изменение свечи под перекрестием, без
@@ -848,6 +862,8 @@ export const ReplayChart = memo(function ReplayChart({
         node.textContent = line[k];
         node.setAttribute('fill', color);
       }
+      const vol = legendVol.current;
+      if (vol) vol.textContent = bar.v != null ? compactVolume(bar.v) : '—';
     }
     const r = legendRsi.current;
     if (r) {
@@ -1306,6 +1322,33 @@ export const ReplayChart = memo(function ReplayChart({
   }, [candles, lastIdx, startIdx, endIdx, frameStart, slot, lo, hi, bodyW, u, plotBottom]);
 
   /**
+   * Гистограмма объёма: столбики от нижнего края поля цены, самый большой в кадре —
+   * `VOLUME_FRAC` высоты поля. Своей шкалы нет — важно соотношение, а не число
+   * (число — в легенде). Свечи без объёма (тренажёр) столбиков не дают.
+   */
+  const volumePaths = useMemo(() => {
+    if (!volume) return null;
+    let max = 0;
+    for (let i = startIdx; i < endIdx; i++) max = Math.max(max, candles[i]?.v ?? 0);
+    if (!(max > 0)) return null;
+    const hMax = (plotBottom - PT) * VOLUME_FRAC;
+    const r = (v: number) => Math.round(v * 100) / 100;
+    let up = '';
+    let down = '';
+    for (let i = startIdx; i < endIdx; i++) {
+      const c = candles[i];
+      const v = c.v ?? 0;
+      if (!(v > 0)) continue;
+      const x = (i - frameStart) * slot + slot / 2;
+      const h = Math.max(u, (v / max) * hMax);
+      const bar = `M${r(x - bodyW / 2)} ${r(plotBottom - h)}h${r(bodyW)}v${r(h)}h${r(-bodyW)}z`;
+      if (c.c >= c.o) up += bar;
+      else down += bar;
+    }
+    return { up, down };
+  }, [volume, candles, startIdx, endIdx, frameStart, slot, bodyW, u, plotBottom]);
+
+  /**
    * RSI — по всем загруженным свечам таймфрейма, как у TradingView по всем
    * барам графика (иначе у левого края кадра был бы разгон), а пути — только
    * по видимым, тем же приёмом, что свечи: несколько узлов на весь кадр.
@@ -1653,6 +1696,12 @@ export const ReplayChart = memo(function ReplayChart({
                   strokeWidth={px(1)}
                   strokeDasharray={`${px(2)} ${px(3)}`}
                 />
+              </g>
+            )}
+            {volumePaths && (
+              <g pointerEvents="none" opacity={0.35}>
+                <path d={volumePaths.up} fill="var(--profit)" />
+                <path d={volumePaths.down} fill="var(--loss)" />
               </g>
             )}
             <path d={candlePaths.upWicks} stroke="var(--profit)" strokeWidth={px(1)} fill="none" />
@@ -2113,6 +2162,12 @@ export const ReplayChart = memo(function ReplayChart({
                 legendVals.current.change = node;
               }}
             />
+            {volume && (
+              <tspan dx={px(8)}>
+                <tspan fill="var(--color-muted)">{t('legend.v')} </tspan>
+                <tspan ref={legendVol} fill="var(--color-fg)" />
+              </tspan>
+            )}
           </text>
         )}
 

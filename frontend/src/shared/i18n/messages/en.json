@@ -1278,6 +1278,7 @@
     "chartSettings": "Chart settings",
     "indicators": "Indicators",
     "indicatorRsi": "RSI with divergences",
+    "indicatorVolume": "Volume",
     "indicatorRanges": "Ranges after an impulse",
     "revealHidden": "Show coin, prices and dates",
     "revealHiddenHint": "Only in this session and until you leave it.",
@@ -1605,7 +1606,8 @@
       "l": "L",
       "c": "C",
       "history": "History",
-      "synthetic": "Simulator"
+      "synthetic": "Simulator",
+      "v": "V"
     },
     "fullscreen": "Fullscreen",
     "exitFullscreen": "Exit fullscreen",

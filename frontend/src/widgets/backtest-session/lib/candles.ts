@@ -15,6 +15,8 @@ export interface Candle {
   h: number;
   l: number;
   c: number;
+  /** Объём в монете. У свечей без объёма (тренажёр) его нет. */
+  v?: number;
 }
 
 /** Свеча, как её отдаёт `/api/market-data/candles`: время открытия ISO-строкой. */
@@ -35,11 +37,11 @@ export const TIMEFRAMES = [1, 5, 15, 30, 60, 240, 1440] as const;
     последние два часа, и переключаться вниз дешевле, чем каждый раз вверх. */
 export const DEFAULT_TIMEFRAME = 60;
 
-export const fromApi = (c: ApiCandle): Candle => ({ t: Date.parse(c.time), o: c.open, h: c.high, l: c.low, c: c.close });
+export const fromApi = (c: ApiCandle): Candle => ({ t: Date.parse(c.time), o: c.open, h: c.high, l: c.low, c: c.close, v: c.volume });
 
 /** Свеча, домноженная на масштаб скрытой цены сессии; scale=1 — тот же объект, без копии. */
 export function scaleCandle(c: Candle, scale: number): Candle {
-  return scale === 1 ? c : { t: c.t, o: c.o * scale, h: c.h * scale, l: c.l * scale, c: c.c * scale };
+  return scale === 1 ? c : { t: c.t, o: c.o * scale, h: c.h * scale, l: c.l * scale, c: c.c * scale, v: c.v };
 }
 
 export const tfMs = (tf: number) => tf * MINUTE;
@@ -83,11 +85,12 @@ export function aggregate(minutes: Candle[], tf: number, from: number, to: numbe
     const b = bucketStart(m.t, tf);
     if (!cur || cur.t !== b) {
       if (cur) out.push(cur);
-      cur = { t: b, o: m.o, h: m.h, l: m.l, c: m.c };
+      cur = { t: b, o: m.o, h: m.h, l: m.l, c: m.c, v: m.v };
     } else {
       cur.h = Math.max(cur.h, m.h);
       cur.l = Math.min(cur.l, m.l);
       cur.c = m.c;
+      if (m.v != null) cur.v = (cur.v ?? 0) + m.v;
     }
   }
   if (cur) out.push(cur);

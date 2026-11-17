@@ -883,6 +883,7 @@
     "chartSettings": "Настройки графика",
     "indicators": "Индикаторы",
     "indicatorRsi": "RSI с дивергенциями",
+    "indicatorVolume": "Объём",
     "indicatorRanges": "Боковики после импульса",
     "revealHidden": "Показать монету, цены и даты",
     "revealHiddenHint": "Только в этой сессии и до выхода из неё.",
@@ -1210,7 +1211,8 @@
       "l": "Мн",
       "c": "З",
       "history": "История",
-      "synthetic": "Тренажёр"
+      "synthetic": "Тренажёр",
+      "v": "Об"
     },
     "fullscreen": "Во весь экран",
     "exitFullscreen": "Выйти из полного экрана",

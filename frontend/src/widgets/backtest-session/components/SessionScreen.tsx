@@ -64,7 +64,7 @@ import {
 } from '../lib/money';
 import type { TerminalSound } from '../lib/sounds';
 import { useSessionActions, type TerminalActions } from '../model/actions';
-import { useExpSettings, useRailPanel, useRangesOn, useRsiOn, useTagPromptOn, type RailPanel } from '../model/useChartSettings';
+import { useExpSettings, useRailPanel, useRangesOn, useRsiOn, useTagPromptOn, useVolumeOn, type RailPanel } from '../model/useChartSettings';
 import { useFullscreen } from '../model/useFullscreen';
 import { usePanes } from '../model/usePanes';
 import { useMediaQuery } from '@/shared/lib/hooks/useMediaQuery';
@@ -418,6 +418,7 @@ export function Terminal({
   const exp = useExpSettings();
   const takeOddsOn = exp.on.take;
   const [tagPromptOn] = useTagPromptOn();
+  const [volumeOn, setVolumeOn] = useVolumeOn();
   const [chartSettingsOpen, setChartSettingsOpen] = useState(false);
   useSnapshotSound(
     detail,
@@ -1417,6 +1418,7 @@ export function Terminal({
     rsi: rsiOn,
     ranges: chartRanges,
     legend: legendTitle,
+    volume: volumeOn,
   };
   // Скорость — свечей выбранного ТФ в секунду; чего ТФ не тянет — выключено, а не тихо медленнее.
   const speedOptions: SegOption<number>[] = [
@@ -1571,6 +1573,7 @@ export function Terminal({
                         labelFor={labelFor}
                         levelLabel={levelLabel}
                         rsi={rsiOn}
+                        volume={volumeOn}
                         oddsOn={takeOddsOn}
                         userId={user?.id ?? 'anon'}
                         drawingsHidden={drawings.hidden}
@@ -1660,6 +1663,8 @@ export function Terminal({
                 onReveal={revealable ? toggleReveal : undefined}
                 rsiOn={rsiOn}
                 onRsi={setRsiOn}
+                volumeOn={volumeOn}
+                onVolume={setVolumeOn}
                 rangesOn={rangesOn}
                 onRanges={setRangesOn}
                 exp={exp.on}

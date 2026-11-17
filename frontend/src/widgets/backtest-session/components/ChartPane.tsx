@@ -54,6 +54,7 @@ export const ChartPane = memo(function ChartPane({
   labelFor,
   levelLabel,
   rsi,
+  volume,
   oddsOn,
   userId,
   drawingsHidden,
@@ -75,6 +76,7 @@ export const ChartPane = memo(function ChartPane({
   labelFor: (t: number) => string;
   levelLabel: ChartProps['levelLabel'];
   rsi: boolean;
+  volume: boolean;
   oddsOn: boolean;
   userId: string;
   drawingsHidden: boolean;
@@ -157,6 +159,7 @@ export const ChartPane = memo(function ChartPane({
         drawing={drawing}
         priceDecimals={decimalsOf(pane.symbol)}
         rsi={rsi}
+        volume={volume}
         legend={legend}
       />
     );

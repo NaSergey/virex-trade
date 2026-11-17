@@ -61,3 +61,9 @@ const encodeRail = (v: RailPanel) => (v === 'order' ? null : v);
 
 /** Выбор рейки справа от графика; на устройстве и общий для всех терминалов, как настройки графика. */
 export const useRailPanel = () => usePersistentValue('virex.terminal.rail', decodeRail, 'order', encodeRail);
+
+/**
+ * Гистограмма объёма у нижнего края поля цены (спека 2026-11-17). Выключена,
+ * пока её не включили в настройках графика: вид терминала без спроса не меняется.
+ */
+export const useVolumeOn = () => usePersistentValue('virex.terminal.volume', decodeOff, false, encodeOff);
