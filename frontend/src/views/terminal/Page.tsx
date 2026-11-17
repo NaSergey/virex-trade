@@ -34,17 +34,7 @@ export function TerminalPage() {
   // Демо-аккаунт — общий аккаунт без ключа: сразу тот же экран на симуляции.
   if (user?.email === DEMO_EMAIL) return <DemoTerminal />;
   if (access.data?.available) return <TerminalScreen />;
-  // Пока не пришёл пользователь, неизвестно, демо это или биржа: надпись
-  // слева внизу у них разная, и на её месте стоит серая полоса.
-  if (loading || access.isLoading)
-    return (
-      <TerminalSkeleton
-        live
-        multiChart
-        badge={loading ? null : demoChosen ? undefined : tt('realBadge')}
-        leave={demoChosen}
-      />
-    );
+  if (loading || access.isLoading) return <TerminalSkeleton live multiChart leave={demoChosen} />;
   // Выбравшему демо и сбой запроса доступа не мешает: демо-счёт безопасен, а
   // когда ответ придёт с доступом, страница сама перейдёт на биржу.
   if (demoChosen) return <DemoTerminal connect />;

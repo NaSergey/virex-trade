@@ -25,7 +25,6 @@ const HINT_OF: Record<string, string> = {
   'term-plate-pick': 'platePick',
   'term-plate-grid': 'plateGrid',
   'term-plate-x': 'plateX',
-  'term-badge': 'badge',
   'term-deposit': 'deposit',
   'term-leverage': 'leverage',
   'term-risk': 'risk',

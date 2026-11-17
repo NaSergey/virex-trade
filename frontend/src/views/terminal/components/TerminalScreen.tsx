@@ -54,7 +54,6 @@ const sounds = (was: SessionDetail, next: SessionDetail) =>
  * держится на их `isPending`.
  */
 export function TerminalScreen() {
-  const badge = useAccountBadge();
   const qc = useQueryClient();
   // Начало — из кэша: вернувшийся на терминал видит снимок сразу, без заглушки.
   const [data, setData] = useState(() => qc.getQueryData(terminalStateQuery.queryKey));
@@ -74,7 +73,7 @@ export function TerminalScreen() {
       ) : error ? (
         <StateError error={error} />
       ) : (
-        <TerminalSkeleton live badge={badge} leave={false} multiChart />
+        <TerminalSkeleton live leave={false} multiChart />
       )}
     </>
   );
@@ -118,20 +117,10 @@ function StateError({ error }: { error: Error }) {
  * - стоп за тейками и стоп после исполнения сетки входа ведёт worker (не экран);
  * - кнопки «К списку» нет — уходить некуда.
  */
-/**
- * Подпись над графиком — какой это счёт. Демо-ключ Bybit (биржа `bybit-demo`)
- * торгует тем же экраном, и «настоящий счёт» на нём был бы неправдой.
- */
-function useAccountBadge(): string {
-  const tt = useTranslations('terminal');
-  const demo = useTerminalAccess().data?.exchange === 'bybit-demo';
-  return tt(demo ? 'demoBadge' : 'realBadge');
-}
-
 function ExchangeTerminal({ state, stale }: { state: TerminalState; stale: boolean }) {
   const tt = useTranslations('terminal');
-  const badge = useAccountBadge();
-  // Источник цен в легенде графика: у демо-ключа свой адрес биржи (Demo Trading).
+  // Источник цен в легенде графика — он же говорит, какой это счёт: «Bybit» — настоящий,
+  // «Bybit Demo» — демо (подпись «Bybit · настоящий счёт» под графиком снята владельцем 2026-11-17).: у демо-ключа свой адрес биржи (Demo Trading).
   const sourceLabel = useTerminalAccess().data?.exchange === 'bybit-demo' ? 'Bybit Demo' : 'Bybit';
   const actions = useExchangeActions();
   const { data: symbolsData } = useTerminalSymbols();
@@ -177,8 +166,6 @@ function ExchangeTerminal({ state, stale }: { state: TerminalState; stale: boole
         decimalsOf={decimalsOf}
         qtyStepOf={qtyStepOf}
         priceOf={priceOf}
-        // Какой это счёт (настоящий или демо Bybit) — сказано словами: экран тот же, что у бектеста, и спутать их можно ровно один раз.
-        badge={badge}
         sourceLabel={sourceLabel}
         multiChart
         soundsOf={sounds}

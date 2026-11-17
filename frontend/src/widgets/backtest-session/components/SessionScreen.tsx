@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { Settings as SettingsIcon, Volume2, VolumeX } from 'lucide-react';
 import { TagsDialog } from '@/entities/tag';
@@ -64,7 +64,8 @@ import {
 } from '../lib/money';
 import type { TerminalSound } from '../lib/sounds';
 import { useSessionActions, type TerminalActions } from '../model/actions';
-import { useExpSettings, useRailPanel, useRangesOn, useRsiOn, useTagPromptOn, useVolumeOn, type RailPanel } from '../model/useChartSettings';
+import { useExpSettings, usePanelWidth, useRailPanel, useRangesOn, useRsiOn, useTagPromptOn, useVolumeOn, type RailPanel } from '../model/useChartSettings';
+import { PanelSplitter } from './PanelSplitter';
 import { usePanes } from '../model/usePanes';
 import { useMediaQuery } from '@/shared/lib/hooks/useMediaQuery';
 import { ChartPane, type ChartProps } from './ChartPane';
@@ -221,8 +222,6 @@ export interface TerminalProps {
   qtyStepOf?: (symbol: string) => number;
   /** Цена монеты, которой нет на графике; не задано — цены эфира с сервера. */
   priceOf?: (symbol: string) => number | null;
-  /** Подпись у переключателя таблиц вместо «Эфир»; `false` — без подписи (терминал на главной). */
-  badge?: string | false;
   /** Сигналы по разнице снимков; не задано — правила сессии (`soundsOf`). Ссылка — стабильная. */
   soundsOf?: (was: SessionDetail, next: SessionDetail) => readonly TerminalSound[];
   /**
@@ -286,7 +285,6 @@ export function Terminal({
   decimalsOf: decimalsOfProp,
   qtyStepOf: qtyStepOfProp,
   priceOf: priceOfProp,
-  badge,
   soundsOf,
   history: History,
   tags = true,
@@ -360,7 +358,7 @@ export function Terminal({
    */
   const wide = useMediaQuery('(min-width: 1101px)');
   const coinIds = useMemo(() => (coins ?? []).map((c) => c.symbol), [coins]);
-  const panesState = usePanes(coinIds, liveSymbol);
+  const panesState = usePanes(coinIds, liveSymbol, (source ?? SESSION_SOURCE).tickers?.kind ?? 'live');
   const multi = multiChart && isLive && wide;
   const activePane = multi ? panesState.panes[panesState.active] : null;
   const symbol = activePane ? activePane.symbol : isLive ? liveSymbol : localSymbol;
@@ -560,6 +558,9 @@ export function Terminal({
   const watchSource = (source ?? SESSION_SOURCE).tickers;
   const hasWatch = watchlist && isLive && watchSource != null && (coins?.length ?? 0) > 1;
   const panel: RailPanel = railPanel === 'watch' && hasWatch ? 'watch' : 'order';
+  // Ширина правой колонки — разделителем между графиком и колонкой.
+  const [panelWidth, setPanelWidth] = usePanelWidth();
+  const gridRef = useRef<HTMLDivElement>(null);
   // Знаки цены монеты — в эфире и у истории с видимой ценой; скрытую цену масштаб
   // приводит к 100–1000, и ей хватает общего правила.
   const coinDecimals = isLive || (session.dataSource === 'real' && (!session.hidePrice || reveal));
@@ -662,9 +663,11 @@ export function Terminal({
       openTrades, а история правит сделки, которых там уже нет. */
   const [historyTagsFor, setHistoryTagsFor] = useState<string | null>(null);
   const [tab, setTab] = useState<'open' | 'orders' | 'history'>('open');
-  // Строка под графиком: кнопки прокрутки, подпись счёта, «К списку», вкладки.
-  // У терминала на главной нет ничего из этого — строки нет вовсе.
-  const controlsShown = !isLive || badge !== false || tables || Boolean(onLeave);
+  // Строка под графиком — только кнопки прокрутки истории и тренажёра. В эфире её нет:
+  // подпись счёта снята, «К списку» — в верхней панели, вкладки таблиц — под колонкой
+  // справа (владелец 2026-11-17: «там теперь будет место для графика»). Сообщения о
+  // конце истории и об ошибке ленты встают туда же, когда они есть.
+  const controlsRow = !isLive || replay.ended || replay.error != null;
   // Ошибки действий над открытыми позициями — своя строка над таблицей позиций, а не
   // `hint` панели ордера: панель про следующий ордер и чужих отказов не показывает.
   const [positionHint, setPositionHint] = useState<string | null>(null);
@@ -1451,8 +1454,12 @@ export function Terminal({
     // Терминал во всю ширину окна — единственное место продукта без .wrap
     // (см. комментарий у SessionScreen). Итог той же сессии после завершения
     // возвращается в обычную читательскую колонку сам, через SessionScreen.
-    <div className="bt-live px-4">
-      <div className="asym terminal">
+    <div className="bt-live">
+      <div
+        className={cn('asym terminal', !controlsRow && 'chart-full')}
+        ref={gridRef}
+        style={{ '--panel-w': `${panelWidth}px` } as CSSProperties}
+      >
         <div className="terminal-main">
           <div className="terminal-chart" ref={chartRef}>
             {/* Верхняя панель графика, как у TradingView: монета, таймфреймы, справа —
@@ -1483,6 +1490,11 @@ export function Terminal({
                 {/* Отступ — свой: кнопки графика стоят вплотную друг к другу, а
                     действие страницы к ним не относится. */}
                 {chartActions && <div className="mr-3 flex items-center">{chartActions}</div>}
+                {onLeave && (
+                  <Button tight className="mr-2" onClick={() => void leave()}>
+                    {detail.tournament ? t('backToTournament') : t('backToList')}
+                  </Button>
+                )}
                 <Button
                   variant="bare"
                   tight
@@ -1583,42 +1595,29 @@ export function Terminal({
               растянута на обе колонки грида, а не сидит в узкой колонке графика:
               место под тикетом справа иначе пустовало бы, а переключателю
               таблицы было бы тесно. */}
-          <div className="terminal-controls">
-            {controlsShown && (
-              <div className="replay-controls">
-                {/* В эфире время ведут часы, а не участник: шагать и ускорять
-                    нечего, и кнопки, которые ничего не делают, тут не стоят. */}
-                {!isLive && (
-                  <>
-                    <Button variant="solid" onClick={() => void replay.step()} disabled={!replay.ready || replay.ended}>
-                      {t('step')} ▶
-                    </Button>
-                    <Seg
-                      options={speedOptions}
-                      value={replay.speed ?? 0}
-                      onChange={(v) => replay.setSpeed(v || null)}
-                      ariaLabel={t('speed')}
-                    />
-                  </>
-                )}
-                {isLive && badge !== false && (
-                  <span className="muted" data-tour="term-badge">
-                    {badge ?? t('liveBadge')}
-                  </span>
-                )}
-                {session.dataSource === 'synthetic' && <span className="muted">{t('syntheticBadge')}</span>}
-                {onLeave && (
-                  <Button tight onClick={() => void leave()}>
-                    {detail.tournament ? t('backToTournament') : t('backToList')}
+          {controlsRow && (
+            <div className="terminal-controls">
+              {!isLive && (
+                <div className="replay-controls">
+                  <Button variant="solid" onClick={() => void replay.step()} disabled={!replay.ready || replay.ended}>
+                    {t('step')} ▶
                   </Button>
-                )}
-                {tables && tableSwitch('view-switch')}
-              </div>
-            )}
-            {replay.ended && <p className="muted">{t('historyEnded')}</p>}
-            <ErrorNote error={replay.error} fallback={t('loadFailed')} />
-          </div>
+                  <Seg
+                    options={speedOptions}
+                    value={replay.speed ?? 0}
+                    onChange={(v) => replay.setSpeed(v || null)}
+                    ariaLabel={t('speed')}
+                  />
+                  {session.dataSource === 'synthetic' && <span className="muted">{t('syntheticBadge')}</span>}
+                </div>
+              )}
+              {replay.ended && <p className="muted">{t('historyEnded')}</p>}
+              <ErrorNote error={replay.error} fallback={t('loadFailed')} />
+            </div>
+          )}
         </div>
+
+        <PanelSplitter gridRef={gridRef} width={panelWidth} onCommit={setPanelWidth} />
 
         <div className="marg">
           {/* Сетка фиксации стоит на месте панели ордера, а не окном поверх: её
@@ -1749,6 +1748,25 @@ export function Terminal({
             )}
           </div>
         </div>
+
+        {/* Вкладки таблиц — под колонкой справа, коротко, в том же виде, что
+            «Терминал / Монеты» сверху. На телефоне — копия над самой таблицей. */}
+        {tables && (
+          <div className="table-tabs" role="tablist" aria-label={t('openPositionsTab')}>
+            {(['open', 'orders', 'history'] as const).map((id) => (
+              <Button
+                key={id}
+                variant="none"
+                role="tab"
+                aria-selected={tab === id}
+                className={cn('panel-tab', tab === id && 'on')}
+                onClick={() => setTab(id)}
+              >
+                {t(`tabShort.${id}`)}
+              </Button>
+            ))}
+          </div>
+        )}
       </div>
 
       {closeM.isError && closeM.variables && (

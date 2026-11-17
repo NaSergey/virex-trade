@@ -9,5 +9,6 @@ import { SessionScreen } from '@/widgets/backtest-session';
  */
 export function BacktestSessionPage({ id }: { id: string }) {
   const router = useRouter();
-  return <SessionScreen id={id} onLeave={() => router.push('/backtest')} />;
+  // Сетка графиков — в эфирной сессии (владелец 2026-11-17); у истории и тренажёра график один сам собой.
+  return <SessionScreen id={id} onLeave={() => router.push('/backtest')} multiChart />;
 }

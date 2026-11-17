@@ -67,3 +67,18 @@ export const useRailPanel = () => usePersistentValue('virex.terminal.rail', deco
  * пока её не включили в настройках графика: вид терминала без спроса не меняется.
  */
 export const useVolumeOn = () => usePersistentValue('virex.terminal.volume', decodeOff, false, encodeOff);
+
+/** Ширина правой колонки терминала по умолчанию и её пределы, px. */
+export const PANEL_WIDTH = { def: 360, min: 300, max: 640 } as const;
+
+const decodeWidth = (raw: string | null): number => {
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= PANEL_WIDTH.min && n <= PANEL_WIDTH.max ? n : PANEL_WIDTH.def;
+};
+const encodeWidth = (v: number) => (v === PANEL_WIDTH.def ? null : String(Math.round(v)));
+
+/**
+ * Ширина правой колонки (панель ордера, список монет) — её тянут разделителем между
+ * графиком и колонкой (владелец 2026-11-17). На устройстве и общая для всех терминалов.
+ */
+export const usePanelWidth = () => usePersistentValue('virex.terminal.panelWidth', decodeWidth, PANEL_WIDTH.def, encodeWidth);

@@ -1,0 +1,170 @@
+//@version=6
+// RSI с облаками, EMA и дивергенциями — скрипт владельца «RSI Divergence», доведённый до версии Trade Play
+// (frontend/src/widgets/backtest-session/lib/rsi.ts; правила — CLAUDE.md, «График терминала: RSI с дивергенциями»).
+//
+// RSI, EMA от RSI, коридор 30–70, подсветка зон и облака за 70 и под 30 — как в исходном скрипте.
+// Дивергенции — по правилам продукта:
+// - вершины ищутся на цене (ta.pivothigh / ta.pivotlow), а не на RSI. RSI у вершины — самый крайний в окне ±3 свечи:
+//   пик RSI стоит в середине импульса, а цена после него ещё растёт, и линия от свечи пика RSI начиналась со склона;
+// - в зоне (выше 70 / ниже 30) должна быть только ПЕРВАЯ вершина пары, вторая — по ту же сторону от 50:
+//   исходный скрипт требовал обе в зоне и пропускал самый частый случай — на втором максимуме RSI не дотянул до 70;
+// - между вершинами 5–60 свечей; пара ищется от ближней вершины к дальней, промежуточный провал её не сбивает;
+// - ни цена, ни RSI между точками не заходят за свою линию (у самих вершин предел — вершина, а не линия);
+// - найденная дивергенция сама становится якорем — цепочка отрезков, а не веер; новая вершина, продолжающая
+//   дивергенцию от того же якоря, удлиняет её линию, а не ставит вторую рядом;
+// - рисуется на обеих панелях: линия по RSI с ▼ / ▲ и пунктир между вершинами на графике цены;
+// - цвет по смыслу: медвежья красная, бычья зелёная (в исходном было наоборот).
+// Считается на закрытой свече. Дивергенция появляется через «Свечей справа» после второй вершины — раньше вершину
+// не подтвердить; задним числом меняется только длина продолженной линии.
+indicator("RSI Divergence", shorttitle = "RSI Div", overlay = false, max_lines_count = 500, max_labels_count = 500)
+
+// ─── Настройки ───────────────────────────────────────────────────────────────
+const string G_RSI = "RSI"
+const string G_DIV = "Дивергенции"
+const string G_BG  = "Подсветка"
+
+int   length     = input.int(14, "Длина RSI", minval = 1, group = G_RSI)
+float src        = input.source(close, "Источник", group = G_RSI)
+int   overbought = input.int(70, "Перекупленность", minval = 1, maxval = 100, group = G_RSI)
+int   oversold   = input.int(30, "Перепроданность", minval = 0, maxval = 99, group = G_RSI)
+int   avgLength  = input.int(30, "Длина EMA от RSI", minval = 1, group = G_RSI)
+
+int  leftBars  = input.int(5, "Свечей слева от вершины", minval = 1, group = G_DIV)
+int  rightBars = input.int(5, "Свечей справа от вершины", minval = 1, group = G_DIV, tooltip = "Столько свечей ждём, чтобы вершина подтвердилась: дивергенция появляется с этой задержкой.")
+int  minRange  = input.int(5, "Мин. свечей между вершинами", minval = 1, group = G_DIV)
+int  maxRange  = input.int(60, "Макс. свечей между вершинами", minval = 2, maxval = 300, group = G_DIV)
+int  lagIn     = input.int(3, "Пик RSI от вершины цены, свечей", minval = 0, maxval = 10, group = G_DIV, tooltip = "Импульс выдыхается раньше цены: RSI у вершины берётся самый крайний в этом окне вокруг неё. Больше «Свечей справа» не бывает — правее вершины ещё нет закрытых свечей.")
+bool onPrice   = input.bool(true, "Пунктир на графике цены", group = G_DIV)
+
+bool bgOn = input.bool(true, "Включить подсветку зон", group = G_BG)
+
+const color C_BEAR = color.red
+const color C_BULL = color.green
+
+// ─── RSI ─────────────────────────────────────────────────────────────────────
+float rsi    = ta.rsi(src, length)
+float rsiAvg = ta.ema(rsi, avgLength)
+
+float pHigh = ta.pivothigh(high, leftBars, rightBars)
+float pLow  = ta.pivotlow(low, leftBars, rightBars)
+
+// ─── Дивергенции ─────────────────────────────────────────────────────────────
+int lag  = math.min(lagIn, rightBars)
+// Сколько закрытых свечей помнить: от дальнего якоря (с его окном пика RSI) до текущей.
+int keep = maxRange + leftBars + rightBars + lag + 2
+
+// Максимумы, минимумы и RSI закрытых свечей; последний элемент — текущая свеча.
+var float[] hiBuf  = array.new<float>()
+var float[] loBuf  = array.new<float>()
+var float[] rsiBuf = array.new<float>()
+
+// Вершина цены и пик RSI у неё. chained — конец найденной дивергенции: может начать следующую и вне зоны.
+// Линии и отметка — дивергенции, начатой от этой вершины как от якоря: продолжение их удлиняет.
+type Swing
+    int   bar
+    float price
+    int   rsiBar
+    float value
+    bool  chained = false
+    line  rsiLine
+    line  priceLine
+    label mark
+
+var Swing[] highs = array.new<Swing>()
+var Swing[] lows  = array.new<Swing>()
+
+// Значение буфера на свече с bar_index = i; na — свечи в буфере уже нет.
+at(float[] buf, int i) =>
+    int k = i - bar_index + buf.size() - 1
+    k >= 0 and k < buf.size() ? buf.get(k) : na
+
+// Заходит ли ряд между точками a и b за линию a→b. s = 1 — «за» значит выше (медвежья), −1 — ниже (бычья).
+// У самих вершин, в их свечах слева и справа, предел — вершина, а не линия: плато RSI у пика — всё тот же пик.
+crosses(float[] buf, int s, int a, float va, int b, float vb) =>
+    bool hit = false
+    if b - a > 1
+        for i = a + 1 to b - 1
+            float ln  = va + (vb - va) * float(i - a) / float(b - a)
+            float lim = i <= a + rightBars ? (s * (va - ln) > 0 ? va : ln) : i >= b - leftBars ? (s * (vb - ln) > 0 ? vb : ln) : ln
+            float v   = at(buf, i)
+            if not na(v) and s * (v - lim) > 0
+                hit := true
+                break
+    hit
+
+// Одна сторона: s = 1 — медвежья по максимумам, −1 — бычья по минимумам. pv — вершина цены, подтверждённая
+// на этой свече (стоит rightBars свечей назад). true — на этой свече дивергенция найдена или продолжена.
+side(int s, float pv, float[] pbuf, Swing[] swings, int zone, color col) =>
+    bool found = false
+    if not na(pv)
+        int p = bar_index - rightBars
+        int   rb = -1
+        float rv = na
+        for k = p - lag to p + lag
+            float v = at(rsiBuf, k)
+            if not na(v) and (rb < 0 or s * (v - rv) > 0)
+                rb := k
+                rv := v
+        if rb >= 0
+            Swing here = Swing.new(p, pv, rb, rv)
+            if s * (rv - 50) > 0
+                int j = swings.size() - 1
+                while j >= 0
+                    Swing a = swings.get(j)
+                    int d = p - a.bar
+                    if d > maxRange
+                        break
+                    bool pair = d >= minRange and s * (pv - a.price) > 0 and s * (a.value - rv) > 0 and (a.chained or s * (a.value - zone) >= 0) and a.rsiBar < rb
+                    if pair and not crosses(pbuf, s, a.bar, a.price, p, pv) and not crosses(rsiBuf, s, a.rsiBar, a.value, rb, rv)
+                        if na(a.rsiLine)
+                            a.rsiLine := line.new(a.rsiBar, a.value, rb, rv, color = col, width = 2)
+                            if onPrice
+                                a.priceLine := line.new(a.bar, a.price, p, pv, color = col, width = 1, style = line.style_dashed, force_overlay = true)
+                            a.mark := label.new(rb, rv, s == 1 ? "▼" : "▲", style = s == 1 ? label.style_label_down : label.style_label_up, color = color.new(col, 100), textcolor = col, size = size.small)
+                        else
+                            a.rsiLine.set_xy2(rb, rv)
+                            if not na(a.priceLine)
+                                a.priceLine.set_xy2(p, pv)
+                            a.mark.set_xy(rb, rv)
+                        here.chained := true
+                        found := true
+                        break
+                    j -= 1
+            swings.push(here)
+        while swings.size() > 0 and p - swings.first().bar > maxRange
+            swings.shift()
+    found
+
+bool bearDiv = false
+bool bullDiv = false
+if barstate.isconfirmed
+    hiBuf.push(high)
+    loBuf.push(low)
+    rsiBuf.push(rsi)
+    if hiBuf.size() > keep
+        hiBuf.shift()
+        loBuf.shift()
+        rsiBuf.shift()
+    bearDiv := side(1, pHigh, hiBuf, highs, overbought, C_BEAR)
+    bullDiv := side(-1, pLow, loBuf, lows, oversold, C_BULL)
+
+// ─── Отрисовка RSI ───────────────────────────────────────────────────────────
+pRsi = plot(rsi, "RSI", color = chart.fg_color, linewidth = 2)
+plot(rsiAvg, "EMA от RSI", color = color.new(#7d7d7d, 0), linewidth = 1)
+pOB = plot(overbought, "Перекупленность", color = color.rgb(255, 255, 255, 76), linewidth = 1)
+pOS = plot(oversold, "Перепроданность", color = color.rgb(255, 255, 255, 76), linewidth = 1)
+fill(pOB, pOS, color = color.new(color.white, 92), title = "Нейтральная зона")
+
+// Полосы зон: чем дальше RSI за границей, тем ярче — от бледной на 70 (30) до яркой на 90 (10) и дальше.
+color obCol = color.from_gradient(rsi, overbought, math.min(100, overbought + 20), color.new(color.green, 90), color.new(color.green, 40))
+color osCol = color.from_gradient(rsi, math.max(0, oversold - 20), oversold, color.new(color.red, 40), color.new(color.red, 90))
+bgcolor(bgOn ? rsi > overbought ? obCol : rsi < oversold ? osCol : na : na)
+
+// Облака: заливка от RSI к 50, видна только за 70 и под 30.
+pMid = plot(50, "Середина", color = na, editable = false, display = display.none)
+fill(pRsi, pMid, 100, overbought, top_color = bgOn ? color.new(color.green, 0) : na, bottom_color = bgOn ? color.new(color.green, 100) : na, title = "Облако перекупленности")
+fill(pRsi, pMid, oversold, 0, top_color = bgOn ? color.new(color.red, 100) : na, bottom_color = bgOn ? color.new(color.red, 0) : na, title = "Облако перепроданности")
+
+// ─── Алерты ──────────────────────────────────────────────────────────────────
+alertcondition(bearDiv, "Медвежья дивергенция", "RSI: медвежья дивергенция")
+alertcondition(bullDiv, "Бычья дивергенция", "RSI: бычья дивергенция")

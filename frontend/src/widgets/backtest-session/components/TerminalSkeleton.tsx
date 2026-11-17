@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { ChevronDown, Plus, Settings as SettingsIcon, Volume2 } from 'lucide-react';
 import { cn } from '@/shared/lib/utils/css';
@@ -12,7 +12,7 @@ import { Skeleton } from '@/shared/ui/Skeleton';
 import { DEFAULT_TIMEFRAME, TIMEFRAMES } from '../lib/candles';
 import { SPEEDS } from '../model/useReplay';
 import { CoinPickerFace } from './CoinPicker';
-import { useRailPanel } from '../model/useChartSettings';
+import { usePanelWidth, useRailPanel } from '../model/useChartSettings';
 import { useStoredLayout } from '../model/usePanes';
 import { LayoutPicker } from './LayoutPicker';
 import { paneCount } from '../lib/panes';
@@ -66,12 +66,6 @@ export interface TerminalSkeletonProps {
    * выбор монеты. Не задано — экран прокрутки истории.
    */
   live?: boolean;
-  /**
-   * Надпись на месте кнопок прокрутки у эфира («Эфир», «Bybit · настоящий счёт»).
-   * `null` — ещё неизвестно, чей это экран: на её месте серая полоса; `false` —
-   * подписи нет (терминал на главной).
-   */
-  badge?: string | null | false;
   /** Есть ли кнопка «К списку» — у биржевого терминала её нет. */
   leave?: boolean;
   /** Вкладки таблиц под графиком; у терминала на главной их нет. */
@@ -127,7 +121,6 @@ function WatchSkeleton() {
  */
 export function TerminalSkeleton({
   live = false,
-  badge,
   leave = true,
   tables = true,
   watchlist = true,
@@ -138,6 +131,8 @@ export function TerminalSkeleton({
   // Свёрнута ли колонка — тот же выбор на устройстве, что у терминала: иначе
   // приход данных раскрывал бы или сворачивал её на глазах.
   const [railPanel] = useRailPanel();
+  // Ширина колонки — та же, что у терминала, иначе приход данных сдвигал бы её.
+  const [panelWidth] = usePanelWidth();
   // Сетка графиков — та же, что у терминала (и так же только на широком экране).
   const storedLayout = useStoredLayout();
   const wide = useMediaQuery('(min-width: 1101px)');
@@ -147,8 +142,8 @@ export function TerminalSkeleton({
   const watch = watchlist && live && railPanel === 'watch';
 
   return (
-    <div className="bt-live px-4" aria-busy="true" inert>
-      <div className="asym terminal">
+    <div className="bt-live" aria-busy="true" inert>
+      <div className={cn('asym terminal', live && 'chart-full')} style={{ '--panel-w': `${panelWidth}px` } as CSSProperties}>
         <div className="terminal-main">
           <div className="terminal-chart">
             <div className="chart-top">
@@ -169,6 +164,11 @@ export function TerminalSkeleton({
                 )}
               </div>
               <div className="chart-top-r">
+                {leave && (
+                  <Button tight className="mr-2">
+                    {t('backToList')}
+                  </Button>
+                )}
                 <Button variant="bare" tight aria-label={tAudio('sound')}>
                   <Volume2 size={16} />
                 </Button>
@@ -205,46 +205,25 @@ export function TerminalSkeleton({
               </div>
             </div>
           </div>
-          <div className="terminal-controls">
-            {(!live || badge !== false || tables || leave) && (
+          {/* Строка под графиком — только у прокрутки истории; в эфире её нет, график до низа. */}
+          {!live && (
+            <div className="terminal-controls">
               <div className="replay-controls">
-                {live ? (
-                  badge === null ? (
-                    <Skeleton as="span" inline width={160} height={12} flush />
-                  ) : (
-                    <span className="muted">{badge ?? t('liveBadge')}</span>
-                  )
-                ) : (
-                  <>
-                    <Button variant="solid" disabled>
-                      {t('step')} ▶
-                    </Button>
-                    <Seg
-                      options={[{ value: 0, label: t('pause') }, ...SPEEDS.map((s) => ({ value: s, label: `×${s}` }))]}
-                      value={0}
-                      onChange={noop}
-                      ariaLabel={t('speed')}
-                    />
-                  </>
-                )}
-                {leave && <Button tight>{t('backToList')}</Button>}
-                {tables && (
-                  <Seg
-                    className="view-switch"
-                    options={[
-                      { value: 'open' as const, label: t('openPositionsTab') },
-                      { value: 'orders' as const, label: t('ordersTab') },
-                      { value: 'history' as const, label: t('historyTab') },
-                    ]}
-                    value="open"
-                    onChange={noop}
-                    ariaLabel={t('openPositionsTab')}
-                  />
-                )}
+                <Button variant="solid" disabled>
+                  {t('step')} ▶
+                </Button>
+                <Seg
+                  options={[{ value: 0, label: t('pause') }, ...SPEEDS.map((s) => ({ value: s, label: `×${s}` }))]}
+                  value={0}
+                  onChange={noop}
+                  ariaLabel={t('speed')}
+                />
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
+
+        <div className="term-split" aria-hidden />
 
         <div className="marg">
           {watchlist && live && (
@@ -333,6 +312,15 @@ export function TerminalSkeleton({
           )}
           </div>
         </div>
+        {tables && (
+          <div className="table-tabs" role="tablist" aria-label={t('openPositionsTab')}>
+            {(['open', 'orders', 'history'] as const).map((id) => (
+              <Button key={id} variant="none" role="tab" className={cn('panel-tab', id === 'open' && 'on')}>
+                {t(`tabShort.${id}`)}
+              </Button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
