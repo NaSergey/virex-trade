@@ -144,14 +144,25 @@ export function useLiveFeed(
    * от них «закрыть можно» и возраст позиции (`nextChange`).
    */
   anchors: readonly number[] = NO_ANCHORS,
+  /**
+   * ТФ задан снаружи — у графиков сетки терминала (спека 2026-11-17): ТФ каждого
+   * графика хранит состояние сетки, и второго источника у ленты быть не должно.
+   * С ним `setTf` ничего не делает. Не задан — ТФ свой, как раньше.
+   */
+  fixedTf?: number,
 ): Replay {
   const { session } = detail;
   const endTime = session.endTime ? Date.parse(session.endTime) : null;
 
-  const [memo] = useState(() => recallFeed(source, symbol, DEFAULT_TIMEFRAME));
-  const [tf, setTf] = useState<number>(DEFAULT_TIMEFRAME);
+  const startTf = fixedTf ?? DEFAULT_TIMEFRAME;
+  const [memo] = useState(() => recallFeed(source, symbol, startTf));
+  const [ownTf, setOwnTf] = useState<number>(startTf);
+  const tf = fixedTf ?? ownTf;
+  const setTf = useCallback((next: number) => {
+    if (fixedTf == null) setOwnTf(next);
+  }, [fixedTf]);
   const [closedState, setClosedState] = useState<ClosedState | null>(() =>
-    memo?.closed ? { symbol, tf: DEFAULT_TIMEFRAME, rows: memo.closed.rows, anchor: memo.closed.anchor } : null,
+    memo?.closed ? { symbol, tf: startTf, rows: memo.closed.rows, anchor: memo.closed.anchor } : null,
   );
   const [minutesState, setMinutesState] = useState<TaggedMinutes>(() => ({ symbol, rows: memo?.minutes ?? [] }));
   const [now, setNow] = useState<number>(() => Date.now() - (memo?.skew ?? 0));
