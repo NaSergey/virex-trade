@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { LayoutGrid } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { cn } from '@/shared/lib/utils/css';
 import { Button } from '@/shared/ui/Button';
 import { LAYOUTS, type LayoutId } from '../lib/panes';
@@ -32,9 +32,9 @@ const CELLS: Record<LayoutId, [number, number, number, number][]> = {
   ],
 };
 
-function Scheme({ layout }: { layout: LayoutId }) {
+export function LayoutScheme({ layout }: { layout: LayoutId }) {
   return (
-    <svg width={20} height={14} viewBox="0 0 20 14" aria-hidden>
+    <svg width={20} height={14} viewBox="0 0 20 14" aria-hidden className="layout-scheme">
       {CELLS[layout].map(([x, y, w, h], i) => (
         <rect key={i} x={x + 0.5} y={y + 0.5} width={w - 1} height={h - 1} fill="none" stroke="currentColor" />
       ))}
@@ -42,9 +42,33 @@ function Scheme({ layout }: { layout: LayoutId }) {
   );
 }
 
+/** Пять раскладок кнопками: схема и подпись. Одна разметка у меню и у настроек графика. */
+export function LayoutOptions({ value, onChange }: { value: LayoutId; onChange: (layout: LayoutId) => void }) {
+  const t = useTranslations('backtest');
+  return (
+    <div className="layout-options" role="radiogroup" aria-label={t('layout.label')}>
+      {LAYOUTS.map((id) => (
+        <Button
+          key={id}
+          variant="none"
+          role="radio"
+          aria-checked={id === value}
+          className={cn('layout-opt', id === value && 'on')}
+          onClick={() => onChange(id)}
+        >
+          <LayoutScheme layout={id} />
+          <span>{t(`layout.${id}`)}</span>
+        </Button>
+      ))}
+    </div>
+  );
+}
+
 /**
- * Раскладка графиков терминала: кнопка в верхней панели и меню из пяти схем
- * (спека 2026-11-17). Escape и нажатие мимо закрывают меню.
+ * Кнопка раскладки в верхней панели: схема текущей раскладки и подпись
+ * «Графики» — безымянная иконка терялась среди кнопок графика (владелец
+ * 2026-11-17: «не понимаю, как поставить несколько графиков»). По нажатию —
+ * меню из пяти раскладок; Escape и нажатие мимо закрывают его.
  */
 export function LayoutPicker({ value, onChange }: { value: LayoutId; onChange: (layout: LayoutId) => void }) {
   const t = useTranslations('backtest');
@@ -56,35 +80,26 @@ export function LayoutPicker({ value, onChange }: { value: LayoutId; onChange: (
   return (
     <div className="layout-pick" ref={root} onKeyDown={(e) => e.key === 'Escape' && close()}>
       <Button
-        variant="bare"
-        tight
-        aria-label={t('layout.label')}
+        variant="none"
+        className="layout-btn"
         title={t('layout.label')}
-        aria-haspopup="menu"
+        aria-haspopup="true"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        <LayoutGrid size={16} />
+        <LayoutScheme layout={value} />
+        <span>{t('layout.button')}</span>
+        <ChevronDown size={12} aria-hidden />
       </Button>
       {open && (
-        <div className="layout-menu" role="menu" aria-label={t('layout.label')}>
-          {LAYOUTS.map((id) => (
-            <Button
-              key={id}
-              variant="none"
-              role="menuitemradio"
-              aria-checked={id === value}
-              aria-label={t(`layout.${id}`)}
-              title={t(`layout.${id}`)}
-              className={cn('layout-opt', id === value && 'on')}
-              onClick={() => {
-                close();
-                if (id !== value) onChange(id);
-              }}
-            >
-              <Scheme layout={id} />
-            </Button>
-          ))}
+        <div className="layout-menu">
+          <LayoutOptions
+            value={value}
+            onChange={(id) => {
+              close();
+              if (id !== value) onChange(id);
+            }}
+          />
         </div>
       )}
     </div>

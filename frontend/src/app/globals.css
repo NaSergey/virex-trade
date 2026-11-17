@@ -1040,38 +1040,41 @@
   .pane { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--ground); }
   .panes:not([data-layout="1"]) > .pane.on { outline: 1px solid var(--ink-3); outline-offset: -1px; z-index: 1; }
   .layout-pick { position: relative; display: inline-flex; }
+  /* Кнопка «Графики»: схема текущей раскладки и подпись — заметнее голой иконки. */
+  .layout-btn {
+    display: inline-flex; align-items: center; gap: var(--s2); height: 30px; padding: 0 var(--s2);
+    font-family: var(--font-mono); font-size: var(--t-xs); letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--ink-2); cursor: pointer;
+  }
+  .layout-btn:hover, .layout-btn[aria-expanded="true"] { color: var(--ink); background: rgb(var(--ink-rgb) / 0.06); }
   .layout-menu {
-    position: absolute; top: calc(100% + 4px); right: 0; z-index: 6;
-    display: flex; gap: var(--s1); padding: var(--s1);
-    background: var(--ground); border: 1px solid var(--rule);
+    position: absolute; top: calc(100% + 4px); left: 0; z-index: 6;
+    padding: var(--s1); background: var(--ground); border: 1px solid var(--rule);
   }
-  .layout-opt { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 28px; color: var(--ink-3); cursor: pointer; }
+  .layout-options { display: flex; flex-direction: column; }
+  .layout-opt {
+    display: flex; align-items: center; gap: var(--s2); width: 100%; min-width: 170px;
+    padding: 6px var(--s2); text-align: left; white-space: nowrap;
+    font-size: var(--t-xs); color: var(--ink-2); cursor: pointer;
+  }
   .layout-opt:hover, .layout-opt.on { color: var(--ink); background: rgb(var(--ink-rgb) / 0.08); }
+  .layout-scheme { flex: none; }
 
-  /* Рейка у правого края терминала (`TerminalRail`): иконка — панель справа,
-     повторное нажатие сворачивает колонку, и график забирает её ширину. На
-     узком экране колонка и так стоит под графиком — там вместо рейки
-     переключатель над панелью (.rail-seg). */
-  .term-rail { display: none; }
-  .rail-seg { margin-bottom: var(--s3); }
-  @media (min-width: 1101px) {
-    .asym.terminal.has-rail { grid-template-columns: minmax(0, 1fr) 360px 44px; }
-    .asym.terminal.has-rail[data-rail="none"] { grid-template-columns: minmax(0, 1fr) 44px; }
-    .asym.terminal.has-rail[data-rail="none"] > .marg { display: none; }
-    .asym.terminal.has-rail .terminal-controls { grid-column: 1 / -2; }
-    .term-rail {
-      grid-column: -2 / -1; grid-row: 1 / -1;
-      display: flex; flex-direction: column; align-items: center; gap: var(--s1);
-      border-left: 1px solid var(--hair);
-    }
-    .rail-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; color: var(--ink-3); }
-    .rail-btn:hover { color: var(--ink); }
-    .rail-btn.on { color: var(--ink); background: rgb(var(--ink-rgb) / 0.1); }
-    .rail-seg { display: none; }
+  /* Вкладки правой колонки «Терминал / Монеты» (владелец 2026-11-17: одно место,
+     сверху, компактно). Высота и линейка — как у верхней панели графика слева,
+     чтобы обе шапки шли одной строкой. */
+  .panel-tabs {
+    display: flex; align-items: stretch; gap: var(--s4);
+    min-height: 30px; padding-bottom: var(--s2); margin-bottom: var(--s3);
+    border-bottom: 1px solid var(--rule);
   }
-  /* Во весь экран: шапки приложения нет, высоту терминалу задаёт окно. Таблицы
-     под графиком остаются — корень прокручивается сам. */
-  .bt-live:fullscreen { --bt-screen: calc(100dvh - var(--s4) * 2); overflow-y: auto; background: var(--ground); }
+  .panel-tab {
+    display: inline-flex; align-items: center;
+    font-family: var(--font-mono); font-size: var(--t-xs); letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--ink-3); cursor: pointer;
+  }
+  .panel-tab:hover { color: var(--ink); }
+  .panel-tab.on { color: var(--ink); box-shadow: inset 0 -2px 0 var(--ink); }
 
   /* ═══════════════ БЕКТЕСТ ═══════════════ */
   /* touch-action: none — иначе на телефоне перетаскивание стопа прокручивало бы страницу. */
@@ -5234,7 +5237,7 @@
     display: flex; flex-direction: column; gap: var(--s2);
     background: var(--ground); border: 1px solid var(--rule);
   }
-  .coin-menu-list { display: flex; flex-direction: column; max-height: 320px; overflow-y: auto; }
+  .coin-menu-list { display: flex; flex-direction: column; max-height: min(320px, 50vh); overflow-y: auto; overscroll-behavior: contain; }
   .coin-menu-row {
     display: flex; align-items: center; gap: var(--s2); width: 100%;
     padding: 6px var(--s1); text-align: left;

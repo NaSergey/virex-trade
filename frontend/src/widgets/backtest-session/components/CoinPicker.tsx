@@ -7,6 +7,7 @@ import { cn } from '@/shared/lib/utils/css';
 import { Button } from '@/shared/ui/Button';
 import { CoinLogo } from '@/shared/ui/CoinLogo';
 import { Input } from '@/shared/ui/Field';
+import { useNonPassiveWheel } from '@/shared/lib/hooks/useNonPassiveWheel';
 
 export interface PickerCoin {
   symbol: string;
@@ -64,6 +65,19 @@ export function CoinMenu({
 }) {
   const t = useTranslations('backtest');
   const [query, setQuery] = useState('');
+  const rootRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  // Колесо над меню крутит только список, а не страницу под ним: страница
+  // терминала длиннее окна (таблицы под графиком), и меню уезжало под шапку
+  // (владелец 2026-11-17: «нельзя скроллить внутри»). Прокрутку ведём сами —
+  // нативную гасит preventDefault.
+  const scrollList = useCallback((e: WheelEvent) => {
+    const list = listRef.current;
+    if (!list) return;
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? list.clientHeight : 1;
+    list.scrollTop += e.deltaY * unit;
+  }, []);
+  useNonPassiveWheel(rootRef, scrollList);
   const q = query.trim().toUpperCase();
   const shown = q ? coins.filter((c) => c.symbol.includes(q)) : coins;
 
@@ -73,7 +87,7 @@ export function CoinMenu({
   };
 
   return (
-    <div className={cn('coin-menu', className)} onKeyDown={onKey}>
+    <div className={cn('coin-menu', className)} ref={rootRef} onKeyDown={onKey}>
       <Input
         full
         autoFocus
@@ -82,7 +96,7 @@ export function CoinMenu({
         placeholder={t('coinSearch')}
         aria-label={t('coinSearch')}
       />
-      <div className="coin-menu-list" role="listbox" aria-label={t('coin')}>
+      <div className="coin-menu-list" ref={listRef} role="listbox" aria-label={t('coin')}>
         {shown.map((c) => (
           <Button
             key={c.symbol}

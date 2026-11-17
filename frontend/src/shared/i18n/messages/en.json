@@ -1635,15 +1635,15 @@
       "synthetic": "Simulator",
       "v": "V"
     },
-    "fullscreen": "Fullscreen",
-    "exitFullscreen": "Exit fullscreen",
     "layout": {
       "label": "Layout",
       "1": "One chart",
       "2h": "Two side by side",
       "2v": "Two stacked",
       "3": "Three",
-      "4": "Four"
+      "4": "Four",
+      "button": "Charts",
+      "settings": "Charts on screen"
     }
   },
   "onboarding": {
