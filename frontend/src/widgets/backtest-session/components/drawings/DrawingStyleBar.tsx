@@ -32,7 +32,9 @@ export function DrawingStyleBar({
   return (
     <div className="draw-style" role="toolbar" aria-label={t('style')}>
       {/* key — новая фигура начинает поле со своего текста, а не с черновика прежней. */}
-      {drawing.kind === 'text' && <TextField key={drawing.id} value={drawing.text ?? ''} onCommit={(text) => onStyle({ text })} />}
+      {(drawing.kind === 'text' || drawing.kind === 'callout') && (
+        <TextField key={drawing.id} value={drawing.text ?? ''} onCommit={(text) => onStyle({ text })} />
+      )}
       {colored &&
         DRAWING_COLORS.map((c) => (
           <Button
@@ -53,7 +55,7 @@ export function DrawingStyleBar({
             key={w}
             variant="none"
             className={cn('draw-width', drawing.width === w && 'on')}
-            aria-label={drawing.kind === 'text' ? t('size', { n: w }) : t('width', { n: w })}
+            aria-label={drawing.kind === 'text' || drawing.kind === 'callout' ? t('size', { n: w }) : t('width', { n: w })}
             aria-pressed={drawing.width === w}
             onClick={() => onStyle({ width: w })}
           >
