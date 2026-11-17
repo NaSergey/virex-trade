@@ -1608,7 +1608,15 @@
       "synthetic": "Simulator"
     },
     "fullscreen": "Fullscreen",
-    "exitFullscreen": "Exit fullscreen"
+    "exitFullscreen": "Exit fullscreen",
+    "layout": {
+      "label": "Layout",
+      "1": "One chart",
+      "2h": "Two side by side",
+      "2v": "Two stacked",
+      "3": "Three",
+      "4": "Four"
+    }
   },
   "onboarding": {
     "askTitle": "Take the tour?",

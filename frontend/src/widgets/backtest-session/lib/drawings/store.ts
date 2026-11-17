@@ -15,6 +15,13 @@ export type DrawingStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem' 
     сирот по списку сессий одной не должна стирать рисунки другой. */
 export const drawingsKey = (userId: string, sessionId: string) => `${PREFIX}${userId}:${sessionId}`;
 
+/**
+ * Чьи рисунки — сессии и монеты. Рисунки BTC — под ключом самой сессии (так они
+ * лежали до монет эфира), остальных монет — с монетой после двоеточия.
+ */
+export const drawingScope = (sessionId: string, symbol: string, defaultSymbol: string) =>
+  symbol === defaultSymbol ? sessionId : `${sessionId}:${symbol}`;
+
 const isPoint = (v: unknown): v is DPoint =>
   !!v && typeof v === 'object' && Number.isFinite((v as DPoint).t) && Number.isFinite((v as DPoint).p);
 

@@ -1027,6 +1027,27 @@
   .chart-top-r { gap: var(--s1); }
   .chart-top-sep { align-self: stretch; width: 1px; background: var(--hair); }
 
+  /* Сетка графиков терминала (`ChartPane`, спека 2026-11-17): ячейки делит
+     линия (фон сетки в зазоре), активный график обведён. В раскладке из одного
+     графика рамки нет — выделять не из чего. */
+  .panes { flex: 1; min-height: 0; display: grid; gap: 1px; background: var(--hair); }
+  .panes[data-layout="1"] { grid-template: minmax(0, 1fr) / minmax(0, 1fr); }
+  .panes[data-layout="2h"] { grid-template: minmax(0, 1fr) / repeat(2, minmax(0, 1fr)); }
+  .panes[data-layout="2v"] { grid-template: repeat(2, minmax(0, 1fr)) / minmax(0, 1fr); }
+  .panes[data-layout="3"] { grid-template: repeat(2, minmax(0, 1fr)) / minmax(0, 2fr) minmax(0, 1fr); }
+  .panes[data-layout="3"] > .pane:first-child { grid-row: 1 / span 2; }
+  .panes[data-layout="4"] { grid-template: repeat(2, minmax(0, 1fr)) / repeat(2, minmax(0, 1fr)); }
+  .pane { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--ground); }
+  .panes:not([data-layout="1"]) > .pane.on { outline: 1px solid var(--ink-3); outline-offset: -1px; z-index: 1; }
+  .layout-pick { position: relative; display: inline-flex; }
+  .layout-menu {
+    position: absolute; top: calc(100% + 4px); right: 0; z-index: 6;
+    display: flex; gap: var(--s1); padding: var(--s1);
+    background: var(--ground); border: 1px solid var(--rule);
+  }
+  .layout-opt { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 28px; color: var(--ink-3); cursor: pointer; }
+  .layout-opt:hover, .layout-opt.on { color: var(--ink); background: rgb(var(--ink-rgb) / 0.08); }
+
   /* Рейка у правого края терминала (`TerminalRail`): иконка — панель справа,
      повторное нажатие сворачивает колонку, и график забирает её ширину. На
      узком экране колонка и так стоит под графиком — там вместо рейки

@@ -40,6 +40,7 @@ import { terminalIntl, timeLabelFormats } from '../lib/time-labels';
 import { CLOSE_GRID_FIRST_ID, CLOSE_GRID_LAST_ID, closeGridLevels, initCloseGrid, type CloseGridDraft } from '../lib/close-grid';
 import { draftLevels } from '../lib/draft-levels';
 import { positionLevels, tradeMarkers } from '../lib/chart-levels';
+import { drawingScope } from '../lib/drawings/store';
 import { atrOf, findRanges, toChartRanges, type ChartRange } from '../lib/ranges';
 import { entryGridTable, gridOrderCount } from '../lib/level-table';
 import { BOT_ENABLED, BOT_MAX_LEVELS } from '../lib/bot-grid';
@@ -65,6 +66,10 @@ import type { TerminalSound } from '../lib/sounds';
 import { useSessionActions, type TerminalActions } from '../model/actions';
 import { useExpSettings, useRailPanel, useRangesOn, useRsiOn, useTagPromptOn, type RailPanel } from '../model/useChartSettings';
 import { useFullscreen } from '../model/useFullscreen';
+import { usePanes } from '../model/usePanes';
+import { useMediaQuery } from '@/shared/lib/hooks/useMediaQuery';
+import { ChartPane, type ChartProps } from './ChartPane';
+import { LayoutPicker } from './LayoutPicker';
 import { TerminalRail } from './TerminalRail';
 import { Watchlist } from './Watchlist';
 import { useRangeCandles, type Load4h } from '../model/useRangeCandles';
@@ -108,6 +113,7 @@ export function SessionScreen({
   onLeave,
   live = false,
   chartActions,
+  multiChart = false,
 }: {
   id: string;
   onLeave: () => void;
@@ -115,6 +121,8 @@ export function SessionScreen({
   live?: boolean;
   /** Узел слева от кнопок графика — см. `TerminalProps.chartActions`. */
   chartActions?: ReactNode;
+  /** Сетка графиков — см. `TerminalProps.multiChart`. */
+  multiChart?: boolean;
 }) {
   const t = useTranslations('backtest');
   const { data, error } = useBacktestSession(id);
@@ -124,7 +132,7 @@ export function SessionScreen({
         <ErrorNote error={error} fallback={t('loadFailed')} />
       </Wrap>
     );
-  if (!data) return <TerminalSkeleton live={live} />;
+  if (!data) return <TerminalSkeleton live={live} multiChart={multiChart} />;
   if (data.session.status === 'finished')
     return (
       <Wrap page>
@@ -137,7 +145,7 @@ export function SessionScreen({
         <OutdatedSession detail={data} onLeave={onLeave} />
       </Wrap>
     );
-  return <ActiveSession detail={data} onLeave={onLeave} chartActions={chartActions} />;
+  return <ActiveSession detail={data} onLeave={onLeave} chartActions={chartActions} multiChart={multiChart} />;
 }
 
 /**
@@ -183,13 +191,15 @@ function ActiveSession({
   detail,
   onLeave,
   chartActions,
+  multiChart,
 }: {
   detail: SessionDetail;
   onLeave: () => void;
   chartActions?: ReactNode;
+  multiChart?: boolean;
 }) {
   const actions = useSessionActions(detail.session.id);
-  return <Terminal detail={detail} actions={actions} onLeave={onLeave} chartActions={chartActions} />;
+  return <Terminal detail={detail} actions={actions} onLeave={onLeave} chartActions={chartActions} multiChart={multiChart} />;
 }
 
 /**
@@ -256,6 +266,11 @@ export interface TerminalProps {
    * в эфире (рынок продукта и главной), у истории и тренажёра — без источника.
    */
   sourceLabel?: string;
+  /**
+   * Сетка из нескольких графиков (спека 2026-11-17) — только `/terminal`: биржа и
+   * демо-счёт. Работает в эфире и на широком экране; иначе график один.
+   */
+  multiChart?: boolean;
 }
 
 /**
@@ -281,6 +296,7 @@ export function Terminal({
   chartActions,
   rail = true,
   sourceLabel,
+  multiChart = false,
 }: TerminalProps) {
   const t = useTranslations('backtest');
   const { locale } = useLocaleControl();
@@ -334,8 +350,26 @@ export function Terminal({
   // ни символа в подзаголовках окон. Раскрывает её итог завершённой сессии.
   const symbolShown = !session.hideSymbol || reveal;
   const coinPrefix = (sym: string) => (symbolShown ? `${sym} · ` : '');
-  const symbol = isLive ? liveSymbol : localSymbol;
-  const setSymbol = isLive ? setLiveSymbol : setLocalSymbol;
+  // Рынок — свой у того, кто его передал (биржа); иначе монеты и цены эфира с сервера.
+  const { data: symbolsData } = useLiveSymbols(isLive && !symbols);
+  const coins = symbols ?? symbolsData?.symbols;
+
+  /**
+   * Сетка графиков (спека 2026-11-17): активный график — это график терминала,
+   * его монета и ТФ — у активной ячейки. Монету пишем и в `useLiveSymbol`: её
+   * читают прогрев терминала и предзагрузка ленты.
+   */
+  const wide = useMediaQuery('(min-width: 1101px)');
+  const coinIds = useMemo(() => (coins ?? []).map((c) => c.symbol), [coins]);
+  const panesState = usePanes(coinIds, liveSymbol);
+  const multi = multiChart && isLive && wide;
+  const activePane = multi ? panesState.panes[panesState.active] : null;
+  const symbol = activePane ? activePane.symbol : isLive ? liveSymbol : localSymbol;
+  const setSymbol = (next: string) => {
+    if (activePane) panesState.setPane(panesState.active, { symbol: next });
+    if (isLive) setLiveSymbol(next);
+    else setLocalSymbol(next);
+  };
   // Своим useMemo — по той же причине, что и openTrades: levels сверяет по ссылке.
   const chartTrades = useMemo(() => openTrades.filter((x) => x.symbol === symbol), [openTrades, symbol]);
   // Стороны монеты графика с открытой позицией: «Лонг/Шорт» по ним доливает
@@ -485,7 +519,7 @@ export function Terminal({
     () => openTrades.map((x) => Date.parse(x.entryTime)).filter(Number.isFinite),
     [openTrades],
   );
-  const liveFeed = useLiveFeed(detail, isLive, symbol, source, paused, entryAnchors);
+  const liveFeed = useLiveFeed(detail, isLive, symbol, source, paused, entryAnchors, activePane?.tf);
   const replay = isLive ? liveFeed : replayFeed;
   // Клавиши — там же, где кнопки скорости: в эфире время ведут часы.
   useReplayKeys({
@@ -498,7 +532,7 @@ export function Terminal({
   // значит. Ключ BTC прежний — рисунки, сделанные до монет, не теряются.
   const drawings = useDrawingTools(
     user?.id ?? 'anon',
-    symbol === DEFAULT_SYMBOL ? session.id : `${session.id}:${symbol}`,
+    drawingScope(session.id, symbol, DEFAULT_SYMBOL),
     scale,
     replay.shownTf * 60_000,
   );
@@ -515,10 +549,6 @@ export function Terminal({
   );
   const candles4h = useRangeCandles(rangesOn, loadRange4h, `${session.id}:${symbol}`, replay.ready ? replay.cursor : null);
   const rangeBoxes = useMemo(() => (rangesOn ? findRanges(candles4h) : []), [rangesOn, candles4h]);
-
-  // Рынок — свой у того, кто его передал (биржа); иначе монеты и цены эфира с сервера.
-  const { data: symbolsData } = useLiveSymbols(isLive && !symbols);
-  const coins = symbols ?? symbolsData?.symbols;
 
   /**
    * Правая колонка: панель ордера, список монет или ничего — колонка свёрнута, и
@@ -905,6 +935,27 @@ export function Terminal({
     clearDraftLevels();
     setCloseGrid(null);
   };
+
+  /**
+   * Нажатие на неактивный график сетки — он становится графиком терминала: его
+   * монета у панели ордера и списка монет, черновики прежней монеты сброшены, как
+   * при смене монеты. Колбэк стабильный (свежая версия — в рефе): ячейки — memo,
+   * и новая функция на каждый рендер перерисовывала бы все графики.
+   */
+  const activateLatest = useRef<(i: number) => void>(() => undefined);
+  useLayoutEffect(() => {
+    activateLatest.current = (i: number) => {
+      const next = panesState.panes[i];
+      if (!next || i === panesState.active) return;
+      clearDraftLevels();
+      setCloseGrid(null);
+      setLiveSymbol(next.symbol);
+      panesState.activate(i);
+    };
+  });
+  const activatePane = useCallback((i: number) => activateLatest.current(i), []);
+  // Смена ТФ в верхней панели — у активного графика сетки: лента терминала берёт ТФ из сетки.
+  const setChartTf = activePane ? (tf: number) => panesState.setPane(panesState.active, { tf }) : replay.setTf;
 
   // График — ради прокрутки к нему, когда монету выбирают в таблице под ним.
   const chartRef = useRef<HTMLDivElement>(null);
@@ -1337,13 +1388,36 @@ export function Terminal({
   const tfOptions: SegOption<number>[] = TIMEFRAMES.map((tf) => ({ value: tf, label: t(`tf.${tf}`) }));
   // Первая строка легенды графика. Строкой, а не объектом: ReplayChart — memo.
   // Скрытая монета истории не называется и здесь — как в таблицах.
+  const legendSource = sourceLabel ?? (isLive ? 'Binance' : null);
   const legendTitle = [
     symbolShown ? symbol : session.dataSource === 'synthetic' ? t('legend.synthetic') : t('legend.history'),
     t(`tf.${replay.shownTf}`),
-    sourceLabel ?? (isLive ? 'Binance' : null),
+    legendSource,
   ]
     .filter(Boolean)
     .join(' · ');
+  // Пропсы графика терминала — один набор на одиночный график и на активную ячейку сетки.
+  const mainChart: ChartProps = {
+    timeframe: replay.shownTf,
+    candles: screenCandles,
+    levels,
+    markers,
+    labelFor,
+    levelLabel,
+    glide: screenGlide,
+    onDragLevel,
+    onCloseTrade,
+    onClearTake,
+    onCancelOrder,
+    onCloseGrid,
+    onNeedHistory: replay.loadMoreHistory,
+    historyLoading: replay.historyLoading,
+    drawing: drawings.chart,
+    priceDecimals: chartDecimals,
+    rsi: rsiOn,
+    ranges: chartRanges,
+    legend: legendTitle,
+  };
   // Скорость — свечей выбранного ТФ в секунду; чего ТФ не тянет — выключено, а не тихо медленнее.
   const speedOptions: SegOption<number>[] = [
     { value: 0, label: t('pause'), title: t('pauseHint') },
@@ -1403,12 +1477,13 @@ export function Terminal({
                 {/* Раскрытая история называет свою монету — иначе её не видно нигде. */}
                 {reveal && <span className="muted">{coinBase(symbol)}</span>}
                 {(isLive || reveal) && <span className="chart-top-sep" aria-hidden />}
-                <Seg options={tfOptions} value={replay.tf} onChange={replay.setTf} ariaLabel={t('timeframe')} />
+                <Seg options={tfOptions} value={replay.tf} onChange={setChartTf} ariaLabel={t('timeframe')} />
               </div>
               <div className="chart-top-r">
                 {/* Отступ — свой: кнопки графика стоят вплотную друг к другу, а
                     действие страницы к ним не относится. */}
                 {chartActions && <div className="mr-3 flex items-center">{chartActions}</div>}
+                {multi && <LayoutPicker value={panesState.layout} onChange={panesState.setLayout} />}
                 <Button
                   variant="bare"
                   tight
@@ -1476,30 +1551,36 @@ export function Terminal({
                     onCopy={() => drawings.copy() && drawings.paste()}
                   />
                 )}
-                {replay.ready ? (
-                  <ReplayChart
-                    // Не key: пересоздание на каждой смене ТФ перерисовывало график с нуля.
-                    // Окно показа при смене ТФ сбрасывает сам ReplayChart.
-                    timeframe={replay.shownTf}
-                    candles={screenCandles}
-                    levels={levels}
-                    markers={markers}
-                    labelFor={labelFor}
-                    levelLabel={levelLabel}
-                    glide={screenGlide}
-                    onDragLevel={onDragLevel}
-                    onCloseTrade={onCloseTrade}
-                    onClearTake={onClearTake}
-                    onCancelOrder={onCancelOrder}
-                    onCloseGrid={onCloseGrid}
-                    onNeedHistory={replay.loadMoreHistory}
-                    historyLoading={replay.historyLoading}
-                    drawing={drawings.chart}
-                    priceDecimals={chartDecimals}
-                    rsi={rsiOn}
-                    ranges={chartRanges}
-                    legend={legendTitle}
-                  />
+                {/* Не key: пересоздание на каждой смене ТФ перерисовывало график с нуля.
+                    Окно показа при смене ТФ сбрасывает сам ReplayChart. */}
+                {multi ? (
+                  <div className="panes" data-layout={panesState.layout}>
+                    {panesState.panes.map((pane, i) => (
+                      <ChartPane
+                        key={i}
+                        index={i}
+                        pane={pane}
+                        active={i === panesState.active}
+                        main={i === panesState.active ? mainChart : null}
+                        mainReady={replay.ready && replay.shownTf === pane.tf}
+                        detail={detail}
+                        source={source}
+                        scale={scale}
+                        decimalsOf={decimalsOf}
+                        qtyStepOf={qtyStepOf}
+                        labelFor={labelFor}
+                        levelLabel={levelLabel}
+                        rsi={rsiOn}
+                        oddsOn={takeOddsOn}
+                        userId={user?.id ?? 'anon'}
+                        drawingsHidden={drawings.hidden}
+                        sourceLabel={legendSource}
+                        onActivate={activatePane}
+                      />
+                    ))}
+                  </div>
+                ) : replay.ready ? (
+                  <ReplayChart {...mainChart} />
                 ) : (
                   <ChartSkeleton />
                 )}

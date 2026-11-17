@@ -13,6 +13,9 @@ import { DEFAULT_TIMEFRAME, TIMEFRAMES } from '../lib/candles';
 import { SPEEDS } from '../model/useReplay';
 import { CoinPickerFace } from './CoinPicker';
 import { useRailPanel } from '../model/useChartSettings';
+import { useStoredLayout } from '../model/usePanes';
+import { paneCount } from '../lib/panes';
+import { useMediaQuery } from '@/shared/lib/hooks/useMediaQuery';
 import { DrawingToolbar } from './drawings/DrawingToolbar';
 import { SliderSlot } from './OrderPanel';
 
@@ -74,6 +77,8 @@ export interface TerminalSkeletonProps {
   tables?: boolean;
   /** Рейка справа «Терминал / Монеты»; у терминала на главной её нет. */
   rail?: boolean;
+  /** Сетка графиков `/terminal` — заглушка рисует сохранённую раскладку. */
+  multiChart?: boolean;
 }
 
 /** Каркас списка монет (`Watchlist`): шапка и строки той же высоты, без цен. */
@@ -119,12 +124,23 @@ function WatchSkeleton() {
  *
  * Корень — `inert`: кнопки видны, но не нажимаются и не берут фокус.
  */
-export function TerminalSkeleton({ live = false, badge, leave = true, tables = true, rail = true }: TerminalSkeletonProps) {
+export function TerminalSkeleton({
+  live = false,
+  badge,
+  leave = true,
+  tables = true,
+  rail = true,
+  multiChart = false,
+}: TerminalSkeletonProps) {
   const t = useTranslations('backtest');
   const tAudio = useTranslations('audio');
   // Свёрнута ли колонка — тот же выбор на устройстве, что у терминала: иначе
   // приход данных раскрывал бы или сворачивал её на глазах.
   const [railPanel] = useRailPanel();
+  // Сетка графиков — та же, что у терминала (и так же только на широком экране).
+  const storedLayout = useStoredLayout();
+  const wide = useMediaQuery('(min-width: 1101px)');
+  const layout = multiChart && live && wide ? storedLayout : '1';
   // Список монет бывает только в эфире; у истории запомненное «Монеты» — панель ордера, как у экрана.
   const watch = rail && live && railPanel === 'watch';
 
@@ -170,7 +186,17 @@ export function TerminalSkeleton({ live = false, badge, leave = true, tables = t
                 onClear={noop}
               />
               <div className="chart-tools-main">
-                <ChartSkeleton />
+                {layout === '1' ? (
+                  <ChartSkeleton />
+                ) : (
+                  <div className="panes" data-layout={layout}>
+                    {Array.from({ length: paneCount(layout) }, (_, i) => (
+                      <div key={i} className={cn('pane', i === 0 && 'on')}>
+                        <ChartSkeleton />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>

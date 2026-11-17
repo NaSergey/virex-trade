@@ -23,7 +23,7 @@ const encodeLayout = (v: string | null) => (v === '1' ? null : v);
  * получают `fallbackSymbol` — монету графика терминала.
  */
 export function usePanes(coins: readonly string[], fallbackSymbol: string) {
-  const [layoutRaw, setLayoutRaw] = usePersistentValue<string | null>('virex.terminal.layout', raw, null, encodeLayout);
+  const [layoutRaw, setLayoutRaw] = useLayoutValue();
   const [panesRaw, setPanesRaw] = usePersistentValue<string | null>('virex.terminal.panes', raw, null, raw);
   const [activeRaw, setActiveRaw] = usePersistentValue<number>('virex.terminal.activePane', decodeIndex, 0, encodeIndex);
 
@@ -65,3 +65,10 @@ export function usePanes(coins: readonly string[], fallbackSymbol: string) {
 }
 
 export type PanesState = ReturnType<typeof usePanes>;
+
+/** Сохранённая раскладка — и для заглушки терминала: она рисует ту же сетку, пока едут данные. */
+function useLayoutValue() {
+  return usePersistentValue<string | null>('virex.terminal.layout', raw, null, encodeLayout);
+}
+
+export const useStoredLayout = (): LayoutId => decodeLayout(useLayoutValue()[0]);

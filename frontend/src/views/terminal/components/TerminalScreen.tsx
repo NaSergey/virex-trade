@@ -74,7 +74,7 @@ export function TerminalScreen() {
       ) : error ? (
         <StateError error={error} />
       ) : (
-        <TerminalSkeleton live badge={badge} leave={false} />
+        <TerminalSkeleton live badge={badge} leave={false} multiChart />
       )}
     </>
   );
@@ -180,6 +180,7 @@ function ExchangeTerminal({ state, stale }: { state: TerminalState; stale: boole
         // Какой это счёт (настоящий или демо Bybit) — сказано словами: экран тот же, что у бектеста, и спутать их можно ровно один раз.
         badge={badge}
         sourceLabel={sourceLabel}
+        multiChart
         soundsOf={sounds}
         history={ExchangeHistory}
       />
