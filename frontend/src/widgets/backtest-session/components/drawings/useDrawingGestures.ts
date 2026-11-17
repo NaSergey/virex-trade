@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent, type RefObject } from 'react';
 import { OPEN_MAX_POINTS, magnetPrice, makeChannel, makePosition, moveAnchor, placement, simplifyIdx, translate } from '../../lib/drawings/geometry';
 import type { DPoint, Drawing, DrawingColor, DrawingKind, DrawingWidth, ToolId } from '../../lib/drawings/types';
+import { isTypingTarget } from '../../lib/drawings/hotkeys';
 
 /** Всё, что график отдаёт слою рисунков. Объект обязан быть стабильным между рендерами — график в memo. */
 export interface ChartDrawingProps {
@@ -177,7 +178,8 @@ export function useDrawingGestures(opts: ChartDrawingProps | undefined, geoRef: 
   // Enter заканчивает ломаную и путь — как двойной клик.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') enterRef.current();
+      // В поле ввода Enter — его собственный (надпись, цена в панели).
+      if (e.key === 'Enter' && !isTypingTarget(e.target)) enterRef.current();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -258,6 +260,8 @@ export function useDrawingGestures(opts: ChartDrawingProps | undefined, geoRef: 
       return true;
     }
     if (g?.type === 'multi') {
+      // Точку ставит только основная кнопка: правая открывает меню графика.
+      if (e.button !== 0) return true;
       capture(e);
       // Клик по последней точке (и второй клик двойного) заканчивает ломаную.
       const again = Math.hypot(e.clientX - g.lastX, e.clientY - g.lastY) < CLICK_PX;
