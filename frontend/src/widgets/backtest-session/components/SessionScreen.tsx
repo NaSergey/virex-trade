@@ -716,7 +716,14 @@ export function Terminal({
   }, [rangeBoxes, candles4h, chartBots, scale]);
 
   const screenGlide = useMemo(
-    () => (replay.glide ? { minute: scaleCandle(replay.glide.minute, scale), durationMs: replay.glide.durationMs } : null),
+    () =>
+      replay.glide
+        ? {
+            ...replay.glide,
+            minute: scaleCandle(replay.glide.minute, scale),
+            base: replay.glide.base ? scaleCandle(replay.glide.base, scale) : null,
+          }
+        : null,
     [replay.glide, scale],
   );
 

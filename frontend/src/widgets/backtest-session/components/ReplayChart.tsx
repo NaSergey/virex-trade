@@ -20,7 +20,7 @@ import {
   zoomStep,
   type ViewState,
 } from '../lib/motion';
-import type { Candle } from '../lib/candles';
+import type { Candle, CandleGlide } from '../lib/candles';
 import { RSI_DEFAULTS, rsiSeries } from '../lib/rsi';
 import { legendOf } from '../lib/legend';
 import type { ChartRange } from '../lib/ranges';
@@ -307,7 +307,7 @@ export const ReplayChart = memo(function ReplayChart({
   onNeedHistory?: () => void;
   historyLoading?: boolean;
   /** В настоящих для экрана (масштабированных) ценах — минутка, которую сейчас анимируем. */
-  glide: { minute: Candle; durationMs: number } | null;
+  glide: CandleGlide | null;
   /** Рисунки и инструмент панели; без него график без разметки. Ссылка стабильная — см. memo. */
   drawing?: ChartDrawingProps;
   /**
@@ -407,7 +407,6 @@ export const ReplayChart = memo(function ReplayChart({
    * хотя меняются в нём только последняя свеча и линия цены.
    */
   const animRef = useRef<(Candle & { tf: number }) | null>(null);
-  const prevLastRef = useRef<Candle | null>(null);
   // Узлы, которые пишет paintLast: последняя свеча, линия текущей цены и её плашка.
   const lastWickRef = useRef<SVGLineElement>(null);
   const lastBodyRef = useRef<SVGRectElement>(null);
@@ -660,53 +659,27 @@ export const ReplayChart = memo(function ReplayChart({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frameStart, live, count, candles.length, timeframe]);
 
-  useEffect(() => {
-    // На монтировании и на смене ТФ — база для первого тика: иначе уже накопленная
-    // часть формирующейся свечи «обрушилась» бы до открытия на первой анимации.
-    prevLastRef.current = candles.length ? candles[candles.length - 1] : null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeframe]);
-
-  // Кадр анимации сверяет ТФ с тем, на котором она началась: без этого запущенный на
-  // 4ч тик доигрывал бы до секунды уже на минутках и красил бы свечу с тем же временем
-  // открытия — где-то слева, а не формирующуюся. В layout-эффекте — до любого rAF.
-  const timeframeRef = useRef(timeframe);
   useLayoutEffect(() => {
-    timeframeRef.current = timeframe;
-    // Кадр прежнего ТФ не должен ожить, если вернуться на него до новой свечи.
-    animRef.current = null;
-  }, [timeframe]);
-
-  useEffect(() => {
-    if (!glide) return;
-    // Формирующаяся — последняя свеча ряда, а не окна: с отведённым от края паном
-    // последней в окне стоит давно закрытая, и анимировать её нельзя.
-    const newLast = candles.length ? candles[candles.length - 1] : null;
-    if (!newLast) return;
-    const tf = timeframe;
-    const prev = prevLastRef.current;
-    const sameBucket = prev != null && prev.t === newLast.t;
-    const base = sameBucket
-      ? prev!
-      : { t: newLast.t, o: glide.minute.o, h: glide.minute.o, l: glide.minute.o, c: glide.minute.o };
+    if (!glide || glide.timeframe !== timeframe) return;
     const { minute, durationMs } = glide;
+    const base = glide.base ?? { o: minute.o, h: minute.o, l: minute.o };
     const t0 = performance.now();
     let raf = 0;
     const frame = (now: number) => {
-      if (timeframeRef.current !== tf) return;
       const ph = Math.min(1, (now - t0) / durationMs);
       const price = glidePrice(minute.o, minute.h, minute.l, minute.c, ph);
       // Доигралось — дальше рисуем настоящие финальные значения.
       animRef.current =
-        ph < 1 ? { tf, t: newLast.t, o: base.o, h: Math.max(base.h, price), l: Math.min(base.l, price), c: price } : null;
+        ph < 1 ? { tf: timeframe, t: minute.t, o: base.o, h: Math.max(base.h, price), l: Math.min(base.l, price), c: price } : null;
       paintLastRef.current();
       if (ph < 1) raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
-    prevLastRef.current = newLast;
-    return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [glide]);
+    return () => {
+      cancelAnimationFrame(raf);
+      animRef.current = null;
+    };
+  }, [glide, timeframe]);
 
   // Натуральный (авто) диапазон — считается всегда, а не только когда
   // используется: он же служит базой для границ ручного зума цены, которые

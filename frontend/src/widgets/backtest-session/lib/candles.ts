@@ -19,6 +19,15 @@ export interface Candle {
   v?: number;
 }
 
+export interface CandleGlide {
+  timeframe: number;
+  /** Часть свечи, видимая до тика. */
+  base: Candle | null;
+  /** Минутки последней свечи, открытые этим тиком. */
+  minute: Candle;
+  durationMs: number;
+}
+
 /** Свеча, как её отдаёт `/api/market-data/candles`: время открытия ISO-строкой. */
 export interface ApiCandle {
   time: string;
@@ -95,6 +104,15 @@ export function aggregate(minutes: Candle[], tf: number, from: number, to: numbe
   }
   if (cur) out.push(cur);
   return out;
+}
+
+/** Данные анимации последней свечи, собранные по обе стороны от начала тика. */
+export function candleGlide(minutes: Candle[], timeframe: number, from: number, reach: number, durationMs: number): CandleGlide | null {
+  const start = currentBucket(reach, timeframe);
+  const [minute] = aggregate(minutes, timeframe, Math.max(from, start), reach);
+  if (!minute) return null;
+  const [base] = aggregate(minutes, timeframe, start, from);
+  return { timeframe, base: base ?? null, minute, durationMs };
 }
 
 /**

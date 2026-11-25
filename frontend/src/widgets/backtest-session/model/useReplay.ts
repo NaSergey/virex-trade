@@ -10,7 +10,7 @@ import {
   DEFAULT_TIMEFRAME,
   MINUTE,
   TIMEFRAMES,
-  aggregate,
+  candleGlide,
   bucketStart,
   currentBucket,
   lastPrice,
@@ -18,6 +18,7 @@ import {
   nextStop,
   visibleCandles,
   type Candle,
+  type CandleGlide,
 } from '../lib/candles';
 import { isPartialExit, type CloseOrder, type EntryFill, type Exit } from '../lib/fills';
 import { liquidationPrice } from '../lib/money';
@@ -113,7 +114,7 @@ export interface Replay {
    * мс её отрисовать — для плавного хода цены внутри тика. null на паузе и
    * после ручного «Шага»: там анимации нет по замыслу.
    */
-  glide: { minute: Candle; durationMs: number } | null;
+  glide: CandleGlide | null;
   /** Догрузить ещё истории назад для текущего ТФ — вызывает ReplayChart, приближаясь к краю. */
   loadMoreHistory: () => Promise<void>;
   historyLoading: boolean;
@@ -498,10 +499,13 @@ export function useReplay(
     [ensureMinutes, closing, filling, firedCloseOrders, setSpeed, trimMinutes],
   );
 
-  /** Мгновенный прыжок до закрытия текущей свечи ТФ — без анимации, для ручного разбора. */
-  const step = useCallback(() => advance(nextStop(cursorRef.current, tfRef.current), LOOKAHEAD_MS), [advance]);
+  const [glide, setGlide] = useState<CandleGlide | null>(null);
 
-  const [glide, setGlide] = useState<{ minute: Candle; durationMs: number } | null>(null);
+  /** Мгновенный прыжок до закрытия текущей свечи ТФ — без анимации, для ручного разбора. */
+  const step = useCallback(
+    () => advance(nextStop(cursorRef.current, tfRef.current), LOOKAHEAD_MS, () => setGlide(null)),
+    [advance],
+  );
 
   /**
    * Тик автопрокрутки — кусок истории по темпу `paceOf`: скорость — свечей
@@ -517,10 +521,7 @@ export function useReplay(
         // Анимируется формирующаяся свеча графика — та часть тика, что легла в её
         // корзину; свечи целиком внутри тика встают сразу. ТФ — тот, что на экране:
         // пока история выбранного грузится, график ещё на прежнем.
-        const tf = shownTfRef.current;
-        const [landed] = aggregate(minutesRef.current, tf, Math.max(from, bucketStart(reach - MINUTE, tf)), reach);
-        // Минуток может не быть — дыра в истории биржи; тогда просто без анимации.
-        if (landed) setGlide({ minute: landed, durationMs: periodMs });
+        setGlide(candleGlide(minutesRef.current, shownTfRef.current, from, reach, periodMs));
       });
     },
     [advance],

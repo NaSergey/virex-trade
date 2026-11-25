@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MINUTE,
   aggregate,
+  candleGlide,
   candlesPath,
   currentBucket,
   dayNumber,
@@ -43,6 +44,32 @@ describe('корзины и шаг', () => {
 
   it('шаг от закрытой свечи — до закрытия следующей', () => {
     expect(nextStop(at(12), 60)).toBe(at(13));
+  });
+});
+
+describe('candleGlide', () => {
+  it('сохраняет открытие и экстремумы уже видимой части свечи после ручного шага', () => {
+    const minutes = mins(at(12), 6);
+    expect(candleGlide(minutes, 60, at(12, 3), at(12, 5), 100)).toEqual({
+      timeframe: 60,
+      base: { t: at(12), o: 100, h: 102.5, l: 99.5, c: 102.25 },
+      minute: { t: at(12), o: 103, h: 104.5, l: 102.5, c: 104.25 },
+      durationMs: 100,
+    });
+  });
+
+  it('при переходе через границу анимирует только последнюю свечу', () => {
+    const minutes = mins(at(11, 58), 5);
+    expect(candleGlide(minutes, 60, at(11, 59), at(12, 2), 100)).toEqual({
+      timeframe: 60,
+      base: null,
+      minute: { t: at(12), o: 102, h: 103.5, l: 101.5, c: 103.25 },
+      durationMs: 100,
+    });
+  });
+
+  it('сбрасывает анимацию, когда тик не добавил минуток', () => {
+    expect(candleGlide(mins(at(12), 1), 60, at(12, 1), at(12, 2), 100)).toBeNull();
   });
 });
 
