@@ -45,6 +45,18 @@ export class MarketDataController {
     return { serverTime: new Date().toISOString(), minutes };
   }
 
+  /** История эфира из того же источника, что и его живой хвост. */
+  @Get('live/candles')
+  getLiveCandles(
+    @Query('symbol') symbol?: string,
+    @Query('tf') tf?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.live.history(liveSymbol(symbol), parseCandleQuery({ tf, from, to, limit }, DEFAULT_LIMIT));
+  }
+
   /** Монеты эфира — единственный список, фронт своего не держит. */
   @Get('live/symbols')
   getLiveSymbols() {

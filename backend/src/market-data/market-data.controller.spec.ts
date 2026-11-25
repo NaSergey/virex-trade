@@ -207,6 +207,20 @@ describe('MarketDataController — монеты эфира', () => {
     expect(live.history).toHaveBeenCalledWith('ETHUSDT', expect.objectContaining({ timeframe: 60, limit: 300 }));
   });
 
+  it('история живого BTC берётся из Binance, даже если в хранилище есть свечи', async () => {
+    const { controller, marketData, live } = make();
+    const from = String(NOW.getTime() - 60_000);
+    await controller.getLiveCandles('BTCUSDT', '1', from, undefined, '300');
+
+    expect(marketData.getCandles).not.toHaveBeenCalled();
+    expect(live.history).toHaveBeenCalledWith('BTCUSDT', {
+      timeframe: 1,
+      from: new Date(Number(from)),
+      to: undefined,
+      limit: 300,
+    });
+  });
+
   it('монета не из списка — 400, к бирже не ходим', async () => {
     const { controller, live } = make();
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { fetchCandles, fetchLiveTail, fetchLiveTickers } from '../api/hooks';
+import { fetchLiveCandles, fetchLiveTail, fetchLiveTickers } from '../api/hooks';
 import {
   DAY,
   DEFAULT_TIMEFRAME,
@@ -41,7 +41,7 @@ const NO_ANCHORS: readonly number[] = [];
 export interface LiveSource {
   /** Хвост минуток монеты и время сервера; последняя минутка ещё формируется. */
   tail: (symbol: string) => Promise<{ serverTime: string; minutes: ApiCandle[] }>;
-  /** Закрытые свечи таймфрейма — в той же форме, что `fetchCandles`. */
+  /** Закрытые свечи таймфрейма. */
   candles: (tf: number, range: { from?: number; to?: number; limit: number }, symbol: string) => Promise<Candle[]>;
   /**
    * Цена и изменение за 24 ч всех монет — список монет справа от графика. `kind` —
@@ -61,7 +61,7 @@ export interface Ticker {
 /** Рынок продукта: у свечей `real` id сессии в адрес не входит. */
 export const SESSION_SOURCE: LiveSource = {
   tail: fetchLiveTail,
-  candles: (tf, range, symbol) => fetchCandles({ id: '', dataSource: 'real' }, tf, range, symbol),
+  candles: fetchLiveCandles,
   tickers: { kind: 'live', fetch: fetchLiveTickers },
 };
 
