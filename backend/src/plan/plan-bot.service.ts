@@ -10,7 +10,7 @@ import {
   TelegramService,
   type CallbackContext,
 } from '../telegram/telegram.service';
-import { OWNER_EMAIL, isOwnerEmail } from '../admin/owner';
+import { findOwner, isOwnerUser } from '../admin/owner';
 import { runsBackgroundJobs } from '../role';
 import { PlanService } from './plan.service';
 import { addDays, weekdayOf } from './plan-time';
@@ -68,16 +68,16 @@ export class PlanBotService
 
   onModuleInit() {
     this.telegram.onCallback(CB, (ctx) => this.onButton(ctx));
-    this.telegram.onCommand('plan', async ({ chatId, email }) => {
-      if (isOwnerEmail(email))
+    this.telegram.onCommand('plan', async ({ chatId, userId }) => {
+      if (await isOwnerUser(this.prisma, userId))
         await this.telegram.sendText(chatId, await this.dayText());
     });
-    this.telegram.onCommand('report', async ({ chatId, email }) => {
-      if (isOwnerEmail(email))
+    this.telegram.onCommand('report', async ({ chatId, userId }) => {
+      if (await isOwnerUser(this.prisma, userId))
         await this.telegram.sendText(chatId, await this.eveningText(false));
     });
-    this.telegram.onCommand('week', async ({ chatId, email }) => {
-      if (isOwnerEmail(email))
+    this.telegram.onCommand('week', async ({ chatId, userId }) => {
+      if (await isOwnerUser(this.prisma, userId))
         await this.telegram.sendText(
           chatId,
           weekBlock(await this.plan.stats(7)),
@@ -99,10 +99,7 @@ export class PlanBotService
 
   /** Чат владельца — как у бэкапа базы: переменной с id чата нет. */
   async ownerChat(): Promise<string | null> {
-    const owner = await this.prisma.user.findFirst({
-      where: { email: { equals: OWNER_EMAIL, mode: 'insensitive' } },
-      select: { telegramChatId: true },
-    });
+    const owner = await findOwner(this.prisma);
     return owner?.telegramChatId ?? null;
   }
 
@@ -223,7 +220,8 @@ export class PlanBotService
   }
 
   private async onButton(ctx: CallbackContext): Promise<string | undefined> {
-    if (!isOwnerEmail(ctx.email)) return 'План — только у владельца';
+    if (!(await isOwnerUser(this.prisma, ctx.userId)))
+      return 'План — только у владельца';
     const action = ACTIONS[ctx.parts[1] as CbAction];
     const id = ctx.parts[2];
     if (!action || !id) return undefined;
